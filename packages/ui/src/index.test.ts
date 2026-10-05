@@ -7,6 +7,7 @@ describe("cn", () => {
   })
 
   it("joins conditionally", () => {
-    expect(cn("a", false && "b", { c: true })).toBe("a c")
+    const off = Math.random() > 2
+    expect(cn("a", off && "b", { c: true })).toBe("a c")
   })
 })

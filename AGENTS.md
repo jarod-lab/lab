@@ -1,15 +1,32 @@
 # starter
 
 Turborepo + pnpm monorepo. Node 22 via mise (`mise trust && mise install` first).
+New project from this template: `pnpm init-project <name>` (renames the `@starter` scope).
 
+## Layout
 - `apps/` — applications (empty in the template)
-- `packages/ui` — shadcn/ui components; use `cn` from `cn`, not clsx/tailwind-merge
-- `packages/db` — Drizzle ORM (Postgres). `pnpm --filter @starter/db db:generate`
+- `packages/ui` — shadcn/ui components + Storybook; use `cn` from `cn`, not clsx/tailwind-merge
+- `packages/db` — Drizzle ORM (Postgres). Auth tables are generated: `pnpm --filter @starter/auth generate`
+- `packages/auth` — better-auth (`createAuth()`), with the Wraps plugin for contact sync + SES auth emails
 - `packages/auth-proofs` — gdp-ts authorization proofs; protected functions take proofs as args
-- `packages/config` — shared tsconfig
+- `packages/env` — the only place env vars are read; add new ones here AND in `.env.example`
+- `packages/config` — shared tsconfig + Vitest base config
 
-Guardrails: `pnpm baseline` (bans/ratchets), `pnpm lint` (Oxlint + @shadcn/lint; no rules enabled yet — add in `.oxlintrc.json`), `pnpm test` (Vitest, per package: `*.test.ts` beside source), `pnpm e2e`.
-Dev servers run through `portless` for stable `*.localhost` URLs.
+## Commands
+- `pnpm lint typecheck test baseline` — all must pass; `pnpm test:coverage` enforces thresholds (they only go up)
+- `pnpm storybook` — http://localhost:6006, MCP at `/mcp` (registered in `.mcp.json`). Use its docs tools for component props instead of reading source.
+- `pnpm dev` runs workspace dev servers through `portless` (stable `*.localhost` URLs)
+- `pnpm e2e` — agent-driven end-to-end tests (`pnpm exec e2e init` first)
+
+## Rules
+- Conventional Commits are enforced (commitlint). PR titles too.
+- Never bypass hooks (`--no-verify`). gitleaks, baseline and format run on pre-commit.
+- `@shadcn/lint` is registered with no rules enabled; add rules in `.oxlintrc.json`.
+- Don't run DB migrations without being asked (`db:migrate` / `drizzle-kit push` are denied in `.claude/settings.json`).
+- Known issue: `wrapsClient()` from `@wraps.dev/better-auth/client` breaks client typing on better-auth 1.7.7, so it's not used.
+
+## Agent skills (`.claude/skills`, locked in `skills-lock.json`)
+gdp-ts, shadcn, turborepo, portless, better-auth (best-practices, create-auth, email-and-password). Refresh with `npx skills update`.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders"
+paths = ['''\.env\.example$''', '''pnpm-lock\.yaml$''']

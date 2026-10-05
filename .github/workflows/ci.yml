@@ -1,13 +1,23 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: jdx/mise-action@v2
       - run: pnpm install --frozen-lockfile
+      - name: Conventional commits (PR range)
+        if: github.event_name == 'pull_request'
+        run: pnpm commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
+      - run: gitleaks git --redact --config .gitleaks.toml
       - run: pnpm baseline
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test:coverage
+      - run: pnpm format:check

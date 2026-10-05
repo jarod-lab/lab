@@ -10,4 +10,8 @@ describe("db", () => {
   it("requires DATABASE_URL", () => {
     expect(() => createDb("")).toThrow("DATABASE_URL is not set")
   })
+
+  it("creates a client without connecting", () => {
+    expect(createDb("postgres://user:pass@localhost:5432/db")).toBeDefined()
+  })
 })

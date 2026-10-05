@@ -12,6 +12,7 @@
   "scripts": {
     "typecheck": "tsc",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "oxlint -c ../../.oxlintrc.json"
   },
@@ -22,6 +23,7 @@
     "@shadcn/lint": "^0.2.0",
     "@starter/config": "workspace:*",
     "@types/react": "^19.0.0",
+    "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "^1.87.0",
     "vitest": "^5.0.3"
   }

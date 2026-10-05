@@ -10,10 +10,16 @@
     "test": "turbo run test",
     "e2e": "e2e run",
     "baseline": "baseline scan .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "init-project": "node scripts/init-project.mjs",
+    "test:coverage": "turbo run test:coverage",
+    "format:check": "biome format .",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@shadcn/lint": "^0.2.0",
     "code-baseline": "^1.6.0",
     "e2e": "^0.17.0",

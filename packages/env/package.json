@@ -1,0 +1,27 @@
+{
+  "name": "@starter/env",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint -c ../../.oxlintrc.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "^0.13.11",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@starter/config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "oxlint": "^1.87.0",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,7 +1,3 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
-
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-})
+// Auth tables (user, session, account, verification) are generated:
+//   pnpm --filter @starter/auth generate
+export * from "./auth-schema"

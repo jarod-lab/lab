@@ -25,5 +25,7 @@ minimumReleaseAgeExclude:
   - oxlint@1.87.0
 
 allowBuilds:
+  '@prisma/client': false
+  better-sqlite3: false
   esbuild: true
   lefthook: true

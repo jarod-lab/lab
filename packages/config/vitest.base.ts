@@ -9,7 +9,7 @@ export const baseConfig = (
       coverage: {
         provider: "v8",
         include: ["src/**/*.{ts,tsx}"],
-        exclude: ["src/**/*.test.*", "src/**/*.stories.*"],
+        exclude: ["src/**/*.test.*", "src/**/*.stories.*", "src/auth-schema.ts"],
         reporter: ["text-summary", "lcov"],
         thresholds,
       },

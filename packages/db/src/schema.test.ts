@@ -1,10 +1,10 @@
 import { getTableName } from "drizzle-orm"
 import { describe, expect, it } from "vitest"
-import { createDb, users } from "./index"
+import { createDb, user } from "./index"
 
 describe("db", () => {
-  it("exposes the users table", () => {
-    expect(getTableName(users)).toBe("users")
+  it("exposes the user table", () => {
+    expect(getTableName(user)).toBe("user")
   })
 
   it("requires DATABASE_URL", () => {

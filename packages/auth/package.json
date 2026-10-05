@@ -1,0 +1,32 @@
+{
+  "name": "@starter/auth",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint -c ../../.oxlintrc.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "generate": "better-auth generate --config ./auth.cli.ts --output ../db/src/auth-schema.ts -y"
+  },
+  "dependencies": {
+    "@starter/db": "workspace:*",
+    "@starter/env": "workspace:*",
+    "@wraps.dev/better-auth": "^0.2.1",
+    "@wraps.dev/email": "^0.15.0",
+    "better-auth": "^1.7.7"
+  },
+  "devDependencies": {
+    "@starter/config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "auth": "1.7.7",
+    "oxlint": "^1.87.0",
+    "vitest": "^5.0.0"
+  }
+}

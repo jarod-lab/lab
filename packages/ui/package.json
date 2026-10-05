@@ -11,15 +11,18 @@
   },
   "scripts": {
     "typecheck": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "oxlint -c ../../.oxlintrc.json"
   },
   "dependencies": {
     "cn": "^0.4.0"
   },
   "devDependencies": {
-    "@starter/config": "workspace:*",
     "@shadcn/lint": "^0.2.0",
+    "@starter/config": "workspace:*",
+    "@types/react": "^19.0.0",
     "oxlint": "^1.87.0",
-    "@types/react": "^19.0.0"
+    "vitest": "^5.0.3"
   }
 }

@@ -8,7 +8,7 @@ Turborepo + pnpm monorepo. Node 22 via mise (`mise trust && mise install` first)
 - `packages/auth-proofs` — gdp-ts authorization proofs; protected functions take proofs as args
 - `packages/config` — shared tsconfig
 
-Guardrails: `pnpm baseline` (bans/ratchets), `pnpm lint` (Oxlint + @shadcn/lint; no rules enabled yet — add in `.oxlintrc.json`), `pnpm e2e`.
+Guardrails: `pnpm baseline` (bans/ratchets), `pnpm lint` (Oxlint + @shadcn/lint; no rules enabled yet — add in `.oxlintrc.json`), `pnpm test` (Vitest, per package: `*.test.ts` beside source), `pnpm e2e`.
 Dev servers run through `portless` for stable `*.localhost` URLs.
 
 <!-- BEGIN:turborepo-agent-rules -->

@@ -8,6 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "oxlint -c ../../.oxlintrc.json"
   },
   "dependencies": {
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@starter/config": "workspace:*",
-    "oxlint": "^1.87.0"
+    "oxlint": "^1.87.0",
+    "vitest": "^5.0.3"
   }
 }

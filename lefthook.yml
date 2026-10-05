@@ -1,0 +1,8 @@
+pre-commit:
+  parallel: true
+  commands:
+    baseline:
+      run: pnpm baseline
+    format:
+      glob: "*.{ts,tsx,json}"
+      run: pnpm biome format {staged_files}

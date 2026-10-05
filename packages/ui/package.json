@@ -1,0 +1,25 @@
+{
+  "name": "@starter/ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css",
+    "./components/*": "./src/components/*.tsx",
+    "./components/ui/*": "./src/components/ui/*.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint -c ../../.oxlintrc.json"
+  },
+  "dependencies": {
+    "cn": "^0.4.0"
+  },
+  "devDependencies": {
+    "@starter/config": "workspace:*",
+    "@shadcn/lint": "^0.2.0",
+    "oxlint": "^1.87.0",
+    "@types/react": "^19.0.0"
+  }
+}

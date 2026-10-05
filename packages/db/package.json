@@ -1,0 +1,26 @@
+{
+  "name": "@starter/db",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint -c ../../.oxlintrc.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.3",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "@starter/config": "workspace:*",
+    "@types/node": "^26.6.4",
+    "drizzle-kit": "^0.31.11",
+    "oxlint": "^1.87.0"
+  }
+}

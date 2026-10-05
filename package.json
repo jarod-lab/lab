@@ -1,0 +1,26 @@
+{
+  "name": "starter",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "dev": "portless",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "e2e": "e2e run",
+    "baseline": "baseline scan .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@shadcn/lint": "^0.2.0",
+    "code-baseline": "^1.6.0",
+    "e2e": "^0.17.0",
+    "lefthook": "^1.11.0",
+    "oxlint": "^1.87.0",
+    "portless": "^0.15.7",
+    "turbo": "^2.11.7",
+    "typescript": "^5.9.0"
+  }
+}

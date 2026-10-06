@@ -28,7 +28,7 @@
     "oxlint": "^1.87.0",
     "portless": "^0.15.7",
     "turbo": "^2.11.7",
-    "typescript": "^5.9.0"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=24"

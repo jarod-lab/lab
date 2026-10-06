@@ -24,7 +24,7 @@
     "@shadcn/lint": "^0.2.0",
     "code-baseline": "^1.6.0",
     "e2e": "^0.17.0",
-    "lefthook": "^1.11.0",
+    "lefthook": "^2.1.16",
     "oxlint": "^1.87.0",
     "portless": "^0.15.7",
     "turbo": "^2.11.7",

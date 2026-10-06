@@ -60,6 +60,7 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - Type-level tests go in `*.types.ts` (checked by `pnpm typecheck`, not run by Vitest).
 - Database tests use `createTestDb()` from `@starter/db/testing`: in-process Postgres (PGlite) with the real migrations
   applied. Regenerate the migration after any schema change or those tests run against a stale schema.
+  The shared config allows 30s per test and 60s per hook because PGlite startup is slow on cold CI runners.
 - UI tests render with `react-dom/server`; there is no jsdom or Testing Library yet.
 
 ## Database and auth

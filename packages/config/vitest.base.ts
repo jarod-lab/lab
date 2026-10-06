@@ -6,6 +6,9 @@ export const baseConfig = (
 ) =>
   defineConfig({
     test: {
+      // PGlite boots a WASM Postgres and applies migrations; that is slow on a cold CI runner.
+      testTimeout: 30_000,
+      hookTimeout: 60_000,
       coverage: {
         provider: "v8",
         include: ["src/**/*.{ts,tsx}"],

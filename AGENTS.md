@@ -51,13 +51,16 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - **Formatting and lint:** Biome formats only (no semicolons, 100 columns); Oxlint lints. Biome skips `.claude/` and lockfiles.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`). pnpm maintains
   `minimumReleaseAgeExclude` itself for very new releases; don't hand-edit it.
-- **Vendored shadcn code:** `packages/ui/src/components/ui/` (53 components) and `src/hooks/` come from the shadcn CLI.
+- **Vendored shadcn code:** `packages/ui/src/components/ui/` (60 components) and `src/hooks/` come from the shadcn CLI, style
+  **`base-sera`** (Base UI primitives via `@base-ui/react`, lucide icons, sharp corners), set in `packages/ui/components.json`.
   Add or update with `cd packages/ui && npx shadcn@latest add <name> --overwrite`, never by hand-writing a clone. They get a smoke
-  test (`all.test.tsx`), not coverage thresholds. `add --all` fails (registry lists `attachment`, which has no `new-york` build), and
-  `combobox`, `native-select`, `direction`, `bubble`, `marker`, `message`, `message-scroller` don't exist for `new-york` either.
-  Local patches that a re-add would revert: `input-otp.tsx` (`slots[index]!`), `pagination.tsx` (`type ButtonProps`), `sidebar.tsx`
-  (hooks import is `@starter/ui/hooks/use-mobile`). `react-resizable-panels` is pinned to ^3 because v4 renamed the API the
-  component uses. Animations need `tw-animate-css` (imported in `styles.css`). baseline allows `bg-black/80` (overlay scrim).
+  test (`all.test.tsx`), not coverage thresholds. Base UI uses a `render` prop where Radix used `asChild`.
+  `npx shadcn@latest apply` does not work here (it needs a detected framework); change `style` in `components.json` and `add`
+  the components instead. The registry's `form` is an empty stub for this style, so forms use `Field`/`FieldGroup`.
+  `styles.css` must keep `@import "tw-animate-css"` and `@import "shadcn/tailwind.css"`: without them Tailwind silently drops the
+  `data-open:`/`data-closed:` variants and the `animate-in`/`animate-out` utilities, and typecheck won't notice. Rebuild Storybook and
+  check the CSS if you touch them. baseline allows `bg-black/20` (the overlay scrim used by dialog, sheet and drawer).
+  `sonner` pulls in `next-themes` for theming; it works without Next but needs a theme provider to follow dark mode.
 - **Vendored skills** in `.claude/skills` are third-party; don't edit them. Refresh with `npx skills update`.
 
 ## Testing

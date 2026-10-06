@@ -4,7 +4,8 @@ extends = ["shadcn-strict", "dependency-hygiene", "security"]
 exclude = ["scripts/**"]
 
 # Overrides the shadcn-strict rule of the same id (presets are replaced whole): identical except
-# the overlay scrim used by shadcn's sheet and drawer, which is intentionally the same in both themes.
+# the overlay scrim used by shadcn's dialog, alert-dialog, sheet and drawer (Sera), which is
+# intentionally the same in both themes.
 [[rule]]
 id = "enforce-dark-mode"
 type = "tailwind-dark-mode"
@@ -12,4 +13,4 @@ severity = "error"
 glob = "**/*.{tsx,jsx}"
 message = "Missing dark: variant for color class"
 suggest = "Use a shadcn semantic token class or add an explicit dark: counterpart"
-allowed_classes = ["bg-black/80"]
+allowed_classes = ["bg-black/20"]

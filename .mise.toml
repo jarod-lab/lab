@@ -2,3 +2,6 @@
 node = "22"
 pnpm = "11"
 gitleaks = "8"
+
+[env]
+_.file = ".env"

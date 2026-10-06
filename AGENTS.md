@@ -13,6 +13,8 @@ New project from this template: `pnpm init-project <name>` (renames the `@starte
 - `packages/config` — shared tsconfig + Vitest base config
 
 ## Commands
+- Env: `cp .env.example .env`; mise loads `.env` automatically (needs mise shell activation, or prefix commands with `mise exec --`). Never read or edit `.env` (denied in settings).
+- Local DB: `docker compose up -d db`. Tests don't need it — they use in-process PGlite (`@starter/db/testing`).
 - `pnpm lint typecheck test baseline` — all must pass; `pnpm test:coverage` enforces thresholds (they only go up)
 - `pnpm storybook` — http://localhost:6006, MCP at `/mcp` (registered in `.mcp.json`). Use its docs tools for component props instead of reading source.
 - `pnpm dev` runs workspace dev servers through `portless` (stable `*.localhost` URLs)

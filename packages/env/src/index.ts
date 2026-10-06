@@ -12,6 +12,7 @@ export const env = createEnv({
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),
     WRAPS_API_KEY: z.string().min(1).optional(),
+    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

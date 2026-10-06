@@ -9,6 +9,8 @@ New project from this template: `pnpm init-project <name>` (renames the `@starte
 - `packages/db` — Drizzle ORM (Postgres). Auth tables are generated: `pnpm --filter @starter/auth generate`
 - `packages/auth` — better-auth (`createAuth()`), with the Wraps plugin for contact sync + SES auth emails
 - `packages/auth-proofs` — gdp-ts authorization proofs; protected functions take proofs as args
+- `packages/logger` — pino with secret redaction; `createLogger({ name })`. Use it instead of `console.log` (baseline flags it). Reads `LOG_LEVEL` directly so it stays dependency-free.
+- `packages/errors` — `AppError`/`ErrorCode`, `Result` (`ok`/`err`/`attempt`), `reportError` + `setErrorReporter` (wire Sentry here once, at startup). Throw `AppError`, never leak `INTERNAL` messages to clients (`toPublic()`).
 - `packages/env` — the only place env vars are read; add new ones here AND in `.env.example`
 - `packages/config` — shared tsconfig + Vitest base config
 

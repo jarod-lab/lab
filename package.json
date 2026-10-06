@@ -14,7 +14,8 @@
     "init-project": "node scripts/init-project.mjs",
     "test:coverage": "turbo run test:coverage",
     "format:check": "biome format .",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "storybook": "pnpm --filter @starter/ui storybook"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

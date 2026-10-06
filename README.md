@@ -7,7 +7,7 @@ better-auth, typed env, and agent-ready guardrails. No app framework yet — add
 
 ```bash
 gh repo create my-app --template stewartjarod/starter --private --clone && cd my-app
-mise trust && mise install        # Node 22, pnpm 11, gitleaks
+mise trust && mise install        # Node 24, pnpm 11, gitleaks
 pnpm install
 pnpm init-project my-app          # renames the @starter scope, DB name and display name
 cp .env.example .env              # mise loads it; fill in BETTER_AUTH_SECRET (openssl rand -base64 32)

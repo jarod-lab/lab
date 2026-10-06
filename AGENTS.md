@@ -5,7 +5,7 @@ Turborepo + pnpm 11 monorepo, TypeScript, no app framework yet (add apps under `
 ## Setup
 
 ```bash
-mise trust && mise install   # Node 22, pnpm 11, gitleaks (a fresh clone is untrusted until you do this)
+mise trust && mise install   # Node 24, pnpm 11, gitleaks (a fresh clone is untrusted until you do this)
 pnpm install
 pnpm init-project <name>     # template only: renames the @starter scope, DB name and display name
 cp .env.example .env         # mise loads it; BETTER_AUTH_SECRET: openssl rand -base64 32
@@ -81,7 +81,7 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - **e2e** (tester-army): **not configured yet.** `e2e/example.e2e.ts` is a skipped placeholder outside the workspace and CI.
   Setting it up needs an app to test and a model credential (e.g. `AI_GATEWAY_API_KEY`). Docs ship in `node_modules/e2e/docs`.
 - **Dependabot** runs weekly and groups minor/patch updates; major bumps arrive as separate PRs to evaluate, and
-  `@types/node` majors are ignored to stay on the pinned Node 22. The `esbuild` alert is dismissed: it is a dev-only transitive
+  `@types/node` majors are ignored to stay on the pinned Node 24. The `esbuild` alert is dismissed: it is a dev-only transitive
   dependency of `drizzle-kit`, and the advisory concerns esbuild's dev server, which we don't run.
 
 ## Agent permissions

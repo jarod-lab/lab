@@ -1,0 +1,19 @@
+# Local Postgres for dev: `docker compose up -d db`, then use the DATABASE_URL from .env.example.
+# Tests don't need this; they use in-process PGlite (@starter/db/testing).
+services:
+  db:
+    image: postgres:17-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: starter
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d starter"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

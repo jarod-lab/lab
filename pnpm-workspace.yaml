@@ -23,6 +23,7 @@ minimumReleaseAgeExclude:
   - '@oxlint/binding-win32-ia32-msvc@1.87.0'
   - '@oxlint/binding-win32-x64-msvc@1.87.0'
   - oxlint@1.87.0
+  - '@wraps.dev/better-auth@0.2.2'
 
 allowBuilds:
   '@prisma/client': false

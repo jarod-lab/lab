@@ -23,7 +23,6 @@ New project from this template: `pnpm init-project <name>` (renames the `@starte
 - Never bypass hooks (`--no-verify`). gitleaks, baseline and format run on pre-commit.
 - `@shadcn/lint` is registered with no rules enabled; add rules in `.oxlintrc.json`.
 - Don't run DB migrations without being asked (`db:migrate` / `drizzle-kit push` are denied in `.claude/settings.json`).
-- Known issue: `wrapsClient()` from `@wraps.dev/better-auth/client` breaks client typing on better-auth 1.7.7, so it's not used.
 
 ## Agent skills (`.claude/skills`, locked in `skills-lock.json`)
 gdp-ts, shadcn, turborepo, portless, better-auth (best-practices, create-auth, email-and-password). Refresh with `npx skills update`.

@@ -39,6 +39,7 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 
 - **Commits:** Conventional Commits (`feat`, `fix`, `chore`, `docs`, `test`, `ci`, `refactor`, `perf`, `build`, `style`, `revert`).
   Header and every body line must be 100 characters or fewer, or commitlint rejects it. PR titles follow the same format.
+  Dependabot commits (signed off by `dependabot[bot]`) are exempt, since it writes "Bump x from a to b".
 - **Hooks:** pre-commit runs gitleaks, baseline and a format check; commit-msg runs commitlint. Never use `--no-verify`.
   If gitleaks flags a test fixture, add `// gitleaks:allow` on that line. Don't allowlist whole files.
 - **Logging:** use `@starter/logger`, not `console.log` (baseline flags it). Throw `AppError`; never send an `INTERNAL`
@@ -79,7 +80,8 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - **baseline** (`code-baseline`): bans, ratchets and design-system rules in `baseline.toml`. Localhost `http://` warnings are fine.
 - **e2e** (tester-army): **not configured yet.** `e2e/example.e2e.ts` is a skipped placeholder outside the workspace and CI.
   Setting it up needs an app to test and a model credential (e.g. `AI_GATEWAY_API_KEY`). Docs ship in `node_modules/e2e/docs`.
-- **Dependabot** runs weekly and groups minor/patch updates. The `esbuild` alert is dismissed: it is a dev-only transitive
+- **Dependabot** runs weekly and groups minor/patch updates; major bumps arrive as separate PRs to evaluate, and
+  `@types/node` majors are ignored to stay on the pinned Node 22. The `esbuild` alert is dismissed: it is a dev-only transitive
   dependency of `drizzle-kit`, and the advisory concerns esbuild's dev server, which we don't run.
 
 ## Agent permissions

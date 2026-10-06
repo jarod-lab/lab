@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config"
 // Ratchet: thresholds only go up. Raise them when coverage improves.
 export const baseConfig = (
   thresholds = { lines: 80, functions: 80, branches: 70, statements: 80 },
+  extraExclude: string[] = [],
 ) =>
   defineConfig({
     test: {
@@ -17,6 +18,7 @@ export const baseConfig = (
           "src/**/*.stories.*",
           "src/**/*.types.ts",
           "src/auth-schema.ts",
+          ...extraExclude,
         ],
         reporter: ["text-summary", "lcov"],
         thresholds,

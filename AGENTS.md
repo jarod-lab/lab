@@ -51,6 +51,13 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - **Formatting and lint:** Biome formats only (no semicolons, 100 columns); Oxlint lints. Biome skips `.claude/` and lockfiles.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`). pnpm maintains
   `minimumReleaseAgeExclude` itself for very new releases; don't hand-edit it.
+- **Vendored shadcn code:** `packages/ui/src/components/ui/` (53 components) and `src/hooks/` come from the shadcn CLI.
+  Add or update with `cd packages/ui && npx shadcn@latest add <name> --overwrite`, never by hand-writing a clone. They get a smoke
+  test (`all.test.tsx`), not coverage thresholds. `add --all` fails (registry lists `attachment`, which has no `new-york` build), and
+  `combobox`, `native-select`, `direction`, `bubble`, `marker`, `message`, `message-scroller` don't exist for `new-york` either.
+  Local patches that a re-add would revert: `input-otp.tsx` (`slots[index]!`), `pagination.tsx` (`type ButtonProps`), `sidebar.tsx`
+  (hooks import is `@starter/ui/hooks/use-mobile`). `react-resizable-panels` is pinned to ^3 because v4 renamed the API the
+  component uses. Animations need `tw-animate-css` (imported in `styles.css`). baseline allows `bg-black/80` (overlay scrim).
 - **Vendored skills** in `.claude/skills` are third-party; don't edit them. Refresh with `npx skills update`.
 
 ## Testing

@@ -10,6 +10,11 @@ if (!name || !/^[a-z][a-z0-9-]*$/.test(name)) {
   process.exit(1)
 }
 
+const title = name
+  .split("-")
+  .map((w) => w[0].toUpperCase() + w.slice(1))
+  .join(" ")
+
 const SKIP = new Set(["node_modules", ".git", ".turbo", "dist", "pnpm-lock.yaml"])
 const SELF = "scripts/init-project.mjs"
 
@@ -37,6 +42,12 @@ for (const file of walk(".")) {
     .replace(/("name": ")starter(")/g, `$1${name}$2`)
     .replace(/^# starter$/m, `# ${name}`)
     .replace(/(name = ")starter(")/g, `$1${name}$2`)
+    .replaceAll("localhost:5432/starter", `localhost:5432/${name}`)
+    .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${name}`)
+    .replace(/-d starter/g, `-d ${name}`)
+    .replace(/^New project from this template:.*\n/m, "")
+    .replaceAll('"Starter', `"${title}`)
+    .replaceAll("Starter <", `${title} <`)
   if (next !== text) {
     writeFileSync(file, next)
     changed++

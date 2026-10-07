@@ -1,7 +1,8 @@
 [baseline]
 name = "starter"
 extends = ["shadcn-strict", "dependency-hygiene", "security"]
-exclude = ["scripts/**"]
+# scripts: CLIs may log. *-example.tsx: shadcn demo code, full of raw colors by design.
+exclude = ["scripts/**", "packages/ui/src/components/*-example.tsx"]
 
 # Overrides the shadcn-strict rule of the same id (presets are replaced whole): identical except
 # the overlay scrim used by shadcn's dialog, alert-dialog, sheet and drawer (Sera), which is

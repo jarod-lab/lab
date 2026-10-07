@@ -1,5 +1,5 @@
 import { baseConfig } from "@starter/config/vitest.base"
 
-// components/ui and hooks are vendored shadcn code (see AGENTS.md): the components get a smoke
-// test (all.test.tsx), but they are not held to coverage thresholds.
-export default baseConfig(undefined, ["src/components/ui/**", "src/hooks/**"])
+// src/components is vendored shadcn code, demos and their shims (see AGENTS.md), and src/hooks is a
+// vendored hook. They are smoke-tested (all.test.tsx, examples.test.tsx), not held to thresholds.
+export default baseConfig(undefined, ["src/components/**", "src/hooks/**"])

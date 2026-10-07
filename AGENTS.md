@@ -23,7 +23,7 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 - `packages/errors` — `AppError`/`ErrorCode`, `Result` (`ok`/`err`/`attempt`), `reportError` + `setErrorReporter`
 - `packages/env` — the only place env vars are read (validated with Zod)
 - `packages/config` — shared tsconfig and Vitest base config
-- `scripts/` — `init-project.mjs`
+- `scripts/` — `init-project.mjs`, `generate-stories.mjs`
 
 ## Before you call a change done
 
@@ -53,14 +53,21 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
   `minimumReleaseAgeExclude` itself for very new releases; don't hand-edit it.
 - **Vendored shadcn code:** `packages/ui/src/components/ui/` (60 components) and `src/hooks/` come from the shadcn CLI, style
   **`base-sera`** (Base UI primitives via `@base-ui/react`, lucide icons, sharp corners), set in `packages/ui/components.json`.
-  Add or update with `cd packages/ui && npx shadcn@latest add <name> --overwrite`, never by hand-writing a clone. They get a smoke
-  test (`all.test.tsx`), not coverage thresholds. Base UI uses a `render` prop where Radix used `asChild`.
+  Add or update with `cd packages/ui && npx shadcn@latest add <name> --overwrite`, never by hand-writing a clone. They get smoke
+  tests (`all.test.tsx`, `examples.test.tsx`), not coverage thresholds. Base UI uses a `render` prop where Radix used `asChild`.
   `npx shadcn@latest apply` does not work here (it needs a detected framework); change `style` in `components.json` and `add`
   the components instead. The registry's `form` is an empty stub for this style, so forms use `Field`/`FieldGroup`.
   `styles.css` must keep `@import "tw-animate-css"` and `@import "shadcn/tailwind.css"`: without them Tailwind silently drops the
   `data-open:`/`data-closed:` variants and the `animate-in`/`animate-out` utilities, and typecheck won't notice. Rebuild Storybook and
   check the CSS if you touch them. baseline allows `bg-black/20` (the overlay scrim used by dialog, sheet and drawer).
   `sonner` pulls in `next-themes` for theming; it works without Next but needs a theme provider to follow dark mode.
+- **Stories:** every component has a story that renders shadcn's own example for `base-sera` (`src/components/<name>-example.tsx`,
+  installed with `npx shadcn@latest add <name>-example --overwrite`). After adding examples run `pnpm stories`: it writes missing
+  `ui/<name>.stories.tsx` files (never overwriting existing ones) and sanitizes the demos. The demos assume Next, so it points
+  `next/image` and `next/link` at `components/example-compat.tsx`, and it applies three exact-string patches for
+  `noUncheckedIndexedAccess`. `message` and `message-scroller` have no example (their demos need the Vercel AI SDK) and `direction`
+  has none upstream. `examples.test.tsx` server-renders every example. Demos are excluded from baseline and coverage.
+  `add` may also flip `"use client"` directives in existing components; that is harmless here.
 - **Vendored skills** in `.claude/skills` are third-party; don't edit them. Refresh with `npx skills update`.
 
 ## Testing

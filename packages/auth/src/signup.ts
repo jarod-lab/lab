@@ -41,8 +41,12 @@ export interface ProvisionalSignup {
 export const isClaimed = (user: { emailVerified?: boolean | null }): boolean =>
   user.emailVerified === true
 
+// REST sends `headers` on the response, so the client sees Retry-After; `context` keeps the number.
 const rateLimited = (retryAfter: number, message: string) =>
-  new AppError("RATE_LIMITED", message, { context: { retryAfter } })
+  new AppError("RATE_LIMITED", message, {
+    headers: { "retry-after": String(retryAfter) },
+    context: { retryAfter },
+  })
 
 /**
  * Create a provisional account and send one claim email (a password reset link to `/claim`).

@@ -9,7 +9,7 @@ import { jwt, organization } from "better-auth/plugins"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 
-import { deviceAuthorizationPlugin } from "./device"
+import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { type Adapter, firstMembership, findMember, personalOrganization } from "./membership"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { registerSignupDatabase } from "./signup"
@@ -70,6 +70,8 @@ export interface AuthOptions {
    * Defaults to 600 per minute; `false` turns it off (e.g. when a gateway rate-limits instead).
    */
   apiKeyRateLimit?: { timeWindow: number; maxRequests: number } | false
+  /** Device-grant minimum poll interval (e.g. "5s"). Tests use a short one; the default is 5s. */
+  deviceInterval?: DeviceInterval
   /** Passed to `WrapsEmail` for auth emails (`client`, `region`, `roleArn`, ...); tests inject a fake. */
   ses?: Record<string, unknown>
   /** Called when an auth email fails to send. Sends never block the auth flow. */
@@ -198,7 +200,7 @@ export function createAuth(opts: AuthOptions) {
         customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
       }),
       // RFC 8628 device grant on the same token endpoint (see device.ts).
-      deviceAuthorizationPlugin(),
+      deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
     ],
   })
   ref.context = auth.$context

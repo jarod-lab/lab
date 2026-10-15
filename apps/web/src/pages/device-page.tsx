@@ -5,6 +5,7 @@ import { Field, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
+import { NotYou } from "../components/not-you"
 import { OrganizationSwitcher } from "../components/organization-switcher"
 import { SignInOrUp } from "../components/sign-in-or-up"
 import { messageOf } from "../lib/messages"
@@ -133,7 +134,11 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
   }
 
   return (
-    <AuthCard title="Connect a device" description="Enter the code your agent shows you.">
+    <AuthCard
+      title="Connect a device"
+      description="Enter the code your agent shows you."
+      footer={<NotYou auth={auth} onSignedOut={() => setReloads((n) => n + 1)} />}
+    >
       <div className="flex flex-col gap-4">
         <FieldGroup>
           <Field>

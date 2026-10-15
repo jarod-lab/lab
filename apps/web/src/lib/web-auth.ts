@@ -1,4 +1,3 @@
-import { oauthProviderClient } from "@better-auth/oauth-provider/client"
 import { createClient } from "@starter/auth/client"
 
 /** An auth call that the server refused, with the message to show the person. */
@@ -45,6 +44,8 @@ export interface WebAuth {
   getSession(): Promise<WebSession | null>
   signIn(input: { email: string; password: string }): Promise<string | undefined>
   signUp(input: { name: string; email: string; password: string }): Promise<string | undefined>
+  /** End the current session (the person is not who the page expects, or wants to switch). */
+  signOut(): Promise<void>
   listOrganizations(): Promise<WebOrganization[]>
   setActiveOrganization(organizationId: string): Promise<void>
   /** The display name of an OAuth client, or null when it has none. */
@@ -82,15 +83,12 @@ const urlFrom = (body: { url?: string; redirect_uri?: string } | null | undefine
 
 /**
  * The browser implementation. Same-origin: the API serves these pages, so `baseURL` is the page's
- * origin and session cookies go with every request. The OAuth fetch plugin adds the page's signed
- * query to sign-in, sign-up, consent and continue, which is how those requests resume the flow.
+ * origin and session cookies go with every request. The client's OAuth fetch plugin adds the page's
+ * signed query to sign-in, sign-up, consent and continue, which is how those requests resume the flow.
  */
 export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAuth {
-  const client = createClient(baseURL, {
-    plugins: oauthProviderClient().fetchPlugins,
-    // Only set when given: an explicit undefined would replace better-auth's default fetch.
-    ...(fetchImpl ? { customFetchImpl: fetchImpl } : {}),
-  })
+  // Only set when given: an explicit undefined would replace better-auth's default fetch.
+  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
 
   return {
     async getSession() {
@@ -116,6 +114,9 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
         "Could not create the account",
       )
       return data?.url ?? undefined
+    },
+    async signOut() {
+      unwrap(await client.signOut(), "Could not sign out")
     },
     async listOrganizations() {
       const orgs = unwrap<Array<{ id: string; name: string }>>(

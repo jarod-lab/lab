@@ -11,6 +11,7 @@ export function fakeAuth(overrides: Partial<WebAuth> = {}): WebAuth {
     })),
     signIn: vi.fn(async () => undefined),
     signUp: vi.fn(async () => undefined),
+    signOut: vi.fn(async () => undefined),
     listOrganizations: vi.fn(async () => [
       { id: "org-a", name: "Analytical Ltd" },
       { id: "org-b", name: "Babbage Labs" },

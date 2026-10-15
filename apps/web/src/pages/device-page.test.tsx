@@ -120,4 +120,25 @@ describe("DevicePage", () => {
     render(<DevicePage auth={auth} />)
     expect(await screen.findByText("Network down")).toBeTruthy()
   })
+
+  it("lets a signed-in person who is not the approver sign out and sign in again", async () => {
+    let signedIn = true
+    const auth = fakeAuth({
+      getSession: vi.fn(async () =>
+        signedIn
+          ? {
+              user: { id: "u1", email: "ada@example.com", name: "Ada" },
+              activeOrganizationId: "org-a",
+            }
+          : null,
+      ),
+      signOut: vi.fn(async () => {
+        signedIn = false
+      }),
+    })
+    render(<DevicePage auth={auth} />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: /sign out/i }))
+    expect(await screen.findByRole("group", { name: "Sign in or create an account" })).toBeTruthy()
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
 })

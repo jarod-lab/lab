@@ -1,0 +1,114 @@
+// The built web app (apps/web/dist), served from the API origin so the auth cookies apply to its pages.
+// Only the app's page paths get index.html (the client router takes over); unknown paths stay 404.
+import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+import { readFile, stat } from "node:fs/promises"
+import { extname, join, resolve, sep } from "node:path"
+
+import type { Env, Hono } from "hono"
+
+/** The pages the single-page app serves. Keep in step with apps/web's routes. */
+export const PAGE_PATHS = [
+  "/sign-in",
+  "/sign-up",
+  "/consent",
+  "/select-organization",
+  "/accept-invitation/:id",
+  "/device",
+  "/reset-password",
+  "/claim",
+  "/settings/*",
+] as const
+
+const MIME: Record<string, string> = {
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain; charset=utf-8",
+}
+
+/** `'sha256-…'` for each inline script in the page: the app's bootstrap code is inline. */
+export function inlineScriptHashes(html: string): string[] {
+  const hashes: string[] = []
+  for (const m of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)) {
+    if (/\ssrc\s*=/i.test(m[1] ?? "")) continue
+    const digest = createHash("sha256")
+      .update(m[2] ?? "")
+      .digest("base64")
+    hashes.push(`'sha256-${digest}'`)
+  }
+  return hashes
+}
+
+/** Same-origin resources only, inline scripts by hash, and no framing (clickjacking). */
+export function contentSecurityPolicy(html: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' ${inlineScriptHashes(html).join(" ")}`.trim(),
+    // React sets style attributes at runtime, which a strict style-src would block.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ")
+}
+
+/**
+ * Serve the built web app from `distDir`. Reads index.html now, so a missing build fails at startup
+ * rather than on the first page view.
+ */
+export function mountWeb<E extends Env>(app: Hono<E>, distDir: string): void {
+  const root = resolve(distDir)
+  const html = readFileSync(join(root, "index.html"), "utf8")
+  const pageHeaders = {
+    "content-type": "text/html; charset=utf-8",
+    "content-security-policy": contentSecurityPolicy(html),
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "cache-control": "no-cache",
+  }
+  for (const path of PAGE_PATHS) {
+    app.get(path, () => new Response(html, { headers: pageHeaders }))
+  }
+
+  // Build output is content-hashed, so it can be cached forever.
+  const assetsDir = join(root, "assets")
+  app.get("/assets/*", async (c) => {
+    let relative: string
+    try {
+      relative = decodeURIComponent(c.req.path.slice("/assets/".length))
+    } catch {
+      return c.notFound()
+    }
+    const file = resolve(assetsDir, relative)
+    if (!file.startsWith(`${assetsDir}${sep}`)) return c.notFound()
+    try {
+      if (!(await stat(file)).isFile()) return c.notFound()
+    } catch {
+      return c.notFound()
+    }
+    return new Response(await readFile(file), {
+      headers: {
+        "content-type": MIME[extname(file)] ?? "application/octet-stream",
+        "cache-control": "public, max-age=31536000, immutable",
+      },
+    })
+  })
+}

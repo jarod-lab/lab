@@ -1,3 +1,4 @@
+import { getConnInfo } from "@hono/node-server/conninfo"
 import {
   type AnyOperation,
   type ApiInfo,
@@ -6,21 +7,28 @@ import {
   invoke,
   llmsFullTxt,
   llmsTxt,
+  type OperationContext,
   openApiDocument,
 } from "@starter/api"
 import {
   AUTH_BASE_PATH,
+  type Auth,
   OAUTH_SCOPE_GRANTS,
   OAUTH_SCOPES,
-  type Auth,
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
+  provisionalSignup,
   resolvePrincipal,
 } from "@starter/auth"
 import { AppError, reportError, toAppError } from "@starter/errors"
 import { type Logger } from "@starter/logger"
 import { createMcpHandler, protectedResourceMetadata } from "@starter/mcp"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
+
+import { BEARER_PATHS, bearerCors } from "./cors"
+import type { ApiHooks } from "./hooks"
+import { mountWeb } from "./static"
+import { REST_ONLY_OPERATIONS, signupInput } from "./operations"
 
 export interface AppOptions {
   auth: Auth
@@ -31,6 +39,74 @@ export interface AppOptions {
   version: string
   description: string
   logger: Logger
+  /** Metering, idempotency and audit for every operation call (see hooks.ts). */
+  hooks: ApiHooks
+  /**
+   * Take the client IP from the rightmost X-Forwarded-For entry (the one our proxy added). Only when
+   * a proxy overwrites that header; otherwise the socket address is used.
+   */
+  trustProxy?: boolean
+  /** The built web app to serve from this origin (apps/web/dist). */
+  webDistDir?: string
+}
+
+/** Idempotency-Key: 1 to 255 characters, or absent. */
+function idempotencyKeyOf(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  if (value.length === 0 || value.length > 255) {
+    throw new AppError("BAD_REQUEST", "Idempotency-Key must be 1 to 255 characters", {
+      hint: "Send a unique string per logical action, or omit the header.",
+    })
+  }
+  return value
+}
+
+/** The client's address for signup limits. X-Forwarded-For only when the proxy is trusted. */
+function clientIp(c: Context, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = (c.req.header("x-forwarded-for") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const ours = forwarded.at(-1)
+    if (ours) return ours
+  }
+  try {
+    return getConnInfo(c).remote.address ?? "unknown"
+  } catch {
+    // No socket (tests call the app directly).
+    return "unknown"
+  }
+}
+
+/** Headers an error response carries: its own, plus retry-after from a rate limit's context. */
+function errorHeaders(error: AppError): Record<string, string> {
+  const headers = { ...error.headers }
+  const retryAfter = error.context.retryAfter
+  if (headers["retry-after"] === undefined && typeof retryAfter === "number") {
+    headers["retry-after"] = String(retryAfter)
+  }
+  return headers
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null
+
+/**
+ * The OpenAPI document, with the one operation that needs no credentials and takes no idempotency
+ * key (signup) corrected: its generated entry would advertise auth and a retry header it ignores.
+ */
+function openApi(doc: ReturnType<typeof openApiDocument>) {
+  const post = doc.paths["/v1/signup"]?.post
+  if (isRecord(post)) {
+    post.security = []
+    if (Array.isArray(post.parameters)) {
+      post.parameters = post.parameters.filter(
+        (p) => !(isRecord(p) && p.name === "Idempotency-Key"),
+      )
+    }
+  }
+  return doc
 }
 
 /**
@@ -38,7 +114,8 @@ export interface AppOptions {
  * REST under the operations' paths, MCP at /mcp, OpenAPI, llms.txt and OAuth discovery.
  */
 export function createApp(opts: AppOptions) {
-  const { auth, operations, baseURL, logger } = opts
+  const { auth, operations, baseURL, logger, hooks } = opts
+  const trustProxy = opts.trustProxy ?? false
   const issuer = `${baseURL}${AUTH_BASE_PATH}`
   const mcpUrl = `${baseURL}/mcp`
   const audience = [baseURL, mcpUrl]
@@ -58,7 +135,7 @@ export function createApp(opts: AppOptions) {
         OAUTH_SCOPES.filter((s) => covers(OAUTH_SCOPE_GRANTS[s], permissions)),
     },
   }
-  const openapi = openApiDocument(operations, info)
+  const openapi = openApi(openApiDocument(operations, info))
   const llms = llmsTxt(operations, info)
   const llmsFull = llmsFullTxt(operations, info)
 
@@ -69,9 +146,10 @@ export function createApp(opts: AppOptions) {
     name: opts.name,
     version: opts.version,
     instructions: `${opts.description} Full reference: ${baseURL}/llms-full.txt`,
-    operations,
+    operations: operations.filter((op) => !REST_ONLY_OPERATIONS.has(op.name)),
     authenticate,
     resourceMetadataUrl: `${baseURL}/.well-known/oauth-protected-resource/mcp`,
+    invokeOptions: hooks.invokeOptions,
   })
   const resourceMetadata = protectedResourceMetadata({
     resource: mcpUrl,
@@ -103,6 +181,10 @@ export function createApp(opts: AppOptions) {
     )
   })
 
+  // Browsers may call the bearer surfaces cross-origin. Never /api/auth/*: that stays same-origin.
+  const cors = bearerCors()
+  for (const path of BEARER_PATHS) app.use(path, cors)
+
   app.onError((e, c) => {
     const error = toAppError(e)
     // Agents sending bad requests is normal traffic; only report what we'd want to be paged for.
@@ -110,6 +192,7 @@ export function createApp(opts: AppOptions) {
       reportError(error, { requestId: c.get("requestId"), path: c.req.path })
       logger.error({ err: error, requestId: c.get("requestId") }, error.message)
     }
+    for (const [name, value] of Object.entries(errorHeaders(error))) c.header(name, value)
     return c.json({ error: error.toPublic() }, error.status as 400)
   })
 
@@ -141,6 +224,32 @@ export function createApp(opts: AppOptions) {
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))
 
+  // Signup needs no credentials. With credentials, it falls through to the operation (which refuses).
+  app.post("/v1/signup", async (c, next) => {
+    if (await authenticate(c.req.raw)) return next()
+    const body = await c.req.json().catch(() => {
+      throw new AppError("BAD_REQUEST", "Body must be JSON")
+    })
+    const input = signupInput.safeParse(body)
+    if (!input.success)
+      throw new AppError("BAD_REQUEST", "Invalid signup", {
+        hint: input.error.issues
+          .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+          .join("; "),
+      })
+    const created = await provisionalSignup(auth, {
+      email: input.data.email,
+      name: input.data.name,
+      ip: clientIp(c, trustProxy),
+    })
+    return c.json({
+      organizationId: created.organizationId,
+      apiKey: created.apiKey,
+      claimUrlSentTo: input.data.email.trim().toLowerCase(),
+      limits: { requestsPerDay: hooks.limits.unclaimed },
+    })
+  })
+
   // REST: one route per operation.
   for (const op of operations) {
     app.on(op.method, op.path, async (c) => {
@@ -153,9 +262,26 @@ export function createApp(opts: AppOptions) {
         })
       }
       const input = { ...c.req.query(), ...(body as object), ...c.req.param() }
-      return c.json(await invoke(op, input, { caller, requestId: c.get("requestId") }))
+      const ctx: OperationContext = {
+        caller,
+        requestId: c.get("requestId"),
+        idempotencyKey: idempotencyKeyOf(c.req.header("idempotency-key")),
+      }
+      try {
+        const result = await invoke(op, input, ctx, hooks.invokeOptions)
+        for (const [name, value] of Object.entries(hooks.rateLimitHeaders(ctx)))
+          c.header(name, value)
+        return c.json(result)
+      } catch (e) {
+        // Refusals by the rate limit still carry the counters.
+        for (const [name, value] of Object.entries(hooks.rateLimitHeaders(ctx)))
+          c.header(name, value)
+        throw e
+      }
     })
   }
+
+  if (opts.webDistDir) mountWeb(app, opts.webDistDir)
 
   return app
 }

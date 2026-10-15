@@ -1,0 +1,198 @@
+// Cross-cutting behaviour for every operation call, REST and MCP alike, wired through `invoke`'s hooks:
+//   - metering: every call counts toward its organization's daily limit (lower while unclaimed)
+//   - idempotency: a non-readOnly call with an Idempotency-Key runs once; retries replay its response
+//   - audit: every non-readOnly call is recorded with its outcome (including refusals made here)
+//   - permission hints: a FORBIDDEN names the OAuth scope or API key permission that would allow it
+import { createHash } from "node:crypto"
+
+import {
+  type AnyOperation,
+  type Caller,
+  covers,
+  formatPermissions,
+  type InvokeEvent,
+  type InvokeOptions,
+  type InvokeOutcome,
+  type OperationContext,
+  type PermissionSet,
+} from "@starter/api"
+import { OAUTH_SCOPE_GRANTS, OAUTH_SCOPES } from "@starter/auth"
+import type { Database } from "@starter/db"
+import { AppError, type ErrorCode, reportError } from "@starter/errors"
+
+import { recordAuditEvent } from "./data/audit"
+import {
+  completeIdempotencyKey,
+  releaseIdempotencyKey,
+  reserveIdempotencyKey,
+} from "./data/idempotency"
+import { type Meter, type MeterLimits, secondsUntilReset } from "./meter"
+import { inCallerOrg } from "./tenant"
+
+export interface ApiHooks {
+  /** Pass to `invoke` (REST) and `createMcpHandler` (MCP). */
+  invokeOptions: InvokeOptions
+  /** The daily request limits in force (claimed and unclaimed organizations). */
+  limits: MeterLimits
+  /** RateLimit-* headers for a call that was metered; empty otherwise. Read after `invoke` returns. */
+  rateLimitHeaders(ctx: OperationContext): Record<string, string>
+}
+
+interface Reading {
+  limit: number
+  total: number
+  claimed: boolean
+  resetIn: number
+}
+
+const isMutating = (op: AnyOperation) => op.hints?.readOnly !== true
+
+/** JSON with sorted keys, so the same input always hashes the same way. */
+export function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((v) => stableJson(v ?? null)).join(",")}]`
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`
+  }
+  return JSON.stringify(value) ?? "null"
+}
+
+/**
+ * The hash an Idempotency-Key is bound to: the operation, who is calling, and the validated input.
+ * The actor is part of it, so one credential's key can't replay another actor's response (a key
+ * minted for someone else must never be handed back).
+ */
+export const requestHash = (operation: string, actor: Caller["actor"], input: unknown): string =>
+  createHash("sha256").update(stableJson({ operation, actor, input })).digest("hex")
+
+/** Names the OAuth scopes (and API key permission) that would allow what the caller lacks. */
+export function permissionHint(missing: PermissionSet): string {
+  const needed = formatPermissions(missing)
+  const scopes = OAUTH_SCOPES.filter((s) => covers(OAUTH_SCOPE_GRANTS[s], missing))
+  const via =
+    scopes.length > 0
+      ? `an OAuth token with scope ${scopes.map((s) => `\`${s}\``).join(" or ")}, or an API key with ${needed}`
+      : `an API key with ${needed} (no OAuth scope grants it)`
+  return `Needs ${needed}. Use ${via}.`
+}
+
+export function createApiHooks({ db, meter }: { db: Database; meter: Meter }): ApiHooks {
+  const readings = new WeakMap<OperationContext, Reading>()
+  // Keys this call reserved; completed or released in `after`.
+  const reserved = new WeakMap<OperationContext, string>()
+
+  async function audit(op: AnyOperation, ctx: OperationContext, outcome: "ok" | ErrorCode) {
+    const { caller } = ctx
+    try {
+      await inCallerOrg(caller, (org, proof) =>
+        recordAuditEvent(db, org, proof, {
+          actorType: caller.actor.type === "user" ? "user" : "apiKey",
+          actorId: caller.actor.type === "user" ? caller.actor.userId : caller.actor.keyId,
+          clientId: caller.clientId,
+          operation: op.name,
+          outcome,
+          requestId: ctx.requestId,
+        }),
+      )
+    } catch (e) {
+      // An audit write that fails must not change the response the caller gets.
+      reportError(e, { operation: op.name, phase: "audit" })
+    }
+  }
+
+  async function before(e: InvokeEvent): Promise<{ result: unknown } | undefined> {
+    const { op, input, ctx } = e
+    const mutating = isMutating(op)
+    try {
+      const now = new Date()
+      const { limit, total, claimed, day } = await meter.consume(ctx.caller, op.name, now)
+      const resetIn = secondsUntilReset(now)
+      readings.set(ctx, { limit, total, claimed, resetIn })
+      if (total > limit) {
+        throw new AppError(
+          "RATE_LIMITED",
+          `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,
+          {
+            hint: claimed
+              ? "The counter resets at 00:00 UTC. Retry after the Retry-After seconds."
+              : `The owner has not verified their email yet, so the limit is ${limit} per day. ` +
+                `Verify it (the claim link from signup) to raise the limit to ${meter.limits.claimed} ` +
+                "per day, or retry after the Retry-After seconds.",
+            headers: { "retry-after": String(resetIn) },
+            context: { limit, day },
+          },
+        )
+      }
+
+      if (!mutating || ctx.idempotencyKey === undefined) return undefined
+      const key = ctx.idempotencyKey
+      const state = await inCallerOrg(ctx.caller, (org, proof) =>
+        reserveIdempotencyKey(db, org, proof, {
+          key,
+          operation: op.name,
+          requestHash: requestHash(op.name, ctx.caller.actor, input),
+        }),
+      )
+      if (state.state === "done") return { result: state.response }
+      if (state.state === "in_progress") {
+        throw new AppError("CONFLICT", "A request with this Idempotency-Key is still running", {
+          hint: "Wait a moment, then retry with the same Idempotency-Key and the same body.",
+        })
+      }
+      if (state.state === "mismatch") {
+        throw new AppError(
+          "CONFLICT",
+          "This Idempotency-Key was already used for a different request",
+          {
+            hint: "Use a new Idempotency-Key for a new request. To repeat this exact request, send the same body and operation.",
+          },
+        )
+      }
+      reserved.set(ctx, key)
+      return undefined
+    } catch (err) {
+      // `after` does not run for errors thrown here, so refusals are audited on the way out.
+      if (
+        mutating &&
+        err instanceof AppError &&
+        (err.code === "RATE_LIMITED" || err.code === "CONFLICT")
+      ) {
+        await audit(op, ctx, err.code)
+      }
+      throw err
+    }
+  }
+
+  async function after(e: InvokeEvent & { outcome: InvokeOutcome }): Promise<void> {
+    const { op, ctx, outcome } = e
+    const key = reserved.get(ctx)
+    try {
+      if (key !== undefined) {
+        reserved.delete(ctx)
+        await inCallerOrg(ctx.caller, (org, proof) =>
+          outcome.ok
+            ? completeIdempotencyKey(db, org, proof, { key, response: outcome.result })
+            : releaseIdempotencyKey(db, org, proof, key),
+        )
+      }
+    } finally {
+      if (isMutating(op)) await audit(op, ctx, outcome.ok ? "ok" : outcome.error.code)
+    }
+  }
+
+  return {
+    invokeOptions: { hooks: { before, after }, permissionHint },
+    limits: meter.limits,
+    rateLimitHeaders(ctx): Record<string, string> {
+      const r = readings.get(ctx)
+      if (!r) return {}
+      return {
+        "ratelimit-limit": String(r.limit),
+        "ratelimit-remaining": String(Math.max(0, r.limit - r.total)),
+        "ratelimit-reset": String(r.resetIn),
+      }
+    },
+  }
+}

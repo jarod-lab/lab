@@ -14,8 +14,8 @@
     "/v1/whoami": {
       "get": {
         "operationId": "whoami",
-        "summary": "Show the caller, its organization and permissions",
-        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, and its permission grants (a request is allowed when one grant covers all of it). Call this first to check a credential.",
+        "summary": "Show the caller, its organization, permissions and usage",
+        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email). Call this first to check a credential.",
         "responses": {
           "200": {
             "description": "OK",
@@ -65,13 +65,46 @@
                           }
                         }
                       }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "day": {
+                          "type": "string",
+                          "description": "The UTC day the counter covers (YYYY-MM-DD)"
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Requests so far today, including this one"
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Requests allowed per day for this organization"
+                        }
+                      },
+                      "required": [
+                        "day",
+                        "total",
+                        "limit"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "claimed": {
+                      "type": "boolean",
+                      "description": "False while the owner's email is unverified (lower limit)"
                     }
                   },
                   "required": [
                     "organizationId",
                     "actor",
                     "via",
-                    "grants"
+                    "grants",
+                    "usage",
+                    "claimed"
                   ],
                   "additionalProperties": false
                 }
@@ -126,11 +159,149 @@
         }
       }
     },
+    "/v1/signup": {
+      "post": {
+        "operationId": "signup",
+        "summary": "Create an agent account without signing in",
+        "description": "Creates a personal organization, an API key with project permissions, and sends one email to the address to claim the account. Send it with no credentials: this is the only operation that needs none. Use the returned apiKey straight away, as x-api-key or a Bearer token. Until the owner follows the claim link the organization has a lower daily request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+                    "description": "Address that claims the account; one claim email is sent to it"
+                  },
+                  "name": {
+                    "description": "Display name",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "example": {
+                "email": "agent@example.com"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "apiKey": {
+                      "type": "string",
+                      "description": "Shown once. Stores project read, create, update and delete."
+                    },
+                    "claimUrlSentTo": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "requestsPerDay": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Until the email is verified"
+                        }
+                      },
+                      "required": [
+                        "requestsPerDay"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "organizationId",
+                    "apiKey",
+                    "claimUrlSentTo",
+                    "limits"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-required-permissions": []
+      }
+    },
     "/v1/projects": {
       "get": {
         "operationId": "list_projects",
         "summary": "List the organization's projects",
-        "description": "Returns every project in the caller's organization, oldest first. Use the ids with delete_project.",
+        "description": "Returns the organization's projects, oldest first, one page at a time. Pass nextCursor back as cursor to get the next page; it is null on the last page. Use the ids with delete_project.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -162,10 +333,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
-                    "projects"
+                    "projects",
+                    "nextCursor"
                   ],
                   "additionalProperties": false
                 }
@@ -601,6 +779,391 @@
         "x-required-permissions": [
           "apiKey:create"
         ]
+      }
+    },
+    "/v1/agents": {
+      "get": {
+        "operationId": "list_connected_agents",
+        "summary": "List the agents connected to this organization",
+        "description": "Lists the organization's API keys and the OAuth clients (AI tools, CLIs) that hold consent or a live refresh token for it. Each has an id for revoke_agent_access. Use it to audit access before revoking. An OAuth client only shows while it holds a refresh token or consent.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "oauthClient",
+                              "apiKey"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "access": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "name",
+                          "createdAt",
+                          "lastUsedAt",
+                          "access"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "agents"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "apiKey:delete"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
+    "/v1/agents/{id}": {
+      "delete": {
+        "operationId": "revoke_agent_access",
+        "summary": "Revoke an agent's access to this organization",
+        "description": "Deletes an API key, or for an OAuth client removes its consent and refresh tokens for this organization, so it can no longer refresh. An access token it already holds stays valid until it expires (one hour by default). The client itself is not deleted. Returns NOT_FOUND for ids that aren't connected to this organization. Confirm with the user before calling.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Agent id from list_connected_agents"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "revoked"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "apiKey:delete"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        }
+      }
+    },
+    "/v1/audit-events": {
+      "get": {
+        "operationId": "list_audit_events",
+        "summary": "List who did what in this organization",
+        "description": "Lists recorded writes and refusals in this organization, newest first: the actor (a user or an API key), the OAuth client if any, the operation, its outcome and the request id. Pass nextCursor back as cursor for older events; it is null on the last page. Requires an organization admin.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "actor": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "apiKey"
+                                ]
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "clientId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "operation": {
+                            "type": "string"
+                          },
+                          "outcome": {
+                            "type": "string"
+                          },
+                          "requestId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "actor",
+                          "clientId",
+                          "operation",
+                          "outcome",
+                          "requestId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "events",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "organization:update"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
       }
     }
   },

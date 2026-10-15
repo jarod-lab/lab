@@ -73,7 +73,14 @@ async function fromSession(auth: Auth, headers: Headers): Promise<Principal | nu
 async function fromApiKey(auth: Auth, key: string): Promise<Principal | null> {
   const res = await auth.api.verifyApiKey({ body: { key } })
   if (res.error?.code === "RATE_LIMITED") {
-    throw new AppError("RATE_LIMITED", "API key rate limit exceeded; retry later")
+    // better-auth reports the wait in milliseconds; Retry-After is whole seconds, at least one.
+    const details = (res.error as { details?: { tryAgainIn?: unknown } }).details
+    const waitMs = Number(details?.tryAgainIn)
+    const retryAfter = Math.max(1, Math.ceil((Number.isFinite(waitMs) ? waitMs : 0) / 1000))
+    throw new AppError("RATE_LIMITED", "API key rate limit exceeded; retry later", {
+      headers: { "retry-after": String(retryAfter) },
+      hint: `Wait ${retryAfter} seconds before retrying, or use a key with a higher limit.`,
+    })
   }
   if (!res.valid || !res.key) return null
   // Keys reference their organization without a foreign key; a deleted org's keys must stop working.
@@ -90,6 +97,54 @@ async function fromApiKey(auth: Auth, key: string): Promise<Principal | null> {
     grants: Object.keys(permissions).length > 0 ? [permissions] : [],
     clientId: res.key.id,
   }
+}
+
+interface Grant {
+  clientId: string
+  organizationId: string
+  userId: string
+  /** When the access token was issued (whole seconds, as in its `iat`). */
+  issuedAt: Date
+}
+
+/**
+ * Whether the grant behind an OAuth access token still stands for this client, organization and
+ * user. A grant is consent (authorization code clients, always written) or a live refresh token
+ * (device-grant clients, which never get consent). revoke_agent_access deletes the consent and
+ * revokes the refresh tokens, stamping `revoked`. A token issued before such a stamp fails even
+ * when a new grant exists now. Rotation also stamps `revoked`, but sets `rotatedAt`, so rotated
+ * rows don't count. Consent counts only when it predates the token, since better-auth writes
+ * consent before it mints the token. Three point lookups, each keyed by the clientId index.
+ */
+async function grantStands(auth: Auth, grant: Grant, now: Date): Promise<boolean> {
+  const db = (await auth.$context).adapter
+  const who = [
+    { field: "clientId", value: grant.clientId },
+    { field: "referenceId", value: grant.organizationId },
+    { field: "userId", value: grant.userId },
+  ]
+  const [consent, live, revocation] = await Promise.all([
+    db.findOne<{ createdAt: Date | string }>({ model: "oauthConsent", where: who }),
+    db.findOne<{ id: string }>({
+      model: "oauthRefreshToken",
+      where: [
+        ...who,
+        { field: "revoked", value: null },
+        { field: "expiresAt", value: now, operator: "gt" },
+      ],
+    }),
+    db.findOne<{ id: string }>({
+      model: "oauthRefreshToken",
+      where: [
+        ...who,
+        { field: "revoked", value: grant.issuedAt, operator: "gt" },
+        { field: "rotatedAt", value: null },
+      ],
+    }),
+  ])
+  if (revocation) return false
+  if (consent) return new Date(consent.createdAt).getTime() <= grant.issuedAt.getTime()
+  return live !== null
 }
 
 async function fromAccessToken(
@@ -113,6 +168,15 @@ async function fromAccessToken(
   if (!payload.sub || typeof clientId !== "string" || typeof payload.org !== "string") return null
   const member = await findMember((await auth.$context).adapter, payload.sub, payload.org)
   if (!member) return null
+  // A JWT has no row to revoke, so its grant is checked on every request (see grantStands).
+  if (typeof payload.iat !== "number") return null
+  const grant = {
+    clientId,
+    organizationId: payload.org,
+    userId: payload.sub,
+    issuedAt: new Date(payload.iat * 1000),
+  }
+  if (!(await grantStands(auth, grant, new Date()))) return null
   const scopes = typeof payload.scope === "string" ? payload.scope.split(" ") : []
   return {
     organizationId: payload.org,

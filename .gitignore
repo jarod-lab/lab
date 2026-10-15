@@ -6,3 +6,4 @@ dist
 !.env.example
 coverage
 storybook-static
+.claude/worktrees/

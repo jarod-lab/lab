@@ -7,7 +7,7 @@ pre-commit:
       run: pnpm baseline
     format:
       glob: "*.{ts,tsx,json,css}"
-      run: pnpm biome format {staged_files}
+      run: pnpm biome format --no-errors-on-unmatched {staged_files}
 
 commit-msg:
   commands:

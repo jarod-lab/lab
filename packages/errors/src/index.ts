@@ -23,6 +23,19 @@ export interface AppErrorOptions {
   expose?: boolean
   /** Structured, loggable context. Never put secrets here. */
   context?: Record<string, unknown>
+  /** Actionable advice for the caller (agents read it), e.g. which permission would fix it. */
+  hint?: string
+  /** A link or doc reference for the caller. */
+  docs?: string
+  /** Extra HTTP response headers (e.g. `retry-after`). REST sets them on the response. */
+  headers?: Record<string, string>
+}
+
+export interface PublicAppError {
+  code: ErrorCode
+  message: string
+  hint?: string
+  docs?: string
 }
 
 export class AppError extends Error {
@@ -30,6 +43,9 @@ export class AppError extends Error {
   readonly status: number
   readonly expose: boolean
   readonly context: Record<string, unknown>
+  readonly hint: string | undefined
+  readonly docs: string | undefined
+  readonly headers: Record<string, string>
 
   constructor(code: ErrorCode, message: string, opts: AppErrorOptions = {}) {
     super(message, { cause: opts.cause })
@@ -38,11 +54,18 @@ export class AppError extends Error {
     this.status = STATUS[code]
     this.expose = opts.expose ?? code !== "INTERNAL"
     this.context = opts.context ?? {}
+    this.hint = opts.hint
+    this.docs = opts.docs
+    this.headers = opts.headers ?? {}
   }
 
-  /** What to send to a client: details only when `expose` is set. */
-  toPublic(): { code: ErrorCode; message: string } {
-    return { code: this.code, message: this.expose ? this.message : "Internal error" }
+  /** What to send to a client: details only when `expose` is set; hint and docs only then too. */
+  toPublic(): PublicAppError {
+    if (!this.expose) return { code: this.code, message: "Internal error" }
+    const out: PublicAppError = { code: this.code, message: this.message }
+    if (this.hint) out.hint = this.hint
+    if (this.docs) out.docs = this.docs
+    return out
   }
 }
 

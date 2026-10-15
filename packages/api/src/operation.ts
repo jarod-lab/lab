@@ -1,7 +1,7 @@
-import { AppError, type ErrorCode } from "@starter/errors"
+import { AppError, type ErrorCode, reportError, toAppError } from "@starter/errors"
 import { z } from "zod"
 
-import { allowed, type PermissionSet, type PermissionsOf } from "./permissions"
+import { allowed, isEmpty, type PermissionSet, type PermissionsOf } from "./permissions"
 
 /**
  * Who is calling, for which organization, and what they may do there. `Principal` from
@@ -19,6 +19,42 @@ export interface Caller {
 export interface OperationContext {
   caller: Caller
   requestId?: string
+  /** Client-chosen key for safe retries of non-readOnly operations (see `Idempotency-Key`). */
+  idempotencyKey?: string
+}
+
+export interface InvokeEvent {
+  op: AnyOperation
+  input: unknown
+  ctx: OperationContext
+}
+
+export interface InvokeHooks {
+  /**
+   * After permission + input validation, before the handler. Return `{ result }` to short-circuit: the
+   * handler is skipped and `result` is returned as stored (a replay), without output validation, because
+   * it was validated when first produced. Throwing an AppError aborts the call (e.g. CONFLICT,
+   * RATE_LIMITED); `after` does not run then, since the handler was never reached.
+   */
+  before?(e: InvokeEvent): Promise<{ result: unknown } | undefined | void>
+  /**
+   * Runs once per call that reached the handler or was short-circuited, with the outcome. Errors thrown
+   * here are reported via `reportError` and swallowed: they never change what the caller receives.
+   */
+  after?(e: InvokeEvent & { outcome: InvokeOutcome }): Promise<void>
+}
+
+export type InvokeOutcome =
+  | { ok: true; result: unknown; replayed: boolean }
+  | { ok: false; error: AppError }
+
+export interface InvokeOptions {
+  hooks?: InvokeHooks
+  /**
+   * Text for FORBIDDEN hints, e.g. "Needs project:read; OAuth scope `read` or an API key with project:read".
+   * Receives the permissions the caller lacks, measured against their closest grant.
+   */
+  permissionHint?: (missing: PermissionSet) => string
 }
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
@@ -110,13 +146,21 @@ export function defineRegistry<const T extends readonly AnyOperation[]>(ops: T):
 }
 
 /**
- * Run an operation for a caller: check permissions, validate input, call the handler, validate output.
- * Throws AppError (FORBIDDEN, BAD_REQUEST); anything else the handler throws propagates.
+ * Run an operation for a caller: check permissions, validate input, run `before` hooks, call the handler,
+ * validate output, then run `after` hooks. Throws AppError (FORBIDDEN, BAD_REQUEST, or whatever a hook
+ * throws); anything else the handler throws propagates unchanged.
  */
-export async function invoke(op: AnyOperation, raw: unknown, ctx: OperationContext) {
+export async function invoke(
+  op: AnyOperation,
+  raw: unknown,
+  ctx: OperationContext,
+  options: InvokeOptions = {},
+) {
   if (!allowed(ctx.caller.grants, op.permissions)) {
-    throw new AppError("FORBIDDEN", `Missing permission: ${formatPermissions(op.permissions)}`, {
+    const missing = missingPermissions(ctx.caller.grants, op.permissions)
+    throw new AppError("FORBIDDEN", `Missing permission: ${formatPermissions(missing)}`, {
       context: { operation: op.name, organizationId: ctx.caller.organizationId },
+      hint: options.permissionHint?.(missing),
     })
   }
   const parsed = op.input.safeParse(raw ?? {})
@@ -125,15 +169,68 @@ export async function invoke(op: AnyOperation, raw: unknown, ctx: OperationConte
       context: { operation: op.name },
     })
   }
-  const result = await op.handler(parsed.data, ctx)
-  const out = op.output.safeParse(result)
-  if (!out.success) {
-    throw new AppError("INTERNAL", `${op.name} returned an invalid result`, {
-      cause: out.error,
-      context: { operation: op.name },
-    })
+  const event: InvokeEvent = { op, input: parsed.data, ctx }
+  const hooks = options.hooks
+  const replay = await hooks?.before?.(event)
+  if (replay) {
+    await runAfter(hooks, event, { ok: true, result: replay.result, replayed: true })
+    return replay.result
   }
-  return out.data
+  let result: unknown
+  try {
+    const out = op.output.safeParse(await op.handler(parsed.data, ctx))
+    if (!out.success) {
+      throw new AppError("INTERNAL", `${op.name} returned an invalid result`, {
+        cause: out.error,
+        context: { operation: op.name },
+      })
+    }
+    result = out.data
+  } catch (e) {
+    await runAfter(hooks, event, { ok: false, error: toAppError(e) })
+    throw e
+  }
+  await runAfter(hooks, event, { ok: true, result, replayed: false })
+  return result
+}
+
+/** Errors from `after` are reported and dropped: they must not change the response. */
+async function runAfter(
+  hooks: InvokeHooks | undefined,
+  event: InvokeEvent,
+  outcome: InvokeOutcome,
+): Promise<void> {
+  if (!hooks?.after) return
+  try {
+    await hooks.after({ ...event, outcome })
+  } catch (e) {
+    reportError(e, { operation: event.op.name, phase: "after" })
+  }
+}
+
+const countActions = (p: PermissionSet) => Object.values(p).reduce((n, a) => n + a.length, 0)
+
+/**
+ * The permissions a caller lacks for `need`, measured against the grant closest to covering it, so the
+ * hint names the smallest missing set. With no grants at all, everything in `need` is missing.
+ */
+export function missingPermissions(
+  grants: readonly PermissionSet[],
+  need: PermissionSet,
+): PermissionSet {
+  if (isEmpty(need)) return {}
+  const missingIn = (g: PermissionSet): Record<string, string[]> => {
+    const out: Record<string, string[]> = {}
+    for (const [resource, actions] of Object.entries(need)) {
+      const lacking = actions.filter((a) => !g[resource]?.includes(a))
+      if (lacking.length > 0) out[resource] = lacking
+    }
+    return out
+  }
+  if (grants.length === 0) return need
+  return grants
+    .map(missingIn)
+    .reduce((best, cur) => (countActions(cur) < countActions(best) ? cur : best))
 }
 
 /** `{ project: ["read", "update"] }` -> "project:read, project:update" */

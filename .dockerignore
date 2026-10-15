@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.env
+.env.*
+out
+**/node_modules
+**/.turbo
+**/dist
+**/build
+**/coverage
+**/.next
+storybook-static
+e2e

@@ -23,3 +23,6 @@
 | N7 | CI jobs run on GitHub; compose stack end-to-end | unresolved | needs push / a real DB + migrations (user) |
 | N4b | revoked OAuth client's existing access tokens fail; API-key 429 has Retry-After | pass | revocation.test.ts 6 HTTP tests (5/6 fail with the check disabled: mutation-verified); auth 53, api-app 156; branch 528488f |
 | N4b | grant check is one indexed query | fail (accepted, follow-up) | 3 parallel point lookups on clientId-indexed tables; composite index + db accessor left for later |
+| N5 | install snippets, server.json (schema-validated, served + committed in sync), skill parity test | pass | node: uncached chain green on b8dcb40; schema 2025-12-11 vendored; openapi unchanged |
+| N5 | Cursor remote config + VS Code `--add-mcp` `type:"http"` shapes | unresolved | inferred from docs without remote examples |
+| N5 | signup.test.ts flake under parallel load | fail→M3 | timed out once at 30s, passed on rerun (second sighting after N1 fix) |

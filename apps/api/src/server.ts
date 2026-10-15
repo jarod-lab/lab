@@ -42,6 +42,12 @@ const app = createApp({
   hooks: createApiHooks({ db, meter }),
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
+  // The MCP registry entry (/.well-known/mcp/server.json). Rename before publishing: the name is
+  // reverse-DNS for a namespace you can prove (io.github.<owner>/<repo> or your domain).
+  registry: {
+    name: "io.github.example/starter",
+    description: "Starter API: projects, API keys, agent access and audit for people and agents.",
+  },
 })
 
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)

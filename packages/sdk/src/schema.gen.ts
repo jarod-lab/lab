@@ -137,7 +137,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke an agent's access to this organization
-         * @description Deletes an API key, or for an OAuth client removes its consent and refresh tokens for this organization, so it can no longer refresh. An access token it already holds stays valid until it expires (one hour by default). The client itself is not deleted. Returns NOT_FOUND for ids that aren't connected to this organization. Confirm with the user before calling.
+         * @description Deletes an API key, or for an OAuth client removes its consent and refresh tokens for this organization. Its tokens stop working immediately, including access tokens it already holds. The client itself is not deleted. Returns NOT_FOUND for ids that aren't connected to this organization. Confirm with the user before calling.
          */
         delete: operations["revoke_agent_access"];
         options?: never;

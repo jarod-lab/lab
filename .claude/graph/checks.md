@@ -27,3 +27,6 @@
 | N5 | Cursor remote config + VS Code `--add-mcp` `type:"http"` shapes | unresolved | inferred from docs without remote examples |
 | N5 | signup.test.ts flake under parallel load | fail→M3 | timed out once at 30s, passed on rerun (second sighting after N1 fix) |
 | M3-prep | parallel-load flake fixed at the root (worker cap), not per test | pass | 2 forced full runs 13/13 (88s, 112s); auth/signup.test.ts file 11.2s (was 40–47s) |
+| N6 | SDK (generated types, retries, idempotency, errors, paginate) + CLI (device login w/ offline_access, call/ops/whoami) | pass | node: uncached chain green; sdk 38 tests, cli 68 tests; `starter --help` runs; branch 1fafba3 |
+| N6 | CLI login against the real server | unresolved→N8 | tested only against a fake server |
+| M3 | merge N4b+N5+N6+N7, lockfile, SDK schema regenerated, full chain uncached | pass | TURBO_FORCE: lint/typecheck/test:coverage 15/15, baseline, format, build 4/4 (ERROR lines are negative-path test logs) |

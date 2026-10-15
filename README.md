@@ -20,7 +20,7 @@ docker compose up -d db           # local Postgres (tests don't need it)
 
 | | |
 |---|---|
-| `packages/ui` | shadcn/ui components, `cn`, Tailwind v4 theme, Storybook (+ MCP at `/mcp`) |
+| `packages/ui` | shadcn/ui components, `cn`, Tailwind v4 theme, Storybook (+ MCP at `/mcp`), axe test helper |
 | `packages/db` | Drizzle ORM, committed migrations, `@starter/db/testing` (in-process PGlite) |
 | `apps/api` | Reference API ([Hono](https://hono.dev) on Node): REST, `/mcp`, `/openapi.json`, `/llms.txt`, OAuth discovery |
 | `packages/api` | Operation registry: `defineOperation` once → REST, MCP, OpenAPI 3.1, `llms.txt` / `llms-full.txt` |
@@ -29,6 +29,7 @@ docker compose up -d db           # local Postgres (tests don't need it)
 | `packages/auth-proofs` | [gdp-ts](https://github.com/rauchg/gdp-ts) proofs for tenant isolation (`callerActsFor`, `projectInOrg`), lint-enforced |
 | `packages/env` | Validated environment variables (the only place env is read) |
 | `packages/logger`, `packages/errors` | Structured logging and typed app errors |
+| `packages/observability` | Request ids, access logs, error handling and health checks for Web-standard handlers |
 | `packages/config` | Shared tsconfig and Vitest base config |
 | `skills/starter` | Template agent skill to ship to your customers' agents (`npx skills add <owner>/<repo>`) |
 

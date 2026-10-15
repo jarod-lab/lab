@@ -123,4 +123,28 @@ describe("InvitationPage", () => {
     render(<InvitationPage auth={auth} invitationId="nope" />)
     await waitFor(() => expect(screen.getByText("This invitation could not be found")).toBeTruthy())
   })
+
+  it("lets the wrong account sign out and sign in as the invited address", async () => {
+    let signedIn = true
+    const auth = fakeAuth({
+      getSession: vi.fn(async () =>
+        signedIn
+          ? {
+              user: { id: "u1", email: "grace@example.com", name: "Grace" },
+              activeOrganizationId: null,
+            }
+          : null,
+      ),
+      getInvitation: vi.fn(async () =>
+        Promise.reject(new Error("This invitation could not be found")),
+      ),
+      signOut: vi.fn(async () => {
+        signedIn = false
+      }),
+    })
+    render(<InvitationPage auth={auth} invitationId="inv-1" />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: /sign out/i }))
+    expect(await screen.findByRole("group", { name: "Sign in or create an account" })).toBeTruthy()
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
 })

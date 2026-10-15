@@ -4,8 +4,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light and dark tokens: the shadcn `neutral` base colour for style base-sera (registry values),
-   except the sidebar-primary and primary colours, which this app sets itself. */
+/* Light and dark tokens. The shadcn `neutral` values (registry for style base-sera) fill in the
+   card, popover, secondary, muted, accent, destructive, border, input, ring, chart and radius
+   tokens. Values this file already had are kept as the app set them, so they differ from the
+   registry: dark --primary (0.985 here, 0.922 upstream) and every sidebar token (hsl here, oklch
+   upstream). */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

@@ -78,7 +78,10 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
 
   if (state.status === "error") {
     return (
-      <AuthCard title="Invitation unavailable">
+      <AuthCard
+        title="Invitation unavailable"
+        footer={<NotYou auth={auth} onSignedOut={() => setReloads((n) => n + 1)} />}
+      >
         <ErrorAlert message={state.message} />
       </AuthCard>
     )

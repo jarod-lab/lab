@@ -15,5 +15,33 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot release step: applies the migrations, then exits 0. The api starts only after it succeeds.
+  migrate:
+    build: .
+    working_dir: /app
+    command: ["node", "scripts/release.mjs"]
+    environment:
+      DATABASE_URL: postgres://user:pass@db:5432/starter
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # The API image (built from the Dockerfile) against the compose database. Needs BETTER_AUTH_SECRET
+  # and EMAIL_FROM in your shell or an interpolation env file; see .env.example.
+  api:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://user:pass@db:5432/starter
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM}
+      PORT: "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   pgdata:

@@ -26,3 +26,4 @@
 | N5 | install snippets, server.json (schema-validated, served + committed in sync), skill parity test | pass | node: uncached chain green on b8dcb40; schema 2025-12-11 vendored; openapi unchanged |
 | N5 | Cursor remote config + VS Code `--add-mcp` `type:"http"` shapes | unresolved | inferred from docs without remote examples |
 | N5 | signup.test.ts flake under parallel load | fail→M3 | timed out once at 30s, passed on rerun (second sighting after N1 fix) |
+| M3-prep | parallel-load flake fixed at the root (worker cap), not per test | pass | 2 forced full runs 13/13 (88s, 112s); auth/signup.test.ts file 11.2s (was 40–47s) |

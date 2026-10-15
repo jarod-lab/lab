@@ -99,4 +99,6 @@ SDK types via the generator script · full check chain.
 - `invoke`'s `after` hook does not see FORBIDDEN/BAD_REQUEST or `before`-thrown errors; audit of denied
   attempts must be done by the caller (N2 decision, accepted). N4 audits before-hook refusals itself.
 - OAuth JWT access tokens leave no DB row; "revoked" must be checked against refresh tokens/consents (N4).
+- Cap vitest workers per package (`maxWorkers` = cores/4 in vitest.base): turbo runs all packages at
+  once, and default per-core workers oversubscribed PGlite past 30s timeouts (M3; auth/signup 47s→11s).
 - Device-grant clients have no consent row; list them from `oauth_refresh_token` (N4).

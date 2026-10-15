@@ -22,7 +22,7 @@
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
-    "@wraps.dev/better-auth": "^0.2.2",
+    "@wraps.dev/better-auth": "^0.3.0",
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "1.7.7",
     "jose": "^6.2.3"

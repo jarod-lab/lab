@@ -1,6 +1,6 @@
 import { apiKey } from "@better-auth/api-key"
 import { oauthProvider } from "@better-auth/oauth-provider"
-import { wraps, wrapsAuthEmails } from "@wraps.dev/better-auth"
+import { wraps } from "@wraps.dev/better-auth"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
@@ -82,17 +82,18 @@ export function createAuth(opts: AuthOptions) {
 
   // Auth emails go through the user's own SES via Wraps. The plugin fills in better-auth's top-level
   // senders (verification, reset, password changed); the invitation sender belongs to the
-  // organization plugin, so it's wired below. Links point at the app's /accept-invitation/:id page.
-  // TODO: once @wraps.dev/better-auth ships `plugin.emails` (after 0.2.2), pass
-  // `plugin.emails.invitation` instead, so all auth emails share one SES client.
-  const emailOptions = {
-    from: opts.emailFrom,
-    appName: opts.appName ?? "Starter",
-    appUrl: opts.baseURL,
-    ses: opts.ses,
-    onError: opts.onEmailError,
-  }
-  const emails = wrapsAuthEmails(emailOptions)
+  // organization plugin, so it comes from `wrapsPlugin.emails` below and shares the SES client.
+  // Invitation links point at the app's /accept-invitation/:id page.
+  const wrapsPlugin = wraps({
+    apiKey: opts.wrapsApiKey,
+    email: {
+      from: opts.emailFrom,
+      appName: opts.appName ?? "Starter",
+      appUrl: opts.baseURL,
+      ses: opts.ses,
+      onError: opts.onEmailError,
+    },
+  })
 
   const auth = betterAuth({
     secret: opts.secret,
@@ -121,15 +122,12 @@ export function createAuth(opts: AuthOptions) {
       },
     },
     plugins: [
-      wraps({
-        apiKey: opts.wrapsApiKey,
-        email: emailOptions,
-      }),
+      wrapsPlugin,
       organization({
         ac,
         roles,
         creatorRole: "owner",
-        sendInvitationEmail: emails.invitation,
+        sendInvitationEmail: wrapsPlugin.emails.invitation,
       }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
       // checks it against the creator). No defaults: a key without permissions can do nothing.

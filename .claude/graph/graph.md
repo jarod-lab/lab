@@ -77,7 +77,7 @@ All editing nodes run in a git worktree off the current `agent-graph` head, with
 ## Edges and waves
 
 ```
-B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2 ─► wave 3: N4b ∥ N5 ∥ N6 ∥ N7 ─► M3 ─► wave 4: N8 ─► N9 ─► M4
+B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2 ─► wave 3: N4b ∥ N5 ∥ N6 ∥ N7 ─► M3 ─► wave 4: N8 ∥ N9 ─► M4
 ```
 
 - N4 consumes N1 (tables, data fns, device grant) and N2 (hooks, pagination, hints).
@@ -85,6 +85,8 @@ B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2
 - N5, N6, N7 consume the post-N4 `openapi.json` / env; they share no files.
 - Gate on every merge: the full chain, plus `oauth-flow.test.ts` and `principal.test.ts` with no diff
   unless the node's report justifies it.
+
+Decision (wave 4): N9 runs beside N8, not after it. N8 only adds test files, and docs don't describe them.
 
 ## Code nodes (never routed through a model)
 

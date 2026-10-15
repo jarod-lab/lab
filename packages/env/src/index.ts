@@ -12,6 +12,9 @@ export const env = createEnv({
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),
     WRAPS_API_KEY: z.string().min(1).optional(),
+    PORT: z.coerce.number().int().positive().optional(),
+    /** Set by portless under `pnpm dev`: the app's https://<name>.localhost URL. */
+    PORTLESS_URL: z.url().optional(),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional(),
   },
   runtimeEnv: process.env,

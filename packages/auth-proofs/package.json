@@ -14,7 +14,10 @@
     "lint": "oxlint -c ../../.oxlintrc.json"
   },
   "dependencies": {
-    "@gdp-ts/core": "^0.1.0"
+    "@gdp-ts/core": "^0.1.0",
+    "@starter/api": "workspace:*",
+    "@starter/db": "workspace:*",
+    "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
     "@starter/config": "workspace:*",

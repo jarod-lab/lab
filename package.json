@@ -22,6 +22,7 @@
     "@biomejs/biome": "^2.0.0",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
+    "@gdp-ts/core": "^0.1.0",
     "@shadcn/lint": "^0.2.0",
     "code-baseline": "^1.6.0",
     "e2e": "^0.17.0",

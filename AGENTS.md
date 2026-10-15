@@ -1,6 +1,6 @@
 # starter
 
-Turborepo + pnpm 11 monorepo, TypeScript, no app framework yet (add apps under `apps/`).
+Turborepo + pnpm 11 monorepo, TypeScript. `apps/api` is a reference Hono API; add more apps under `apps/`.
 
 ## Setup
 
@@ -14,11 +14,22 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 
 ## Layout
 
-- `apps/` — applications (empty in the template)
+- `apps/api` — Hono on Node (`@hono/node-server`, run with `tsx`). `createApp` in `app.ts` serves REST, `/mcp`,
+  `/openapi.json`, `/llms.txt`, `/llms-full.txt`, OAuth discovery under `/.well-known/` and better-auth at `/api/auth/*`.
+  Operations live in `src/operations.ts`. `server.ts` only wires env, the DB and the listener (excluded from coverage)
+- `packages/api` — operation registry: `defineOperation`, `defineRegistry`, `invoke` (scopes → input → handler →
+  output validation), `openApiDocument`, `llmsTxt`, `llmsFullTxt`. Framework-agnostic
+- `packages/mcp` — `createMcpHandler({ operations, authenticate, resourceMetadataUrl })`: stateless Streamable HTTP
+  MCP server as a Web handler; `protectedResourceMetadata` (RFC 9728)
 - `packages/ui` — shadcn/ui components + Storybook; use `cn` from `cn`, never clsx/tailwind-merge
 - `packages/db` — Drizzle ORM (Postgres), committed migrations in `drizzle/`, test helper `@starter/db/testing`
-- `packages/auth` — better-auth: `createAuth({ db, secret, baseURL, emailFrom })`, `createClient()`; Wraps plugin for contact sync and SES auth emails
-- `packages/auth-proofs` — gdp-ts authorization proofs; protected functions take proofs as arguments
+- `packages/auth` — better-auth: `createAuth({ db, secret, baseURL, emailFrom })`, `createClient()`; Wraps plugin for contact
+  sync and SES auth emails; organizations (personal org on signup); org-owned API keys (`sk_`); OAuth 2.1 + jwt plugin.
+  `permissions.ts` is the permission catalog (`statements`), roles and OAuth scope grants.
+  `resolvePrincipal(auth, headers, { audience })` turns an API key, OAuth token or session into a `Principal`
+- `skills/starter` — template skill shipped to customers' agents (not one for this repo; those are in `.claude/skills`)
+- `packages/auth-proofs` — gdp-ts proofs: branded ids in `lib/ids.ts`, trusted provers in `proofs/` (`callerActsFor`,
+  `projectInOrg`), compile-time misuse cases in `mistakes.types.ts`. Tenant data functions take proofs as arguments
 - `packages/logger` — pino with secret redaction: `createLogger({ name })`
 - `packages/errors` — `AppError`/`ErrorCode`, `Result` (`ok`/`err`/`attempt`), `reportError` + `setErrorReporter`
 - `packages/env` — the only place env vars are read (validated with Zod)
@@ -45,7 +56,8 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 - **Logging:** use `@starter/logger`, not `console.log` (baseline flags it). Throw `AppError`; never send an `INTERNAL`
   message to a client, use `error.toPublic()`. Register Sentry once at startup with `setErrorReporter`.
 - **Env:** add every variable to `packages/env` and `.env.example`. Never read or edit `.env` (denied in settings).
-- **Authorization:** use gdp-ts proofs (see the gdp-ts skill), don't hand-roll boolean permission checks.
+- **Authorization:** declare what an operation needs in its `permissions` (enforced by `invoke`), and guard tenant data
+  with gdp-ts proofs (see the gdp-ts and agent-api skills). Don't hand-roll role or ownership checks in handlers.
 - **UI:** semantic tokens and dark-mode variants only, no raw colors like `bg-white` (baseline `shadcn-strict`).
   `@shadcn/lint` is registered with no rules enabled; add rules in `.oxlintrc.json`.
 - **Formatting and lint:** Biome formats only (no semicolons, 100 columns); Oxlint lints. Biome skips `.claude/` and lockfiles.
@@ -69,6 +81,52 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
   has none upstream. `examples.test.tsx` server-renders every example. Demos are excluded from baseline and coverage.
   `add` may also flip `"use client"` directives in existing components; that is harmless here.
 - **Vendored skills** in `.claude/skills` are third-party; don't edit them. Refresh with `npx skills update`.
+  Exception: `.claude/skills/agent-api` is ours (not in `skills-lock.json`); keep it current when the API setup changes.
+
+## Agent-native API
+
+Load the `agent-api` skill before adding or changing an operation, permission, role, OAuth scope, tenant
+table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth-proofs` or `resolvePrincipal`.
+
+- **One registry, many surfaces.** Operations are defined in `apps/api/src/operations.ts` with the typed
+  `defineOperation` (`operationsFor<Catalog>()`). Never hand-write a REST route, MCP tool or OpenAPI entry: they are
+  generated. Write `description` for an agent, give `examples` (contract tests require one; `error` documents an
+  expected failure), `permissions` and `hints`. Input is params + query + JSON body merged; `z.coerce` for GET numbers.
+- **Every request acts in one organization.** `ctx.caller` has `organizationId`, `actor` (user or apiKey) and `grants`.
+  Signup creates a personal org; sessions use their active org; API keys belong to an org; OAuth tokens carry an
+  `org` claim chosen at consent. Membership is checked live on every request.
+- **Permissions.** One catalog (`statements` in `packages/auth/src/permissions.ts`) drives roles (owner, admin, member,
+  viewer), API-key permissions, OAuth scope grants and operations. Effective access = role ∩ credential, and a
+  request needs a single grant covering all of it (better-auth's multi-role rule; `permissions.test.ts` checks parity
+  with `hasPermission` for every role and action). `invoke` enforces `op.permissions`; MCP hides tools a caller can't use.
+- **OAuth scopes** are coarse (`read`, `write`, `admin` in `OAUTH_SCOPE_GRANTS`), each an explicit permission set.
+  `OAUTH_EXCLUDED` lists what no token may ever do (org deletion, role editing); a test checks every action is one or
+  the other. `openid`/`profile`/`email`/`offline_access` grant nothing.
+- **API keys** are org-owned, start with no permissions, and are created through `create_api_key`, which requires a
+  user actor and refuses permissions beyond the caller's own grants (better-auth only accepts key permissions
+  server-side). Rate limited per key (default 600/min, `apiKeyRateLimit`); over the limit is 429. better-auth's default
+  is 10 per day, so never drop the override. Keys of a deleted organization stop working.
+- **Tenant data.** Every customer-data table has `organizationId` (see `project` in `packages/db/src/schema.ts`). Data
+  functions take a `Named` org id plus `CallerActsFor` (and `ProjectInOrg`-style proofs for rows), and still filter by
+  org in SQL. Another org's row answers NOT_FOUND, never FORBIDDEN. `pnpm lint` runs the gdp-ts rules: only
+  `proofs/` may mint proofs.
+- **The contract.** `apps/api/openapi.json` is a committed snapshot (`contract.test.ts`); Biome skips it. After an
+  intended API change run `pnpm --filter @starter/api-app test -u` and review the diff as a public API change.
+- **Errors** reach agents as `{ error: { code, message } }` (REST) or an `isError` tool result (MCP), via `toPublic()`.
+  Only 5xx and unexposed errors are reported to the error tracker.
+- **OAuth.** Tokens are JWTs: aud = the resource, `azp`, `org`, space-separated `scope`, iss = `${baseURL}/api/auth`;
+  `resolvePrincipal` requires all of them, and the jwt plugin's `set-auth-jwt` header is off so session JWTs can't
+  pass. A web app must provide `/sign-in`, `/consent` (show the org being granted, with a switcher that calls
+  `organization/set-active` before accepting) and `/select-organization` (only when the session has no valid active
+  org; then POST `/oauth2/continue` with `{ postLogin: true }`). None exists yet. `nativeLoopbackRegistration` and
+  `clientRegistrationDefaultResources` keep self-registering MCP clients working. `oauth-flow.test.ts` covers the flow.
+- **URLs.** `apps/api` uses `PORTLESS_URL` (set by portless under `pnpm dev`) or else `BETTER_AUTH_URL`; the OAuth
+  issuer, audiences and llms.txt links derive from it. The server needs Postgres with every migration applied: the
+  OAuth provider seeds its resources at boot and exits if it can't.
+- **Request logging:** `apps/api` has its own request-id and access-log middleware.
+- **Not yet:** custom roles per org (`dynamicAccessControl`: resolve roles from the DB in `rolePermissions`, then rerun
+  the parity test), CORS for browser MCP clients and cross-origin web apps, usage metering, breaking-change checks on
+  `openapi.json` in CI.
 
 ## Testing
 
@@ -87,6 +145,8 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
   `src/auth-schema.ts`; regenerate with `pnpm --filter @starter/auth generate` after changing auth options or plugins.
 - New migration: `pnpm --filter @starter/db db:generate`, then commit the SQL in `packages/db/drizzle/`.
 - Applying migrations (`db:migrate`, `drizzle-kit push`) is denied for agents. Ask the user to run them.
+- `0001_agent_auth` adds the API key, JWKS and OAuth tables (apikey, jwks, oauth_*); `0002_organizations` adds
+  organization, member, invitation, `session.active_organization_id` and the example `project` table.
 
 ## Tooling
 
@@ -107,10 +167,11 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
 It denies force-push, `--no-verify`, `git reset --hard`, DB migrations and reading or editing `.env` files.
 Anything else, such as `git push`, `docker`, `pnpm init-project` or installing skills, is not pre-approved.
 
-## Skills
+## Skills (this repo)
 
 gdp-ts, shadcn, turborepo, portless, better-auth (best-practices, create-auth, email-and-password).
-Pinned in `skills-lock.json`.
+Pinned in `skills-lock.json`. Ours: `agent-api` (operations, MCP, OAuth, the API contract).
+`skills/starter` is not for this repo: it is the template skill shipped to customers' agents.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

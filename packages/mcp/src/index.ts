@@ -1,0 +1,146 @@
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+import {
+  CallToolRequestSchema,
+  type CallToolResult,
+  ListToolsRequestSchema,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js"
+import {
+  allowed,
+  type AnyOperation,
+  type Caller,
+  inputSchema,
+  invoke,
+  outputSchema,
+} from "@starter/api"
+import { reportError, toAppError } from "@starter/errors"
+
+export interface McpHandlerOptions {
+  name: string
+  version: string
+  /** Sent to the client on initialize: tell the agent what this server is for. */
+  instructions?: string
+  operations: readonly AnyOperation[]
+  /** Resolve the caller from the request, or null when unauthenticated. */
+  authenticate: (request: Request) => Promise<Caller | null>
+  /** URL of this server's /.well-known/oauth-protected-resource document (RFC 9728). */
+  resourceMetadataUrl: string
+}
+
+const canCall = (op: AnyOperation, caller: Caller) => allowed(caller.grants, op.permissions)
+
+export function toTool(op: AnyOperation): Tool {
+  const output = outputSchema(op)
+  return {
+    name: op.name,
+    title: op.summary,
+    description: op.description,
+    inputSchema: { ...inputSchema(op), type: "object" },
+    // MCP structured output must be an object; other outputs are returned as text only.
+    ...(output.type === "object" && { outputSchema: { ...output, type: "object" } }),
+    annotations: {
+      title: op.summary,
+      readOnlyHint: op.hints?.readOnly,
+      destructiveHint: op.hints?.destructive,
+      idempotentHint: op.hints?.idempotent,
+      openWorldHint: false,
+    },
+  }
+}
+
+async function callTool(
+  op: AnyOperation,
+  args: unknown,
+  caller: Caller,
+  requestId?: string,
+): Promise<CallToolResult> {
+  try {
+    const result = await invoke(op, args, { caller, requestId })
+    const text = JSON.stringify(result, null, 2)
+    const structured = result !== null && typeof result === "object" && !Array.isArray(result)
+    return {
+      content: [{ type: "text", text }],
+      ...(structured && { structuredContent: result as Record<string, unknown> }),
+    }
+  } catch (e) {
+    const error = toAppError(e)
+    // A model sending bad arguments is expected; only report what we'd want to be paged for.
+    if (error.status >= 500 || !error.expose) reportError(error, { operation: op.name, requestId })
+    // Tool errors go back to the model so it can correct itself; never leak INTERNAL details.
+    return { isError: true, content: [{ type: "text", text: JSON.stringify(error.toPublic()) }] }
+  }
+}
+
+function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string): Server {
+  const server = new Server(
+    { name: opts.name, version: opts.version },
+    { capabilities: { tools: {} }, instructions: opts.instructions },
+  )
+  const visible = opts.operations.filter((op) => canCall(op, caller))
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
+  server.setRequestHandler(CallToolRequestSchema, (req) => {
+    const op = visible.find((o) => o.name === req.params.name)
+    if (!op) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown tool: ${req.params.name}` }],
+      } satisfies CallToolResult
+    }
+    return callTool(op, req.params.arguments, caller, requestId)
+  })
+  return server
+}
+
+/**
+ * A stateless MCP server over Streamable HTTP, as a Web `Request` -> `Response` handler.
+ * Every operation the caller has permissions for is a tool. Unauthenticated requests get a 401 that
+ * points MCP clients at the OAuth metadata, so they can sign the user in.
+ */
+export function createMcpHandler(opts: McpHandlerOptions) {
+  return async (request: Request, ctx: { requestId?: string } = {}): Promise<Response> => {
+    const caller = await opts.authenticate(request)
+    if (!caller) {
+      return Response.json(
+        { error: { code: "UNAUTHORIZED", message: "Sign in or send an organization API key" } },
+        {
+          status: 401,
+          headers: {
+            "www-authenticate": `Bearer resource_metadata="${opts.resourceMetadataUrl}"`,
+          },
+        },
+      )
+    }
+    const server = buildServer(opts, caller, ctx.requestId)
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    })
+    await server.connect(transport)
+    try {
+      return await transport.handleRequest(request)
+    } finally {
+      await server.close()
+    }
+  }
+}
+
+export interface ProtectedResourceOptions {
+  /** This MCP server's URL, e.g. https://api.example.com/mcp */
+  resource: string
+  /** Issuer URL(s) of the OAuth authorization server. */
+  authorizationServers: string[]
+  scopes: readonly string[]
+  name?: string
+}
+
+/** RFC 9728 metadata. Serve at /.well-known/oauth-protected-resource (and with the /mcp suffix). */
+export function protectedResourceMetadata(opts: ProtectedResourceOptions) {
+  return {
+    resource: opts.resource,
+    authorization_servers: opts.authorizationServers,
+    scopes_supported: [...opts.scopes],
+    bearer_methods_supported: ["header"],
+    ...(opts.name && { resource_name: opts.name }),
+  }
+}

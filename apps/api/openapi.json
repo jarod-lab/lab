@@ -1,0 +1,528 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Test API",
+    "version": "1.0.0",
+    "description": "A test API."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/v1/whoami": {
+      "get": {
+        "operationId": "whoami",
+        "summary": "Show the caller, its organization and permissions",
+        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, and its permission grants (a request is allowed when one grant covers all of it). Call this first to check a credential.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "apiKey"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "via": {
+                      "type": "string"
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "organizationId",
+                    "actor",
+                    "via",
+                    "grants"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": []
+          }
+        ],
+        "x-required-permissions": [],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "operationId": "list_projects",
+        "summary": "List the organization's projects",
+        "description": "Returns every project in the caller's organization, oldest first. Use the ids with delete_project.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "projects"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "project:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      },
+      "post": {
+        "operationId": "create_project",
+        "summary": "Create a project",
+        "description": "Creates a project in the caller's organization and returns it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Project name"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "example": {
+                "name": "Website"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "project:create"
+        ]
+      }
+    },
+    "/v1/projects/{id}": {
+      "delete": {
+        "operationId": "delete_project",
+        "summary": "Delete a project",
+        "description": "Permanently deletes a project in the caller's organization. Returns NOT_FOUND for ids that don't exist or belong to another organization. Confirm with the user before calling.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Project id from list_projects"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "project:delete"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        }
+      }
+    },
+    "/v1/api-keys": {
+      "post": {
+        "operationId": "create_api_key",
+        "summary": "Create an organization API key",
+        "description": "Creates an API key for the caller's organization with the given permissions, which must be within the caller's own. The key is returned once; store it securely. Only a signed-in user (session or OAuth) can create keys, not another API key.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "What the key is for"
+                  },
+                  "permissions": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "description": "Permissions for the key, e.g. { \"project\": [\"read\"] }"
+                  },
+                  "expiresInDays": {
+                    "description": "Omit for no expiry",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                },
+                "required": [
+                  "name",
+                  "permissions"
+                ]
+              },
+              "example": {
+                "name": "CI",
+                "permissions": {
+                  "project": [
+                    "read"
+                  ]
+                },
+                "expiresInDays": 90
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "key",
+                    "permissions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "apiKey:create"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      },
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key or OAuth access token"
+      },
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "http://localhost:3000/api/auth/oauth2/authorize",
+            "tokenUrl": "http://localhost:3000/api/auth/oauth2/token",
+            "scopes": {
+              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"]}",
+              "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"]}",
+              "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"]}"
+            }
+          }
+        }
+      }
+    }
+  }
+}

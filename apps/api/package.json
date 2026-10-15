@@ -1,0 +1,42 @@
+{
+  "name": "@starter/api-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc",
+    "lint": "oxlint -c ../../.oxlintrc.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@starter/api": "workspace:*",
+    "@starter/auth": "workspace:*",
+    "@starter/auth-proofs": "workspace:*",
+    "@starter/db": "workspace:*",
+    "@starter/env": "workspace:*",
+    "@starter/errors": "workspace:*",
+    "@starter/logger": "workspace:*",
+    "@starter/mcp": "workspace:*",
+    "drizzle-orm": "^0.45.3",
+    "hono": "^4.13.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@seriousme/openapi-schema-validator": "^2.11.0",
+    "@starter/config": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "jose": "^6.2.12",
+    "oxlint": "^1.87.0",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
+  }
+}

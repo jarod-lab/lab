@@ -16,11 +16,16 @@
     "generate": "better-auth generate --config ./auth.cli.ts --output ../db/src/auth-schema.ts -y"
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@starter/api": "workspace:*",
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
+    "@starter/errors": "workspace:*",
     "@wraps.dev/better-auth": "^0.2.2",
     "@wraps.dev/email": "^0.15.0",
-    "better-auth": "^1.7.7"
+    "better-auth": "^1.7.7",
+    "jose": "^6.2.3"
   },
   "devDependencies": {
     "@starter/config": "workspace:*",

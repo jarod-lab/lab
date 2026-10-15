@@ -1,0 +1,160 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { type Caller, defineOperation } from "@starter/api"
+import { AppError, setErrorReporter } from "@starter/errors"
+import { afterEach, describe, expect, it, onTestFinished } from "vitest"
+import { z } from "zod"
+import { createMcpHandler, protectedResourceMetadata, toTool } from "./index"
+
+const whoami = defineOperation({
+  name: "whoami",
+  method: "GET",
+  path: "/v1/whoami",
+  summary: "Who am I",
+  description: "Returns the caller.",
+  permissions: { note: ["read"] },
+  input: z.object({}),
+  output: z.object({ userId: z.string() }),
+  hints: { readOnly: true },
+  handler: (_input, ctx) => ({ userId: ctx.caller.organizationId }),
+})
+
+const shout = defineOperation({
+  name: "shout",
+  method: "POST",
+  path: "/v1/shout",
+  summary: "Shout",
+  description: "Uppercases text, or fails on request.",
+  permissions: { note: ["create"] },
+  input: z.object({ text: z.string(), fail: z.enum(["exposed", "internal"]).optional() }),
+  output: z.string(),
+  handler: ({ text, fail }) => {
+    if (fail === "exposed") throw new AppError("CONFLICT", "Too loud")
+    if (fail === "internal") throw new Error("db password is hunter2")
+    return text.toUpperCase()
+  },
+})
+
+const URL_ = "http://localhost/mcp"
+let clients: Client[] = []
+afterEach(async () => {
+  await Promise.all(clients.map((c) => c.close()))
+  clients = []
+})
+
+function setup(caller: Caller | null) {
+  const handler = createMcpHandler({
+    name: "test",
+    version: "1.0.0",
+    instructions: "Test server",
+    operations: [whoami, shout],
+    authenticate: async () => caller,
+    resourceMetadataUrl: "http://localhost/.well-known/oauth-protected-resource/mcp",
+  })
+  return handler
+}
+
+async function connect(caller: Caller) {
+  const handler = setup(caller)
+  const client = new Client({ name: "test-client", version: "1.0.0" })
+  const transport = new StreamableHTTPClientTransport(new URL(URL_), {
+    fetch: (url, init) => handler(new Request(url, init)),
+  })
+  await client.connect(transport)
+  clients.push(client)
+  return client
+}
+
+const full: Caller = {
+  organizationId: "u1",
+  actor: { type: "apiKey", keyId: "k1" },
+  grants: [{ note: ["read", "create"] }],
+  via: "api-key",
+}
+
+describe("createMcpHandler", () => {
+  it("answers 401 with resource metadata when unauthenticated", async () => {
+    const res = await setup(null)(new Request(URL_, { method: "POST", body: "{}" }))
+    expect(res.status).toBe(401)
+    expect(res.headers.get("www-authenticate")).toBe(
+      'Bearer resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp"',
+    )
+  })
+
+  it("lists only the tools the caller has permissions for", async () => {
+    const all = await (await connect(full)).listTools()
+    expect(all.tools.map((t) => t.name)).toEqual(["whoami", "shout"])
+    const readOnly = await (await connect({ ...full, grants: [{ note: ["read"] }] })).listTools()
+    expect(readOnly.tools.map((t) => t.name)).toEqual(["whoami"])
+  })
+
+  it("sends server instructions on initialize", async () => {
+    expect((await connect(full)).getInstructions()).toBe("Test server")
+  })
+
+  it("calls a tool and returns structured content for object outputs", async () => {
+    const res = await (await connect(full)).callTool({ name: "whoami", arguments: {} })
+    expect(res.structuredContent).toEqual({ userId: "u1" })
+  })
+
+  it("returns text only for non-object outputs", async () => {
+    const res = await (await connect(full)).callTool({ name: "shout", arguments: { text: "hi" } })
+    expect(res.structuredContent).toBeUndefined()
+    expect(res.content).toEqual([{ type: "text", text: '"HI"' }])
+  })
+
+  it("returns tool errors to the model without leaking internals", async () => {
+    const reported: string[] = []
+    setErrorReporter((e) => reported.push(e.code))
+    onTestFinished(() => setErrorReporter(undefined))
+    const client = await connect(full)
+    const exposed = await client.callTool({
+      name: "shout",
+      arguments: { text: "x", fail: "exposed" },
+    })
+    expect(exposed).toMatchObject({ isError: true })
+    expect(JSON.stringify(exposed.content)).toContain("Too loud")
+    const internal = await client.callTool({
+      name: "shout",
+      arguments: { text: "x", fail: "internal" },
+    })
+    expect(JSON.stringify(internal.content)).not.toContain("hunter2")
+    const invalid = await client.callTool({ name: "shout", arguments: {} })
+    expect(JSON.stringify(invalid.content)).toContain("BAD_REQUEST")
+    // Only the unexpected failure is reported; model mistakes and exposed errors are not.
+    expect(reported).toEqual(["INTERNAL"])
+  })
+
+  it("rejects tools the caller can't see", async () => {
+    const client = await connect({ ...full, grants: [{ note: ["read"] }] })
+    const res = await client.callTool({ name: "shout", arguments: { text: "x" } })
+    expect(res).toMatchObject({ isError: true, content: [{ text: "Unknown tool: shout" }] })
+  })
+})
+
+describe("toTool", () => {
+  it("maps hints to MCP annotations", () => {
+    expect(toTool(whoami).annotations).toMatchObject({ readOnlyHint: true, title: "Who am I" })
+    expect(toTool(whoami).outputSchema?.type).toBe("object")
+    expect(toTool(shout).outputSchema).toBeUndefined()
+  })
+})
+
+describe("protectedResourceMetadata", () => {
+  it("builds RFC 9728 metadata", () => {
+    expect(
+      protectedResourceMetadata({
+        resource: "https://a.test/mcp",
+        authorizationServers: ["https://a.test/api/auth"],
+        scopes: ["read"],
+        name: "A",
+      }),
+    ).toEqual({
+      resource: "https://a.test/mcp",
+      authorization_servers: ["https://a.test/api/auth"],
+      scopes_supported: ["read"],
+      bearer_methods_supported: ["header"],
+      resource_name: "A",
+    })
+  })
+})

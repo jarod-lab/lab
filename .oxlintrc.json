@@ -1,4 +1,21 @@
 {
-  "jsPlugins": ["@shadcn/lint"],
-  "rules": {}
+  "jsPlugins": ["@shadcn/lint", { "name": "gdp-ts", "specifier": "@gdp-ts/core/lint/plugin" }],
+  "rules": {},
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+      "rules": {
+        "gdp-ts/no-define-proof": "error",
+        "gdp-ts/no-proof-assertion": "error"
+      }
+    },
+    {
+      "files": ["**/proofs/**"],
+      "rules": {
+        "gdp-ts/no-define-proof": "off",
+        "gdp-ts/no-proof-assertion": "off",
+        "gdp-ts/no-exported-prover": "error"
+      }
+    }
+  ]
 }

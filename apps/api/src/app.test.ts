@@ -1,5 +1,6 @@
 import { defineOperation } from "@starter/api"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { setErrorReporter } from "@starter/errors"
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest"
 import { z } from "zod"
 import { BASE, createTestApp } from "./app.test.helpers"
 
@@ -285,6 +286,17 @@ describe("api app (real Postgres via PGlite)", () => {
         status: 400,
         body: { error: { code: "BAD_REQUEST", message: "Body must be JSON" } },
       })
+    })
+
+    it("reports only unexpected errors, not agents' bad requests", async () => {
+      const reported: string[] = []
+      setErrorReporter((e) => reported.push(e.code))
+      onTestFinished(() => setErrorReporter(undefined))
+      await t.req("/v1/whoami") // 401
+      await post(t.readKey, "/v1/projects", { name: "x" }) // 403
+      await post(t.fullKey, "/v1/projects", { name: "" }) // 400
+      await t.req("/v1/boom", t.as(t.fullKey)) // 500
+      expect(reported).toEqual(["INTERNAL"])
     })
 
     it("hides unexpected errors", async () => {

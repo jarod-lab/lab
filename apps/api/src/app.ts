@@ -104,9 +104,12 @@ export function createApp(opts: AppOptions) {
   })
 
   app.onError((e, c) => {
-    const error = reportError(e, { requestId: c.get("requestId"), path: c.req.path })
-    if (error.status >= 500)
+    const error = toAppError(e)
+    // Agents sending bad requests is normal traffic; only report what we'd want to be paged for.
+    if (error.status >= 500 || !error.expose) {
+      reportError(error, { requestId: c.get("requestId"), path: c.req.path })
       logger.error({ err: error, requestId: c.get("requestId") }, error.message)
+    }
     return c.json({ error: error.toPublic() }, error.status as 400)
   })
 

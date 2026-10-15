@@ -9,6 +9,8 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
     ],
+    // A plain external script (public/theme.js) so the dark class is set before the body paints.
+    scripts: [{ src: "/theme.js" }],
   }),
   shellComponent: RootDocument,
   component: () => <Outlet />,

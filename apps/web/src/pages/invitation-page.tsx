@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@starter/ui/components/ui/button"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
+import { NotYou } from "../components/not-you"
 import { SignInOrUp } from "../components/sign-in-or-up"
 import { messageOf } from "../lib/messages"
 import type { WebAuth, WebInvitation } from "../lib/web-auth"
@@ -102,6 +103,7 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
     <AuthCard
       title={`Join ${invitation.organizationName}`}
       description={`This invitation was sent to ${invitation.email} as ${invitation.role}.`}
+      footer={<NotYou auth={auth} onSignedOut={() => setReloads((n) => n + 1)} />}
     >
       <div className="flex flex-col gap-4">
         {invitation.status !== "pending" ? (

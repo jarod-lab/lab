@@ -8,6 +8,8 @@ import { createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { createLogger } from "@starter/logger"
 import { createApp } from "./app"
+import { createApiHooks } from "./hooks"
+import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
 
 export const BASE = "http://localhost:3000"
@@ -20,7 +22,19 @@ export interface SentEmail {
   link: string
 }
 
-export async function createTestApp(extra: readonly AnyOperation[] = []) {
+export interface TestAppOptions {
+  /** Daily request limits. Test users are unverified, so `unclaimed` is the one that applies. */
+  limits?: Partial<MeterLimits>
+  /** Trust X-Forwarded-For (as behind a proxy), for signup rate-limit tests. */
+  trustProxy?: boolean
+  /** A built web app to serve (see static.test.ts). */
+  webDistDir?: string
+}
+
+export async function createTestApp(
+  extra: readonly AnyOperation[] = [],
+  options: TestAppOptions = {},
+) {
   const t = await createTestDb()
   // Stands in for SES. Reads the request loosely, so a change in how WrapsEmail shapes it doesn't
   // matter: only who it's for, the subject and the link.
@@ -49,8 +63,15 @@ export async function createTestApp(extra: readonly AnyOperation[] = []) {
       throw error
     },
   })
-  const operations = [...createOperations({ auth, db: t.db }), ...extra]
+  const meter = createMeter({
+    db: t.db,
+    limits: { claimed: 10_000, unclaimed: 500, ...options.limits },
+  })
+  const operations = [...createOperations({ auth, db: t.db, meter }), ...extra]
   const app = createApp({
+    hooks: createApiHooks({ db: t.db, meter }),
+    trustProxy: options.trustProxy ?? false,
+    webDistDir: options.webDistDir,
     auth,
     operations,
     baseURL: BASE,
@@ -146,6 +167,7 @@ export async function createTestApp(extra: readonly AnyOperation[] = []) {
     readKey,
     otherKey,
     outbox,
+    db: t.db,
     close: t.close,
   }
 }

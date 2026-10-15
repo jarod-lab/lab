@@ -158,7 +158,13 @@ describe("api app (real Postgres via PGlite)", () => {
     it("enforces permissions per key and per role", async () => {
       expect(await json(await post(t.readKey, "/v1/projects", { name: "x" }))).toEqual({
         status: 403,
-        body: { error: { code: "FORBIDDEN", message: "Missing permission: project:create" } },
+        body: {
+          error: {
+            code: "FORBIDDEN",
+            message: "Missing permission: project:create",
+            hint: expect.stringContaining("OAuth token with scope `write`"),
+          },
+        },
       })
       expect((await post(t.viewer.cookie, "/v1/projects", { name: "x" })).status).toBe(403)
       expect((await post(t.owner.cookie, "/v1/projects", { name: "x" })).status).toBe(200)
@@ -331,6 +337,9 @@ describe("api app (real Postgres via PGlite)", () => {
         "create_project",
         "delete_project",
         "create_api_key",
+        "list_connected_agents",
+        "revoke_agent_access",
+        "list_audit_events",
         "boom",
       ])
       const res = await owner.callTool({ name: "create_project", arguments: { name: "Via MCP" } })

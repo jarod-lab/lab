@@ -5,6 +5,8 @@ import { env } from "@starter/env"
 import { createLogger } from "@starter/logger"
 
 import { createApp } from "./app"
+import { createApiHooks } from "./hooks"
+import { createMeter } from "./meter"
 import { createOperations } from "./operations"
 
 const logger = createLogger({ name: "api" })
@@ -21,14 +23,25 @@ const auth = createAuth({
   oauthResources: [baseURL, `${baseURL}/mcp`],
 })
 
+const meter = createMeter({
+  db,
+  limits: {
+    claimed: env.ORG_DAILY_REQUEST_LIMIT,
+    unclaimed: env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT,
+  },
+})
+
 const app = createApp({
   auth,
-  operations: createOperations({ auth, db }),
+  operations: createOperations({ auth, db, meter }),
   baseURL,
   name: "Starter API",
   version: "0.0.0",
   description: "The Starter API. Replace this with one sentence about what your product does.",
   logger,
+  hooks: createApiHooks({ db, meter }),
+  trustProxy: env.TRUST_PROXY,
+  webDistDir: env.WEB_DIST_DIR,
 })
 
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)

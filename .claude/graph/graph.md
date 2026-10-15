@@ -66,6 +66,7 @@ All editing nodes run in a git worktree off the current `agent-graph` head, with
 | N3 | web pages (TanStack Start, SPA) | `packages/ui`, auth client, better-auth endpoints | `apps/web/**` | pages: sign-in, sign-up, consent (org switcher), select-organization, accept-invitation/:id, device, reset-password, claim, settings/agents; a11y tests via `expectNoA11yViolations`; semantic tokens only; `apps/web/dist` builds; coverage ≥ thresholds |
 | N3b | web follow-ups | N3 report | `packages/ui/src/styles.css`, `packages/auth/src/client.ts`, `apps/web/**` | ui defines card/muted/destructive/border/input/ring tokens (verified missing; `grep -c -- --card styles.css` = 0) and web drops its workaround; `createClient` includes `oauthProviderClient`; vite dev proxy; sign-out on device + accept-invitation; Storybook build still renders |
 | N4 | app wiring | N1, N2 outputs | `apps/api/src/{app,operations,server}.ts`, `packages/env/**`, `.env.example`, new app tests | CORS test (bearer-only, never `/api/auth`); idempotency replay/conflict tests; 429 headers; audit + metering + new ops; static web serving; `list_projects` paginated; gated `POST /v1/signup` (per-IP + per-domain limits, abuse tests) |
+| N4b | auth revocation | N4 report | `packages/auth/src/principal.ts` + `principal.test.ts` (additions only) | an OAuth JWT stops working once its client's grant for the org is revoked (live refresh token or consent required for azp+org); API-key 429 → RATE_LIMITED with retry-after header; oauth-flow + device-flow green |
 | N5 | discovery + skill | N4 registry | `packages/api/src/llms.ts`, `server.json` generator + committed `server.json`, `skills/starter/**`, parity test | install snippets (Claude Code, Cursor, VS Code, Codex, device-grant curl) in llms.txt and `/`; `server.json` validates against the MCP registry schema; parity test (scopes, error codes, op names vs openapi.json) |
 | N6 | SDK + CLI | committed `openapi.json` | `packages/sdk/**`, `packages/cli/**` | typed SDK generated from openapi.json (script, not hand-written); CLI `login` (device grant), `whoami`, generic `call <op> --json`; tests with a fake server; coverage |
 | N7 | deploy + CI | N3 dist path, N4 env | `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `scripts/release.mjs`, `.github/workflows/ci.yml` | `docker build` succeeds if docker is available (else unresolved); CI job diffs `openapi.json` against base for breaking changes (oasdiff) |
@@ -76,7 +77,7 @@ All editing nodes run in a git worktree off the current `agent-graph` head, with
 ## Edges and waves
 
 ```
-B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2 ─► wave 3: N5 ∥ N6 ∥ N7 ─► M3 ─► wave 4: N8 ─► N9 ─► M4
+B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2 ─► wave 3: N4b ∥ N5 ∥ N6 ∥ N7 ─► M3 ─► wave 4: N8 ─► N9 ─► M4
 ```
 
 - N4 consumes N1 (tables, data fns, device grant) and N2 (hooks, pagination, hints).
@@ -96,4 +97,6 @@ SDK types via the generator script · full check chain.
 - Run every gate with `turbo --force` (or TURBO_FORCE=true): a cached api-app test PASS replayed after
   `packages/api` changed (found by N2).
 - `invoke`'s `after` hook does not see FORBIDDEN/BAD_REQUEST or `before`-thrown errors; audit of denied
-  attempts must be done by the caller (N2 decision, accepted).
+  attempts must be done by the caller (N2 decision, accepted). N4 audits before-hook refusals itself.
+- OAuth JWT access tokens leave no DB row; "revoked" must be checked against refresh tokens/consents (N4).
+- Device-grant clients have no consent row; list them from `oauth_refresh_token` (N4).

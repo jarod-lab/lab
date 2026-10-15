@@ -12,3 +12,10 @@
 | N1 | migration 0003 generated, not applied | pass | `0003_ambiguous_ezekiel.sql` on branch; user runs db:migrate |
 | M1 | merge N1+N2+N3, lockfile via pnpm install, openapi.json regenerated | pass | merges 3631b56, 67ac0a8, 1f58e99; openapi diff +140/-0 (additive: Idempotency-Key, 429/Retry-After, hint/docs) |
 | M1 | full chain uncached | fail→N1 correction #1 | auth device.test.ts + signup.test.ts time out (30s) under full parallel run; pass alone (49/49) |
+| N1 fix#1 | full parallel test:coverage passes twice; signup 429 sets retry-after header | pass | node report: 2 forced runs 13/13; diff 6863886..99c678d test-only + interval option (prod default 5s unchanged) |
+| N3b | ui tokens generated; client plugins; dev proxy; sign-out; web/ui tests | pass | `.bg-card{` in storybook-static iframe CSS and web dist CSS; web+ui coverage forced 2/2; branch fb04aeb |
+| N3b | API_URL (vite dev proxy) in packages/env + .env.example | unresolved→M2 | node didn't own env; add to .env.example after N4 merge |
+| N4 | hooks, CORS, static, new ops, openapi regenerated; full chain | pass | node: api-app 150 passed / 1 skipped (signup's MCP contract, REST-only by design); branch a6215ca |
+| M2 | merge N1fix+N3b+N4, API_URL in env + .env.example, full chain uncached | pass | TURBO_FORCE: lint/typecheck/test:coverage 13/13, baseline, format, build 2/2; contract snapshot matches |
+| N4 | revoking an OAuth client stops its tokens immediately | fail→N4b | JWT access tokens have no row; resolvePrincipal only checks signature + membership (up to 3600s) |
+| N4 | API-key 429 carries Retry-After | fail→N4b | principal.ts drops better-auth tryAgainIn |

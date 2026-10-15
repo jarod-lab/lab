@@ -24,6 +24,8 @@ export const env = createEnv({
     TRUST_PROXY: z.stringbool().default(false),
     /** Directory of the built web app (apps/web/dist). When set, apps/api serves its pages and assets. */
     WEB_DIST_DIR: z.string().min(1).optional(),
+    /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
+    API_URL: z.url().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

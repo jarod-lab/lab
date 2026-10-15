@@ -1,4 +1,5 @@
 import { allowed } from "@starter/api"
+import type { AppError } from "@starter/errors"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { AUDIENCE, BASE, createTestAuth } from "./auth.test.helpers"
 import { resolvePrincipal } from "./principal"
@@ -117,13 +118,64 @@ describe("resolvePrincipal (real Postgres via PGlite)", () => {
       })
     })
 
+    it("carry Retry-After in whole seconds when over the limit", async () => {
+      const key = await orgKey(
+        { project: ["read"] },
+        { rateLimitEnabled: true, rateLimitTimeWindow: 60_000, rateLimitMax: 1 },
+      )
+      await resolve({ "x-api-key": key.key })
+      const error = await resolve({ "x-api-key": key.key }).then(
+        () => null,
+        (e: AppError) => e,
+      )
+      expect(error).toMatchObject({ code: "RATE_LIMITED", status: 429 })
+      const retryAfter = Number(error?.headers["retry-after"])
+      // The window is 60s and the second call came right after the first: about the full minute.
+      expect(Number.isInteger(retryAfter)).toBe(true)
+      expect(retryAfter).toBeGreaterThanOrEqual(55)
+      expect(retryAfter).toBeLessThanOrEqual(60)
+    })
+
     it("reject an unknown key", async () => {
       expect(await resolve({ "x-api-key": "sk_not-a-real-key" })).toBeNull()
     })
   })
 
   describe("OAuth access tokens", () => {
-    const claims = () => ({ sub: viewer.userId, aud: AUDIENCE, azp: "client-1", org: owner.orgId })
+    // iat is required (better-auth always sets it); the revocation check compares against it.
+    const claims = () => ({
+      sub: viewer.userId,
+      aud: AUDIENCE,
+      azp: "client-1",
+      org: owner.orgId,
+      iat: Math.floor(Date.now() / 1000),
+    })
+
+    // A token needs a live grant for its client, org and user. These clients consented, as an
+    // authorization code grant writes it (createdAt floored to the second, as better-auth does).
+    beforeAll(async () => {
+      const adapter = (await t.auth.$context).adapter
+      const now = new Date()
+      // Floored to the second, one second back: tokens signed below carry the current second.
+      const consentedAt = new Date(Math.floor(now.getTime() / 1000) * 1000 - 1000)
+      for (const clientId of ["client-1", "client-2"]) {
+        await adapter.create({
+          model: "oauthClient",
+          data: { clientId, redirectUris: [], createdAt: now, updatedAt: now },
+        })
+        await adapter.create({
+          model: "oauthConsent",
+          data: {
+            clientId,
+            userId: viewer.userId,
+            referenceId: owner.orgId,
+            scopes: ["read", "write"],
+            createdAt: consentedAt,
+            updatedAt: consentedAt,
+          },
+        })
+      }
+    })
 
     it("act in the token's org with role ∩ scopes", async () => {
       const token = await sign({ ...claims(), scope: "openid write" })
@@ -156,6 +208,72 @@ describe("resolvePrincipal (real Postgres via PGlite)", () => {
       for (const token of tokens) {
         expect(await resolve({ authorization: `Bearer ${token}` })).toBeNull()
       }
+    })
+
+    it("need a grant for the client, the org and the user", async () => {
+      // No grant at all for this client.
+      const unknown = await sign({ ...claims(), azp: "client-3" })
+      expect(await resolve({ authorization: `Bearer ${unknown}` })).toBeNull()
+      // The owner has no consent from client-1: the viewer's grant doesn't cover them.
+      const ownerToken = await sign({ ...claims(), sub: owner.userId })
+      expect(await resolve({ authorization: `Bearer ${ownerToken}` })).toBeNull()
+    })
+
+    describe("grants that were revoked", () => {
+      const refreshRow = (clientId: string, extra: Record<string, unknown> = {}) => ({
+        model: "oauthRefreshToken",
+        data: {
+          token: `rt-${crypto.randomUUID()}`,
+          clientId,
+          userId: viewer.userId,
+          referenceId: owner.orgId,
+          scopes: ["read"],
+          expiresAt: new Date(Date.now() + 86_400_000),
+          createdAt: new Date(),
+          ...extra,
+        },
+      })
+      const oauthClient = (clientId: string) => ({
+        model: "oauthClient",
+        data: { clientId, redirectUris: [], createdAt: new Date(), updatedAt: new Date() },
+      })
+
+      it("accept a device-grant client through a live refresh token, and stop once revoked", async () => {
+        const adapter = (await t.auth.$context).adapter
+        await adapter.create(oauthClient("client-dev"))
+        await adapter.create(refreshRow("client-dev"))
+        const token = await sign({ ...claims(), azp: "client-dev", scope: "read" })
+        expect(await resolve({ authorization: `Bearer ${token}` })).toMatchObject({
+          clientId: "client-dev",
+          organizationId: owner.orgId,
+        })
+
+        // Stamped one second ahead, so the token above is certainly issued before it.
+        await adapter.updateMany({
+          model: "oauthRefreshToken",
+          where: [{ field: "clientId", value: "client-dev" }],
+          update: { revoked: new Date(Date.now() + 1000) },
+        })
+        expect(await resolve({ authorization: `Bearer ${token}` })).toBeNull()
+
+        // A new grant made after the revocation does not revive the older token.
+        await adapter.create(refreshRow("client-dev"))
+        expect(await resolve({ authorization: `Bearer ${token}` })).toBeNull()
+      })
+
+      it("ignore expired refresh tokens, and rotation (revoked with rotatedAt) is not a revocation", async () => {
+        const adapter = (await t.auth.$context).adapter
+        await adapter.create(oauthClient("client-rot"))
+        await adapter.create(refreshRow("client-rot", { expiresAt: new Date(Date.now() - 1000) }))
+        const token = await sign({ ...claims(), azp: "client-rot", scope: "read" })
+        expect(await resolve({ authorization: `Bearer ${token}` })).toBeNull()
+
+        // Rotation consumes the old row (revoked and rotatedAt both set); the new row is live.
+        const stamp = new Date(Date.now() + 1000)
+        await adapter.create(refreshRow("client-rot", { revoked: stamp, rotatedAt: stamp }))
+        await adapter.create(refreshRow("client-rot"))
+        expect(await resolve({ authorization: `Bearer ${token}` })).not.toBeNull()
+      })
     })
   })
 

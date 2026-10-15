@@ -6,12 +6,16 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
 import { jwt, organization } from "better-auth/plugins"
 
+import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 
-type Db = Parameters<typeof drizzleAdapter>[0]
-
+import { deviceAuthorizationPlugin } from "./device"
 import { type Adapter, firstMembership, findMember, personalOrganization } from "./membership"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
+import { registerSignupDatabase } from "./signup"
+
+export { DEVICE_VERIFICATION_PATH } from "./device"
+export { isClaimed, provisionalSignup, type ProvisionalSignup } from "./signup"
 
 /** Where better-auth's routes are mounted; the OAuth issuer is `${baseURL}${AUTH_BASE_PATH}`. */
 export const AUTH_BASE_PATH = "/api/auth"
@@ -45,7 +49,7 @@ export const nativeLoopbackRegistration = createAuthMiddleware(async (ctx) => {
 })
 
 export interface AuthOptions {
-  db: Db
+  db: Database
   secret: string
   baseURL: string
   /** "Name <addr@domain>" — sender for auth emails. */
@@ -101,12 +105,28 @@ export function createAuth(opts: AuthOptions) {
     basePath: AUTH_BASE_PATH,
     database: drizzleAdapter(opts.db, { provider: "pg", schema }),
     // A reset means the password may be compromised: sign out every session, not just future ones.
-    emailAndPassword: { enabled: true, revokeSessionsOnPasswordReset: true },
+    emailAndPassword: {
+      enabled: true,
+      revokeSessionsOnPasswordReset: true,
+      // Wraps fills this gap only when it is unset, so the notice is sent from here. Resetting through
+      // an emailed link proves the mailbox, so the address counts as verified: provisional signups
+      // (see signup.ts) are claimed this way.
+      onPasswordReset: async ({ user }) => {
+        // Verified first: a failing notice must not leave the claim unrecorded.
+        await (await adapter()).updateMany({
+          model: "user",
+          where: [{ field: "id", value: user.id }],
+          update: { emailVerified: true },
+        })
+        await wrapsPlugin.emails.passwordChanged({ user })
+      },
+    },
     // better-auth turns its origin/CSRF checks off under a test runner. Keep them on, so tests
     // exercise what production does (requests with cookies must come from a trusted origin).
     advanced: { disableOriginCheck: false },
-    // The jwt plugin's session-to-JWT endpoint; OAuth clients get tokens from /oauth2/token instead.
-    disabledPaths: ["/token"],
+    // The jwt plugin's session-to-JWT endpoint, and the device plugin's /device/token, which mints a
+    // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
+    disabledPaths: ["/token", "/device/token"],
     hooks: { before: nativeLoopbackRegistration },
     databaseHooks: {
       // Every account works inside an organization: signing up creates a personal one.
@@ -177,9 +197,12 @@ export function createAuth(opts: AuthOptions) {
         },
         customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
       }),
+      // RFC 8628 device grant on the same token endpoint (see device.ts).
+      deviceAuthorizationPlugin(),
     ],
   })
   ref.context = auth.$context
+  registerSignupDatabase(auth, opts.db)
   return auth
 }
 

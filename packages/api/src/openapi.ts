@@ -31,9 +31,36 @@ const ERROR_SCHEMA = {
     error: {
       type: "object",
       required: ["code", "message"],
-      properties: { code: { type: "string" }, message: { type: "string" } },
+      properties: {
+        code: { type: "string" },
+        message: { type: "string" },
+        hint: { type: "string", description: "What the caller can do to fix this." },
+        docs: { type: "string", description: "A link with more detail." },
+      },
     },
   },
+}
+
+/** Sent with every non-readOnly operation: a client-chosen key that makes retries safe. */
+const IDEMPOTENCY_KEY_PARAM = {
+  name: "Idempotency-Key",
+  in: "header",
+  required: false,
+  description:
+    "Unique key for this request. Retrying with the same key and body returns the first response; " +
+    "reusing it with a different body is a CONFLICT.",
+  schema: { type: "string", minLength: 1, maxLength: 255 },
+}
+
+const RATE_LIMITED_RESPONSE = {
+  description: "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+  headers: {
+    "Retry-After": {
+      description: "Seconds to wait before retrying.",
+      schema: { type: "integer", minimum: 0 },
+    },
+  },
+  content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
 }
 
 export const inputSchema = (op: AnyOperation): JsonSchema =>
@@ -51,14 +78,17 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
   const required = new Set(schema.required ?? [])
   const inPath = new Set(pathParams(op.path))
   const hasBody = op.method !== "GET" && op.method !== "DELETE"
-  const parameters = Object.entries(props)
-    .filter(([key]) => inPath.has(key) || !hasBody)
-    .map(([key, s]) => ({
-      name: key,
-      in: inPath.has(key) ? "path" : "query",
-      required: inPath.has(key) || required.has(key),
-      schema: s,
-    }))
+  const parameters = [
+    ...Object.entries(props)
+      .filter(([key]) => inPath.has(key) || !hasBody)
+      .map(([key, s]) => ({
+        name: key,
+        in: inPath.has(key) ? "path" : "query",
+        required: inPath.has(key) || required.has(key),
+        schema: s,
+      })),
+    ...(op.hints?.readOnly ? [] : [IDEMPOTENCY_KEY_PARAM]),
+  ]
   const bodyProps = Object.fromEntries(Object.entries(props).filter(([k]) => !inPath.has(k)))
   const example = op.examples?.[0]
   const responseContent = { "application/json": { schema: outputSchema(op) } }
@@ -84,6 +114,7 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
     }),
     responses: {
       "200": { description: "OK", content: responseContent },
+      "429": RATE_LIMITED_RESPONSE,
       default: {
         description: "Error",
         content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },

@@ -5,15 +5,26 @@ export {
   defineRegistry,
   formatPermissions,
   invoke,
+  missingPermissions,
   operationsFor,
   pathParams,
   type AnyOperation,
   type Caller,
   type HttpMethod,
+  type InvokeEvent,
+  type InvokeHooks,
+  type InvokeOptions,
+  type InvokeOutcome,
   type Operation,
   type OperationContext,
   type OperationSpec,
 } from "./operation"
+export {
+  decodeCursor,
+  encodeCursor,
+  paginated,
+  paginationInput,
+} from "./pagination"
 export {
   allowed,
   covers,

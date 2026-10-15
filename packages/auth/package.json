@@ -25,6 +25,7 @@
     "@wraps.dev/better-auth": "^0.3.0",
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "1.7.7",
+    "drizzle-orm": "^0.45.3",
     "jose": "^6.2.3"
   },
   "devDependencies": {

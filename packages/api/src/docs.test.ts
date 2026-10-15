@@ -126,4 +126,28 @@ describe("llms.txt", () => {
     expect(full).toContain("Permissions: note:update")
     expect(full).toContain('"id": "n 1"')
   })
+
+  it("carries install snippets for each client in both files and the root", () => {
+    for (const txt of [llmsTxt(ops, info), llmsFullTxt(ops, info)]) {
+      expect(txt).toContain("## Install")
+      expect(txt).toContain("claude mcp add --transport http acme https://api.acme.test/mcp")
+      expect(txt).toContain("cursor://anysphere.cursor-deeplink/mcp/install?name=acme&config=")
+      expect(txt).toContain("code --add-mcp")
+      expect(txt).toContain("[mcp_servers.acme]")
+      expect(txt).toContain(`"mcpServers"`)
+      expect(txt).toContain("urn:ietf:params:oauth:grant-type:device_code")
+      expect(txt).toContain("https://api.acme.test/api/auth/device/code")
+    }
+  })
+
+  it("marks the operations that need no credential, and says so in the intro", () => {
+    const unauth = { unauthenticated: ["ping"] }
+    const txt = llmsTxt(ops, info, unauth)
+    expect(txt).toContain("(`ping`, no credential)")
+    expect(txt).toContain('Operations marked "no credential" need none (`ping`); the rest do.')
+    expect(txt).not.toContain("Every request needs")
+    expect(llmsTxt(ops, info)).not.toContain("no credential")
+    expect(llmsFullTxt(ops, info, unauth)).toContain("Credential: none. Anyone may call this.")
+    expect(llmsFullTxt(ops, info, unauth)).toContain("Permissions: note:update")
+  })
 })

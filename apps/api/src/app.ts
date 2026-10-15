@@ -5,10 +5,13 @@ import {
   type Caller,
   covers,
   invoke,
+  DEFAULT_REGISTRY_META,
   llmsFullTxt,
   llmsTxt,
   type OperationContext,
   openApiDocument,
+  type RegistryMeta,
+  serverJson,
 } from "@starter/api"
 import {
   AUTH_BASE_PATH,
@@ -48,7 +51,12 @@ export interface AppOptions {
   trustProxy?: boolean
   /** The built web app to serve from this origin (apps/web/dist). */
   webDistDir?: string
+  /** The MCP registry's name and description for this server (server.json). */
+  registry?: RegistryMeta
 }
+
+/** Operations that take no credential. Everything else needs an API key or OAuth token. */
+const UNAUTHENTICATED = ["signup"]
 
 /** Idempotency-Key: 1 to 255 characters, or absent. */
 function idempotencyKeyOf(value: string | undefined): string | undefined {
@@ -136,8 +144,10 @@ export function createApp(opts: AppOptions) {
     },
   }
   const openapi = openApi(openApiDocument(operations, info))
-  const llms = llmsTxt(operations, info)
-  const llmsFull = llmsFullTxt(operations, info)
+  const docLinks = { unauthenticated: UNAUTHENTICATED }
+  const llms = llmsTxt(operations, info, docLinks)
+  const llmsFull = llmsFullTxt(operations, info, docLinks)
+  const registryRecord = serverJson(info, opts.registry ?? DEFAULT_REGISTRY_META)
 
   const authenticate = (req: Request): Promise<Caller | null> =>
     resolvePrincipal(auth, req.headers, { audience })
@@ -214,6 +224,7 @@ export function createApp(opts: AppOptions) {
   app.get("/llms.txt", markdown(llms))
   app.get("/llms-full.txt", markdown(llmsFull))
   app.get("/openapi.json", (c) => c.json(openapi))
+  app.get("/.well-known/mcp/server.json", (c) => c.json(registryRecord))
   app.get("/health", (c) => c.json({ ok: true }))
   app.get("/", (c) => {
     const accept = c.req.header("accept") ?? ""

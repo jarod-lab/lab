@@ -115,8 +115,17 @@ async function approvedOrganizationId(adapter: Adapter, deviceCodeId: string) {
  * expired codes are answered by the plugin as usual). A code with no recorded organization gets no
  * token: `org` is never missing.
  */
-export function deviceAuthorizationPlugin() {
-  const plugin = oauthDeviceAuthorization({ verificationUri: DEVICE_VERIFICATION_PATH })
+/** A duration as the plugin takes it (e.g. "5s"), so the option can't drift from better-auth's type. */
+export type DeviceInterval = NonNullable<
+  NonNullable<Parameters<typeof oauthDeviceAuthorization>[0]>["interval"]
+>
+
+export function deviceAuthorizationPlugin(options: { interval?: DeviceInterval } = {}) {
+  const plugin = oauthDeviceAuthorization({
+    verificationUri: DEVICE_VERIFICATION_PATH,
+    // Minimum time between polls (better-auth's duration format). Undefined keeps the plugin's 5s.
+    interval: options.interval,
+  })
   // The grant object the plugin registers with the OAuth provider. Its type doesn't name the token
   // handlers (`grants`), so they are reached through a narrowed `unknown`. Wrapping the handler in
   // place keeps the plugin's own validation (client, resources, scopes, polling) intact.

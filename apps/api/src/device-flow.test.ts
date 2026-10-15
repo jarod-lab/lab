@@ -89,16 +89,11 @@ describe("device authorization grant (real tokens)", () => {
     const device = await requestDeviceCode(clientId)
     expect(device.verification_uri).toBe(`${BASE}/device`)
 
-    // Not approved yet: RFC 8628's pending state.
-    const pending = await poll(clientId, device.device_code)
-    expect(pending.status).toBe(400)
-    expect(await pending.json()).toMatchObject({ error: "authorization_pending" })
-
+    // No poll before approval: the plugin paces polls (5s by default) and a poll that lands inside
+    // the interval is slow_down. The pending state is covered in packages/auth (device.test.ts).
     const approved = await approve(device.user_code, t.owner.cookie)
     expect(approved.status).toBe(200)
 
-    // The plugin paces polls (interval, 5s by default): wait out one interval after the last poll.
-    await new Promise((resolve) => setTimeout(resolve, device.interval * 1000 + 100))
     const tokenRes = await poll(clientId, device.device_code)
     expect(tokenRes.status).toBe(200)
     const tokens = (await tokenRes.json()) as TokenSet
@@ -147,7 +142,7 @@ describe("device authorization grant (real tokens)", () => {
         },
       ),
     ).toMatchObject({ organizationId: t.owner.orgId })
-  }, 30_000)
+  })
 
   it("binds the token to the organization the approver had active, not their own", async () => {
     // The viewer is a member of the owner's organization, and their session is set to it.
@@ -168,7 +163,7 @@ describe("device authorization grant (real tokens)", () => {
       organizationId: t.owner.orgId,
       actor: { type: "user", userId: t.viewer.userId },
     })
-  }, 30_000)
+  })
 
   it("never issues a session token from /device/token", async () => {
     const res = await t.req("/api/auth/device/token", {

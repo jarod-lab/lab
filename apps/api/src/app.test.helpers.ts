@@ -12,14 +12,42 @@ import { createOperations } from "./operations"
 
 export const BASE = "http://localhost:3000"
 
+/** An auth email the app sent, as the fake SES client received it. */
+export interface SentEmail {
+  to: string
+  subject: string
+  /** The first link to the app in the email (verification, reset), or "" when it has none. */
+  link: string
+}
+
 export async function createTestApp(extra: readonly AnyOperation[] = []) {
   const t = await createTestDb()
+  // Stands in for SES. Reads the request loosely, so a change in how WrapsEmail shapes it doesn't
+  // matter: only who it's for, the subject and the link.
+  const outbox: SentEmail[] = []
+  const ses = {
+    send: async (command: { input: unknown }) => {
+      const raw = JSON.stringify(command.input)
+      const input = command.input as { Destination?: { ToAddresses?: string[] } }
+      const subject = /"Subject":\{"Data":"([^"]*)"/.exec(raw)?.[1] ?? ""
+      // The first link back to this app, so a logo or doctype URL in a template doesn't count.
+      const links = raw.match(/https?:\/\/[^"\s<>\\]+/g) ?? []
+      const link = (links.find((l) => l.startsWith(BASE)) ?? "").replaceAll("&amp;", "&")
+      outbox.push({ to: input.Destination?.ToAddresses?.[0] ?? "", subject, link })
+      return { MessageId: `test-${outbox.length}`, $metadata: { requestId: "test" } }
+    },
+  }
   const auth = createAuth({
     db: t.db,
     secret: "a-test-secret-that-is-long-enough-123456", // gitleaks:allow
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, `${BASE}/mcp`],
+    ses: { client: ses },
+    // Senders swallow failures; a test must not pass because an email silently failed.
+    onEmailError: (error) => {
+      throw error
+    },
   })
   const operations = [...createOperations({ auth, db: t.db }), ...extra]
   const app = createApp({
@@ -77,7 +105,11 @@ export async function createTestApp(extra: readonly AnyOperation[] = []) {
   const as = (credential: string, init: RequestInit = {}) => {
     const headers = new Headers(init.headers)
     if (credential.startsWith("sk_")) headers.set("x-api-key", credential)
-    else headers.set("cookie", credential)
+    else {
+      headers.set("cookie", credential)
+      // Browsers send Origin; better-auth rejects cookie requests without a trusted one.
+      headers.set("origin", BASE)
+    }
     if (!headers.has("content-type")) headers.set("content-type", "application/json")
     return { ...init, headers }
   }
@@ -113,6 +145,7 @@ export async function createTestApp(extra: readonly AnyOperation[] = []) {
     fullKey,
     readKey,
     otherKey,
+    outbox,
     close: t.close,
   }
 }

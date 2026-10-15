@@ -1,43 +1,9 @@
 import { intersect, type PermissionSet, type PermissionsOf, union } from "@starter/api"
-import { createAccessControl } from "better-auth/plugins/access"
-import { defaultStatements } from "better-auth/plugins/organization/access"
+import { type Catalog, type RoleName, roles } from "./access"
 
-/**
- * The permission catalog: every resource and action in the product. Roles, API keys, OAuth scopes
- * and operations are all expressed in these terms. Add your resources here.
- * The first five come from better-auth's organization plugin; `apiKey` is checked by the api-key plugin.
- */
-export const statements = {
-  ...defaultStatements,
-  apiKey: ["create", "read", "update", "delete"],
-  project: ["create", "read", "update", "delete"],
-} as const
+export { ac, type Catalog, type RoleName, roles, statements } from "./access"
 
-export type Catalog = typeof statements
 export type Permissions = PermissionsOf<Catalog>
-
-export const ac = createAccessControl(statements)
-
-const all = Object.fromEntries(
-  Object.entries(statements).map(([resource, actions]) => [resource, [...actions]]),
-) as { -readonly [R in keyof Catalog]: Catalog[R][number][] }
-
-/**
- * Fixed roles. To let organizations define their own, enable the organization plugin's
- * `dynamicAccessControl` and resolve roles through `rolePermissions` below.
- */
-export const roles = {
-  owner: ac.newRole(all),
-  admin: ac.newRole({ ...all, organization: ["update"] }),
-  member: ac.newRole({
-    ac: ["read"],
-    apiKey: ["read"],
-    project: ["create", "read", "update"],
-  }),
-  viewer: ac.newRole({ project: ["read"] }),
-} as const
-
-export type RoleName = keyof typeof roles
 
 /**
  * One permission set per role in a member's role string ("admin,member" -> two sets), kept apart

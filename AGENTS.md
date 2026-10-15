@@ -25,13 +25,15 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 - `packages/db` — Drizzle ORM (Postgres), committed migrations in `drizzle/`, test helper `@starter/db/testing`
 - `packages/auth` — better-auth: `createAuth({ db, secret, baseURL, emailFrom })`, `createClient()`; Wraps plugin for contact
   sync and SES auth emails; organizations (personal org on signup); org-owned API keys (`sk_`); OAuth 2.1 + jwt plugin.
-  `permissions.ts` is the permission catalog (`statements`), roles and OAuth scope grants.
+  `access.ts` is the permission catalog (`statements`) and roles; it's imported by the browser client, so it may only
+  import better-auth's access modules. `permissions.ts` re-exports it and adds grant math and OAuth scope grants.
   `resolvePrincipal(auth, headers, { audience })` turns an API key, OAuth token or session into a `Principal`
 - `skills/starter` — template skill shipped to customers' agents (not one for this repo; those are in `.claude/skills`)
 - `packages/auth-proofs` — gdp-ts proofs: branded ids in `lib/ids.ts`, trusted provers in `proofs/` (`callerActsFor`,
   `projectInOrg`), compile-time misuse cases in `mistakes.types.ts`. Tenant data functions take proofs as arguments
 - `packages/logger` — pino with secret redaction: `createLogger({ name })`
 - `packages/errors` — `AppError`/`ErrorCode`, `Result` (`ok`/`err`/`attempt`), `reportError` + `setErrorReporter`
+- `packages/observability` — `observe(handler, { logger })` wraps a Web `Request`/`Response` handler (request id, access log, error handling); `createHealthHandler(checks)`
 - `packages/env` — the only place env vars are read (validated with Zod)
 - `packages/config` — shared tsconfig and Vitest base config
 - `scripts/` — `init-project.mjs`, `generate-stories.mjs`
@@ -55,6 +57,15 @@ CI runs the same, plus gitleaks over history and commitlint over PR commits. `pn
   If gitleaks flags a test fixture, add `// gitleaks:allow` on that line. Don't allowlist whole files.
 - **Logging:** use `@starter/logger`, not `console.log` (baseline flags it). Throw `AppError`; never send an `INTERNAL`
   message to a client, use `error.toPublic()`. Register Sentry once at startup with `setErrorReporter`.
+- **Observability:** wrap every route handler in `observe` from `@starter/observability` and expose a health route with
+  `createHealthHandler`. It reports only 5xx or non-exposed errors; 4xx are logged. Server-error logs include only
+  allowlisted request headers (`safeHeaders`), never the full set. No error-tracking SDK is installed yet:
+  until an app registers one with `setErrorReporter`, reported errors go nowhere (only the logs).
+- **Accessibility:** oxlint's `jsx-a11y` rules are errors everywhere except the vendored `packages/ui/src/components` and
+  `src/hooks` (see `overrides` in `.oxlintrc.json`). Test app UI with `expectNoA11yViolations(html)` from `@starter/ui/a11y`
+  (axe-core; the test file needs `// @vitest-environment jsdom`, and an app needs `jsdom` as its own devDependency). jsdom can't check colour contrast or landmarks, so those
+  rules are off. The shadcn demos are not swept: about half have axe violations in shadcn's own demo content.
+  Storybook's a11y panel is a dev aid only; nothing fails CI on it.
 - **Env:** add every variable to `packages/env` and `.env.example`. Never read or edit `.env` (denied in settings).
 - **Authorization:** declare what an operation needs in its `permissions` (enforced by `invoke`), and guard tenant data
   with gdp-ts proofs (see the gdp-ts and agent-api skills). Don't hand-roll role or ownership checks in handlers.
@@ -95,7 +106,7 @@ table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth
 - **Every request acts in one organization.** `ctx.caller` has `organizationId`, `actor` (user or apiKey) and `grants`.
   Signup creates a personal org; sessions use their active org; API keys belong to an org; OAuth tokens carry an
   `org` claim chosen at consent. Membership is checked live on every request.
-- **Permissions.** One catalog (`statements` in `packages/auth/src/permissions.ts`) drives roles (owner, admin, member,
+- **Permissions.** One catalog (`statements` in `packages/auth/src/access.ts`) drives roles (owner, admin, member,
   viewer), API-key permissions, OAuth scope grants and operations. Effective access = role ∩ credential, and a
   request needs a single grant covering all of it (better-auth's multi-role rule; `permissions.test.ts` checks parity
   with `hasPermission` for every role and action). `invoke` enforces `op.permissions`; MCP hides tools a caller can't use.
@@ -117,8 +128,9 @@ table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth
 - **OAuth.** Tokens are JWTs: aud = the resource, `azp`, `org`, space-separated `scope`, iss = `${baseURL}/api/auth`;
   `resolvePrincipal` requires all of them, and the jwt plugin's `set-auth-jwt` header is off so session JWTs can't
   pass. A web app must provide `/sign-in`, `/consent` (show the org being granted, with a switcher that calls
-  `organization/set-active` before accepting) and `/select-organization` (only when the session has no valid active
-  org; then POST `/oauth2/continue` with `{ postLogin: true }`). None exists yet. `nativeLoopbackRegistration` and
+  `organization/set-active` before accepting), `/select-organization` (only when the session has no valid active
+  org; then POST `/oauth2/continue` with `{ postLogin: true }`) and `/accept-invitation/:id` (the link in invitation
+  emails: sign in or up as the invited address, then `organization/accept-invitation`). None exists yet. `nativeLoopbackRegistration` and
   `clientRegistrationDefaultResources` keep self-registering MCP clients working. `oauth-flow.test.ts` covers the flow.
 - **URLs.** `apps/api` uses `PORTLESS_URL` (set by portless under `pnpm dev`) or else `BETTER_AUTH_URL`; the OAuth
   issuer, audiences and llms.txt links derive from it. The server needs Postgres with every migration applied: the
@@ -127,6 +139,13 @@ table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth
 - **Not yet:** custom roles per org (`dynamicAccessControl`: resolve roles from the DB in `rolePermissions`, then rerun
   the parity test), CORS for browser MCP clients and cross-origin web apps, usage metering, breaking-change checks on
   `openapi.json` in CI.
+
+## Advisor checkpoints
+
+- Consult the advisor before locking a multi-file plan (check auth proofs and DB schema/migration contracts).
+- Consult it when the same test or compiler error fails twice, before trying a third fix.
+- Consult it on the full diff before declaring done or committing.
+- Don't consult it for routine bash, formatting, or single-file edits.
 
 ## Testing
 
@@ -138,6 +157,17 @@ table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth
   applied. Regenerate the migration after any schema change or those tests run against a stale schema.
   The shared config allows 30s per test and 60s per hook because PGlite startup is slow on cold CI runners.
 - UI tests render with `react-dom/server`; there is no jsdom or Testing Library yet.
+- **Auth flows** (`apps/api/src/auth-flows.test.ts`) are the guard against better-auth breaking things in minor and
+  patch releases. They drive sign-up, sign-in and sign-out, sessions, password reset, email verification, change
+  password, organizations and invitations, CSRF and disabled endpoints over HTTP. They use the real `createClient`
+  through `browser()` (`browser.test.helpers.ts`, a cookie jar that sends Origin), and assert status codes, error
+  codes, redirects and emails. Auth emails go to a fake SES (`t.outbox`; wait
+  with `delivered()`). A send error throws, but better-auth swallows some (reset requests), so always assert the
+  email arrived. Add
+  a test there for every auth flow the product relies on. Don't call `auth.api.*` for the step under test: that
+  skips HTTP, cookies and origin checks. better-auth disables its origin/CSRF checks under a test runner, so
+  `createAuth` turns them back on. Cookie requests in tests therefore need an `origin` header (`as()` and
+  `browser()` add it).
 
 ## Database and auth
 
@@ -158,7 +188,9 @@ table, or anything in `apps/api`, `packages/api`, `packages/mcp`, `packages/auth
 - **e2e** (tester-army): **not configured yet.** `e2e/example.e2e.ts` is a skipped placeholder outside the workspace and CI.
   Setting it up needs an app to test and a model credential (e.g. `AI_GATEWAY_API_KEY`). Docs ship in `node_modules/e2e/docs`.
 - **Dependabot** runs weekly and groups minor/patch updates; major bumps arrive as separate PRs to evaluate, and
-  `@types/node` majors are ignored to stay on the pinned Node 24. The `esbuild` alert is dismissed: it is a dev-only transitive
+  `@types/node` majors are ignored to stay on the pinned Node 24. `better-auth`, `@better-auth/*` and `auth` are
+  pinned exactly and get their own `better-auth` group (any update type), so a break shows up as its own red PR;
+  bump them together, never one alone. The `esbuild` alert is dismissed: it is a dev-only transitive
   dependency of `drizzle-kit`, and the advisory concerns esbuild's dev server, which we don't run.
 
 ## Agent permissions

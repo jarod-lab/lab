@@ -59,7 +59,7 @@ describe("OAuth authorization code flow (real tokens)", () => {
       code_challenge_method: "S256",
       resource: opts.resource ?? MCP,
     })
-    const headers = { cookie: opts.cookie, "content-type": "application/json" }
+    const headers = { cookie: opts.cookie, origin: BASE, "content-type": "application/json" }
     if (opts.pickOrg) {
       // What the consent page's organization switcher does before the user accepts.
       await t.req("/api/auth/organization/set-active", {
@@ -174,7 +174,7 @@ describe("OAuth authorization code flow (real tokens)", () => {
     // Leave the session without an active organization, as after leaving one.
     await t.req("/api/auth/organization/set-active", {
       method: "POST",
-      headers: { cookie: u.cookie, "content-type": "application/json" },
+      headers: { cookie: u.cookie, origin: BASE, "content-type": "application/json" },
       body: JSON.stringify({ organizationId: null }),
     })
     const clientId = await registerClient()

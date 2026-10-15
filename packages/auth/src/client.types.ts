@@ -9,3 +9,9 @@ const client = createClient("http://localhost:3000")
 
 expectTypeOf(client.signIn.email).toEqualTypeOf(plain.signIn.email)
 expectTypeOf(client.signUp.email).toEqualTypeOf(plain.signUp.email)
+
+// The product's own roles, not just better-auth's defaults, are valid in the client. This file is
+// only type-checked, never run.
+void client.organization.inviteMember({ email: "a@example.com", role: "viewer" })
+// @ts-expect-error not a role
+void client.organization.inviteMember({ email: "a@example.com", role: "superuser" })

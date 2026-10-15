@@ -1,6 +1,6 @@
 import { apiKey } from "@better-auth/api-key"
 import { oauthProvider } from "@better-auth/oauth-provider"
-import { wraps } from "@wraps.dev/better-auth"
+import { wraps, wrapsAuthEmails } from "@wraps.dev/better-auth"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
@@ -66,6 +66,10 @@ export interface AuthOptions {
    * Defaults to 600 per minute; `false` turns it off (e.g. when a gateway rate-limits instead).
    */
   apiKeyRateLimit?: { timeWindow: number; maxRequests: number } | false
+  /** Passed to `WrapsEmail` for auth emails (`client`, `region`, `roleArn`, ...); tests inject a fake. */
+  ses?: Record<string, unknown>
+  /** Called when an auth email fails to send. Sends never block the auth flow. */
+  onEmailError?: (error: Error) => void
 }
 
 export function createAuth(opts: AuthOptions) {
@@ -76,12 +80,30 @@ export function createAuth(opts: AuthOptions) {
     return (await ref.context).adapter
   }
 
+  // Auth emails go through the user's own SES via Wraps. The plugin fills in better-auth's top-level
+  // senders (verification, reset, password changed); the invitation sender belongs to the
+  // organization plugin, so it's wired below. Links point at the app's /accept-invitation/:id page.
+  // TODO: once @wraps.dev/better-auth ships `plugin.emails` (after 0.2.2), pass
+  // `plugin.emails.invitation` instead, so all auth emails share one SES client.
+  const emailOptions = {
+    from: opts.emailFrom,
+    appName: opts.appName ?? "Starter",
+    appUrl: opts.baseURL,
+    ses: opts.ses,
+    onError: opts.onEmailError,
+  }
+  const emails = wrapsAuthEmails(emailOptions)
+
   const auth = betterAuth({
     secret: opts.secret,
     baseURL: opts.baseURL,
     basePath: AUTH_BASE_PATH,
     database: drizzleAdapter(opts.db, { provider: "pg", schema }),
-    emailAndPassword: { enabled: true },
+    // A reset means the password may be compromised: sign out every session, not just future ones.
+    emailAndPassword: { enabled: true, revokeSessionsOnPasswordReset: true },
+    // better-auth turns its origin/CSRF checks off under a test runner. Keep them on, so tests
+    // exercise what production does (requests with cookies must come from a trusted origin).
+    advanced: { disableOriginCheck: false },
     // The jwt plugin's session-to-JWT endpoint; OAuth clients get tokens from /oauth2/token instead.
     disabledPaths: ["/token"],
     hooks: { before: nativeLoopbackRegistration },
@@ -101,9 +123,14 @@ export function createAuth(opts: AuthOptions) {
     plugins: [
       wraps({
         apiKey: opts.wrapsApiKey,
-        email: { from: opts.emailFrom, appName: opts.appName ?? "Starter" },
+        email: emailOptions,
       }),
-      organization({ ac, roles, creatorRole: "owner" }),
+      organization({
+        ac,
+        roles,
+        creatorRole: "owner",
+        sendInvitationEmail: emails.invitation,
+      }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
       // checks it against the creator). No defaults: a key without permissions can do nothing.
       apiKey({

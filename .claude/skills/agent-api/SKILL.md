@@ -21,7 +21,8 @@ the registry can't express, extend `OperationSpec` in `packages/api` and the gen
 
 - Every request acts in **one organization**. `ctx.caller` = `{ organizationId, actor, grants, via, clientId }`.
   `actor` is `{ type: "user", userId }` (session, OAuth) or `{ type: "apiKey", keyId }`.
-- **Catalog**: `statements` in `packages/auth/src/permissions.ts` lists every resource and its actions. Roles
+- **Catalog**: `statements` in `packages/auth/src/access.ts` lists every resource and its actions (roles live there
+  too; the browser client imports it, so no server imports). Scopes and grant math are in `permissions.ts`. Roles
   (`owner`, `admin`, `member`, `viewer`), API-key permissions, OAuth scope grants and operation permissions all
   use it, so a typo is a compile error.
 - **Grants**: one permission set per role the member has, each narrowed to the credential (key permissions, or the
@@ -104,4 +105,5 @@ the registry can't express, extend `OperationSpec` in `packages/api` and the gen
 - `packages/auth-proofs`: provers against PGlite; `mistakes.types.ts` at typecheck.
 - `apps/api`: `createTestApp()` from `app.test.helpers.ts` gives two orgs (owner, a viewer member, a full and a
   read-only key; another user's org and key), `as(credential)` and `mcpClient`. `app.test.ts` covers permissions and
-  cross-tenant isolation; `contract.test.ts` the spec; `oauth-flow.test.ts` the OAuth flow.
+  cross-tenant isolation; `contract.test.ts` the spec; `oauth-flow.test.ts` the OAuth flow; `auth-flows.test.ts` the
+  browser-side auth flows over HTTP with the real client (`browser()`), and auth emails via `t.outbox`.

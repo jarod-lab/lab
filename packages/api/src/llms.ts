@@ -23,7 +23,8 @@ export function serverName(info: ApiInfo): string {
   )
 }
 
-function curl(op: AnyOperation, baseURL: string): string {
+/** An example call. Anonymous operations (no credential) get no auth header. */
+function curl(op: AnyOperation, baseURL: string, anonymous: boolean): string {
   const input = (op.examples?.[0]?.input ?? {}) as Record<string, unknown>
   let path = op.path
   const rest: Record<string, unknown> = { ...input }
@@ -38,7 +39,7 @@ function curl(op: AnyOperation, baseURL: string): string {
     const qs = new URLSearchParams(Object.entries(rest).map(([k, v]) => [k, String(v)])).toString()
     lines[0] += qs ? `?${qs}"` : `"`
   } else lines[0] += `"`
-  lines.push(`  -H "x-api-key: $API_KEY"`)
+  if (!anonymous) lines.push(`  -H "x-api-key: $API_KEY"`)
   if (op.method !== "GET" && op.method !== "DELETE") {
     lines.push(`  -H "content-type: application/json"`, `  -d '${JSON.stringify(rest)}'`)
   }
@@ -130,6 +131,9 @@ export function installSnippets(info: ApiInfo, unauthenticated: readonly string[
       `curl -s -X POST "${info.baseURL}/api/auth/device/code" \\\n  -H "content-type: application/json" \\\n  -d '${JSON.stringify({ client_id: "CLIENT_ID", scope: "read write offline_access", resource: mcp })}'`,
     ),
     "",
+    "Keep `offline_access` in the scope. It makes the server issue a refresh token; without it the",
+    "client cannot renew access, and the refresh token is revoked if the approving web session signs out.",
+    "",
     "3. Poll `/api/auth/oauth2/token` every `interval` seconds until it returns `access_token`. On",
     "   `authorization_pending` keep polling; on `slow_down` wait longer:",
     "",
@@ -211,7 +215,7 @@ export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo, links: 
         ? [
             "Example:",
             "",
-            fence("sh", curl(op, info.baseURL)),
+            fence("sh", curl(op, info.baseURL, open)),
             ...(example.output ? ["", fence("json", JSON.stringify(example.output, null, 2))] : []),
             ...(example.error ? ["", `Fails with \`${example.error}\`.`] : []),
             "",

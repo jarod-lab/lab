@@ -67,6 +67,19 @@ describe("registry record (server.json)", () => {
     expect(txt).not.toContain("Every request needs")
     const full = await (await t.req("/llms-full.txt")).text()
     expect(full).toContain("Credential: none. Anyone may call this.")
+    // The signup example is the documented call an agent copies: it must send no credential.
+    const start = full.indexOf("## signup\n")
+    const signup = full.slice(start, full.indexOf("\n## ", start + 1))
+    // The example's code fence only (the description may name the header in prose).
+    const fence = signup.slice(signup.indexOf("curl -X POST")).split("```")[0] ?? ""
+    expect(fence).toContain("curl -X POST")
+    expect(fence).not.toContain("x-api-key")
+  })
+
+  it("serves the install snippets from / for non-browser clients", async () => {
+    const res = await t.req("/", { headers: { accept: "text/markdown" } })
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain("## Install")
   })
 })
 

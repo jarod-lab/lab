@@ -33,7 +33,9 @@ Every credential acts in one organization (workspace) and sees only that organiz
 - **OAuth, headless (device grant)**: for CI and machines with no browser. Register a public client that lists
   the device grant (`urn:ietf:params:oauth:grant-type:device_code`) and refresh token; request a device code
   for `resource` = `https://api.example.com/mcp`; show the person the verification URL and user code; poll the
-  token endpoint at the returned interval until it issues an access token. Refresh it with the refresh token.
+  token endpoint at the returned interval until it issues an access token. Request the offline_access scope
+  so a refresh token is issued: without it the client can't renew access, and the refresh token is revoked if
+  the approving web session signs out. Refresh with the refresh token.
   The token acts in the organization the approving person had active. The full sequence is in llms.txt.
 
 Check a credential first. `whoami` names the organization, the grants and today's usage:
@@ -79,8 +81,8 @@ and a working example. Don't guess parameters: the schemas are exact.
 ## Connected agents
 
 Keys and OAuth clients connected to an organization are listed by `list_connected_agents`, each with an id.
-Use `revoke_agent_access` with that id to cut off a key or client. An access token it already holds stays
-valid until it expires (one hour by default). Confirm with the person before revoking. `list_audit_events`
+Use `revoke_agent_access` with that id to cut off a key or client. For an OAuth client, its refresh tokens and
+consent are removed, so it cannot renew access. Confirm with the person before revoking. `list_audit_events`
 shows who did what, including refusals, and needs an organization admin.
 
 ## Errors

@@ -149,5 +149,11 @@ describe("llms.txt", () => {
     expect(llmsTxt(ops, info)).not.toContain("no credential")
     expect(llmsFullTxt(ops, info, unauth)).toContain("Credential: none. Anyone may call this.")
     expect(llmsFullTxt(ops, info, unauth)).toContain("Permissions: note:update")
+    // An anonymous operation's example must not send a credential.
+    const full = llmsFullTxt(ops, info, { unauthenticated: ["get_note"] })
+    const getNote = full.slice(full.indexOf("## get_note\n"), full.indexOf("## update_note\n"))
+    expect(getNote).toContain('curl -X GET "https://api.acme.test/v1/notes/n%201?fields=all"')
+    expect(getNote).not.toContain("x-api-key")
+    expect(llmsFullTxt(ops, info)).toContain("x-api-key")
   })
 })

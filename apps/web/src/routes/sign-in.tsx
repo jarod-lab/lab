@@ -1,7 +1,7 @@
-import { createFileRoute, useLocation } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 
+import { rawSearch, safeNext } from "../lib/navigation"
 import { SignInPage } from "../pages/auth-pages"
-import { safeNext } from "../lib/navigation"
 import { getWebAuth } from "../lib/web-auth"
 
 export const Route = createFileRoute("/sign-in")({
@@ -13,9 +13,8 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignInRoute() {
   const { next } = Route.useSearch()
-  // The OAuth query (client_id, sig, ...) must survive the trip to sign-up and back.
-  const searchStr = useLocation({ select: (location) => location.searchStr })
+  // The OAuth query (client_id, sig, repeated ba_param, ...) must reach sign-up unchanged.
   return (
-    <SignInPage auth={getWebAuth()} next={safeNext(next)} signUpHref={`/sign-up${searchStr}`} />
+    <SignInPage auth={getWebAuth()} next={safeNext(next)} signUpHref={`/sign-up${rawSearch()}`} />
   )
 }

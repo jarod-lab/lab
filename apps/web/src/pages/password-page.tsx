@@ -43,7 +43,15 @@ export function PasswordPage({
           success: "Your password is set. Sign in with it.",
         }
 
-  if (!token || linkError) {
+  // better-auth sends an invalid or expired link back as `?error=INVALID_TOKEN` with no token, so
+  // that check comes first; a missing token on its own means the link was cut short.
+  let linkProblem: string | null = null
+  if (linkError) {
+    linkProblem = "This link is invalid or has expired. Ask for a new one."
+  } else if (!token) {
+    linkProblem = "This link is missing its token. Open the link from the email again."
+  }
+  if (linkProblem) {
     return (
       <AuthCard
         title={copy.title}
@@ -53,13 +61,7 @@ export function PasswordPage({
           </a>
         }
       >
-        <ErrorAlert
-          message={
-            token
-              ? "This link is invalid or has expired. Ask for a new one."
-              : "This link is missing its token. Open the link from the email again."
-          }
-        />
+        <ErrorAlert message={linkProblem} />
       </AuthCard>
     )
   }

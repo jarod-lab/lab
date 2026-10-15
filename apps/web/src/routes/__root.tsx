@@ -17,6 +17,8 @@ export const Route = createRootRoute({
 /** styles.css defines dark tokens under `.dark`, so the class follows the OS setting. */
 function useSystemDarkMode() {
   useEffect(() => {
+    // Some embedded webviews and test DOMs have no matchMedia; the page then stays in light mode.
+    if (typeof window.matchMedia !== "function") return
     const media = window.matchMedia("(prefers-color-scheme: dark)")
     const apply = () => document.documentElement.classList.toggle("dark", media.matches)
     apply()

@@ -87,7 +87,10 @@ describe("PasswordPage", () => {
     ).toBeTruthy()
     unmount()
 
-    render(<PasswordPage auth={fakeAuth()} mode="reset" token="tok" linkError="INVALID_TOKEN" />)
+    // The real shape of an expired link: better-auth redirects with ?error=INVALID_TOKEN, no token.
+    render(
+      <PasswordPage auth={fakeAuth()} mode="reset" token={undefined} linkError="INVALID_TOKEN" />,
+    )
     expect(
       await screen.findByText("This link is invalid or has expired. Ask for a new one."),
     ).toBeTruthy()

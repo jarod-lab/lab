@@ -112,8 +112,8 @@ export async function listConnectedAgents<O>(
 
 /**
  * Revoke an agent's access to this organization. An API key is deleted. An OAuth client loses its
- * consent and its refresh tokens here (access tokens are JWTs that stay valid until they expire,
- * one hour by default). The client itself is kept: other organizations may use it.
+ * consent and its refresh tokens here; `resolvePrincipal` then refuses access tokens it issued
+ * before the revocation. The client itself is kept: other organizations may use it.
  * Returns false when nothing in this organization matched.
  */
 export async function revokeAgentAccess<O>(

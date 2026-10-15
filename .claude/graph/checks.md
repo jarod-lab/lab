@@ -19,3 +19,7 @@
 | M2 | merge N1fix+N3b+N4, API_URL in env + .env.example, full chain uncached | pass | TURBO_FORCE: lint/typecheck/test:coverage 13/13, baseline, format, build 2/2; contract snapshot matches |
 | N4 | revoking an OAuth client stops its tokens immediately | fail→N4b | JWT access tokens have no row; resolvePrincipal only checks signature + membership (up to 3600s) |
 | N4 | API-key 429 carries Retry-After | fail→N4b | principal.ts drops better-auth tryAgainIn |
+| N7 | Dockerfile builds; release.mjs; compose; CI oasdiff + docker jobs; actions pinned by SHA | pass | node: `docker build` exit 0, actionlint clean, `compose config -q` valid; `grep uses:` all 40-hex SHAs; branch 754c27c |
+| N7 | CI jobs run on GitHub; compose stack end-to-end | unresolved | needs push / a real DB + migrations (user) |
+| N4b | revoked OAuth client's existing access tokens fail; API-key 429 has Retry-After | pass | revocation.test.ts 6 HTTP tests (5/6 fail with the check disabled: mutation-verified); auth 53, api-app 156; branch 528488f |
+| N4b | grant check is one indexed query | fail (accepted, follow-up) | 3 parallel point lookups on clientId-indexed tables; composite index + db accessor left for later |

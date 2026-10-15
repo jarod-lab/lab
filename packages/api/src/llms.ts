@@ -4,11 +4,27 @@ import { type ApiInfo, inputSchema, outputSchema } from "./openapi"
 export interface DocsLinks {
   /** Extra links for the llms.txt "Docs" section, e.g. a quickstart or the agent skill. */
   docs?: { title: string; url: string; note?: string }[]
+  /** Operations that need no credential (e.g. signup). Everything else is called with one. */
+  unauthenticated?: readonly string[]
 }
 
 const fence = (lang: string, body: string) => `\`\`\`${lang}\n${body}\n\`\`\``
 
-function curl(op: AnyOperation, baseURL: string): string {
+/** The device grant's scope and the resource it is bound to (kept in step with device-flow.test.ts). */
+const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+
+/** The name agents and clients know the server by: the title as a slug ("Acme API" -> "acme-api"). */
+export function serverName(info: ApiInfo): string {
+  return (
+    info.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "api"
+  )
+}
+
+/** An example call. Anonymous operations (no credential) get no auth header. */
+function curl(op: AnyOperation, baseURL: string, anonymous: boolean): string {
   const input = (op.examples?.[0]?.input ?? {}) as Record<string, unknown>
   let path = op.path
   const rest: Record<string, unknown> = { ...input }
@@ -23,14 +39,20 @@ function curl(op: AnyOperation, baseURL: string): string {
     const qs = new URLSearchParams(Object.entries(rest).map(([k, v]) => [k, String(v)])).toString()
     lines[0] += qs ? `?${qs}"` : `"`
   } else lines[0] += `"`
-  lines.push(`  -H "x-api-key: $API_KEY"`)
+  if (!anonymous) lines.push(`  -H "x-api-key: $API_KEY"`)
   if (op.method !== "GET" && op.method !== "DELETE") {
     lines.push(`  -H "content-type: application/json"`, `  -d '${JSON.stringify(rest)}'`)
   }
   return lines.join(" \\\n")
 }
 
-function intro(info: ApiInfo): string[] {
+function intro(info: ApiInfo, unauthenticated: readonly string[]): string[] {
+  const open =
+    unauthenticated.length > 0
+      ? ` Operations marked "no credential" need none (${unauthenticated
+          .map((n) => `\`${n}\``)
+          .join(", ")}); the rest do.`
+      : ""
   return [
     `# ${info.title}`,
     "",
@@ -38,35 +60,138 @@ function intro(info: ApiInfo): string[] {
     "",
     "Authenticate with an organization API key (`x-api-key: sk_...` or `Authorization: Bearer sk_...`) " +
       "or an OAuth access token. Every request acts in one organization, with the key's permissions, " +
-      "or the user's role narrowed by the token's scopes. " +
-      'Errors are JSON: `{ "error": { "code", "message" } }`.',
+      "or the user's role narrowed by the token's scopes." +
+      open +
+      ' Errors are JSON: `{ "error": { "code", "message", "hint?" } }`.',
     "",
+  ]
+}
+
+/**
+ * Install snippets for each client, built from the server's base URL and name. Each one connects
+ * over Streamable HTTP; the client finds the OAuth sign-in from the 401 at /mcp, so no key is pasted.
+ */
+export function installSnippets(info: ApiInfo, unauthenticated: readonly string[] = []): string[] {
+  const name = serverName(info)
+  const mcp = `${info.baseURL}/mcp`
+  const remote = { url: mcp }
+  const cursorConfig = btoa(JSON.stringify(remote))
+  const cursorLink = `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(cursorConfig)}`
+  const signupRequest = `curl -s -X POST "${info.baseURL}/v1/signup" \\\n  -H "content-type: application/json" \\\n  -d '{"email":"person@example.com","name":"Ada"}'`
+  return [
+    "## Install",
+    "",
+    `The MCP server is \`${mcp}\` (Streamable HTTP). Pick the client:`,
+    "",
+    "### Claude Code",
+    "",
+    fence("sh", `claude mcp add --transport http ${name} ${mcp}`),
+    "Then run `/mcp` in Claude Code and finish the sign-in in the browser.",
+    "",
+    "### Cursor",
+    "",
+    `[Add to Cursor](${cursorLink}), or put this in \`.cursor/mcp.json\`:`,
+    "",
+    fence("json", JSON.stringify({ mcpServers: { [name]: remote } }, null, 2)),
+    "",
+    "### VS Code",
+    "",
+    fence("sh", `code --add-mcp '${JSON.stringify({ name, type: "http", url: mcp })}'`),
+    "Or put this in `.vscode/mcp.json`:",
+    "",
+    fence("json", JSON.stringify({ servers: { [name]: { type: "http", url: mcp } } }, null, 2)),
+    "",
+    "### Codex CLI",
+    "",
+    "Add this to `~/.codex/config.toml` (or a trusted project's `.codex/config.toml`):",
+    "",
+    fence("toml", `[mcp_servers.${name}]\nurl = "${mcp}"`),
+    "",
+    "### Any other MCP client",
+    "",
+    fence("json", JSON.stringify({ mcpServers: { [name]: remote } }, null, 2)),
+    "",
+    "### Headless or CI: device grant",
+    "",
+    "No browser on the machine? Use the OAuth device grant (RFC 8628). The person approves the code in",
+    "any browser; the token is bound to the organization they have active.",
+    "",
+    "1. Register a public client once (`token_endpoint_auth_method` none; the device grant and refresh are",
+    "   not implied, so list them):",
+    "",
+    fence(
+      "sh",
+      `curl -s -X POST "${info.baseURL}/api/auth/oauth2/register" \\\n  -H "content-type: application/json" \\\n  -d '${JSON.stringify({ client_name: `${name}-cli`, token_endpoint_auth_method: "none", grant_types: [DEVICE_GRANT, "refresh_token"] })}'`,
+    ),
+    "",
+    "2. Ask for a device code. Show the person `verification_uri` and `user_code`:",
+    "",
+    fence(
+      "sh",
+      `curl -s -X POST "${info.baseURL}/api/auth/device/code" \\\n  -H "content-type: application/json" \\\n  -d '${JSON.stringify({ client_id: "CLIENT_ID", scope: "read write offline_access", resource: mcp })}'`,
+    ),
+    "",
+    "Keep `offline_access` in the scope. It makes the server issue a refresh token; without it the",
+    "client cannot renew access, and the refresh token is revoked if the approving web session signs out.",
+    "",
+    "3. Poll `/api/auth/oauth2/token` every `interval` seconds until it returns `access_token`. On",
+    "   `authorization_pending` keep polling; on `slow_down` wait longer:",
+    "",
+    fence(
+      "sh",
+      `curl -s -X POST "${info.baseURL}/api/auth/oauth2/token" \\\n  -d grant_type=${DEVICE_GRANT} -d device_code=DEVICE_CODE -d client_id=CLIENT_ID`,
+    ),
+    "",
+    "Send `Authorization: Bearer <access_token>` to `/mcp` or `/v1/*`. Refresh with",
+    "`grant_type=refresh_token` and the `refresh_token` from the same response.",
+    "",
+    ...(unauthenticated.includes("signup")
+      ? [
+          "### Agent self-signup (no credential)",
+          "",
+          "An agent with no account yet can create one. The response carries an API key that works at a",
+          "low daily limit (`limits.requestsPerDay`) until the person opens the claim email sent to the",
+          "address they gave. Ask them to use that address; don't guess one.",
+          "",
+          fence("sh", signupRequest),
+          "Returns `{ organizationId, apiKey, claimUrlSentTo, limits }`.",
+          "",
+        ]
+      : []),
   ]
 }
 
 /** llms.txt (https://llmstxt.org): an index agents read first. Serve it at /llms.txt. */
 export function llmsTxt(ops: readonly AnyOperation[], info: ApiInfo, links: DocsLinks = {}) {
+  const unauthenticated = links.unauthenticated ?? []
   const lines = [
-    ...intro(info),
+    ...intro(info, unauthenticated),
     "## Docs",
     "",
     `- [Full reference](${info.baseURL}/llms-full.txt): every operation with schemas and examples`,
     `- [OpenAPI](${info.baseURL}/openapi.json): OpenAPI 3.1 spec`,
     `- [MCP server](${info.baseURL}/mcp): Streamable HTTP; same operations as tools, OAuth sign-in`,
+    `- [MCP registry record](${info.baseURL}/.well-known/mcp/server.json): server.json for registries`,
     ...(links.docs ?? []).map((d) => `- [${d.title}](${d.url})${d.note ? `: ${d.note}` : ""}`),
     "",
+    ...installSnippets(info, unauthenticated),
     "## Operations",
     "",
-    ...ops.map((op) => `- \`${op.method} ${op.path}\` (\`${op.name}\`): ${op.summary}`),
+    ...ops.map(
+      (op) =>
+        `- \`${op.method} ${op.path}\` (\`${op.name}\`${unauthenticated.includes(op.name) ? ", no credential" : ""}): ${op.summary}`,
+    ),
     "",
   ]
   return lines.join("\n")
 }
 
 /** Every operation in full, as one Markdown file. Serve it at /llms-full.txt. */
-export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
+export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo, links: DocsLinks = {}) {
+  const unauthenticated = links.unauthenticated ?? []
   const sections = ops.map((op) => {
     const example = op.examples?.[0]
+    const open = unauthenticated.includes(op.name)
     return [
       `## ${op.name}`,
       "",
@@ -74,7 +199,9 @@ export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
       "",
       op.description,
       "",
-      `Permissions: ${formatPermissions(op.permissions) || "none (any authenticated caller)"}`,
+      open
+        ? "Credential: none. Anyone may call this."
+        : `Permissions: ${formatPermissions(op.permissions) || "none (any authenticated caller)"}`,
       "",
       "Input:",
       "",
@@ -88,7 +215,7 @@ export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
         ? [
             "Example:",
             "",
-            fence("sh", curl(op, info.baseURL)),
+            fence("sh", curl(op, info.baseURL, open)),
             ...(example.output ? ["", fence("json", JSON.stringify(example.output, null, 2))] : []),
             ...(example.error ? ["", `Fails with \`${example.error}\`.`] : []),
             "",
@@ -96,5 +223,9 @@ export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
         : []),
     ].join("\n")
   })
-  return [...intro(info), ...sections].join("\n")
+  return [
+    ...intro(info, unauthenticated),
+    ...installSnippets(info, unauthenticated),
+    ...sections,
+  ].join("\n")
 }

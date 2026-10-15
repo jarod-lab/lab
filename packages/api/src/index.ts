@@ -1,4 +1,10 @@
-export { llmsFullTxt, llmsTxt, type DocsLinks } from "./llms"
+export { installSnippets, llmsFullTxt, llmsTxt, serverName, type DocsLinks } from "./llms"
+export {
+  DEFAULT_REGISTRY_META,
+  SERVER_JSON_SCHEMA,
+  serverJson,
+  type RegistryMeta,
+} from "./server-json"
 export { openApiDocument, openApiPath, inputSchema, outputSchema, type ApiInfo } from "./openapi"
 export {
   defineOperation,

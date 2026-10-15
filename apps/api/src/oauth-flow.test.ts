@@ -265,6 +265,37 @@ describe("OAuth authorization code flow (real tokens)", () => {
     expect((await t.req("/v1/whoami", { headers: bearer(access_token) })).status).toBe(401)
   })
 
+  it("advertises offline_access, so an MCP client's grant outlives the web session", async () => {
+    // MCP clients commonly request exactly the resource's scopes_supported.
+    const prm = (await (await t.req("/.well-known/oauth-protected-resource/mcp")).json()) as {
+      scopes_supported: string[]
+    }
+    expect(prm.scopes_supported).toContain("offline_access")
+
+    const user = await t.signUp("Signs out")
+    const clientId = await registerClient()
+    const scope = prm.scopes_supported.filter((s) => s !== "offline_access").join(" ")
+    const tokens = await authorize({ cookie: user.cookie, clientId, scope })
+    expect(tokens.refresh_token).toBeTruthy()
+
+    const signOut = await t.req("/api/auth/sign-out", {
+      method: "POST",
+      headers: { cookie: user.cookie, origin: BASE, "content-type": "application/json" },
+      body: "{}",
+    })
+    expect(signOut.status).toBe(200)
+
+    // The access token still works, and the refresh token (offline_access) still renews it.
+    expect((await t.req("/v1/whoami", { headers: bearer(tokens.access_token) })).status).toBe(200)
+    const renewed = await form({
+      grant_type: "refresh_token",
+      refresh_token: tokens.refresh_token,
+      client_id: clientId,
+      resource: MCP,
+    })
+    expect(renewed.status).toBe(200)
+  })
+
   it("refuses to authorize a resource this API does not serve", async () => {
     const clientId = await registerClient()
     await expect(

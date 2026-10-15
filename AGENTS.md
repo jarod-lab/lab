@@ -159,6 +159,8 @@ or `resolvePrincipal`.
   at approval, then read when the token is issued. The client polls `/api/auth/oauth2/token` with the `device_code`
   grant. The result is an ordinary OAuth JWT, so `resolvePrincipal` is unchanged. The plugin's `/device/token` is
   disabled. Clients must register the `device_code` grant and should ask for `offline_access` (for a refresh token).
+  The MCP resource metadata advertises `offline_access` in `scopes_supported`, so clients that request exactly
+  those get a refresh token and keep working after the approving web session signs out.
   `starter login` (`packages/cli`, the `starter` bin) is the reference client.
 - **Provisional signup.** `POST /v1/signup` with `{ email, name? }` and no credential (REST only, not an MCP tool). It
   creates an unverified user, a personal org and an `sk_` key with project permissions, and sends one claim email.
@@ -240,7 +242,7 @@ or `resolvePrincipal`.
   `scripts/release.mjs` in a deploy.
 - `0001_agent_auth` adds the API key, JWKS and OAuth tables (apikey, jwks, oauth_*); `0002_organizations` adds
   organization, member, invitation, `session.active_organization_id` and the example `project` table.
-- `0003_ambiguous_ezekiel` (not applied yet; the user runs it) adds `audit_event`, `usage_daily`, `idempotency_key`,
+- `0003_agent_distribution` (not applied yet; the user runs it) adds `audit_event`, `usage_daily`, `idempotency_key`,
   `signup_attempt` and the device grant's `device_code` table. The first three cascade from `organization`;
   `signup_attempt` is keyed by IP and email domain, not by org.
 

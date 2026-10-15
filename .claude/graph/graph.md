@@ -51,7 +51,8 @@
   instead of standing up a second origin.
 - **Provisional signup (user: build it, gated).** Lives in N1 (auth module) + N4 (route/op). It is rate-limited per IP and per
   email domain, creates an unverified user + personal org, sends one claim email, and the resulting
-  credential is the device-grant token with a low quota until claimed.
+  credential is an org `sk_` API key (not a device-grant token, as first written) with a low quota until
+  claimed. Changed by N1 with the contract in contracts.md.
 
 ## Nodes
 
@@ -72,6 +73,7 @@ All editing nodes run in a git worktree off the current `agent-graph` head, with
 | N7 | deploy + CI | N3 dist path, N4 env | `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `scripts/release.mjs`, `.github/workflows/ci.yml` | `docker build` succeeds if docker is available (else unresolved); CI job diffs `openapi.json` against base for breaking changes (oasdiff) |
 | N8 | onboarding journey | everything merged | `apps/api/src/onboarding.test.ts` | over HTTP only: discover from `/llms.txt` + well-known → device grant → `create_api_key` → `create_project` with idempotency → audit shows it |
 | N9 | docs | merged branch | `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/skills/agent-api/**` | docs describe what was built; the "Not yet" list matches reality |
+| N3c | web correction #1 | headless-Chromium evidence | `apps/web/**` | SPA shell has no route content; no React #418 / CSP errors on any page in headless Chromium against the real server |
 | M* | **code**: merge | node branches | `agent-graph` | `git merge`; `pnpm install` for lockfile; `pnpm --filter @starter/api-app test -u` for openapi.json; full chain |
 
 ## Edges and waves
@@ -87,6 +89,16 @@ B0 ─► wave 1: N1 ∥ N2 ∥ N3 ─► M1 ─► wave 2: N4 ∥ N3b ─► M2
   unless the node's report justifies it.
 
 Decision (wave 4): N9 runs beside N8, not after it. N8 only adds test files, and docs don't describe them.
+
+## Lead edits outside nodes (small, made at merge points; each gated by the full chain)
+
+| where | change | why |
+|---|---|---|
+| M1 | `lefthook.yml` format hook `--no-errors-on-unmatched`; `.gitignore` `.claude/worktrees/` | hook failed on an openapi.json-only commit; worktrees untracked |
+| M2 | `API_URL` in `packages/env` + `.env.example` | N3b's vite proxy reads it; N3b didn't own env |
+| M3-prep | `revoke_agent_access` wording; registry entry passed from `server.ts`; `maxWorkers` cap | N4b made tokens die at once; N5 left the placeholder implicit; parallel-load timeouts |
+| M4 | `list_connected_agents` gains `clientId`/`keyId`; MCP answers FORBIDDEN (not "unknown") for hidden tools; llms.txt/skill say add `admin` for keys | N8 findings A and B |
+| M4 review | REST-only `signup` stays unknown over MCP (test); PRM advertises `offline_access` (test: grant survives web sign-out); migration renamed `0003_agent_distribution` | advisor review of the full diff |
 
 ## Code nodes (never routed through a model)
 
@@ -104,3 +116,8 @@ SDK types via the generator script · full check chain.
 - Cap vitest workers per package (`maxWorkers` = cores/4 in vitest.base): turbo runs all packages at
   once, and default per-core workers oversubscribed PGlite past 30s timeouts (M3; auth/signup 47s→11s).
 - Device-grant clients have no consent row; list them from `oauth_refresh_token` (N4).
+- jsdom tests don't prove an SPA works: serve the real build behind its real CSP and load it in a browser
+  (headless Chromium `--dump-dom` + stderr console works when the extension isn't connected). Found the
+  shell hydration mismatch (React #418) that 88 green web tests missed.
+- An agent's-eye journey test (follow discovery text, not constants) finds product gaps unit tests can't:
+  N8 found that the default scope dead-ended at "Unknown tool" and agents/audit ids didn't join.

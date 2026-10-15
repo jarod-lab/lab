@@ -36,3 +36,8 @@
 | N8→fix | finding A: default scope can't create keys, MCP said "Unknown tool" | pass | MCP now returns FORBIDDEN + hint for hidden tools; llms.txt + skill say add `admin`; test asserts hint names `admin` |
 | N8→fix | finding B: agents list id ≠ audit clientId | pass | additive `clientId`/`keyId` on list_connected_agents (openapi +16/-0); test matches on clientId |
 | M4 | final tree: full chain uncached | pass | TURBO_FORCE: lint, typecheck, test:coverage 15/15 (api-app 175 + 1 skip, auth 53, web 88, cli 68, sdk 38, ...), baseline, format:check, build 4/4 |
+| review | CI extras: gitleaks history, commitlint 53a0710..HEAD, oasdiff breaking vs base | pass | gitleaks "no leaks found"; commitlint exit 0; oasdiff (docker) "No breaking changes"; ci.yml checkout fetch-depth 0 |
+| review | REST-only signup not callable over MCP after M4 change | pass | signup.test.ts asserts "Unknown tool: signup" |
+| review | MCP client requesting scopes_supported gets refresh token; survives web sign-out | pass | PRM advertises offline_access; oauth-flow.test.ts new test (sign-out → whoami 200, refresh 200) |
+| review | migration descriptively named; generate is a no-op | pass | `0003_agent_distribution`; drizzle-kit "No schema changes"; auth generate leaves auth-schema.ts unchanged |
+| review | built SPA under real CSP in a browser | fail→N3c | headless Chromium: no CSP violations, assets 200, CSP hashes = inline script hashes; React #418 hydration error on /device, /consent |

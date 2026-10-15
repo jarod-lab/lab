@@ -68,7 +68,7 @@ describe("api app (real Postgres via PGlite)", () => {
         expect(await (await t.req(path)).json()).toMatchObject({
           resource: `${BASE}/mcp`,
           authorization_servers: [`${BASE}/api/auth`],
-          scopes_supported: ["read", "write", "admin"],
+          scopes_supported: ["read", "write", "admin", "offline_access"],
         })
       }
     })

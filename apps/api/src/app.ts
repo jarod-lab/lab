@@ -164,7 +164,9 @@ export function createApp(opts: AppOptions) {
   const resourceMetadata = protectedResourceMetadata({
     resource: mcpUrl,
     authorizationServers: [issuer],
-    scopes: OAUTH_SCOPES,
+    // MCP clients often request exactly these. offline_access gets them a refresh token, so they
+    // needn't re-authorize hourly and survive the approving web session signing out.
+    scopes: [...OAUTH_SCOPES, "offline_access"],
     name: opts.name,
   })
   const asMetadata = oauthProviderAuthServerMetadata(auth)

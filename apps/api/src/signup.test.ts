@@ -108,6 +108,12 @@ describe("signup (REST, no credentials)", () => {
       const client = await t.mcpClient(t.fullKey)
       const tools = await client.listTools()
       expect(tools.tools.map((tool) => tool.name)).not.toContain("signup")
+      // Hidden tools are callable by name (they answer FORBIDDEN); REST-only ones must stay unknown.
+      const called = await client.callTool({
+        name: "signup",
+        arguments: { email: "x@example.com" },
+      })
+      expect(called).toMatchObject({ isError: true, content: [{ text: "Unknown tool: signup" }] })
       await client.close()
       expect(t.operations.map((op) => op.name)).toContain("signup")
     } finally {

@@ -810,6 +810,20 @@
                               "apiKey"
                             ]
                           },
+                          "clientId": {
+                            "description": "OAuth client id, as clientId on audit events; null for API keys",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "keyId": {
+                            "description": "API key id, as actor.id on audit events; null for OAuth",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -832,6 +846,8 @@
                         "required": [
                           "id",
                           "type",
+                          "clientId",
+                          "keyId",
                           "name",
                           "createdAt",
                           "lastUsedAt",

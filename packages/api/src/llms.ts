@@ -133,6 +133,7 @@ export function installSnippets(info: ApiInfo, unauthenticated: readonly string[
     "",
     "Keep `offline_access` in the scope. It makes the server issue a refresh token; without it the",
     "client cannot renew access, and the refresh token is revoked if the approving web session signs out.",
+    "Add `admin` to the scope only if the agent must create API keys or manage members and agents.",
     "",
     "3. Poll `/api/auth/oauth2/token` every `interval` seconds until it returns `access_token`. On",
     "   `authorization_pending` keep polling; on `slow_down` wait longer:",

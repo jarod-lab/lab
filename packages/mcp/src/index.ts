@@ -137,7 +137,10 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
   const visible = opts.operations.filter((op) => canCall(op, caller))
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
   server.setRequestHandler(CallToolRequestSchema, (req) => {
-    const op = visible.find((o) => o.name === req.params.name)
+    // Hidden tools are still callable by name: invoke refuses them with FORBIDDEN and a hint naming
+    // the scope or permission that would allow it, which is more use to an agent than "unknown".
+    // The operation list is public anyway (openapi.json, llms.txt).
+    const op = opts.operations.find((o) => o.name === req.params.name)
     if (!op) {
       return {
         isError: true,

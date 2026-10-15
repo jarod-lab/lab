@@ -565,6 +565,10 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             type: "oauthClient" | "apiKey";
+                            /** @description OAuth client id, as clientId on audit events; null for API keys */
+                            clientId: string | null;
+                            /** @description API key id, as actor.id on audit events; null for OAuth */
+                            keyId: string | null;
                             name: string;
                             createdAt: string;
                             lastUsedAt: string | null;

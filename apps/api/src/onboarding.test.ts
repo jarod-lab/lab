@@ -312,26 +312,21 @@ describe("onboarding journey A: headless agent, human approves", () => {
     )
   }, 60_000)
 
-  // The audit trail names an agent by its OAuth client id, but list_connected_agents prefixes it, so
-  // an agent can't match its own audit rows to the id it revokes with. Expected to fail until they
-  // agree. Runs before the revoke, so the agent is listed (the first assertion checks that).
-  it.fails("list_connected_agents lists an OAuth agent under the client id its audit rows carry", async () => {
+  // The audit trail names an agent by its OAuth client id; list_connected_agents carries the same id
+  // in `clientId`, so an agent can match its audit rows to the entry it revokes. Runs before the revoke.
+  it("list_connected_agents carries the client id its audit rows use", async () => {
     const listed = await ok(await grace.request("/v1/agents"))
-    const agents = listed.agents as { id: string; type: string }[]
+    const agents = listed.agents as { id: string; type: string; clientId: string | null }[]
     expect(
-      agents.some(
-        (a) => a.type === "oauthClient" && a.id.endsWith(need(j.clientId, "the client id")),
-      ),
+      agents.some((a) => a.type === "oauthClient" && a.clientId === need(j.clientId, "client id")),
     ).toBe(true)
-    expect(agents.some((a) => a.type === "oauthClient" && a.id === j.clientId)).toBe(true)
   })
 
   it("6. the human revokes the agent; its token then gets 401", async () => {
     const listed = await ok(await grace.request("/v1/agents"))
-    const agents = listed.agents as { id: string; type: string }[]
-    // The listed id is prefixed (see the it.fails test below); match on the client id it ends with.
+    const agents = listed.agents as { id: string; type: string; clientId: string | null }[]
     const client = agents.find(
-      (a) => a.type === "oauthClient" && a.id.endsWith(need(j.clientId, "the client id")),
+      (a) => a.type === "oauthClient" && a.clientId === need(j.clientId, "the client id"),
     )
     expect(client).toBeDefined()
 
@@ -359,9 +354,9 @@ describe("onboarding journey A: headless agent, human approves", () => {
     expect(stillKey.status).toBe(200)
   }, 60_000)
 
-  // The scope the discovered snippet asks for cannot create a key, so an agent following the docs
-  // to the letter gets stuck at create_api_key. Expected to fail until the snippet or the op changes.
-  it.fails("a token from the documented scope (read write offline_access) can create an API key", async () => {
+  // The documented default scope is least-privilege: it can't create keys. The refusal must tell the
+  // agent which scope would (`admin`), and the install docs must say so too.
+  it("a token from the default scope is refused create_api_key with a hint naming admin", async () => {
     const reg = await t.req(pathOf(need(j.registerUrl, "the register URL")), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -378,7 +373,12 @@ describe("onboarding journey A: headless agent, human approves", () => {
       arguments: { name: "documented", permissions: { project: ["read"] } },
     })
     await mcp.close()
-    expect(created.isError).toBeFalsy()
+    expect(created.isError).toBe(true)
+    const text = JSON.stringify(created.content)
+    expect(text).toContain("FORBIDDEN")
+    expect(text).toContain("`admin`")
+    const llms = await (await t.req("/llms.txt")).text()
+    expect(llms).toMatch(/add `admin`/i)
   }, 60_000)
 })
 

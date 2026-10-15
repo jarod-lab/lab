@@ -30,3 +30,9 @@
 | N6 | SDK (generated types, retries, idempotency, errors, paginate) + CLI (device login w/ offline_access, call/ops/whoami) | pass | node: uncached chain green; sdk 38 tests, cli 68 tests; `starter --help` runs; branch 1fafba3 |
 | N6 | CLI login against the real server | unresolved→N8 | tested only against a fake server |
 | M3 | merge N4b+N5+N6+N7, lockfile, SDK schema regenerated, full chain uncached | pass | TURBO_FORCE: lint/typecheck/test:coverage 15/15, baseline, format, build 4/4 (ERROR lines are negative-path test logs) |
+| N9 | docs match code; every path/script named exists | pass | node existence table: all yes except build outputs (apps/web/dist, packages/cli/dist); only AGENTS.md (CLAUDE.md symlink), README.md, agent-api SKILL.md changed; branch f6e0056 |
+| N9 | onboarding journey test mentioned | unresolved→M4 | N8 not merged when N9 ran; add a line after N8 |
+| N8 | journeys A (device grant from discovery → MCP → key → idempotent create → pagination → audit → revoke), B (signup → claim), C (CLI login vs live server) | pass | onboarding.test.ts; node ran chain 3× green; branch 196fe4c |
+| N8→fix | finding A: default scope can't create keys, MCP said "Unknown tool" | pass | MCP now returns FORBIDDEN + hint for hidden tools; llms.txt + skill say add `admin`; test asserts hint names `admin` |
+| N8→fix | finding B: agents list id ≠ audit clientId | pass | additive `clientId`/`keyId` on list_connected_agents (openapi +16/-0); test matches on clientId |
+| M4 | final tree: full chain uncached | pass | TURBO_FORCE: lint, typecheck, test:coverage 15/15 (api-app 175 + 1 skip, auth 53, web 88, cli 68, sdk 38, ...), baseline, format:check, build 4/4 |

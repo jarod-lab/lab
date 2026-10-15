@@ -164,7 +164,8 @@ so REST and MCP behave the same:
 - Clients get `{ error: { code, message, hint?, docs? } }` via `toPublic()`, plus the error's `headers` (for example
   `retry-after`). `AppError` takes `hint`, `docs`, `headers` and `context`. A FORBIDDEN hint names the OAuth scope
   or API key permission that would allow the call (`permissionHint`). MCP tool failures return `isError` results
-  with the same text, so the model can retry with better arguments.
+  with the same text, so the model can retry with better arguments. Calling a hidden tool (one the caller lacks
+  permissions for) by name also gets FORBIDDEN with the hint.
 - Report (`reportError`) only 5xx or non-exposed errors.
 
 ## Tests

@@ -125,7 +125,8 @@ or `resolvePrincipal`.
 - **Permissions.** One catalog (`statements` in `packages/auth/src/access.ts`) drives roles (owner, admin, member,
   viewer), API-key permissions, OAuth scope grants and operations. Effective access = role ∩ credential, and a
   request needs a single grant covering all of it (better-auth's multi-role rule; `permissions.test.ts` checks parity
-  with `hasPermission` for every role and action). `invoke` enforces `op.permissions`; MCP hides tools a caller can't use.
+  with `hasPermission` for every role and action). `invoke` enforces `op.permissions`; MCP hides tools a caller can't use (calling one by name
+  still returns FORBIDDEN with the hint, not "unknown tool").
 - **OAuth scopes** are coarse (`read`, `write`, `admin` in `OAUTH_SCOPE_GRANTS`), each an explicit permission set.
   `OAUTH_EXCLUDED` lists what no token may ever do (org deletion, role editing); a test checks every action is one or
   the other. `openid`/`profile`/`email`/`offline_access` grant nothing.
@@ -186,8 +187,8 @@ or `resolvePrincipal`.
 - Publishing: the MCP registry, the Claude connectors directory, Smithery, and `npx skills add` for `skills/starter`.
   Each needs your namespace and a real URL.
 - Deploy target: the Dockerfile and `scripts/release.mjs` only; no platform config.
-- LLM onboarding eval: an agent starting from `llms.txt` alone, judged on its run. The deterministic HTTP onboarding
-  journey test is not written yet.
+- LLM onboarding eval: an agent starting from `llms.txt` alone, judged on its run. The deterministic HTTP journeys
+  exist (`apps/api/src/onboarding.test.ts`: device grant from discovery, self-signup and claim, CLI login).
 - Composite index for the grant check (the three lookups in `grantStands`).
 - Cleanup job for `signup_attempt`, expired `idempotency_key` rows (reserve reclaims only the key it reserves) and
   `device-org:` rows in `verification`.
@@ -205,6 +206,8 @@ or `resolvePrincipal`.
 ## Testing
 
 - Vitest per package, `*.test.ts` beside the source. `pnpm test`, or `pnpm test:coverage` to enforce thresholds.
+- `apps/api/src/onboarding.test.ts` is the agent's-eye check: it follows the install text in `/` and the
+  well-known documents rather than constants. If you change the snippets or discovery, it should still pass.
 - Thresholds live in `packages/config/vitest.base.ts` (80% lines/functions/statements, 70% branches) and only go up.
   Generated `src/auth-schema.ts`, stories, tests and `*.types.ts` are excluded from coverage.
 - Type-level tests go in `*.types.ts` (checked by `pnpm typecheck`, not run by Vitest).

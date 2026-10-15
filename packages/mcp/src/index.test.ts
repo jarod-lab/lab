@@ -125,10 +125,13 @@ describe("createMcpHandler", () => {
     expect(reported).toEqual(["INTERNAL"])
   })
 
-  it("rejects tools the caller can't see", async () => {
+  it("refuses a hidden tool with FORBIDDEN, and an unknown one as unknown", async () => {
     const client = await connect({ ...full, grants: [{ note: ["read"] }] })
-    const res = await client.callTool({ name: "shout", arguments: { text: "x" } })
-    expect(res).toMatchObject({ isError: true, content: [{ text: "Unknown tool: shout" }] })
+    const hidden = await client.callTool({ name: "shout", arguments: { text: "x" } })
+    expect(hidden).toMatchObject({ isError: true })
+    expect(JSON.stringify(hidden.content)).toContain("FORBIDDEN")
+    const unknown = await client.callTool({ name: "nope", arguments: {} })
+    expect(unknown).toMatchObject({ isError: true, content: [{ text: "Unknown tool: nope" }] })
   })
 })
 

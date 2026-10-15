@@ -94,6 +94,11 @@ const actorType = (stored: string): "user" | "apiKey" => (stored === "apiKey" ? 
 const agentOutput = z.object({
   id: z.string(),
   type: z.enum(["oauthClient", "apiKey"]),
+  clientId: z
+    .string()
+    .nullable()
+    .describe("OAuth client id, as clientId on audit events; null for API keys"),
+  keyId: z.string().nullable().describe("API key id, as actor.id on audit events; null for OAuth"),
   name: z.string(),
   createdAt: z.string(),
   lastUsedAt: z.string().nullable(),

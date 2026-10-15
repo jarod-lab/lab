@@ -17,6 +17,10 @@ export interface Agent {
   /** `key_<id>` for an API key, `client_<clientId>` for an OAuth client. Pass it to revokeAgentAccess. */
   id: string
   type: "oauthClient" | "apiKey"
+  /** The OAuth client id, as `clientId` on audit events. Null for API keys. */
+  clientId: string | null
+  /** The API key id, as `actor.id` on audit events. Null for OAuth clients. */
+  keyId: string | null
   name: string
   createdAt: string
   /** API keys: the last request. OAuth clients: not tracked, so null. */
@@ -47,6 +51,8 @@ export async function listConnectedAgents<O>(
     .map((k) => ({
       id: `${KEY_PREFIX}${k.id}`,
       type: "apiKey" as const,
+      clientId: null,
+      keyId: k.id,
       name: k.name ?? "API key",
       createdAt: k.createdAt.toISOString(),
       lastUsedAt: k.lastRequest?.toISOString() ?? null,
@@ -101,6 +107,8 @@ export async function listConnectedAgents<O>(
     agents.push({
       id: `${CLIENT_PREFIX}${clientId}`,
       type: "oauthClient",
+      clientId,
+      keyId: null,
       name: names.get(clientId) ?? clientId,
       createdAt: seen.createdAt.toISOString(),
       lastUsedAt: null,

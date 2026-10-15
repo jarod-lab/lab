@@ -35,7 +35,8 @@ Every credential acts in one organization (workspace) and sees only that organiz
   for `resource` = `https://api.example.com/mcp`; show the person the verification URL and user code; poll the
   token endpoint at the returned interval until it issues an access token. Request the offline_access scope
   so a refresh token is issued: without it the client can't renew access, and the refresh token is revoked if
-  the approving web session signs out. Refresh with the refresh token.
+  the approving web session signs out. Add `admin` only to create API keys or manage members and agents.
+  Refresh with the refresh token.
   The token acts in the organization the approving person had active. The full sequence is in llms.txt.
 
 Check a credential first. `whoami` names the organization, the grants and today's usage:

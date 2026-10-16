@@ -95,7 +95,9 @@ for (const file of walk(".")) {
     .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${name}`)
     .replace(/-d starter/g, `-d ${name}`)
     .replace(/^New project from this template:.*\n/m, "")
-    .replaceAll('"Starter', `"${title}`)
+    // The display name as a whole word ("Starter API", "Starter"), never inside an identifier such
+    // as the SDK's "StarterError", whose class name stays as it is.
+    .replace(/"Starter(?=[ "])/g, `"${title}`)
     .replaceAll("Starter <", `${title} <`)
   // The registry name in server.ts, its fallback and the committed server.json stay in step.
   if (registryName) next = next.replaceAll("io.github.example/starter", registryName)

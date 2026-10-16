@@ -90,14 +90,21 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
     ...(op.hints?.readOnly ? [] : [IDEMPOTENCY_KEY_PARAM]),
   ]
   const bodyProps = Object.fromEntries(Object.entries(props).filter(([k]) => !inPath.has(k)))
+  // An operation whose input is all path parameters reads no body, so it declares none.
+  const takesBody = hasBody && Object.keys(bodyProps).length > 0
   const example = op.examples?.[0]
+  const bodyExample =
+    example &&
+    Object.fromEntries(
+      Object.entries(example.input as Record<string, unknown>).filter(([k]) => !inPath.has(k)),
+    )
   const responseContent = { "application/json": { schema: outputSchema(op) } }
   return {
     operationId: op.name,
     summary: op.summary,
     description: op.description,
     ...(parameters.length > 0 && { parameters }),
-    ...(hasBody && {
+    ...(takesBody && {
       requestBody: {
         required: true,
         content: {
@@ -107,7 +114,7 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
               properties: bodyProps,
               required: [...required].filter((k) => !inPath.has(k)),
             },
-            ...(example && { example: example.input }),
+            ...(bodyExample && { example: bodyExample }),
           },
         },
       },

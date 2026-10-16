@@ -93,6 +93,33 @@ describe("openApiDocument", () => {
     expect(json.schema.required).toEqual(["body"])
   })
 
+  it("leaves out the request body when every input is a path parameter", () => {
+    const archive = defineOperation({
+      name: "archive_note",
+      method: "POST",
+      path: "/v1/notes/:id/archive",
+      summary: "Archive a note",
+      description: "Archives one note.",
+      permissions: { note: ["update"] },
+      input: z.object({ id: z.string() }),
+      output: z.object({ id: z.string() }),
+      examples: [{ input: { id: "n1" }, output: { id: "n1" } }],
+      handler: (input) => ({ id: input.id }),
+    })
+    const archived = openApiDocument([archive], info).paths["/v1/notes/{id}/archive"] as Record<
+      string,
+      Record<string, unknown>
+    >
+    expect(archived.post?.requestBody).toBeUndefined()
+  })
+
+  it("keeps path parameters out of the body example", () => {
+    const body = path.patch?.requestBody as {
+      content: { "application/json": { example: Record<string, unknown> } }
+    }
+    expect(body.content["application/json"].example).toEqual({ body: "hi" })
+  })
+
   it("declares the auth schemes, oauth only when configured", () => {
     expect(Object.keys(doc.components.securitySchemes)).toEqual(["apiKey", "bearer", "oauth2"])
     const noOauth = openApiDocument(ops, { ...info, oauth: undefined })

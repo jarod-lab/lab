@@ -18,6 +18,19 @@ const boom = defineOperation({
   },
 })
 
+/** A POST whose whole input is a path parameter, so OpenAPI documents no request body. */
+const touch = defineOperation({
+  name: "touch",
+  method: "POST",
+  path: "/v1/touch/:id",
+  summary: "Touch",
+  description: "Echoes the id from the path.",
+  permissions: {},
+  input: z.object({ id: z.string() }),
+  output: z.object({ id: z.string() }),
+  handler: (input) => ({ id: input.id }),
+})
+
 describe("api app (real Postgres via PGlite)", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   beforeAll(async () => {
@@ -345,6 +358,19 @@ describe("api app (real Postgres via PGlite)", () => {
       const res = await owner.callTool({ name: "create_project", arguments: { name: "Via MCP" } })
       expect(res.structuredContent).toMatchObject({ name: "Via MCP" })
       await owner.close()
+    })
+  })
+})
+
+// Its own app, so the extra operation doesn't change the tool lists asserted above.
+describe("a POST whose input is all path parameters", () => {
+  it("takes no body as an empty input, as the OpenAPI document says", async () => {
+    const t = await createTestApp([touch])
+    onTestFinished(() => t.close())
+    const res = await t.req("/v1/touch/t1", t.as(t.fullKey, { method: "POST" }))
+    expect({ status: res.status, body: await res.json() }).toEqual({
+      status: 200,
+      body: { id: "t1" },
     })
   })
 })

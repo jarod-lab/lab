@@ -270,9 +270,13 @@ export function createApp(opts: AppOptions) {
       if (!caller) throw new AppError("UNAUTHORIZED", "Send an API key or OAuth access token")
       let body: unknown = {}
       if (op.method !== "GET" && op.method !== "DELETE") {
-        body = await c.req.json().catch(() => {
+        // No body is an empty input: an operation whose input is all path parameters has none.
+        const text = await c.req.text()
+        try {
+          body = text.trim() === "" ? {} : JSON.parse(text)
+        } catch {
           throw new AppError("BAD_REQUEST", "Body must be JSON")
-        })
+        }
       }
       const input = { ...c.req.query(), ...(body as object), ...c.req.param() }
       const ctx: OperationContext = {

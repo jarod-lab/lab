@@ -15,7 +15,8 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 ## Layout
 
 - `apps/api` — Hono on Node (`@hono/node-server`, run with `tsx`). `createApp` in `app.ts` serves REST, `/mcp`,
-  `/openapi.json`, `/llms.txt`, `/llms-full.txt`, `/.well-known/mcp/server.json`, `/health`, OAuth discovery under
+  `/openapi.json`, `/llms.txt`, `/llms-full.txt`, `/.well-known/mcp/server.json`, `/health`, `/status` (when
+  `STATUS_PROVIDERS` is set), OAuth discovery under
   `/.well-known/` and better-auth at `/api/auth/*`. With `WEB_DIST_DIR` set it also serves the web app's pages.
   Operations live in `src/operations.ts`; invoke hooks (metering, idempotency, audit) in `src/hooks.ts`; tenant data in
   `src/data/`. `server.ts` only wires env, the DB and the listener (excluded from coverage)
@@ -43,7 +44,7 @@ docker compose up -d db      # optional local Postgres; tests don't need it
   `projectInOrg`), compile-time misuse cases in `mistakes.types.ts`. Tenant data functions take proofs as arguments
 - `packages/logger` — pino with secret redaction: `createLogger({ name })`
 - `packages/errors` — `AppError` (with `hint`, `docs`, `headers`)/`ErrorCode`, `Result` (`ok`/`err`/`attempt`), `reportError` + `setErrorReporter`
-- `packages/observability` — `observe(handler, { logger })` wraps a Web `Request`/`Response` handler (request id, access log, error handling); `createHealthHandler(checks)`
+- `packages/observability` — `observe(handler, { logger })` wraps a Web `Request`/`Response` handler (request id, access log, error handling); `createHealthHandler(checks)`; `createStatusHandler(providers)` and `parseStatusProviders` (vendor status pages)
 - `packages/env` — the only place env vars are read (validated with Zod)
 - `packages/config` — shared tsconfig and Vitest base config
 - `scripts/` — `init-project.mjs`, `generate-stories.mjs`, `release.mjs` (the release step: applies migrations from `DATABASE_URL`)
@@ -73,8 +74,12 @@ CI runs the same, plus gitleaks over history, commitlint over PR commits, an oas
 - **Logging:** use `@starter/logger`, never `console.*` or pino directly (baseline errors on both). Throw
   `AppError`; never send an `INTERNAL` message to a client, use `error.toPublic()`. Register Sentry once at
   startup with `setErrorReporter`.
-- **Observability:** wrap every route handler in `observe` from `@starter/observability` and expose a health route with
-  `createHealthHandler`. It reports only 5xx or non-exposed errors; 4xx are logged. Server-error logs include only
+- **Observability:** wrap every route handler in `observe` from `@starter/observability` (apps/api has its own
+  request-id and access-log middleware instead). Health is liveness only: `/health` pings no dependency. Vendor
+  health comes from the vendors themselves: `GET /status` reads each one's status page (Atlassian Statuspage, or
+  AWS Health for `aws:<service>@<region>`), caches it for 60s and reports `unknown` when one can't be reached; set
+  the list in `STATUS_PROVIDERS`. `observe` reports only 5xx (thrown or returned) or non-exposed errors; 4xx are
+  logged. Server-error logs include only
   allowlisted request headers (`safeHeaders`), never the full set. No error-tracking SDK is installed yet:
   until an app registers one with `setErrorReporter`, reported errors go nowhere (only the logs).
 - **Accessibility:** oxlint's `jsx-a11y` rules are errors everywhere except the vendored `packages/ui/src/components` and

@@ -21,6 +21,7 @@
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
     "@starter/logger": "workspace:*",
+    "@starter/observability": "workspace:*",
     "@starter/mcp": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.13",

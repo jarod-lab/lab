@@ -382,3 +382,33 @@ describe("a POST whose input is all path parameters", () => {
     })
   })
 })
+
+describe("GET /status", () => {
+  it("reports the vendors' own status pages, and isn't served when none are configured", async () => {
+    const asked: string[] = []
+    const t = await createTestApp([], {
+      status: {
+        providers: [{ kind: "statuspage", name: "Host", url: "https://status.host.example" }],
+        fetch: async (url) => {
+          asked.push(url)
+          return Response.json({ status: { indicator: "minor", description: "Slow deploys" } })
+        },
+      },
+    })
+    onTestFinished(() => t.close())
+    const res = await t.req("/status")
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      status: "degraded",
+      providers: [{ name: "Host", status: "degraded", description: "Slow deploys" }],
+    })
+    expect(asked).toEqual(["https://status.host.example/api/v2/status.json"])
+    // /health stays a liveness check: it asks no one.
+    expect(await (await t.req("/health")).json()).toEqual({ ok: true })
+    expect(asked).toHaveLength(1)
+
+    const plain = await createTestApp()
+    onTestFinished(() => plain.close())
+    expect((await plain.req("/status")).status).toBe(404)
+  })
+})

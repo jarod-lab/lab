@@ -170,3 +170,14 @@ export function createHealthHandler(
     )
   }
 }
+
+export {
+  AWS_HEALTH_URL,
+  createStatusHandler,
+  parseStatusProviders,
+  type ProviderState,
+  type ProviderStatus,
+  type StatusOptions,
+  type StatusProvider,
+  type StatusReport,
+} from "./status"

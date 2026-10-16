@@ -22,6 +22,11 @@ export const env = createEnv({
     UNCLAIMED_ORG_DAILY_REQUEST_LIMIT: z.coerce.number().int().positive().default(500),
     /** Trust X-Forwarded-For for the client IP (signup limits). Only when a proxy overwrites that header. */
     TRUST_PROXY: z.stringbool().default(false),
+    /**
+     * Vendors whose own status pages `GET /status` reports (never pinged by /health). Comma-separated
+     * `Name=https://status.example.com` (a Statuspage) or `aws:<service>@<region>` (AWS Health).
+     */
+    STATUS_PROVIDERS: z.string().min(1).optional(),
     /** Directory of the built web app (apps/web/dist). When set, apps/api serves its pages and assets. */
     WEB_DIST_DIR: z.string().min(1).optional(),
     /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */

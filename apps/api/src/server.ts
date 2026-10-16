@@ -3,6 +3,7 @@ import { createAuth } from "@starter/auth"
 import { createDb } from "@starter/db"
 import { env } from "@starter/env"
 import { createLogger } from "@starter/logger"
+import { parseStatusProviders } from "@starter/observability"
 
 import { createApp } from "./app"
 import { createApiHooks } from "./hooks"
@@ -42,6 +43,10 @@ const app = createApp({
   hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET }),
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
+  // Parsed here so a malformed list stops startup instead of showing nothing.
+  ...(env.STATUS_PROVIDERS && {
+    status: { providers: parseStatusProviders(env.STATUS_PROVIDERS) },
+  }),
   // The MCP registry entry (/.well-known/mcp/server.json). Rename before publishing: the name is
   // reverse-DNS for a namespace you can prove (io.github.<owner>/<repo> or your domain).
   registry: {

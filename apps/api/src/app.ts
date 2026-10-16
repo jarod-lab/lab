@@ -26,6 +26,11 @@ import {
 import { AppError, reportError, toAppError } from "@starter/errors"
 import { type Logger } from "@starter/logger"
 import { createMcpHandler, protectedResourceMetadata } from "@starter/mcp"
+import {
+  createStatusHandler,
+  type StatusOptions,
+  type StatusProvider,
+} from "@starter/observability"
 import { type Context, Hono } from "hono"
 
 import { BEARER_PATHS, bearerCors } from "./cors"
@@ -53,6 +58,11 @@ export interface AppOptions {
   webDistDir?: string
   /** The MCP registry's name and description for this server (server.json). */
   registry?: RegistryMeta
+  /**
+   * Vendors `GET /status` reports, from their own status pages (`parseStatusProviders`). Unset, there
+   * is no /status. `fetch` is for tests.
+   */
+  status?: { providers: readonly StatusProvider[]; fetch?: StatusOptions["fetch"] }
 }
 
 /** Operations that take no credential. Everything else needs an API key or OAuth token. */
@@ -234,7 +244,13 @@ export function createApp(opts: AppOptions) {
   app.get("/llms-full.txt", markdown(llmsFull))
   app.get("/openapi.json", (c) => c.json(openapi))
   app.get("/.well-known/mcp/server.json", (c) => c.json(registryRecord))
+  // Liveness only: it says this process answers, and pings no dependency. /status reports the
+  // vendors, from what they publish about themselves.
   app.get("/health", (c) => c.json({ ok: true }))
+  if (opts.status) {
+    const status = createStatusHandler(opts.status.providers, { fetch: opts.status.fetch, logger })
+    app.get("/status", () => status())
+  }
   app.get("/", (c) => {
     const accept = c.req.header("accept") ?? ""
     if (accept.includes("text/html")) return c.redirect("/llms.txt")

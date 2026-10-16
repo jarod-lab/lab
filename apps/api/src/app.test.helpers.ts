@@ -7,7 +7,7 @@ import type { AnyOperation } from "@starter/api"
 import { createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { type Logger, createLogger } from "@starter/logger"
-import { createApp } from "./app"
+import { type AppOptions, createApp } from "./app"
 import { createApiHooks } from "./hooks"
 import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
@@ -33,6 +33,8 @@ export interface TestAppOptions {
   webDistDir?: string
   /** Defaults to a silent logger; pass one with a destination to read the access log. */
   logger?: Logger
+  /** Serve GET /status for these vendors (see app.ts). */
+  status?: AppOptions["status"]
 }
 
 export async function createTestApp(
@@ -76,6 +78,7 @@ export async function createTestApp(
     hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
+    status: options.status,
     auth,
     operations,
     baseURL: BASE,

@@ -15,12 +15,15 @@ const SENSITIVE = [
   "cookie",
 ]
 
+/** Credential headers, redacted in any `headers` object up to two levels below the log line. */
+const SENSITIVE_HEADERS = ["authorization", "Authorization", "cookie", "set-cookie", "x-api-key"]
+
 export const redactPaths = [
   ...SENSITIVE,
   ...SENSITIVE.map((k) => `*.${k}`),
-  "req.headers.authorization",
-  "req.headers.cookie",
-  "res.headers['set-cookie']",
+  ...["headers", "*.headers", "*.*.headers"].flatMap((at) =>
+    SENSITIVE_HEADERS.map((h) => `${at}["${h}"]`),
+  ),
 ]
 
 export interface LoggerOptions {

@@ -34,6 +34,18 @@ describe("createLogger", () => {
     })
   })
 
+  it("redacts credential headers wherever a headers object is logged, two levels deep", () => {
+    const { logger, lines } = capture()
+    logger.info({
+      headers: { "x-api-key": "sk_one", "set-cookie": "sid=two", Authorization: "Bearer three" },
+      request: { headers: { authorization: "Bearer four", cookie: "sid=five", accept: "*/*" } },
+      ctx: { req: { headers: { "x-api-key": "sk_six" } } },
+    })
+    const line = JSON.stringify(lines[0])
+    expect(line).not.toMatch(/sk_one|sid=two|three|four|sid=five|sk_six/)
+    expect(lines[0]).toMatchObject({ request: { headers: { accept: "*/*" } } })
+  })
+
   it("serialises errors with the cause folded into the message", () => {
     const { logger, lines } = capture()
     logger.error({ err: new Error("outer", { cause: new Error("inner") }) }, "failed")

@@ -1,17 +1,36 @@
 #!/usr/bin/env node
-// Usage: pnpm init-project <name> [github-owner]   (e.g. acme -> @acme/ui, portless name "acme")
-// The MCP registry name becomes io.github.<owner>/<name>. The owner defaults to the GitHub owner of
-// the `origin` remote; the registry only accepts a namespace you can sign in as.
+// Usage: pnpm init-project <name> [github-owner] [--domain <domain>]
+//   (e.g. acme -> @acme/ui, portless name "acme")
+// The MCP registry only accepts a namespace you can prove. With --domain acme.com the registry name is
+// com.acme/<name> (proved with a DNS record); otherwise io.github.<owner>/<name> (proved by signing in
+// to GitHub), with the owner defaulting to the GitHub owner of the `origin` remote.
 import { execSync } from "node:child_process"
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-const name = process.argv[2]
-if (!name || !/^[a-z][a-z0-9-]*$/.test(name)) {
-  console.error(
-    "Usage: pnpm init-project <name> [github-owner]  (lowercase letters, digits, dashes)",
-  )
+const USAGE =
+  "Usage: pnpm init-project <name> [github-owner] [--domain <domain>]  (name: lowercase letters, digits, dashes)"
+function fail(message) {
+  console.error(message)
   process.exit(1)
+}
+
+const positional = []
+let domain
+const args = process.argv.slice(2)
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i]
+  if (arg === "--domain") {
+    domain = args[++i]
+    if (domain === undefined || domain.startsWith("-")) fail(`--domain needs a value\n${USAGE}`)
+  } else if (arg.startsWith("--domain=")) domain = arg.slice("--domain=".length)
+  else if (arg.startsWith("-")) fail(`Unknown option: ${arg}\n${USAGE}`)
+  else positional.push(arg)
+}
+const [name, ownerArg, extra] = positional
+if (!name || extra !== undefined || !/^[a-z][a-z0-9-]*$/.test(name)) fail(USAGE)
+if (domain !== undefined && ownerArg !== undefined) {
+  fail("Pass a GitHub owner or --domain, not both: the registry name uses one namespace.")
 }
 
 function originOwner() {
@@ -22,11 +41,23 @@ function originOwner() {
     return undefined
   }
 }
-const owner = (process.argv[3] ?? originOwner())?.toLowerCase()
-if (owner && !/^[a-z0-9][a-z0-9-]*$/.test(owner)) {
-  console.error(`Not a GitHub owner: ${owner}`)
-  process.exit(1)
+
+let namespace
+let host
+if (domain !== undefined) {
+  host = domain.toLowerCase().replace(/\.$/, "")
+  const label = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+  const labels = host.split(".")
+  if (labels.length < 2 || !labels.every((l) => label.test(l))) {
+    fail(`Not a domain: ${domain} (e.g. acme.com, without https:// or a path)`)
+  }
+  namespace = labels.reverse().join(".")
+} else {
+  const owner = (ownerArg ?? originOwner())?.toLowerCase()
+  if (owner && !/^[a-z0-9][a-z0-9-]*$/.test(owner)) fail(`Not a GitHub owner: ${owner}`)
+  if (owner) namespace = `io.github.${owner}`
 }
+const registryName = namespace && `${namespace}/${name}`
 
 const title = name
   .split("-")
@@ -67,7 +98,7 @@ for (const file of walk(".")) {
     .replaceAll('"Starter', `"${title}`)
     .replaceAll("Starter <", `${title} <`)
   // The registry name in server.ts, its fallback and the committed server.json stay in step.
-  if (owner) next = next.replaceAll("io.github.example/starter", `io.github.${owner}/${name}`)
+  if (registryName) next = next.replaceAll("io.github.example/starter", registryName)
   if (next !== text) {
     writeFileSync(file, next)
     changed++
@@ -75,12 +106,17 @@ for (const file of walk(".")) {
 }
 
 console.log(`Renamed to "${name}" in ${changed} files.`)
-if (owner) console.log(`MCP registry name: io.github.${owner}/${name}`)
+if (registryName) console.log(`MCP registry name: ${registryName}`)
 else
   console.warn(
-    "No GitHub owner (pass one, or add an origin remote): the MCP registry name stays " +
+    "No GitHub owner or --domain (pass one, or add an origin remote): the MCP registry name stays " +
       "io.github.example/starter. Change it in apps/api/src/server.ts before publishing.",
   )
+if (host) {
+  console.log(
+    `Before publishing, prove ${host} to the registry with a DNS TXT record (mcp-publisher login dns).`,
+  )
+}
 console.log("Refreshing lockfile…")
 execSync("pnpm install", { stdio: "inherit" })
 console.log("Done. Review `git diff`, then commit.")

@@ -34,15 +34,15 @@ const toOutput = (p: { id: string; name: string; createdAt: Date }) => ({
 const catalog: Readonly<Record<string, readonly string[]>> = statements
 
 /** `{ resource: [actions] }`, limited to the permission catalog. */
-const permissionsInput = z
-  .record(z.string(), z.array(z.string()).min(1))
-  .refine(
-    (p) =>
-      Object.entries(p).every(([resource, actions]) =>
-        actions.every((a) => catalog[resource]?.includes(a) ?? false),
-      ),
-    { message: "Unknown resource or action; see the permission catalog" },
-  )
+const permissionsInput = z.record(z.string(), z.array(z.string()).min(1)).refine(
+  (p) =>
+    Object.entries(p).every(
+      ([resource, actions]) =>
+        // Own keys only: `constructor` or `toString` would otherwise find Object.prototype's.
+        Object.hasOwn(catalog, resource) && actions.every((a) => catalog[resource]?.includes(a)),
+    ),
+  { message: "Unknown resource or action; see the permission catalog" },
+)
 
 // Keyset cursors: the position after the last row of a page, as the sort key (time and id).
 const keyset = z.object({ at: z.iso.datetime(), id: z.string().min(1) })

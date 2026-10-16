@@ -246,6 +246,14 @@ describe("api app (real Postgres via PGlite)", () => {
           permissions: { project: ["read"], ac: ["delete"], billing: ["read"] },
         })
         expect((await json(tooMuch)).body.error.code).toBe("BAD_REQUEST")
+        // Resource names that are Object.prototype members are just unknown resources.
+        for (const resource of ["constructor", "toString", "hasOwnProperty"]) {
+          const proto = await post(t.owner.cookie, "/v1/api-keys", {
+            name: "x",
+            permissions: JSON.parse(`{"${resource}":["read"]}`),
+          })
+          expect((await json(proto)).body.error.code, resource).toBe("BAD_REQUEST")
+        }
       })
 
       it("can't be widened through better-auth's own key endpoints", async () => {

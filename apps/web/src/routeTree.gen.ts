@@ -10,19 +10,36 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OrgRouteImport } from './routes/$org'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as DeviceRouteImport } from './routes/device'
+import { Route as NewRouteImport } from './routes/new'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SelectOrganizationRouteImport } from './routes/select-organization'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as OrgIndexRouteImport } from './routes/$org/index'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation/$invitationId'
+import { Route as AccountIndexRouteImport } from './routes/account/index'
+import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as SettingsAgentsRouteImport } from './routes/settings/agents'
+import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgRoute = OrgRouteImport.update({
+  id: '/$org',
+  path: '/$org',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -38,6 +55,11 @@ const ConsentRoute = ConsentRouteImport.update({
 const DeviceRoute = DeviceRouteImport.update({
   id: '/device',
   path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewRoute = NewRouteImport.update({
+  id: '/new',
+  path: '/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -60,104 +82,166 @@ const SignUpRoute = SignUpRouteImport.update({
   path: '/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrgIndexRoute = OrgIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OrgRoute,
+} as any)
 const AcceptInvitationInvitationIdRoute =
   AcceptInvitationInvitationIdRouteImport.update({
     id: '/accept-invitation/$invitationId',
     path: '/accept-invitation/$invitationId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountRoute,
+} as any)
+const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
+  id: '/invite/$invitationId',
+  path: '/invite/$invitationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsAgentsRoute = SettingsAgentsRouteImport.update({
   id: '/settings/agents',
   path: '/settings/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrgSettingsAgentsRoute = OrgSettingsAgentsRouteImport.update({
+  id: '/settings/agents',
+  path: '/settings/agents',
+  getParentRoute: () => OrgRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$org': typeof OrgRouteWithChildren
+  '/account': typeof AccountRouteWithChildren
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
+  '/new': typeof NewRoute
   '/reset-password': typeof ResetPasswordRoute
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/$org/': typeof OrgIndexRoute
+  '/account/': typeof AccountIndexRoute
+  '/$org/settings/agents': typeof OrgSettingsAgentsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
+  '/new': typeof NewRoute
   '/reset-password': typeof ResetPasswordRoute
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/$org': typeof OrgIndexRoute
+  '/account': typeof AccountIndexRoute
+  '/$org/settings/agents': typeof OrgSettingsAgentsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$org': typeof OrgRouteWithChildren
+  '/account': typeof AccountRouteWithChildren
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
+  '/new': typeof NewRoute
   '/reset-password': typeof ResetPasswordRoute
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/$org/': typeof OrgIndexRoute
+  '/account/': typeof AccountIndexRoute
+  '/$org/settings/agents': typeof OrgSettingsAgentsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/$org'
+    | '/account'
     | '/claim'
     | '/consent'
     | '/device'
+    | '/new'
     | '/reset-password'
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
     | '/accept-invitation/$invitationId'
+    | '/invite/$invitationId'
     | '/settings/agents'
+    | '/$org/'
+    | '/account/'
+    | '/$org/settings/agents'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/claim'
     | '/consent'
     | '/device'
+    | '/new'
     | '/reset-password'
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
     | '/accept-invitation/$invitationId'
+    | '/invite/$invitationId'
     | '/settings/agents'
+    | '/$org'
+    | '/account'
+    | '/$org/settings/agents'
   id:
     | '__root__'
     | '/'
+    | '/$org'
+    | '/account'
     | '/claim'
     | '/consent'
     | '/device'
+    | '/new'
     | '/reset-password'
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
     | '/accept-invitation/$invitationId'
+    | '/invite/$invitationId'
     | '/settings/agents'
+    | '/$org/'
+    | '/account/'
+    | '/$org/settings/agents'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  OrgRoute: typeof OrgRouteWithChildren
+  AccountRoute: typeof AccountRouteWithChildren
   ClaimRoute: typeof ClaimRoute
   ConsentRoute: typeof ConsentRoute
   DeviceRoute: typeof DeviceRoute
+  NewRoute: typeof NewRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SelectOrganizationRoute: typeof SelectOrganizationRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
+  InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   SettingsAgentsRoute: typeof SettingsAgentsRoute
 }
 
@@ -168,6 +252,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$org': {
+      id: '/$org'
+      path: '/$org'
+      fullPath: '/$org'
+      preLoaderRoute: typeof OrgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -189,6 +287,13 @@ declare module '@tanstack/react-router' {
       path: '/device'
       fullPath: '/device'
       preLoaderRoute: typeof DeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/new': {
+      id: '/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof NewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -219,11 +324,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$org/': {
+      id: '/$org/'
+      path: '/'
+      fullPath: '/$org/'
+      preLoaderRoute: typeof OrgIndexRouteImport
+      parentRoute: typeof OrgRoute
+    }
     '/accept-invitation/$invitationId': {
       id: '/accept-invitation/$invitationId'
       path: '/accept-invitation/$invitationId'
       fullPath: '/accept-invitation/$invitationId'
       preLoaderRoute: typeof AcceptInvitationInvitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account/': {
+      id: '/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/invite/$invitationId': {
+      id: '/invite/$invitationId'
+      path: '/invite/$invitationId'
+      fullPath: '/invite/$invitationId'
+      preLoaderRoute: typeof InviteInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/agents': {
@@ -233,19 +359,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$org/settings/agents': {
+      id: '/$org/settings/agents'
+      path: '/settings/agents'
+      fullPath: '/$org/settings/agents'
+      preLoaderRoute: typeof OrgSettingsAgentsRouteImport
+      parentRoute: typeof OrgRoute
+    }
   }
 }
 
+interface OrgRouteChildren {
+  OrgIndexRoute: typeof OrgIndexRoute
+  OrgSettingsAgentsRoute: typeof OrgSettingsAgentsRoute
+}
+
+const OrgRouteChildren: OrgRouteChildren = {
+  OrgIndexRoute: OrgIndexRoute,
+  OrgSettingsAgentsRoute: OrgSettingsAgentsRoute,
+}
+
+const OrgRouteWithChildren = OrgRoute._addFileChildren(OrgRouteChildren)
+
+interface AccountRouteChildren {
+  AccountIndexRoute: typeof AccountIndexRoute
+}
+
+const AccountRouteChildren: AccountRouteChildren = {
+  AccountIndexRoute: AccountIndexRoute,
+}
+
+const AccountRouteWithChildren =
+  AccountRoute._addFileChildren(AccountRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  OrgRoute: OrgRouteWithChildren,
+  AccountRoute: AccountRouteWithChildren,
   ClaimRoute: ClaimRoute,
   ConsentRoute: ConsentRoute,
   DeviceRoute: DeviceRoute,
+  NewRoute: NewRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SelectOrganizationRoute: SelectOrganizationRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
+  InviteInvitationIdRoute: InviteInvitationIdRoute,
   SettingsAgentsRoute: SettingsAgentsRoute,
 }
 export const routeTree = rootRouteImport

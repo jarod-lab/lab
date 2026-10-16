@@ -1,7 +1,7 @@
 // The built web app served from the API origin: pages get index.html with a locked-down CSP, assets
 // get long-lived caching, everything else stays a JSON 404.
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -10,6 +10,25 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestApp } from "./app.test.helpers"
 import { contentSecurityPolicy, inlineScriptHashes, mountWeb } from "./static"
+
+// apps/web's generated route tree: every route it declares must be served an app page. Read as text,
+// since this package has no React or TanStack dependencies to import it with.
+const routeTreeSource = readFileSync(
+  new URL("../../web/src/routeTree.gen.ts", import.meta.url),
+  "utf8",
+)
+
+// Every path the route tree declares, with each parameter filled in. `/` is the API's own page.
+const declaredRoutes = (() => {
+  const block = routeTreeSource.slice(
+    routeTreeSource.indexOf("export interface FileRoutesByFullPath"),
+  )
+  const body = block.slice(0, block.indexOf("}"))
+  return [...body.matchAll(/'(\/[^']*)':\s*typeof/g)].map((m) => m[1] ?? "")
+})()
+const sampleParams: Record<string, string> = { $org: "acme", $invitationId: "inv_123" }
+const concretePath = (path: string) =>
+  path.replace(/\$([a-zA-Z]+)/g, (_, name: string) => sampleParams[name] ?? "sample")
 
 const INLINE = "window.__bootstrap = true"
 const inlineHash = `'sha256-${createHash("sha256").update(INLINE).digest("base64")}'`
@@ -46,6 +65,18 @@ describe("web app serving", () => {
       "/reset-password",
       "/claim",
       "/settings/agents",
+      "/new",
+      "/two-factor",
+      "/account",
+      "/account/profile",
+      "/admin",
+      "/admin/users",
+      "/invite/inv_123",
+      "/acme",
+      "/acme/settings/agents",
+      "/acme/settings/general",
+      // A valid slug that no organization has: the shell shows its not-found state.
+      "/dashboard",
     ]
     for (const path of pages) {
       const res = await t.req(path)
@@ -80,8 +111,29 @@ describe("web app serving", () => {
     expect(await traversal.json()).toEqual({ error: { code: "NOT_FOUND", message: "Not found" } })
   })
 
-  it("does not serve index.html for other paths", async () => {
-    expect((await t.req("/dashboard")).status).toBe(404)
+  it("does not serve index.html for dotted paths, reserved slugs or API paths", async () => {
+    // A dot is never part of a slug, and reserved slugs belong to the API (JSON 404 here).
+    for (const path of [
+      "/dashboard.json",
+      "/favicon.ico",
+      "/api/nothing",
+      "/v1/nothing",
+      "/mcp/x",
+    ]) {
+      const res = await t.req(path)
+      expect(res.status, path).toBe(404)
+      expect(res.headers.get("content-type"), path).toContain("application/json")
+    }
+  })
+
+  it("serves index.html for every route the web app declares (except /, which is the API's)", async () => {
+    // Derived from apps/web's route tree, so a new route can't ship unserved.
+    expect(declaredRoutes).toContain("/$org/settings/agents")
+    for (const path of declaredRoutes.filter((route) => route !== "/")) {
+      const res = await t.req(concretePath(path))
+      expect(res.status, `${path} -> ${concretePath(path)}`).toBe(200)
+      expect(await res.text(), path).toContain("window.__bootstrap")
+    }
   })
 
   it("keeps / answering with the llms.txt negotiation", async () => {

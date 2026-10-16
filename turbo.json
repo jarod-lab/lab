@@ -18,6 +18,13 @@
     },
     "test:coverage": {
       "outputs": ["coverage/**"]
+    },
+    "@starter/api-app#test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/routeTree.gen.ts"]
+    },
+    "@starter/api-app#test:coverage": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/routeTree.gen.ts"],
+      "outputs": ["coverage/**"]
     }
   }
 }

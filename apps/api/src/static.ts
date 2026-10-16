@@ -5,20 +5,38 @@ import { readFileSync } from "node:fs"
 import { readFile, stat } from "node:fs/promises"
 import { extname, join, resolve, sep } from "node:path"
 
+import { isReservedOrgSlug } from "@starter/auth/client"
 import type { Env, Hono } from "hono"
 
-/** The pages the single-page app serves. Keep in step with apps/web's routes. */
+/**
+ * The pages the single-page app serves. Keep in step with apps/web's routes (static.test.ts derives
+ * every path from apps/web's route tree and fails when one is missing here).
+ */
 export const PAGE_PATHS = [
   "/sign-in",
   "/sign-up",
   "/consent",
   "/select-organization",
   "/accept-invitation/:id",
+  "/invite/:id",
   "/device",
   "/reset-password",
   "/claim",
+  "/new",
+  "/two-factor",
+  "/account",
+  "/account/*",
+  "/admin",
+  "/admin/*",
   "/settings/*",
 ] as const
+
+/**
+ * An organization's page: `/:org` is its slug. The slug shape (lowercase letters, digits, hyphens; no
+ * dots) keeps `/llms.txt`, `/openapi.json` and friends out of it, and reserved slugs (`api`, `v1`,
+ * `mcp`, the app's own paths...) are passed on to the API, so their 404s stay JSON.
+ */
+export const ORG_PAGE_PATHS = ["/:org{[a-z0-9][a-z0-9-]*}", "/:org{[a-z0-9][a-z0-9-]*}/*"] as const
 
 const MIME: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
@@ -86,6 +104,13 @@ export function mountWeb<E extends Env>(app: Hono<E>, distDir: string): void {
   }
   for (const path of PAGE_PATHS) {
     app.get(path, () => new Response(html, { headers: pageHeaders }))
+  }
+  // Registered last: a reserved slug falls through to the API's routes and its JSON 404.
+  for (const path of ORG_PAGE_PATHS) {
+    app.get(path, (c, next) => {
+      if (isReservedOrgSlug(c.req.param("org") ?? "")) return next()
+      return new Response(html, { headers: pageHeaders })
+    })
   }
 
   // Build output is content-hashed, so it can be cached forever.

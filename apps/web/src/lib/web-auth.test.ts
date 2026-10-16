@@ -116,8 +116,8 @@ describe("createWebAuth", () => {
     })
     const auth = createWebAuth(BASE, fetchImpl)
     await expect(auth.listOrganizations()).resolves.toEqual([
-      { id: "org-a", name: "Analytical Ltd" },
-      { id: "org-b", name: "Babbage Labs" },
+      { id: "org-a", name: "Analytical Ltd", slug: "a" },
+      { id: "org-b", name: "Babbage Labs", slug: "b" },
     ])
     await auth.setActiveOrganization("org-b")
     expect(calls.at(-1)).toMatchObject({
@@ -241,5 +241,53 @@ describe("createWebAuth", () => {
     await expect(createWebAuth(BASE, fetchImpl).device.lookup("NOPE")).rejects.toThrow(
       "That code was not recognised",
     )
+  })
+})
+describe("organization calls for the org switcher", () => {
+  it("checkSlug answers true for a free slug, false for a taken one, and throws for anything else", async () => {
+    const free = fakeServer({
+      "POST /api/auth/organization/check-slug": { body: { status: true } },
+    })
+    await expect(createWebAuth(BASE, free.fetchImpl).checkSlug("acme")).resolves.toBe(true)
+    expect(free.calls.at(-1)).toMatchObject({ body: { slug: "acme" } })
+
+    const taken = fakeServer({
+      "POST /api/auth/organization/check-slug": {
+        status: 400,
+        body: { code: "ORGANIZATION_SLUG_ALREADY_TAKEN", message: "taken" },
+      },
+    })
+    await expect(createWebAuth(BASE, taken.fetchImpl).checkSlug("acme")).resolves.toBe(false)
+
+    const broken = fakeServer({
+      "POST /api/auth/organization/check-slug": { status: 500, body: { message: "down" } },
+    })
+    await expect(createWebAuth(BASE, broken.fetchImpl).checkSlug("acme")).rejects.toBeInstanceOf(
+      WebError,
+    )
+  })
+
+  it("memberRole asks for the role in the organization it names, not the active one", async () => {
+    const { fetchImpl, calls } = fakeServer({
+      "GET /api/auth/organization/get-active-member-role": { body: { role: "admin" } },
+    })
+    await expect(createWebAuth(BASE, fetchImpl).memberRole("org-b")).resolves.toBe("admin")
+    expect(calls.at(-1)?.search).toContain("organizationId=org-b")
+  })
+
+  it("createOrganization sends the name and slug, and maps the new organization", async () => {
+    const { fetchImpl, calls } = fakeServer({
+      "POST /api/auth/organization/create": {
+        body: { id: "org-new", name: "Acme Labs", slug: "acme-labs", logo: null },
+      },
+    })
+    await expect(
+      createWebAuth(BASE, fetchImpl).createOrganization({ name: "Acme Labs", slug: "acme-labs" }),
+    ).resolves.toEqual({ id: "org-new", name: "Acme Labs", slug: "acme-labs" })
+    expect(calls.at(-1)).toMatchObject({
+      method: "POST",
+      path: "/api/auth/organization/create",
+      body: { name: "Acme Labs", slug: "acme-labs" },
+    })
   })
 })

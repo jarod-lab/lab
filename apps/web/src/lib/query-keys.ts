@@ -13,6 +13,8 @@ const org = (orgId: string) => {
   return {
     /** Every query for this organization. Invalidate this to refresh the whole org. */
     all: () => base,
+    /** The caller's own role in this organization (a membership, not org data). */
+    role: () => [...base, "role"] as const,
     members: () => [...base, "members"] as const,
     invitations: () => [...base, "invitations"] as const,
     apiKeys: () => [...base, "api-keys"] as const,

@@ -1,15 +1,18 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import { createAgentsApi } from "../../lib/agents-api"
-import { AgentsPage } from "../../pages/agents-page"
+import { activeOrganization, organizationsQuery } from "../../containers/shell-data"
+import { requireSession } from "../../lib/guards"
+import { getWebAuth } from "../../lib/web-auth"
 
-// Created once: the page's effects depend on this object, so a new one per render would reload.
-const agentsApi = createAgentsApi()
-
+// The agents page moved under the organization (/:org/settings/agents). This keeps old links working.
 export const Route = createFileRoute("/settings/agents")({
-  component: AgentsRoute,
+  beforeLoad: async ({ context }) => {
+    if (typeof window === "undefined") return
+    const auth = getWebAuth()
+    const session = await requireSession(context.queryClient, auth, "/settings/agents")
+    const organizations = await context.queryClient.ensureQueryData(organizationsQuery(auth))
+    const active = activeOrganization(session, organizations) ?? organizations[0]
+    if (!active) throw redirect({ to: "/new" })
+    throw redirect({ to: "/$org/settings/agents", params: { org: active.slug } })
+  },
 })
-
-function AgentsRoute() {
-  return <AgentsPage api={agentsApi} />
-}

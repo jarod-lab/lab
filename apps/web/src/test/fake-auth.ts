@@ -13,9 +13,16 @@ export function fakeAuth(overrides: Partial<WebAuth> = {}): WebAuth {
     signUp: vi.fn(async () => undefined),
     signOut: vi.fn(async () => undefined),
     listOrganizations: vi.fn(async () => [
-      { id: "org-a", name: "Analytical Ltd" },
-      { id: "org-b", name: "Babbage Labs" },
+      { id: "org-a", name: "Analytical Ltd", slug: "analytical" },
+      { id: "org-b", name: "Babbage Labs", slug: "babbage" },
     ]),
+    memberRole: vi.fn(async () => "owner"),
+    checkSlug: vi.fn(async () => true),
+    createOrganization: vi.fn(async (input) => ({
+      id: "org-new",
+      name: input.name,
+      slug: input.slug,
+    })),
     setActiveOrganization: vi.fn(async () => undefined),
     getClientName: vi.fn(async () => "Claude Code"),
     consent: vi.fn(async () => undefined),

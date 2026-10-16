@@ -19,7 +19,11 @@ export interface WebSession {
 export interface WebOrganization {
   id: string
   name: string
+  slug: string
 }
+
+/** The roles better-auth stores on a membership, lowercased. Custom roles may be added later. */
+export type MemberRole = string
 
 export interface WebInvitation {
   id: string
@@ -47,6 +51,11 @@ export interface WebAuth {
   /** End the current session (the person is not who the page expects, or wants to switch). */
   signOut(): Promise<void>
   listOrganizations(): Promise<WebOrganization[]>
+  /** The caller's role(s) in one organization, comma-separated when there are several. */
+  memberRole(organizationId: string): Promise<MemberRole>
+  /** True when the slug is free. Rejects other slugs (bad shape or taken) with `false`. */
+  checkSlug(slug: string): Promise<boolean>
+  createOrganization(input: { name: string; slug: string }): Promise<WebOrganization>
   setActiveOrganization(organizationId: string): Promise<void>
   /** The display name of an OAuth client, or null when it has none. */
   getClientName(clientId: string): Promise<string | null>
@@ -119,11 +128,37 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
       unwrap(await client.signOut(), "Could not sign out")
     },
     async listOrganizations() {
-      const orgs = unwrap<Array<{ id: string; name: string }>>(
+      const orgs = unwrap<Array<{ id: string; name: string; slug: string }>>(
         await client.organization.list(),
         "Could not load organizations",
       )
-      return orgs.map((org) => ({ id: org.id, name: org.name }))
+      return orgs.map((org) => ({ id: org.id, name: org.name, slug: org.slug }))
+    },
+    async memberRole(organizationId) {
+      // Explicit organizationId: the session's active org is not necessarily the one asked about.
+      const body = unwrap<{ role: string }>(
+        await client.organization.getActiveMemberRole({ query: { organizationId } }),
+        "Could not load your role",
+      )
+      return body.role
+    },
+    async checkSlug(slug) {
+      const result = await client.organization.checkSlug({ slug })
+      if (!result.error) return true
+      // better-auth answers a taken slug with BAD_REQUEST and this code (organization/check-slug).
+      const code = (result.error as { code?: string }).code
+      if (code === "ORGANIZATION_SLUG_ALREADY_TAKEN") return false
+      throw new WebError(
+        result.error.message || "Could not check the address",
+        result.error.status ?? 0,
+      )
+    },
+    async createOrganization(input) {
+      const org = unwrap<{ id: string; name: string; slug: string }>(
+        await client.organization.create(input),
+        "Could not create the organization",
+      )
+      return { id: org.id, name: org.name, slug: org.slug }
     },
     async setActiveOrganization(organizationId) {
       unwrap(

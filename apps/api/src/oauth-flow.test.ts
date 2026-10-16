@@ -158,7 +158,9 @@ describe("OAuth authorization code flow (real tokens)", () => {
     expect(decodeJwt(inOwnersOrg.access_token).org).toBe(t.owner.orgId)
     expect(decodeJwt(inPersonal.access_token).org).toBe(t.viewer.orgId)
     // Same scope, different roles: viewer in the owner's org, owner in their own.
-    expect((await whoami(inOwnersOrg.access_token)).grants).toEqual([{ project: ["read"] }])
+    expect((await whoami(inOwnersOrg.access_token)).grants).toEqual([
+      { project: ["read"], agent: ["read"], run: ["read"] },
+    ])
     const create = (token: string) =>
       t.req("/v1/projects", {
         method: "POST",
@@ -218,7 +220,9 @@ describe("OAuth authorization code flow (real tokens)", () => {
       scope: "read",
       pickOrg: t.owner.orgId,
     })
-    expect((await whoami(access_token)).grants).toEqual([{ apiKey: ["read"], project: ["read"] }])
+    expect((await whoami(access_token)).grants).toEqual([
+      { apiKey: ["read"], project: ["read"], agent: ["read"], run: ["read"] },
+    ])
     const mint = await t.req("/v1/api-keys", {
       method: "POST",
       headers: { ...bearer(access_token), "content-type": "application/json" },

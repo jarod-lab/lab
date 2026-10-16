@@ -108,13 +108,29 @@ interface AwsEvent {
   impacted_services?: unknown
 }
 
-/** AWS Health's feed is UTF-16 JSON: a list of current events, each naming `<service>-<region>`. */
+/** Text by its byte-order mark: UTF-16 big- or little-endian, else UTF-8. */
+function decodeByBom(bytes: Uint8Array): string {
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    // Swapped to little-endian, which every TextDecoder supports (utf-16be needs full ICU).
+    const swapped = new Uint8Array(bytes.length - (bytes.length % 2))
+    for (let i = 0; i < swapped.length; i += 2) {
+      swapped[i] = bytes[i + 1] as number
+      swapped[i + 1] = bytes[i] as number
+    }
+    return new TextDecoder("utf-16le").decode(swapped)
+  }
+  const utf16le = bytes[0] === 0xff && bytes[1] === 0xfe
+  return new TextDecoder(utf16le ? "utf-16le" : "utf-8").decode(bytes)
+}
+
+/**
+ * AWS Health's feed: a list of current events, each naming `<service>-<region>`. It is UTF-16 with a
+ * byte-order mark (big-endian when checked), so it is decoded by that mark, not assumed.
+ */
 async function awsEvents(fetchFn: Fetch, signal: AbortSignal): Promise<AwsEvent[]> {
   const res = await fetchFn(AWS_HEALTH_URL, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const bytes = new Uint8Array(await res.arrayBuffer())
-  const utf16 = bytes[0] === 0xff && bytes[1] === 0xfe
-  const text = new TextDecoder(utf16 ? "utf-16le" : "utf-8").decode(bytes).replace(/^﻿/, "")
+  const text = decodeByBom(new Uint8Array(await res.arrayBuffer())).replace(/^\ufeff/, "")
   const events: unknown = JSON.parse(text)
   return Array.isArray(events) ? (events as AwsEvent[]) : []
 }

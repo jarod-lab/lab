@@ -1,4 +1,4 @@
-import type { PermissionSet } from "@starter/api"
+import { ORGANIZATION_HEADER, type PermissionSet } from "@starter/api"
 import { AppError } from "@starter/errors"
 import { createLocalJWKSet, type JSONWebKeySet, jwtVerify } from "jose"
 
@@ -52,9 +52,26 @@ export async function resolvePrincipal(
 ): Promise<Principal | null> {
   const token = bearer(headers)
   const key = headers.get("x-api-key") ?? (token?.startsWith(API_KEY_PREFIX) ? token : undefined)
-  if (key) return fromApiKey(auth, key)
-  if (token) return fromAccessToken(auth, token, opts)
-  return fromSession(auth, headers)
+  const principal = key
+    ? await fromApiKey(auth, key)
+    : token
+      ? await fromAccessToken(auth, token, opts)
+      : await fromSession(auth, headers)
+  if (principal) assertOrganizationHeader(principal, headers)
+  return principal
+}
+
+/**
+ * A product request may name the organization it is for (X-Organization-Id, sent by the web app
+ * for the page it shows). It must be the one the credential acts for, or the call is refused: a
+ * stale tab can't act on another organization. Absent, there is nothing to check.
+ */
+function assertOrganizationHeader(principal: Principal, headers: Headers): void {
+  const requested = headers.get(ORGANIZATION_HEADER)
+  if (requested === null || requested === principal.organizationId) return
+  throw new AppError("CONFLICT", "The page acts for a different organization", {
+    hint: "The request names an organization this credential doesn't act for. Reload the page, or switch organization in the org picker.",
+  })
 }
 
 async function fromSession(auth: Auth, headers: Headers): Promise<Principal | null> {

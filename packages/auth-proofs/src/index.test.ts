@@ -1,7 +1,21 @@
 import { createTestDb } from "@starter/db/testing"
-import { organization, project } from "@starter/db"
+import { agent, approval, member, organization, project, run, user } from "@starter/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { callerActsFor, name, OrganizationId, ProjectId, projectInOrg } from "./index"
+import {
+  agentInOrg,
+  AgentId,
+  approvalInOrg,
+  ApprovalId,
+  callerActsFor,
+  memberInOrg,
+  name,
+  OrganizationId,
+  ProjectId,
+  projectInOrg,
+  RunId,
+  runInOrg,
+  UserId,
+} from "./index"
 
 const caller = (organizationId: string) => ({
   organizationId,
@@ -46,5 +60,74 @@ describe("projectInOrg (real Postgres via PGlite)", () => {
   it("refuses another organization's project, and missing ones", async () => {
     expect(await check("p1", "org-b")).toBeNull()
     expect(await check("nope", "org-a")).toBeNull()
+  })
+})
+
+describe("agent, run, approval and member proofs (real Postgres via PGlite)", () => {
+  let t: Awaited<ReturnType<typeof createTestDb>>
+  beforeAll(async () => {
+    t = await createTestDb()
+    const now = new Date()
+    await t.db.insert(organization).values([
+      { id: "org-a", name: "A", slug: "a", createdAt: now },
+      { id: "org-b", name: "B", slug: "b", createdAt: now },
+    ])
+    await t.db.insert(user).values({
+      id: "u-a",
+      name: "A",
+      email: "a@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await t.db.insert(member).values({
+      id: "m-a",
+      organizationId: "org-a",
+      userId: "u-a",
+      role: "member",
+      createdAt: now,
+    })
+    await t.db.insert(agent).values({ id: "ag-a", organizationId: "org-a", name: "Triage" })
+    await t.db
+      .insert(run)
+      .values({ id: "run-a", organizationId: "org-a", agentId: "ag-a", title: "R" })
+    await t.db.insert(approval).values({
+      id: "ap-a",
+      organizationId: "org-a",
+      runId: "run-a",
+      action: "Post",
+    })
+  })
+  afterAll(() => t.close())
+
+  /** Each proof for the org named `orgId`, or null: the row ids are all in org-a. */
+  const proofKinds = (orgId: string) =>
+    name(OrganizationId(orgId), (org) =>
+      name(AgentId("ag-a"), RunId("run-a"), ApprovalId("ap-a"), (ag, r, ap) =>
+        name(UserId("u-a"), async (u) => ({
+          agent: (await agentInOrg(t.db, ag, org))?.kind ?? null,
+          run: (await runInOrg(t.db, r, org))?.kind ?? null,
+          approval: (await approvalInOrg(t.db, ap, org))?.kind ?? null,
+          member: (await memberInOrg(t.db, u, org))?.kind ?? null,
+        })),
+      ),
+    )
+
+  it("proves each row belongs to its own organization", async () => {
+    expect(await proofKinds("org-a")).toEqual({
+      agent: "AgentInOrg",
+      run: "RunInOrg",
+      approval: "ApprovalInOrg",
+      member: "MemberInOrg",
+    })
+  })
+
+  it("refuses another organization's rows, answering as if they were missing", async () => {
+    expect(await proofKinds("org-b")).toEqual({
+      agent: null,
+      run: null,
+      approval: null,
+      member: null,
+    })
   })
 })

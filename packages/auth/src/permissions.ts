@@ -1,7 +1,14 @@
 import { intersect, type PermissionSet, type PermissionsOf, union } from "@starter/api"
 import { type Catalog, type RoleName, roles } from "./access"
 
-export { ac, type Catalog, type RoleName, roles, statements } from "./access"
+export {
+  ac,
+  type Catalog,
+  OWNER_ONLY_RESOURCES,
+  type RoleName,
+  roles,
+  statements,
+} from "./access"
 
 export type Permissions = PermissionsOf<Catalog>
 
@@ -23,11 +30,16 @@ export function rolePermissions(role: string): PermissionSet[] {
  * AND what its scopes allow. Defined explicitly; never derived from action names.
  */
 export const OAUTH_SCOPE_GRANTS = {
-  read: { project: ["read"], apiKey: ["read"] },
-  write: { project: ["create", "read", "update", "delete"], apiKey: ["read"] },
+  read: { project: ["read"], apiKey: ["read"], agent: ["read"], run: ["read"] },
+  write: {
+    project: ["create", "read", "update", "delete"],
+    apiKey: ["read"],
+    agent: ["create", "read", "update", "delete"],
+    run: ["create", "read", "update", "steer"],
+  },
   admin: {
     organization: ["update"],
-    member: ["create", "update", "delete"],
+    member: ["create", "read", "update", "delete"],
     invitation: ["create", "cancel"],
     apiKey: ["create", "read", "update", "delete"],
   },
@@ -43,6 +55,9 @@ export const OAUTH_SCOPES = Object.keys(OAUTH_SCOPE_GRANTS) as OAuthScope[]
 export const IMPERSONATION_GRANTS = {
   project: ["read"],
   apiKey: ["read"],
+  agent: ["read"],
+  run: ["read"],
+  member: ["read"],
 } as const satisfies Permissions
 
 /** Actions no OAuth token can ever get: an agent should not delete orgs or edit roles. */
@@ -54,6 +69,9 @@ export const OAUTH_EXCLUDED: Permissions = {
   sso: ["read", "update"],
   scim: ["create"],
   subscription: ["read", "update"],
+  // An agent never decides an approval (a person does, in the web app) and never resets 2FA.
+  run: ["approve"],
+  twoFactor: ["reset"],
 }
 
 /** What a set of granted OAuth scopes allows (unknown scopes such as `openid` allow nothing). */

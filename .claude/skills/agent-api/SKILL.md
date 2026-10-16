@@ -150,6 +150,28 @@ so REST and MCP behave the same:
 - Auth plugin or option changes: `pnpm --filter @starter/auth generate`, `pnpm --filter @starter/db db:generate`,
   commit the SQL, ask the user to apply it.
 
+## Workspace agents, runs and approvals
+
+The product's own agents (the org's workers) are the `agent` resource; the connected AI clients stay `list_connected_agents`
+(credentials). Paths: `/v1/workspace-agents`, `/v1/runs`, `/v1/approvals/:id/...`, `/v1/inbox`, `/v1/members/security`.
+
+- **Tables** (`packages/db/src/schema.ts`, migration `0006_agent_runs`): `agent`, `run` (status queued|running|needs_you|done|failed,
+  footprint: energyWh, tokens, toolCalls; no prices), `run_step`, `approval` (status pending|approved|denied, decidedBy, decidedAt,
+  effectiveAt = decidedAt + 30s, undoneAt), `steer_message`. All carry `organizationId` (cascade).
+- **Proofs**: `AgentInOrg`, `RunInOrg`, `ApprovalInOrg`, `MemberInOrg` (`packages/auth-proofs/src/proofs/`). Data functions in
+  `apps/api/src/data/{agents,runs,members}.ts` take them; each also filters by organizationId in SQL.
+- **Approval window** is a clock question, so data functions take `now`. Decide and undo are single conditional writes
+  (`status = pending`, and `effective_at > now` for undo). An agent's view is `pending` until `effective_at`, with no decision
+  fields; a person sees the decision and `undoableUntil`. `approvalView` is the one place that decides what each sees.
+- **Who can do what** (`statements` in `access.ts`): viewer reads agents and runs; member and admin and owner create, update
+  and act on runs (`run:create|update|approve|steer`), and member can't delete agents; admin reads members (`member:read`).
+  Owner only: `twoFactor:reset`, `sso`, `scim`, `subscription` (`OWNER_ONLY_RESOURCES`, not in the admin role).
+- **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along with the owner-only
+  resources. `decide_approval` and `undo_approval` also require a session (`requirePerson`).
+- **Header**: `ORGANIZATION_HEADER` (`X-Organization-Id`, `@starter/api`) is checked in `resolvePrincipal`: a request naming
+  another organization gets CONFLICT with a reload hint, on REST and MCP alike.
+- **Seeding for e2e**: `scripts/seed-demo-run.mjs` drives a run to needs_you through the API with a key (no bypass).
+
 ## CORS, pages and discovery
 
 - **CORS** (`apps/api/src/cors.ts`) is on bearer surfaces only: `/mcp`, `/.well-known/*`, `/openapi.json`,

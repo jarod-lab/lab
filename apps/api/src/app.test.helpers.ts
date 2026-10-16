@@ -36,6 +36,8 @@ export interface TestAppOptions {
   logger?: Logger
   /** Serve GET /status for these vendors (see app.ts). */
   status?: AppOptions["status"]
+  /** The clock the run operations read (approval windows). Defaults to the real one. */
+  now?: () => Date
   /** Check passwords against Have I Been Pwned. Off here (no network); auth-flows fakes the service. */
   breachCheck?: boolean
   /** GitHub and Google sign-in, when a test wants those buttons. */
@@ -88,7 +90,7 @@ export async function createTestApp(
     db: t.db,
     limits: { claimed: 10_000, unclaimed: 500, ...options.limits },
   })
-  const operations = [...createOperations({ auth, db: t.db, meter }), ...extra]
+  const operations = [...createOperations({ auth, db: t.db, meter, now: options.now }), ...extra]
   const app = createApp({
     hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
     trustProxy: options.trustProxy ?? false,

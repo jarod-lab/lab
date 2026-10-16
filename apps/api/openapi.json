@@ -785,6 +785,174 @@
         "x-required-permissions": [
           "apiKey:create"
         ]
+      },
+      "get": {
+        "operationId": "list_api_keys",
+        "summary": "List the organization's API keys (masked)",
+        "description": "Lists the organization's API keys, newest first: id, name, the masked start of the key (for telling keys apart; the key itself is never shown again), its permissions, when it was created and who created it (null for keys made before that was recorded), when it was last used, and when it expires (null for no expiry). Use the id with revoke_agent_access to delete a key. Needs apiKey:read.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "start": {
+                            "description": "The first characters of the key, masked for display",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "permissions": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "name"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "expiresAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "start",
+                          "permissions",
+                          "createdAt",
+                          "createdBy",
+                          "lastUsedAt",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "apiKey:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
       }
     },
     "/v1/agents": {
@@ -1187,6 +1355,3867 @@
           "idempotent": true
         }
       }
+    },
+    "/v1/workspace-agents": {
+      "get": {
+        "operationId": "list_agents",
+        "summary": "List the workspace agents and what each is doing",
+        "description": "Lists the workers this organization has configured (for example a release-triage agent), with their settings and what each is doing now: running, needs_you (waiting for an approval), queued or idle. These are not the AI clients connected to the organization (those are list_connected_agents, which lists credentials). Use an id with get_agent, start_run or list_runs.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "autonomy": {
+                            "type": "string",
+                            "enum": [
+                              "suggest_only",
+                              "ask_first",
+                              "autonomous"
+                            ]
+                          },
+                          "alwaysAskExternalPost": {
+                            "type": "boolean"
+                          },
+                          "alwaysAskMergeOrDeploy": {
+                            "type": "boolean"
+                          },
+                          "alwaysAskOverEnergyBudget": {
+                            "type": "boolean"
+                          },
+                          "energyBudgetWh": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "pinned": {
+                            "type": "boolean"
+                          },
+                          "activity": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "needs_you",
+                              "queued",
+                              "idle"
+                            ],
+                            "description": "What the agent is doing now, from its open runs"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "autonomy",
+                          "alwaysAskExternalPost",
+                          "alwaysAskMergeOrDeploy",
+                          "alwaysAskOverEnergyBudget",
+                          "energyBudgetWh",
+                          "pinned",
+                          "activity",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "agents"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "agent:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      },
+      "post": {
+        "operationId": "create_agent",
+        "summary": "Create a workspace agent",
+        "description": "Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Name shown in the sidebar and the run list"
+                  },
+                  "description": {
+                    "description": "What the agent does",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autonomy": {
+                    "description": "suggest_only: it suggests and waits; ask_first: it works, then waits for approval before anything leaves the organization; autonomous: it acts, asking only for the always-ask actions",
+                    "type": "string",
+                    "enum": [
+                      "suggest_only",
+                      "ask_first",
+                      "autonomous"
+                    ]
+                  },
+                  "alwaysAskExternalPost": {
+                    "description": "Posting outside the organization (guest Slack channels, email, public issues) always asks",
+                    "type": "boolean"
+                  },
+                  "alwaysAskMergeOrDeploy": {
+                    "description": "Merging or deploying code always asks; agents may open pull requests",
+                    "type": "boolean"
+                  },
+                  "alwaysAskOverEnergyBudget": {
+                    "description": "Going past the run's energy budget pauses and asks instead of continuing",
+                    "type": "boolean"
+                  },
+                  "energyBudgetWh": {
+                    "description": "Energy budget per run, in watt-hours; null for none",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pinned": {
+                    "description": "Pin to the sidebar",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "example": {
+                "name": "Release triage",
+                "description": "Groups release blockers"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "autonomy": {
+                      "type": "string",
+                      "enum": [
+                        "suggest_only",
+                        "ask_first",
+                        "autonomous"
+                      ]
+                    },
+                    "alwaysAskExternalPost": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskMergeOrDeploy": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskOverEnergyBudget": {
+                      "type": "boolean"
+                    },
+                    "energyBudgetWh": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "pinned": {
+                      "type": "boolean"
+                    },
+                    "activity": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "needs_you",
+                        "queued",
+                        "idle"
+                      ],
+                      "description": "What the agent is doing now, from its open runs"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "autonomy",
+                    "alwaysAskExternalPost",
+                    "alwaysAskMergeOrDeploy",
+                    "alwaysAskOverEnergyBudget",
+                    "energyBudgetWh",
+                    "pinned",
+                    "activity",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "agent:create"
+        ]
+      }
+    },
+    "/v1/workspace-agents/{id}": {
+      "get": {
+        "operationId": "get_agent",
+        "summary": "Get one workspace agent and its settings",
+        "description": "Returns one workspace agent: its name, autonomy, the actions that always need a person's approval, its energy budget, whether it is pinned, and what it is doing now. Returns NOT_FOUND for ids outside this organization. Use the id with update_agent, start_run or list_runs.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Workspace agent id from list_agents"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "autonomy": {
+                      "type": "string",
+                      "enum": [
+                        "suggest_only",
+                        "ask_first",
+                        "autonomous"
+                      ]
+                    },
+                    "alwaysAskExternalPost": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskMergeOrDeploy": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskOverEnergyBudget": {
+                      "type": "boolean"
+                    },
+                    "energyBudgetWh": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "pinned": {
+                      "type": "boolean"
+                    },
+                    "activity": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "needs_you",
+                        "queued",
+                        "idle"
+                      ],
+                      "description": "What the agent is doing now, from its open runs"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "autonomy",
+                    "alwaysAskExternalPost",
+                    "alwaysAskMergeOrDeploy",
+                    "alwaysAskOverEnergyBudget",
+                    "energyBudgetWh",
+                    "pinned",
+                    "activity",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "agent:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      },
+      "patch": {
+        "operationId": "update_agent",
+        "summary": "Change a workspace agent's settings",
+        "description": "Changes the given settings of a workspace agent: name, description, autonomy, the three always-ask actions, the energy budget, and pinned. Omitted settings stay as they are. Returns the agent, or NOT_FOUND for ids outside this organization. Changing autonomy or the always-ask actions changes what agents may do without asking: confirm with the user first.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Workspace agent id from list_agents"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "Name shown in the sidebar and the run list"
+                  },
+                  "description": {
+                    "description": "What the agent does",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "autonomy": {
+                    "description": "suggest_only: it suggests and waits; ask_first: it works, then waits for approval before anything leaves the organization; autonomous: it acts, asking only for the always-ask actions",
+                    "type": "string",
+                    "enum": [
+                      "suggest_only",
+                      "ask_first",
+                      "autonomous"
+                    ]
+                  },
+                  "alwaysAskExternalPost": {
+                    "description": "Posting outside the organization (guest Slack channels, email, public issues) always asks",
+                    "type": "boolean"
+                  },
+                  "alwaysAskMergeOrDeploy": {
+                    "description": "Merging or deploying code always asks; agents may open pull requests",
+                    "type": "boolean"
+                  },
+                  "alwaysAskOverEnergyBudget": {
+                    "description": "Going past the run's energy budget pauses and asks instead of continuing",
+                    "type": "boolean"
+                  },
+                  "energyBudgetWh": {
+                    "description": "Energy budget per run, in watt-hours; null for none",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pinned": {
+                    "description": "Pin to the sidebar",
+                    "type": "boolean"
+                  }
+                },
+                "required": []
+              },
+              "example": {
+                "pinned": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "autonomy": {
+                      "type": "string",
+                      "enum": [
+                        "suggest_only",
+                        "ask_first",
+                        "autonomous"
+                      ]
+                    },
+                    "alwaysAskExternalPost": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskMergeOrDeploy": {
+                      "type": "boolean"
+                    },
+                    "alwaysAskOverEnergyBudget": {
+                      "type": "boolean"
+                    },
+                    "energyBudgetWh": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "pinned": {
+                      "type": "boolean"
+                    },
+                    "activity": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "needs_you",
+                        "queued",
+                        "idle"
+                      ],
+                      "description": "What the agent is doing now, from its open runs"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "autonomy",
+                    "alwaysAskExternalPost",
+                    "alwaysAskMergeOrDeploy",
+                    "alwaysAskOverEnergyBudget",
+                    "energyBudgetWh",
+                    "pinned",
+                    "activity",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "agent:update"
+        ]
+      },
+      "delete": {
+        "operationId": "delete_agent",
+        "summary": "Delete a workspace agent and all of its runs",
+        "description": "Permanently deletes a workspace agent together with its runs, their steps, approvals and messages. Returns NOT_FOUND for ids outside this organization. Confirm with the user before calling: the history can't be recovered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Workspace agent id from list_agents"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "agent:delete"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        }
+      }
+    },
+    "/v1/workspace-agents/{id}/runs": {
+      "post": {
+        "operationId": "start_run",
+        "summary": "Start a run of a workspace agent",
+        "description": "Queues a new run of a workspace agent with a title and an optional summary (Markdown). The run starts as queued; the agent moves it to running with update_run, then adds steps with append_run_step. Returns NOT_FOUND for agents outside this organization.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Workspace agent id from list_agents"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "What the run is for"
+                  },
+                  "summary": {
+                    "description": "Markdown, optional",
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              },
+              "example": {
+                "title": "v2.8 triage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "summary": {
+                      "description": "Markdown",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "startedBy": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "apiKey"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deferredUntil": {
+                      "description": "Set while the run is deferred (status queued)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Start to finish, or to now while it runs"
+                    },
+                    "footprint": {
+                      "type": "object",
+                      "properties": {
+                        "energyWh": {
+                          "type": "number",
+                          "description": "Energy the run has used so far, estimated, in watt-hours"
+                        },
+                        "tokens": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "toolCalls": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "energyWh",
+                        "tokens",
+                        "toolCalls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "agentId",
+                    "title",
+                    "status",
+                    "summary",
+                    "startedBy",
+                    "createdAt",
+                    "startedAt",
+                    "finishedAt",
+                    "deferredUntil",
+                    "durationMs",
+                    "footprint"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:create"
+        ]
+      }
+    },
+    "/v1/runs": {
+      "get": {
+        "operationId": "list_runs",
+        "summary": "List runs, newest first",
+        "description": "Lists the organization's runs, newest first, one page at a time. Filter by agentId and by status (queued, running, needs_you, done, failed). Pass nextCursor back as cursor for older runs; it is null on the last page. Use an id with get_run for the steps, approvals and messages.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "agentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Only runs of this workspace agent",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "Only runs in this status",
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "needs_you",
+                "done",
+                "failed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "needs_you",
+                              "done",
+                              "failed"
+                            ]
+                          },
+                          "summary": {
+                            "description": "Markdown",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "startedBy": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "user",
+                                      "apiKey"
+                                    ]
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "id"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "finishedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "deferredUntil": {
+                            "description": "Set while the run is deferred (status queued)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "durationMs": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Start to finish, or to now while it runs"
+                          },
+                          "footprint": {
+                            "type": "object",
+                            "properties": {
+                              "energyWh": {
+                                "type": "number",
+                                "description": "Energy the run has used so far, estimated, in watt-hours"
+                              },
+                              "tokens": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "toolCalls": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "energyWh",
+                              "tokens",
+                              "toolCalls"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "agentId",
+                          "title",
+                          "status",
+                          "summary",
+                          "startedBy",
+                          "createdAt",
+                          "startedAt",
+                          "finishedAt",
+                          "deferredUntil",
+                          "durationMs",
+                          "footprint"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "runs",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
+    "/v1/runs/{id}": {
+      "get": {
+        "operationId": "get_run",
+        "summary": "Get a run with its steps, approvals, messages and footprint",
+        "description": "Returns one run: status, summary, timing, footprint (energy against the agent's budget, tokens, tool calls), its ordered steps, the approvals it asked for and the messages people sent it. An approval shows as pending until its decision takes effect, 30 seconds after it was made; then it shows approved or denied. Agents must wait for that before acting. Returns NOT_FOUND for runs outside this organization.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "summary": {
+                      "description": "Markdown",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "startedBy": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "apiKey"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deferredUntil": {
+                      "description": "Set while the run is deferred (status queued)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Start to finish, or to now while it runs"
+                    },
+                    "footprint": {
+                      "type": "object",
+                      "properties": {
+                        "energyWh": {
+                          "type": "number",
+                          "description": "Energy the run has used so far, estimated, in watt-hours"
+                        },
+                        "tokens": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "toolCalls": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "energyBudgetWh": {
+                          "description": "The agent's energy budget; null when unset",
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "energyWh",
+                        "tokens",
+                        "toolCalls",
+                        "energyBudgetWh"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "needs_you",
+                              "done",
+                              "failed"
+                            ]
+                          },
+                          "progressDone": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "progressTotal": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "startedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "finishedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "durationMs": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "position",
+                          "kind",
+                          "title",
+                          "detail",
+                          "status",
+                          "progressDone",
+                          "progressTotal",
+                          "startedAt",
+                          "finishedAt",
+                          "durationMs"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "approvals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "stepId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "action": {
+                            "type": "string",
+                            "description": "The exact action, in words"
+                          },
+                          "detail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "requestedAt": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "approved",
+                              "denied"
+                            ],
+                            "description": "For an agent: pending until the decision takes effect"
+                          },
+                          "decision": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "decidedBy": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "decidedAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "effectiveAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "undoableUntil": {
+                                    "description": "Until when undo_approval works",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "decidedBy",
+                                  "decidedAt",
+                                  "effectiveAt",
+                                  "undoableUntil"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "Shown to people only; null for agents"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "stepId",
+                          "action",
+                          "detail",
+                          "requestedAt",
+                          "status",
+                          "decision"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "authorId": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "body",
+                          "authorId",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "agentId",
+                    "title",
+                    "status",
+                    "summary",
+                    "startedBy",
+                    "createdAt",
+                    "startedAt",
+                    "finishedAt",
+                    "deferredUntil",
+                    "durationMs",
+                    "footprint",
+                    "steps",
+                    "approvals",
+                    "messages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      },
+      "patch": {
+        "operationId": "update_run",
+        "summary": "Report a run's status, summary and footprint (agent side)",
+        "description": "How an agent reports its run: set status to running, done or failed; set the summary (Markdown); and report footprint totals so far (energyWh, tokens, toolCalls). Omitted fields stay. Refused with CONFLICT while an approval still blocks the run: wait until get_run shows it approved or denied. Finished runs take no more updates.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "running",
+                      "done",
+                      "failed"
+                    ]
+                  },
+                  "summary": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 20000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "energyWh": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  },
+                  "toolCalls": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  }
+                },
+                "required": []
+              },
+              "example": {
+                "status": "running"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "summary": {
+                      "description": "Markdown",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "startedBy": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "apiKey"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deferredUntil": {
+                      "description": "Set while the run is deferred (status queued)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Start to finish, or to now while it runs"
+                    },
+                    "footprint": {
+                      "type": "object",
+                      "properties": {
+                        "energyWh": {
+                          "type": "number",
+                          "description": "Energy the run has used so far, estimated, in watt-hours"
+                        },
+                        "tokens": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "toolCalls": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "energyWh",
+                        "tokens",
+                        "toolCalls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "agentId",
+                    "title",
+                    "status",
+                    "summary",
+                    "startedBy",
+                    "createdAt",
+                    "startedAt",
+                    "finishedAt",
+                    "deferredUntil",
+                    "durationMs",
+                    "footprint"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:update"
+        ]
+      }
+    },
+    "/v1/runs/{id}/steps": {
+      "post": {
+        "operationId": "append_run_step",
+        "summary": "Add a step to a run (agent side)",
+        "description": "Appends a step to a run, in order, so people see what the agent is doing: a kind (such as collect, draft or test), a title, optional detail, and progress (progressDone of progressTotal). Status defaults to queued. Change it later with update_run_step. Refused once the run has finished.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "description": "Free-form category, e.g. collect, draft, test"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "detail": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "description": "Defaults to queued",
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "done",
+                      "failed"
+                    ]
+                  },
+                  "progressDone": {
+                    "description": "With progressTotal: 38 of 61",
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "progressTotal": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "title"
+                ]
+              },
+              "example": {
+                "kind": "collect",
+                "title": "Collect blockers"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "progressDone": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "progressTotal": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "position",
+                    "kind",
+                    "title",
+                    "detail",
+                    "status",
+                    "progressDone",
+                    "progressTotal",
+                    "startedAt",
+                    "finishedAt",
+                    "durationMs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:update"
+        ]
+      }
+    },
+    "/v1/runs/{id}/steps/{stepId}": {
+      "patch": {
+        "operationId": "update_run_step",
+        "summary": "Change one step of a run (agent side)",
+        "description": "Updates a step's status, title, detail or progress: move it to running, then to done or failed. A step waiting for a person is set by request_approval, not here. Returns NOT_FOUND for steps that aren't part of this run.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "stepId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Step id from get_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "detail": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "running",
+                      "done",
+                      "failed"
+                    ]
+                  },
+                  "progressDone": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "progressTotal": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": []
+              },
+              "example": {
+                "status": "done"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "progressDone": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "progressTotal": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "position",
+                    "kind",
+                    "title",
+                    "detail",
+                    "status",
+                    "progressDone",
+                    "progressTotal",
+                    "startedAt",
+                    "finishedAt",
+                    "durationMs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:update"
+        ]
+      }
+    },
+    "/v1/runs/{id}/approvals": {
+      "post": {
+        "operationId": "request_approval",
+        "summary": "Ask a person to approve an action before the run takes it",
+        "description": "Use before any action that needs a person's go-ahead, per the agent's always-ask settings (for example posting outside the organization). Give the exact action in words (action) and the content it will send (detail). The run moves to needs_you and the approval counts in the inbox. Do not take the action until get_run shows it approved; a denied one must not be taken. stepId attaches it to an existing step; otherwise the request creates a step for it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "The exact action, e.g. \"Post summary to #releases\""
+                  },
+                  "detail": {
+                    "description": "The content the action will send",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 20000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stepId": {
+                    "description": "Attach to this step instead of creating one",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "example": {
+                "action": "Post summary to #releases",
+                "detail": "v2.8 triage: 4 themes"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "stepId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "description": "The exact action, in words"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied"
+                      ],
+                      "description": "For an agent: pending until the decision takes effect"
+                    },
+                    "decision": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "decidedBy": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "decidedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "effectiveAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "undoableUntil": {
+                              "description": "Until when undo_approval works",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "decidedBy",
+                            "decidedAt",
+                            "effectiveAt",
+                            "undoableUntil"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Shown to people only; null for agents"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "stepId",
+                    "action",
+                    "detail",
+                    "requestedAt",
+                    "status",
+                    "decision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:update"
+        ]
+      }
+    },
+    "/v1/approvals/{id}/decision": {
+      "post": {
+        "operationId": "decide_approval",
+        "summary": "Approve or deny an action (a person's decision)",
+        "description": "A person allows (approve) or refuses (deny) an action a run asked for. The decision takes effect 30 seconds after it is made: until then the agent sees the approval as pending and must not act, and undo_approval can reverse it. Only a person signed in to the web app can decide; API keys and AI clients can't. Returns CONFLICT if the approval was already decided. Confirm the decision with the user before calling.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Approval id from get_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "deny"
+                    ]
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              },
+              "example": {
+                "decision": "approve"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "stepId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "description": "The exact action, in words"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied"
+                      ],
+                      "description": "For an agent: pending until the decision takes effect"
+                    },
+                    "decision": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "decidedBy": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "decidedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "effectiveAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "undoableUntil": {
+                              "description": "Until when undo_approval works",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "decidedBy",
+                            "decidedAt",
+                            "effectiveAt",
+                            "undoableUntil"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Shown to people only; null for agents"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "stepId",
+                    "action",
+                    "detail",
+                    "requestedAt",
+                    "status",
+                    "decision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "x-required-permissions": [
+          "run:approve"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        }
+      }
+    },
+    "/v1/approvals/{id}/undo": {
+      "post": {
+        "operationId": "undo_approval",
+        "summary": "Take back a decision within 30 seconds",
+        "description": "Undoes a decision (approve or deny) before it takes effect, returning the approval to pending. After 30 seconds the decision stands and this returns CONFLICT. Only a person signed in to the web app can undo.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Approval id from get_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "stepId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "description": "The exact action, in words"
+                    },
+                    "detail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "requestedAt": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied"
+                      ],
+                      "description": "For an agent: pending until the decision takes effect"
+                    },
+                    "decision": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "decidedBy": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "decidedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "effectiveAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "undoableUntil": {
+                              "description": "Until when undo_approval works",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "decidedBy",
+                            "decidedAt",
+                            "effectiveAt",
+                            "undoableUntil"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Shown to people only; null for agents"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "stepId",
+                    "action",
+                    "detail",
+                    "requestedAt",
+                    "status",
+                    "decision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "x-required-permissions": [
+          "run:approve"
+        ]
+      }
+    },
+    "/v1/runs/{id}/messages": {
+      "post": {
+        "operationId": "steer_run",
+        "summary": "Send a message to a run",
+        "description": "Sends a message from a person to a run while it works: an instruction or a correction. The agent reads it with get_run. Refused once the run has finished.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000,
+                    "description": "What to tell the agent"
+                  }
+                },
+                "required": [
+                  "body"
+                ]
+              },
+              "example": {
+                "body": "Skip the billing item"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "body",
+                    "authorId",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:steer"
+        ]
+      }
+    },
+    "/v1/runs/{id}/defer": {
+      "post": {
+        "operationId": "defer_run",
+        "summary": "Wait with a run until a later time",
+        "description": "Defers a run until a time (ISO 8601, after now): it shows as queued with that time, and the agent picks it up after. Use it to run work in a low-carbon window or after hours. Refused once the run has finished.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Run id from list_runs or start_run"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "until": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "description": "When the run may start again, e.g. 2026-10-17T02:00:00Z"
+                  }
+                },
+                "required": [
+                  "until"
+                ]
+              },
+              "example": {
+                "until": "2030-01-01T00:00:00Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "needs_you",
+                        "done",
+                        "failed"
+                      ]
+                    },
+                    "summary": {
+                      "description": "Markdown",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "startedBy": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "user",
+                                "apiKey"
+                              ]
+                            },
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "finishedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deferredUntil": {
+                      "description": "Set while the run is deferred (status queued)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "durationMs": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Start to finish, or to now while it runs"
+                    },
+                    "footprint": {
+                      "type": "object",
+                      "properties": {
+                        "energyWh": {
+                          "type": "number",
+                          "description": "Energy the run has used so far, estimated, in watt-hours"
+                        },
+                        "tokens": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "toolCalls": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "energyWh",
+                        "tokens",
+                        "toolCalls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "agentId",
+                    "title",
+                    "status",
+                    "summary",
+                    "startedBy",
+                    "createdAt",
+                    "startedAt",
+                    "finishedAt",
+                    "deferredUntil",
+                    "durationMs",
+                    "footprint"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:steer"
+        ]
+      }
+    },
+    "/v1/inbox": {
+      "get": {
+        "operationId": "get_inbox",
+        "summary": "Count the approvals waiting for a person",
+        "description": "Returns how many approvals in this organization wait for a decision: the \"needs you\" count in the sidebar and top bar. Only a person who can approve gets a count; for everyone else it is 0. Open the runs with list_runs (status needs_you).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "needsYou": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "needsYou"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "run:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
+    "/v1/members/security": {
+      "get": {
+        "operationId": "list_member_security",
+        "summary": "List members with their two-factor state and last activity",
+        "description": "Lists this organization's members with their role, whether two-factor sign-in is on, and when they were last active. Last active is the person's latest session (sessions belong to people, not organizations). For organization admins and owners. Owners can turn a member's two-factor off with reset_member_two_factor.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "twoFactorEnabled": {
+                            "type": "boolean"
+                          },
+                          "lastActiveAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name",
+                          "email",
+                          "role",
+                          "twoFactorEnabled",
+                          "lastActiveAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "members"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "member:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
+    "/v1/members/{userId}/two-factor/reset": {
+      "post": {
+        "operationId": "reset_member_two_factor",
+        "summary": "Turn off a member's two-factor sign-in (owners only)",
+        "description": "Removes a member's authenticator and backup codes and turns their two-factor sign-in off, so they sign in without the second factor. Only an owner can do it, and not for themselves (they use their own security settings). Audited. Returns NOT_FOUND for users who are not members of this organization. Confirm with the user before calling.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The member's user id, from list_member_security"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "reset": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "reset"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "x-required-permissions": [
+          "twoFactor:reset"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        }
+      }
     }
   },
   "components": {
@@ -1241,9 +5270,9 @@
             "authorizationUrl": "http://localhost:3000/api/auth/oauth2/authorize",
             "tokenUrl": "http://localhost:3000/api/auth/oauth2/token",
             "scopes": {
-              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"]}",
-              "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"]}",
-              "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"]}"
+              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"],\"agent\":[\"read\"],\"run\":[\"read\"]}",
+              "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"],\"agent\":[\"create\",\"read\",\"update\",\"delete\"],\"run\":[\"create\",\"read\",\"update\",\"steer\"]}",
+              "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"read\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"]}"
             }
           }
         }

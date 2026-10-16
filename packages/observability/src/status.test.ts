@@ -4,16 +4,17 @@ import { AWS_HEALTH_URL, createStatusHandler, parseStatusProviders } from "./sta
 const statuspage = (indicator: string, description = "All Systems Operational") =>
   Response.json({ page: { name: "X" }, status: { indicator, description } })
 
-/** AWS Health answers UTF-16LE JSON with a byte-order mark. */
-function awsFeed(events: unknown[]) {
+/** AWS Health answers UTF-16 JSON with a byte-order mark: big-endian (FE FF) in practice. */
+function awsFeed(events: unknown[], endian: "be" | "le" = "be") {
   const text = JSON.stringify(events)
   const bytes = new Uint8Array(2 + text.length * 2)
-  bytes[0] = 0xff
-  bytes[1] = 0xfe
+  const [hi, lo] = endian === "be" ? [0, 1] : [1, 0]
+  bytes[hi] = 0xfe
+  bytes[lo] = 0xff
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i)
-    bytes[2 + i * 2] = code & 0xff
-    bytes[3 + i * 2] = code >> 8
+    bytes[2 + i * 2 + hi] = code >> 8
+    bytes[2 + i * 2 + lo] = code & 0xff
   }
   return new Response(bytes, { headers: { "content-type": "application/json;charset=utf-16" } })
 }
@@ -92,6 +93,16 @@ describe("createStatusHandler", () => {
     expect(report.providers[0].description).toBe("Increased send latency")
     // One feed request serves every AWS provider.
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("decodes the AWS feed in either byte order", async () => {
+    for (const endian of ["be", "le"] as const) {
+      const fetch = async () => awsFeed([{ service: "ses-us-east-1", summary: "Slow" }], endian)
+      const report = await body(
+        await createStatusHandler(parseStatusProviders("aws:ses@us-east-1"), { fetch })(),
+      )
+      expect(report.providers[0], endian).toMatchObject({ status: "degraded" })
+    }
   })
 
   it("reports an unreachable or slow vendor as unknown, never failing itself", async () => {

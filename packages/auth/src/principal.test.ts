@@ -181,8 +181,8 @@ describe("resolvePrincipal (real Postgres via PGlite)", () => {
       const token = await sign({ ...claims(), scope: "openid write" })
       const p = await resolve({ authorization: `Bearer ${token}` })
       expect(p).toMatchObject({ organizationId: owner.orgId, via: "oauth", clientId: "client-1" })
-      // viewer role allows project:read only; the write scope can't raise that.
-      expect(p?.grants).toEqual([{ project: ["read"] }])
+      // viewer role allows reads only; the write scope can't raise that.
+      expect(p?.grants).toEqual([{ project: ["read"], agent: ["read"], run: ["read"] }])
     })
 
     it("accept client_id when azp is absent", async () => {

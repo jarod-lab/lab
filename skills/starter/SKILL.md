@@ -49,8 +49,8 @@ curl -s https://api.example.com/v1/whoami -H "x-api-key: $STARTER_API_KEY"
 
 OAuth scopes are coarse. A token may do what one of the person's roles allows and what its scopes allow:
 
-- `read`: read projects and API keys
-- `write`: create, update and delete projects
+- `read`: read projects, API keys, workspace agents and runs
+- `write`: create, update and delete projects and workspace agents; start and drive runs
 - `admin`: organization settings, members, invitations and API keys
 
 A tool you can't see, or a `FORBIDDEN` error, means the credential lacks that permission. The error's hint
@@ -84,6 +84,21 @@ and a working example. Don't guess parameters: the schemas are exact.
 - **Rate limits and quota**: a `429` is `RATE_LIMITED`. Read the `Retry-After` header (seconds) and wait that
   long before retrying. The `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers show the
   daily count. `whoami` reports the same usage.
+
+## Workspace agents and runs
+
+An organization can configure workspace agents (`list_agents`, `create_agent`). Each start is a run
+(`start_run`) with a status: queued, running, needs_you (waiting for a person), done or failed. Drive a run
+as the agent: `update_run` to running, `append_run_step` and `update_run_step` for its steps, and `update_run`
+with the footprint so far (energy, tokens, tool calls). Finish with `update_run` to done or failed.
+
+Before any action a person must allow, call `request_approval` with the exact action and its content. Don't
+take that action until `get_run` shows the approval as approved. A decision takes effect 30 seconds after the
+person makes it, and until then the approval reads as pending, so wait for it. A denied approval must not be
+taken. `update_run` refuses to finish a run while an approval blocks it.
+
+People decide approvals and steer runs (`decide_approval`, `undo_approval`, `steer_run`, `defer_run`) in the
+web app. A key or an OAuth token can't decide. Read `steer_run` messages with `get_run`, and follow them.
 
 ## Connected agents
 

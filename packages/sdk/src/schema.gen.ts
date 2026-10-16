@@ -92,7 +92,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List the organization's API keys (masked)
+         * @description Lists the organization's API keys, newest first: id, name, the masked start of the key (for telling keys apart; the key itself is never shown again), its permissions, when it was created and who created it (null for keys made before that was recorded), when it was last used, and when it expires (null for no expiry). Use the id with revoke_agent_access to delete a key. Needs apiKey:read.
+         */
+        get: operations["list_api_keys"];
         put?: never;
         /**
          * Create an organization API key
@@ -159,6 +163,322 @@ export interface paths {
         get: operations["list_audit_events"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the workspace agents and what each is doing
+         * @description Lists the workers this organization has configured (for example a release-triage agent), with their settings and what each is doing now: running, needs_you (waiting for an approval), queued or idle. These are not the AI clients connected to the organization (those are list_connected_agents, which lists credentials). Use an id with get_agent, start_run or list_runs.
+         */
+        get: operations["list_agents"];
+        put?: never;
+        /**
+         * Create a workspace agent
+         * @description Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent.
+         */
+        post: operations["create_agent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspace-agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one workspace agent and its settings
+         * @description Returns one workspace agent: its name, autonomy, the actions that always need a person's approval, its energy budget, whether it is pinned, and what it is doing now. Returns NOT_FOUND for ids outside this organization. Use the id with update_agent, start_run or list_runs.
+         */
+        get: operations["get_agent"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a workspace agent and all of its runs
+         * @description Permanently deletes a workspace agent together with its runs, their steps, approvals and messages. Returns NOT_FOUND for ids outside this organization. Confirm with the user before calling: the history can't be recovered.
+         */
+        delete: operations["delete_agent"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a workspace agent's settings
+         * @description Changes the given settings of a workspace agent: name, description, autonomy, the three always-ask actions, the energy budget, and pinned. Omitted settings stay as they are. Returns the agent, or NOT_FOUND for ids outside this organization. Changing autonomy or the always-ask actions changes what agents may do without asking: confirm with the user first.
+         */
+        patch: operations["update_agent"];
+        trace?: never;
+    };
+    "/v1/workspace-agents/{id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a run of a workspace agent
+         * @description Queues a new run of a workspace agent with a title and an optional summary (Markdown). The run starts as queued; the agent moves it to running with update_run, then adds steps with append_run_step. Returns NOT_FOUND for agents outside this organization.
+         */
+        post: operations["start_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List runs, newest first
+         * @description Lists the organization's runs, newest first, one page at a time. Filter by agentId and by status (queued, running, needs_you, done, failed). Pass nextCursor back as cursor for older runs; it is null on the last page. Use an id with get_run for the steps, approvals and messages.
+         */
+        get: operations["list_runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a run with its steps, approvals, messages and footprint
+         * @description Returns one run: status, summary, timing, footprint (energy against the agent's budget, tokens, tool calls), its ordered steps, the approvals it asked for and the messages people sent it. An approval shows as pending until its decision takes effect, 30 seconds after it was made; then it shows approved or denied. Agents must wait for that before acting. Returns NOT_FOUND for runs outside this organization.
+         */
+        get: operations["get_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Report a run's status, summary and footprint (agent side)
+         * @description How an agent reports its run: set status to running, done or failed; set the summary (Markdown); and report footprint totals so far (energyWh, tokens, toolCalls). Omitted fields stay. Refused with CONFLICT while an approval still blocks the run: wait until get_run shows it approved or denied. Finished runs take no more updates.
+         */
+        patch: operations["update_run"];
+        trace?: never;
+    };
+    "/v1/runs/{id}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a step to a run (agent side)
+         * @description Appends a step to a run, in order, so people see what the agent is doing: a kind (such as collect, draft or test), a title, optional detail, and progress (progressDone of progressTotal). Status defaults to queued. Change it later with update_run_step. Refused once the run has finished.
+         */
+        post: operations["append_run_step"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{id}/steps/{stepId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change one step of a run (agent side)
+         * @description Updates a step's status, title, detail or progress: move it to running, then to done or failed. A step waiting for a person is set by request_approval, not here. Returns NOT_FOUND for steps that aren't part of this run.
+         */
+        patch: operations["update_run_step"];
+        trace?: never;
+    };
+    "/v1/runs/{id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask a person to approve an action before the run takes it
+         * @description Use before any action that needs a person's go-ahead, per the agent's always-ask settings (for example posting outside the organization). Give the exact action in words (action) and the content it will send (detail). The run moves to needs_you and the approval counts in the inbox. Do not take the action until get_run shows it approved; a denied one must not be taken. stepId attaches it to an existing step; otherwise the request creates a step for it.
+         */
+        post: operations["request_approval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny an action (a person's decision)
+         * @description A person allows (approve) or refuses (deny) an action a run asked for. The decision takes effect 30 seconds after it is made: until then the agent sees the approval as pending and must not act, and undo_approval can reverse it. Only a person signed in to the web app can decide; API keys and AI clients can't. Returns CONFLICT if the approval was already decided. Confirm the decision with the user before calling.
+         */
+        post: operations["decide_approval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take back a decision within 30 seconds
+         * @description Undoes a decision (approve or deny) before it takes effect, returning the approval to pending. After 30 seconds the decision stands and this returns CONFLICT. Only a person signed in to the web app can undo.
+         */
+        post: operations["undo_approval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a message to a run
+         * @description Sends a message from a person to a run while it works: an instruction or a correction. The agent reads it with get_run. Refused once the run has finished.
+         */
+        post: operations["steer_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/{id}/defer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wait with a run until a later time
+         * @description Defers a run until a time (ISO 8601, after now): it shows as queued with that time, and the agent picks it up after. Use it to run work in a low-carbon window or after hours. Refused once the run has finished.
+         */
+        post: operations["defer_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the approvals waiting for a person
+         * @description Returns how many approvals in this organization wait for a decision: the "needs you" count in the sidebar and top bar. Only a person who can approve gets a count; for everyone else it is 0. Open the runs with list_runs (status needs_you).
+         */
+        get: operations["get_inbox"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List members with their two-factor state and last activity
+         * @description Lists this organization's members with their role, whether two-factor sign-in is on, and when they were last active. Last active is the person's latest session (sessions belong to people, not organizations). For organization admins and owners. Owners can turn a member's two-factor off with reset_member_two_factor.
+         */
+        get: operations["list_member_security"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members/{userId}/two-factor/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn off a member's two-factor sign-in (owners only)
+         * @description Removes a member's authenticator and backup codes and turns their two-factor sign-in off, so they sign in without the second factor. Only an owner can do it, and not for themselves (they use their own security settings). Audited. Returns NOT_FOUND for users who are not members of this organization. Confirm with the user before calling.
+         */
+        post: operations["reset_member_two_factor"];
         delete?: never;
         options?: never;
         head?: never;
@@ -477,6 +797,63 @@ export interface operations {
             };
         };
     };
+    list_api_keys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        keys: {
+                            id: string;
+                            name: string | null;
+                            /** @description The first characters of the key, masked for display */
+                            start: string | null;
+                            permissions: {
+                                [key: string]: string[];
+                            };
+                            createdAt: string;
+                            createdBy: {
+                                id: string;
+                                name: string;
+                            } | null;
+                            lastUsedAt: string | null;
+                            expiresAt: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     create_api_key: {
         parameters: {
             query?: never;
@@ -685,6 +1062,1381 @@ export interface operations {
                             requestId: string | null;
                         }[];
                         nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agents: {
+                            id: string;
+                            name: string;
+                            description: string | null;
+                            /** @enum {string} */
+                            autonomy: "suggest_only" | "ask_first" | "autonomous";
+                            alwaysAskExternalPost: boolean;
+                            alwaysAskMergeOrDeploy: boolean;
+                            alwaysAskOverEnergyBudget: boolean;
+                            energyBudgetWh: number | null;
+                            pinned: boolean;
+                            /**
+                             * @description What the agent is doing now, from its open runs
+                             * @enum {string}
+                             */
+                            activity: "running" | "needs_you" | "queued" | "idle";
+                            createdAt: string;
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    create_agent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "Release triage",
+                 *       "description": "Groups release blockers"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Name shown in the sidebar and the run list */
+                    name: string;
+                    /** @description What the agent does */
+                    description?: string | null;
+                    /**
+                     * @description suggest_only: it suggests and waits; ask_first: it works, then waits for approval before anything leaves the organization; autonomous: it acts, asking only for the always-ask actions
+                     * @enum {string}
+                     */
+                    autonomy?: "suggest_only" | "ask_first" | "autonomous";
+                    /** @description Posting outside the organization (guest Slack channels, email, public issues) always asks */
+                    alwaysAskExternalPost?: boolean;
+                    /** @description Merging or deploying code always asks; agents may open pull requests */
+                    alwaysAskMergeOrDeploy?: boolean;
+                    /** @description Going past the run's energy budget pauses and asks instead of continuing */
+                    alwaysAskOverEnergyBudget?: boolean;
+                    /** @description Energy budget per run, in watt-hours; null for none */
+                    energyBudgetWh?: number | null;
+                    /** @description Pin to the sidebar */
+                    pinned?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                        description: string | null;
+                        /** @enum {string} */
+                        autonomy: "suggest_only" | "ask_first" | "autonomous";
+                        alwaysAskExternalPost: boolean;
+                        alwaysAskMergeOrDeploy: boolean;
+                        alwaysAskOverEnergyBudget: boolean;
+                        energyBudgetWh: number | null;
+                        pinned: boolean;
+                        /**
+                         * @description What the agent is doing now, from its open runs
+                         * @enum {string}
+                         */
+                        activity: "running" | "needs_you" | "queued" | "idle";
+                        createdAt: string;
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_agent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                        description: string | null;
+                        /** @enum {string} */
+                        autonomy: "suggest_only" | "ask_first" | "autonomous";
+                        alwaysAskExternalPost: boolean;
+                        alwaysAskMergeOrDeploy: boolean;
+                        alwaysAskOverEnergyBudget: boolean;
+                        energyBudgetWh: number | null;
+                        pinned: boolean;
+                        /**
+                         * @description What the agent is doing now, from its open runs
+                         * @enum {string}
+                         */
+                        activity: "running" | "needs_you" | "queued" | "idle";
+                        createdAt: string;
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    delete_agent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        deleted: true;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    update_agent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "pinned": true
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Name shown in the sidebar and the run list */
+                    name?: string;
+                    /** @description What the agent does */
+                    description?: string | null;
+                    /**
+                     * @description suggest_only: it suggests and waits; ask_first: it works, then waits for approval before anything leaves the organization; autonomous: it acts, asking only for the always-ask actions
+                     * @enum {string}
+                     */
+                    autonomy?: "suggest_only" | "ask_first" | "autonomous";
+                    /** @description Posting outside the organization (guest Slack channels, email, public issues) always asks */
+                    alwaysAskExternalPost?: boolean;
+                    /** @description Merging or deploying code always asks; agents may open pull requests */
+                    alwaysAskMergeOrDeploy?: boolean;
+                    /** @description Going past the run's energy budget pauses and asks instead of continuing */
+                    alwaysAskOverEnergyBudget?: boolean;
+                    /** @description Energy budget per run, in watt-hours; null for none */
+                    energyBudgetWh?: number | null;
+                    /** @description Pin to the sidebar */
+                    pinned?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        name: string;
+                        description: string | null;
+                        /** @enum {string} */
+                        autonomy: "suggest_only" | "ask_first" | "autonomous";
+                        alwaysAskExternalPost: boolean;
+                        alwaysAskMergeOrDeploy: boolean;
+                        alwaysAskOverEnergyBudget: boolean;
+                        energyBudgetWh: number | null;
+                        pinned: boolean;
+                        /**
+                         * @description What the agent is doing now, from its open runs
+                         * @enum {string}
+                         */
+                        activity: "running" | "needs_you" | "queued" | "idle";
+                        createdAt: string;
+                        updatedAt: string;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    start_run: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "title": "v2.8 triage"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description What the run is for */
+                    title: string;
+                    /** @description Markdown, optional */
+                    summary?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        agentId: string;
+                        title: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        /** @description Markdown */
+                        summary: string | null;
+                        startedBy: {
+                            /** @enum {string} */
+                            type: "user" | "apiKey";
+                            id: string;
+                        } | null;
+                        createdAt: string;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        /** @description Set while the run is deferred (status queued) */
+                        deferredUntil: string | null;
+                        /** @description Start to finish, or to now while it runs */
+                        durationMs: number | null;
+                        footprint: {
+                            /** @description Energy the run has used so far, estimated, in watt-hours */
+                            energyWh: number;
+                            tokens: number;
+                            toolCalls: number;
+                        };
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_runs: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+                agentId?: string;
+                status?: "queued" | "running" | "needs_you" | "done" | "failed";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: {
+                            id: string;
+                            agentId: string;
+                            title: string;
+                            /** @enum {string} */
+                            status: "queued" | "running" | "needs_you" | "done" | "failed";
+                            /** @description Markdown */
+                            summary: string | null;
+                            startedBy: {
+                                /** @enum {string} */
+                                type: "user" | "apiKey";
+                                id: string;
+                            } | null;
+                            createdAt: string;
+                            startedAt: string | null;
+                            finishedAt: string | null;
+                            /** @description Set while the run is deferred (status queued) */
+                            deferredUntil: string | null;
+                            /** @description Start to finish, or to now while it runs */
+                            durationMs: number | null;
+                            footprint: {
+                                /** @description Energy the run has used so far, estimated, in watt-hours */
+                                energyWh: number;
+                                tokens: number;
+                                toolCalls: number;
+                            };
+                        }[];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        agentId: string;
+                        title: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        /** @description Markdown */
+                        summary: string | null;
+                        startedBy: {
+                            /** @enum {string} */
+                            type: "user" | "apiKey";
+                            id: string;
+                        } | null;
+                        createdAt: string;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        /** @description Set while the run is deferred (status queued) */
+                        deferredUntil: string | null;
+                        /** @description Start to finish, or to now while it runs */
+                        durationMs: number | null;
+                        footprint: {
+                            /** @description Energy the run has used so far, estimated, in watt-hours */
+                            energyWh: number;
+                            tokens: number;
+                            toolCalls: number;
+                            /** @description The agent's energy budget; null when unset */
+                            energyBudgetWh: number | null;
+                        };
+                        steps: {
+                            id: string;
+                            position: number;
+                            kind: string;
+                            title: string;
+                            detail: string | null;
+                            /** @enum {string} */
+                            status: "queued" | "running" | "needs_you" | "done" | "failed";
+                            progressDone: number | null;
+                            progressTotal: number | null;
+                            startedAt: string | null;
+                            finishedAt: string | null;
+                            durationMs: number | null;
+                        }[];
+                        approvals: {
+                            id: string;
+                            stepId: string | null;
+                            /** @description The exact action, in words */
+                            action: string;
+                            detail: string | null;
+                            requestedAt: string;
+                            /**
+                             * @description For an agent: pending until the decision takes effect
+                             * @enum {string}
+                             */
+                            status: "pending" | "approved" | "denied";
+                            /** @description Shown to people only; null for agents */
+                            decision: {
+                                decidedBy: string | null;
+                                decidedAt: string | null;
+                                effectiveAt: string | null;
+                                /** @description Until when undo_approval works */
+                                undoableUntil: string | null;
+                            } | null;
+                        }[];
+                        messages: {
+                            id: string;
+                            body: string;
+                            authorId: string;
+                            createdAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    update_run: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "status": "running"
+                 *     }
+                 */
+                "application/json": {
+                    /** @enum {string} */
+                    status?: "running" | "done" | "failed";
+                    summary?: string | null;
+                    energyWh?: number;
+                    tokens?: number;
+                    toolCalls?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        agentId: string;
+                        title: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        /** @description Markdown */
+                        summary: string | null;
+                        startedBy: {
+                            /** @enum {string} */
+                            type: "user" | "apiKey";
+                            id: string;
+                        } | null;
+                        createdAt: string;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        /** @description Set while the run is deferred (status queued) */
+                        deferredUntil: string | null;
+                        /** @description Start to finish, or to now while it runs */
+                        durationMs: number | null;
+                        footprint: {
+                            /** @description Energy the run has used so far, estimated, in watt-hours */
+                            energyWh: number;
+                            tokens: number;
+                            toolCalls: number;
+                        };
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    append_run_step: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "kind": "collect",
+                 *       "title": "Collect blockers"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Free-form category, e.g. collect, draft, test */
+                    kind: string;
+                    title: string;
+                    detail?: string | null;
+                    /**
+                     * @description Defaults to queued
+                     * @enum {string}
+                     */
+                    status?: "queued" | "running" | "done" | "failed";
+                    /** @description With progressTotal: 38 of 61 */
+                    progressDone?: number | null;
+                    progressTotal?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        position: number;
+                        kind: string;
+                        title: string;
+                        detail: string | null;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        progressDone: number | null;
+                        progressTotal: number | null;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        durationMs: number | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    update_run_step: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+                stepId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "status": "done"
+                 *     }
+                 */
+                "application/json": {
+                    title?: string;
+                    detail?: string | null;
+                    /** @enum {string} */
+                    status?: "queued" | "running" | "done" | "failed";
+                    progressDone?: number | null;
+                    progressTotal?: number | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        position: number;
+                        kind: string;
+                        title: string;
+                        detail: string | null;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        progressDone: number | null;
+                        progressTotal: number | null;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        durationMs: number | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    request_approval: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "action": "Post summary to #releases",
+                 *       "detail": "v2.8 triage: 4 themes"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description The exact action, e.g. "Post summary to #releases" */
+                    action: string;
+                    /** @description The content the action will send */
+                    detail?: string | null;
+                    /** @description Attach to this step instead of creating one */
+                    stepId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        stepId: string | null;
+                        /** @description The exact action, in words */
+                        action: string;
+                        detail: string | null;
+                        requestedAt: string;
+                        /**
+                         * @description For an agent: pending until the decision takes effect
+                         * @enum {string}
+                         */
+                        status: "pending" | "approved" | "denied";
+                        /** @description Shown to people only; null for agents */
+                        decision: {
+                            decidedBy: string | null;
+                            decidedAt: string | null;
+                            effectiveAt: string | null;
+                            /** @description Until when undo_approval works */
+                            undoableUntil: string | null;
+                        } | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decide_approval: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "decision": "approve"
+                 *     }
+                 */
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approve" | "deny";
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        stepId: string | null;
+                        /** @description The exact action, in words */
+                        action: string;
+                        detail: string | null;
+                        requestedAt: string;
+                        /**
+                         * @description For an agent: pending until the decision takes effect
+                         * @enum {string}
+                         */
+                        status: "pending" | "approved" | "denied";
+                        /** @description Shown to people only; null for agents */
+                        decision: {
+                            decidedBy: string | null;
+                            decidedAt: string | null;
+                            effectiveAt: string | null;
+                            /** @description Until when undo_approval works */
+                            undoableUntil: string | null;
+                        } | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    undo_approval: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        stepId: string | null;
+                        /** @description The exact action, in words */
+                        action: string;
+                        detail: string | null;
+                        requestedAt: string;
+                        /**
+                         * @description For an agent: pending until the decision takes effect
+                         * @enum {string}
+                         */
+                        status: "pending" | "approved" | "denied";
+                        /** @description Shown to people only; null for agents */
+                        decision: {
+                            decidedBy: string | null;
+                            decidedAt: string | null;
+                            effectiveAt: string | null;
+                            /** @description Until when undo_approval works */
+                            undoableUntil: string | null;
+                        } | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    steer_run: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "body": "Skip the billing item"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description What to tell the agent */
+                    body: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        body: string;
+                        authorId: string;
+                        createdAt: string;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    defer_run: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "until": "2030-01-01T00:00:00Z"
+                 *     }
+                 */
+                "application/json": {
+                    /**
+                     * Format: date-time
+                     * @description When the run may start again, e.g. 2026-10-17T02:00:00Z
+                     */
+                    until: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        agentId: string;
+                        title: string;
+                        /** @enum {string} */
+                        status: "queued" | "running" | "needs_you" | "done" | "failed";
+                        /** @description Markdown */
+                        summary: string | null;
+                        startedBy: {
+                            /** @enum {string} */
+                            type: "user" | "apiKey";
+                            id: string;
+                        } | null;
+                        createdAt: string;
+                        startedAt: string | null;
+                        finishedAt: string | null;
+                        /** @description Set while the run is deferred (status queued) */
+                        deferredUntil: string | null;
+                        /** @description Start to finish, or to now while it runs */
+                        durationMs: number | null;
+                        footprint: {
+                            /** @description Energy the run has used so far, estimated, in watt-hours */
+                            energyWh: number;
+                            tokens: number;
+                            toolCalls: number;
+                        };
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_inbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        needsYou: number;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_member_security: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        members: {
+                            userId: string;
+                            name: string;
+                            email: string;
+                            role: string;
+                            twoFactorEnabled: boolean;
+                            lastActiveAt: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reset_member_two_factor: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        reset: true;
                     };
                 };
             };

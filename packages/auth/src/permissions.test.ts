@@ -80,12 +80,18 @@ describe("OAuth scopes", () => {
 
   it("ignore non-permission scopes like openid", () => {
     expect(scopePermissions(["openid", "offline_access"])).toEqual({})
-    expect(scopePermissions(["read"])).toEqual({ project: ["read"], apiKey: ["read"] })
+    expect(scopePermissions(["read"])).toEqual({
+      project: ["read"],
+      apiKey: ["read"],
+      agent: ["read"],
+      run: ["read"],
+    })
   })
 
   it("narrow each role to the token's scopes, dropping roles left with nothing", () => {
     const grants = narrow(rolePermissions("viewer,member"), scopePermissions(["read"]))
-    expect(grants).toEqual([{ project: ["read"] }, { apiKey: ["read"], project: ["read"] }])
+    const read = { agent: ["read"], project: ["read"], run: ["read"] }
+    expect(grants).toEqual([read, { apiKey: ["read"], ...read }])
     expect(narrow(rolePermissions("viewer"), scopePermissions(["admin"]))).toEqual([])
   })
 })

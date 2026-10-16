@@ -26,6 +26,7 @@ export {
   type OperationContext,
   type OperationSpec,
 } from "./operation"
+export { ORGANIZATION_HEADER } from "./headers"
 export {
   decodeCursor,
   encodeCursor,

@@ -43,6 +43,13 @@
       "when": 1792190711024,
       "tag": "0005_sso_scim_stripe",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792192719748,
+      "tag": "0006_agent_runs",
+      "breakpoints": true
     }
   ]
 }

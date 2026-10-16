@@ -10,12 +10,22 @@ import { defaultStatements } from "better-auth/plugins/organization/access"
  */
 export const statements = {
   ...defaultStatements,
+  // Read lets admins list members with their security state (two-factor, last active).
+  member: ["create", "read", "update", "delete"],
   apiKey: ["create", "read", "update", "delete"],
   project: ["create", "read", "update", "delete"],
+  // Workspace agents (the configured workers and their settings, not connected AI clients).
+  agent: ["create", "read", "update", "delete"],
+  // Runs of an agent. `update` is what an agent does while it runs (steps, status, approval
+  // requests); `approve` is a person's decision (never granted to a key or an OAuth token);
+  // `steer` covers the messages and deferrals a person sends to a run.
+  run: ["create", "read", "update", "approve", "steer"],
   // Owner only (see roles): single sign-on providers, SCIM provisioning tokens and the subscription.
   sso: ["read", "update"],
   scim: ["create"],
   subscription: ["read", "update"],
+  // Owner only: turning off another member's two-factor sign-in.
+  twoFactor: ["reset"],
 } as const
 
 export type Catalog = typeof statements
@@ -26,10 +36,12 @@ const all = Object.fromEntries(
 ) as { -readonly [R in keyof Catalog]: Catalog[R][number][] }
 
 /** Resources only the owner role holds: the admin role is built without them. */
-const OWNER_ONLY = ["sso", "scim", "subscription"] as const
+export const OWNER_ONLY_RESOURCES = ["sso", "scim", "subscription", "twoFactor"] as const
 
 const adminStatements = Object.fromEntries(
-  Object.entries(all).filter(([resource]) => !(OWNER_ONLY as readonly string[]).includes(resource)),
+  Object.entries(all).filter(
+    ([resource]) => !(OWNER_ONLY_RESOURCES as readonly string[]).includes(resource),
+  ),
 ) as typeof all
 
 /**
@@ -43,8 +55,10 @@ export const roles = {
     ac: ["read"],
     apiKey: ["read"],
     project: ["create", "read", "update"],
+    agent: ["create", "read", "update"],
+    run: ["create", "read", "update", "approve", "steer"],
   }),
-  viewer: ac.newRole({ project: ["read"] }),
+  viewer: ac.newRole({ project: ["read"], agent: ["read"], run: ["read"] }),
 } as const
 
 export type RoleName = keyof typeof roles

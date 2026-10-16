@@ -130,6 +130,20 @@ describe("member removal ends their agents' access (real device grant)", () => {
     expect((await refresh(agent)).status).toBeGreaterThanOrEqual(400)
   }, 30_000)
 
+  it("keeps the grants when the leave is refused (the only owner can't leave)", async () => {
+    const agent = await connectAgent(t.owner.cookie)
+    const refused = await t.req(
+      "/api/auth/organization/leave",
+      t.as(t.owner.cookie, {
+        method: "POST",
+        body: JSON.stringify({ organizationId: t.owner.orgId }),
+      }),
+    )
+    expect(refused.status).toBeGreaterThanOrEqual(400)
+    expect(await works(agent.access)).toBe(true)
+    expect((await refresh(agent)).status).toBe(200)
+  }, 30_000)
+
   it("leaves other members' agents alone", async () => {
     const stays = await member("Stays")
     const agent = await connectAgent(stays.cookie)

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Organization settings — API keys</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --danger: {{t.danger}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --solar: #FFD23F; width: 1200px; height: 860px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="settings" h="860" hint-size="252px,860px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Acme Inc / Settings / API keys" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="org" active="api-keys" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 22px 36px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; align-items: flex-start; gap: 20px">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em">API keys</h2>
+          <p style="margin: 0; font-size: 14.5px; color: var(--ink2); max-width: 560px">Keys act as Acme Inc, not as a person. Anyone holding a key can use it, so treat it like a password.</p>
+        </div>
+        <button style="min-height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-weight: 700; cursor: pointer">Create API key</button>
+      </div>
+
+      <section aria-labelledby="new-k" style="background: #FFD23F; color: #111111; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+        <h3 id="new-k" style="margin: 0; font-size: 16px; font-weight: 800">Copy “CI deploy” now. You won't see this key again.</h3>
+        <div style="display: flex; gap: 8px; align-items: stretch">
+          <code style="flex: 1; display: flex; align-items: center; padding: 0 14px; min-height: 44px; background: #FFFFFF; border: 2px solid #111111; border-radius: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 14px; overflow: hidden; white-space: nowrap">ak_live_9fQ2xLm7Tz4Kp1Rw8Vb3Hn6Yc5Ds0Ea</code>
+          <button style="min-height: 44px; padding: 0 16px; border: 2px solid #111111; border-radius: 8px; background: #111111; color: #FFD23F; font: inherit; font-weight: 700; cursor: pointer">Copy</button>
+          <button style="min-height: 44px; padding: 0 16px; border: 2px solid #111111; border-radius: 8px; background: transparent; color: #111111; font: inherit; font-weight: 700; cursor: pointer">I've saved it</button>
+        </div>
+        <span style="font-size: 13.5px">Read &amp; write · expires Jan 14, 2027 · created by you just now</span>
+      </section>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 14.5px">
+        <thead>
+          <tr style="text-align: left; color: var(--muted); font-size: 13px">
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Name</th>
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Key</th>
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Access</th>
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Created by</th>
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Last used</th>
+            <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Expires</th>
+            <th scope="col" style="padding: 8px 0; border-bottom: 1px solid var(--line)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{keys}}" as="k" hint-placeholder-count="3">
+            <tr>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line); font-weight: 600">{{k.name}}</td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--ink2)">{{k.prefix}}</td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line)">{{k.access}}</td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--ink2)">{{k.by}}</td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line)">
+                <sc-if value="{{k.stale}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px">{{k.last}}</span></sc-if>
+                <sc-if value="{{k.fresh}}" hint-placeholder-val="{{ true }}"><span style="color: var(--ink2)">{{k.last}}</span></sc-if>
+              </td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--ink2)">{{k.expires}}</td>
+              <td style="padding: 12px 0; border-bottom: 1px solid var(--line); text-align: right"><button aria-label="Revoke {{k.name}}" style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Revoke</button></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+
+      <div style="display: flex; gap: 24px; font-size: 13.5px; color: var(--ink2)">
+        <span style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12.5px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px">Unused 90+ days</span>consider revoking</span>
+        <span>Only owners and admins can see this page. Revoking takes effect within a minute.</span>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', danger: '#FF8A80', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', danger: '#9E1A12', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    const keys = [
+      { name: 'CI deploy', prefix: 'ak_live_••••s0Ea', access: 'Read & write', by: 'Jordan Lee', last: 'Never', expires: 'Jan 14, 2027' },
+      { name: 'Support bot', prefix: 'ak_live_••••3f9a', access: 'Read only', by: 'Priya Shah', last: '2 hours ago', expires: 'Mar 2, 2027' },
+      { name: 'Old staging', prefix: 'ak_live_••••77c1', access: 'Read & write', by: 'Marcus Webb', last: 'Unused 90+ days', expires: 'No expiry', stale: true }
+    ].map((k) => ({ ...k, stale: !!k.stale, fresh: !k.stale }));
+    return { t, theme, keys };
+  }
+}
+</script>
+</body>
+</html>

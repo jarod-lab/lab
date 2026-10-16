@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Personal settings — Profile and account</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --done: {{t.done}}; --danger: {{t.danger}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --solar: #FFD23F; width: 1200px; height: 900px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="none" menu="user" h="900" hint-size="252px,900px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Personal / Profile &amp; account" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="personal" active="profile" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 22px 36px; display: flex; flex-direction: column; gap: 20px; max-width: 760px">
+
+      <div style="display: flex; align-items: center; gap: 16px">
+        <span style="width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--ink); box-sizing: border-box; display: grid; place-items: center; font-size: 22px; font-weight: 700">JL</span>
+        <div style="display: flex; gap: 8px">
+          <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Upload photo</button>
+          <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Use initials</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-end; gap: 10px">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <label for="pf-n" style="font-size: 14px; font-weight: 650">Name</label>
+          <input id="pf-n" value="Jordan Lee" style="min-height: 44px; padding: 0 12px; border: 1.5px solid var(--muted); border-radius: 8px; background: transparent; color: var(--ink); font: inherit">
+        </div>
+        <button style="min-height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-weight: 700; cursor: pointer">Save</button>
+      </div>
+
+      <section aria-labelledby="em-h" style="display: flex; flex-direction: column; gap: 10px">
+        <h2 id="em-h" style="margin: 0; font-size: 16px; font-weight: 700">Email</h2>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line)">
+          <div style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 650">jordan@acme.dev</span><span style="display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink2)">Verified · used to sign in and for notices</span></span></div>
+          <button disabled style="min-height: 40px; padding: 0 14px; border: 2px dashed var(--muted); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 650; cursor: not-allowed">Change email</button>
+        </div>
+        <div role="status" style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 10px">
+          <span style="flex: none; font-size: 12px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 1px 6px; margin-top: 2px">Pending</span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+            <span>We sent a confirmation link to <strong>jordan@northwind.io</strong>.</span>
+            <span style="font-size: 13.5px; color: var(--ink2)">Your email stays jordan@acme.dev until you click it. We also told your current address, in case this wasn't you.</span>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Resend</button>
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Cancel change</button>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="orgs-h" style="display: flex; flex-direction: column">
+        <h2 id="orgs-h" style="margin: 0 0 6px; font-size: 16px; font-weight: 700">Your organizations</h2>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)"><span style="width: 28px; height: 28px; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800">A</span><span style="flex: 1; font-weight: 600">Acme Inc</span><span style="font-size: 14px; color: var(--ink2)">Owner</span></div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)"><span style="width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid var(--ink); box-sizing: border-box; display: grid; place-items: center; font-weight: 800">N</span><span style="flex: 1; font-weight: 600">Northwind Labs</span><span style="font-size: 14px; color: var(--ink2)">Viewer</span><button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Leave</button></div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line)"><span style="width: 28px; height: 28px; border-radius: 6px; border: 1.5px dashed var(--muted); box-sizing: border-box; display: grid; place-items: center; font-weight: 800; color: var(--muted)">J</span><span style="flex: 1; font-weight: 600">Jordan's workspace</span><span style="font-size: 14px; color: var(--ink2)">Personal · Owner</span></div>
+      </section>
+
+      <section aria-labelledby="del-h" style="border: 2px solid var(--danger); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="del-h" style="margin: 0; font-size: 16px; font-weight: 800; color: var(--danger)">Delete account</h2>
+        <p style="margin: 0; font-size: 14.5px; color: var(--ink2)">Deletes your user, sessions, passkeys and connected accounts, and removes you from Northwind Labs. We email a confirmation link before anything is deleted.</p>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="flex: 1; display: flex; align-items: center; gap: 8px; font-size: 14px"><span style="font-size: 12px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px">Blocked</span>You own Acme Inc. <a href="#" style="color: var(--ink); text-underline-offset: 3px">Transfer or delete it first</a></span>
+          <button disabled style="min-height: 44px; padding: 0 16px; border: 2px dashed var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font: inherit; font-weight: 700; cursor: not-allowed">Delete my account</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', done: '#86D6A2', danger: '#FF8A80', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', done: '#1B5A31', danger: '#9E1A12', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    return { t, theme };
+  }
+}
+</script>
+</body>
+</html>

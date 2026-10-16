@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Organization settings — General</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --danger: {{t.danger}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --solar: #FFD23F; width: 1200px; height: 860px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="settings" h="860" hint-size="252px,860px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Acme Inc / Settings / General" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="org" active="general" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 24px 36px; display: flex; flex-direction: column; gap: 20px; max-width: 720px">
+      <sc-if value="{{viewer}}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 2px dashed var(--ink); border-radius: 10px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <div style="display: flex; flex-direction: column"><strong>You have view-only access to Acme Inc.</strong><span style="font-size: 14px; color: var(--ink2)">Ask an owner or admin to change these settings.</span></div>
+        </div>
+      </sc-if>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="g-n" style="font-size: 14px; font-weight: 650">Organization name</label>
+          <input id="g-n" value="Acme Inc" disabled="{{viewer}}" style="min-height: 44px; padding: 0 12px; border: {{field}}; border-radius: 8px; background: transparent; color: var(--ink); font: inherit">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="g-s" style="font-size: 14px; font-weight: 650">URL</label>
+          <input id="g-s" value="acme" disabled="{{viewer}}" aria-describedby="g-s-h" style="min-height: 44px; padding: 0 12px; border: {{field}}; border-radius: 8px; background: transparent; color: var(--ink); font-family: ui-monospace, Menlo, monospace; font-size: 14px">
+          <span id="g-s-h" style="font-size: 13px; color: var(--muted)">Changing this breaks existing links to app.example.com/acme.</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span style="width: 48px; height: 48px; border-radius: 10px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 22px">A</span>
+        <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 650">Logo</span><span style="font-size: 13.5px; color: var(--muted)">Square, at least 128px. SVG or PNG.</span></div>
+        <sc-if value="{{owner}}" hint-placeholder-val="{{ true }}"><button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-weight: 650; cursor: pointer">Upload</button></sc-if>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="g-r" style="font-size: 14px; font-weight: 650">Default role for new invites</label>
+          <select id="g-r" disabled="{{viewer}}" style="min-height: 44px; padding: 0 10px; border: {{field}}; border-radius: 8px; background: transparent; color: var(--ink); font: inherit"><option>Member</option><option>Viewer</option><option>Admin</option></select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 14px; font-weight: 650">Organization ID</span>
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 44px"><code style="flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; color: var(--ink2)">org_2Kq8vX4mT9</code><button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Copy</button></div>
+        </div>
+      </div>
+
+      <sc-if value="{{owner}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; gap: 10px; justify-content: flex-end; padding-bottom: 6px; border-bottom: 1px solid var(--line)">
+          <button style="min-height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer">Discard</button>
+          <button style="min-height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-weight: 700; cursor: pointer">Save changes</button>
+        </div>
+        <section aria-labelledby="dz" style="border: 2px solid var(--danger); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px">
+          <h2 id="dz" style="margin: 0; font-size: 16px; font-weight: 800; color: var(--danger)">Danger zone</h2>
+          <div style="display: flex; align-items: center; gap: 16px">
+            <div style="flex: 1; display: flex; flex-direction: column"><strong>Transfer ownership</strong><span style="font-size: 14px; color: var(--ink2)">Make another admin the owner. You become an admin.</span></div>
+            <button style="min-height: 44px; padding: 0 16px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer">Transfer…</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 14px">
+            <div style="flex: 1; display: flex; flex-direction: column"><strong>Delete Acme Inc</strong><span style="font-size: 14px; color: var(--ink2)">Permanently deletes 4 agents, 3 API keys and all run history, removes 12 members, and cancels the subscription. You'll type the org name to confirm.</span></div>
+            <button style="min-height: 44px; padding: 0 16px; border: 2px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap">Delete organization</button>
+          </div>
+        </section>
+      </sc-if>
+      <sc-if value="{{viewer}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 16px">
+          <div style="flex: 1; display: flex; flex-direction: column"><strong>Leave Acme Inc</strong><span style="font-size: 14px; color: var(--ink2)">You'll lose access right away. An admin can invite you again.</span></div>
+          <button style="min-height: 44px; padding: 0 16px; border: 2px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font: inherit; font-weight: 700; cursor: pointer">Leave organization</button>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"role":{"editor":"enum","default":"owner","options":["owner","viewer"],"section":"Viewing as"},"$preview":{"width":1200,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const viewer = (this.props.role ?? 'owner') === 'viewer';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', danger: '#FF8A80', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', danger: '#9E1A12', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    return { t, theme, viewer, owner: !viewer, field: viewer ? '1.5px dashed ' + t.muted : '1.5px solid ' + t.muted };
+  }
+}
+</script>
+</body>
+</html>

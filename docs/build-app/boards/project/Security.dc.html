@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Personal settings — Security</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --done: {{t.done}}; --danger: {{t.danger}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --solar: #FFD23F; width: 1200px; height: 1180px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="none" h="1180" hint-size="252px,1180px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Personal / Security" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="personal" active="security" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 22px 36px; display: flex; flex-direction: column; gap: 22px; max-width: 820px">
+
+      <div style="display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 2px solid var(--ink); border-radius: 12px">
+        <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: var(--muted)">Last sign-in</span><strong>Passkey · today at 10:41 · Chrome on macOS</strong></div>
+        <ul style="display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; font-size: 14px">
+          <li style="display: flex; align-items: center; gap: 6px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink)">2 passkeys</span></li>
+          <li style="display: flex; align-items: center; gap: 6px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink)">Two-factor on</span></li>
+          <li style="display: flex; align-items: center; gap: 6px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink)">Password not breached</span></li>
+        </ul>
+      </div>
+
+      <section aria-labelledby="pk-h" style="display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px">
+          <div style="flex: 1; display: flex; flex-direction: column"><h2 id="pk-h" style="margin: 0; font-size: 16px; font-weight: 700">Passkeys</h2><span style="font-size: 13.5px; color: var(--muted)">Sign in with Touch ID, Face ID or a security key. Nothing to remember, nothing to phish.</span></div>
+          <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">Add a passkey</button>
+        </div>
+        <sc-for list="{{passkeys}}" as="k" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)">
+            <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">{{k.name}}</span><span style="font-size: 13px; color: var(--muted)">{{k.meta}}</span></div>
+            <button aria-label="Rename {{k.name}}" style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Rename</button>
+            <button aria-label="Remove {{k.name}}" style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--danger); border-radius: 8px; background: transparent; color: var(--danger); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Remove</button>
+          </div>
+        </sc-for>
+      </section>
+
+      <section aria-labelledby="tf-h" style="display: flex; flex-direction: column; gap: 8px">
+        <h2 id="tf-h" style="margin: 0; font-size: 16px; font-weight: 700">Two-factor authentication</h2>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)">
+          <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">Authenticator app</span><span style="font-size: 13px; color: var(--muted)">On since Sep 2 · asked when you sign in with a password</span></div>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Turn off</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line)">
+          <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">Backup codes</span><span style="font-size: 13px; color: var(--muted)">8 of 10 left · each works once</span></div>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">View codes</button>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Make new codes</button>
+        </div>
+      </section>
+
+      <section aria-labelledby="pw-h" style="display: flex; align-items: center; gap: 12px">
+        <div style="flex: 1; display: flex; flex-direction: column"><h2 id="pw-h" style="margin: 0; font-size: 16px; font-weight: 700">Password</h2><span style="font-size: 13.5px; color: var(--muted)">Changed 3 months ago · checked against Have I Been Pwned at every change</span></div>
+        <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">Change password</button>
+      </section>
+
+      <section aria-labelledby="oa-h" style="display: flex; flex-direction: column">
+        <div style="display: flex; flex-direction: column; margin-bottom: 6px"><h2 id="oa-h" style="margin: 0; font-size: 16px; font-weight: 700">Connected accounts</h2><span style="font-size: 13.5px; color: var(--muted)">Sign in with these instead of a password. You can't disconnect your last way to sign in.</span></div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)">
+          <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">GitHub</span><span style="font-size: 13px; color: var(--muted)">Connected as @jordanlee · Sep 2</span></div>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Disconnect</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line)">
+          <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">Google</span><span style="font-size: 13px; color: var(--muted)">Not connected</span></div>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Connect</button>
+        </div>
+      </section>
+
+      <section aria-labelledby="ss-h" style="display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 6px">
+          <h2 id="ss-h" style="flex: 1; margin: 0; font-size: 16px; font-weight: 700">Where you're signed in</h2>
+          <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">Sign out everywhere else</button>
+        </div>
+        <sc-for list="{{sessions}}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)">
+            <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">{{s.device}}<sc-if value="{{s.current}}" hint-placeholder-val="{{ false }}"> <span style="font-size: 12px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px; margin-left: 4px">This device</span></sc-if></span><span style="font-size: 13px; color: var(--muted)">Signed in with {{s.method}} · {{s.when}}</span></div>
+            <sc-if value="{{s.other}}" hint-placeholder-val="{{ true }}"><button aria-label="Sign out {{s.device}}" style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Sign out</button></sc-if>
+          </div>
+        </sc-for>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', done: '#86D6A2', danger: '#FF8A80', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', done: '#1B5A31', danger: '#9E1A12', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    const passkeys = [
+      { name: 'MacBook Pro · Touch ID', meta: 'Added Sep 2 · last used today' },
+      { name: 'iPhone · Face ID', meta: 'Added Aug 18 · last used 3 days ago' }
+    ];
+    const sessions = [
+      { device: 'Chrome on macOS', method: 'Passkey', when: 'active now', current: true },
+      { device: 'Safari on iPhone', method: 'Google', when: '2 days ago' },
+      { device: 'Firefox on Windows', method: 'email, password and two-factor', when: '12 days ago' }
+    ].map((s) => ({ ...s, current: !!s.current, other: !s.current }));
+    return { t, theme, passkeys, sessions };
+  }
+}
+</script>
+</body>
+</html>

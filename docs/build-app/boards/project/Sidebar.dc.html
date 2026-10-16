@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sidebar component</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<aside aria-label="Primary" style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --raise: {{t.raise}}; --solar: #FFD23F; --hl: {{hl}}; position: relative; z-index: 20; width: 252px; height: {{h}}px; box-sizing: border-box; border-right: 1px solid var(--line); background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; display: flex; flex-direction: column; padding: 16px 12px; gap: 2px">
+
+  <button aria-haspopup="menu" aria-expanded="{{orgOpen}}" aria-label="Switch organization, current Acme Inc" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 8px; border: {{orgBorder}}; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; margin-bottom: 14px; cursor: pointer">
+    <span style="width: 30px; height: 30px; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 16px">A</span>
+    <span style="flex: 1; display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 650">Acme Inc</span><span style="font-size: 12.5px; color: var(--muted)">Owner · Pro plan</span></span><span aria-hidden="true" style="color: var(--muted)">▾</span>
+  </button>
+
+  <sc-if value="{{orgOpen}}" hint-placeholder-val="{{ false }}">
+    <div role="menu" aria-label="Organizations" style="position: absolute; top: 70px; left: 12px; width: 300px; z-index: 30; background: var(--raise); border: 2px solid var(--ink); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+      <div style="padding: 6px 10px 4px; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .04em">ORGANIZATIONS</div>
+      <button role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer">
+        <span style="width: 28px; height: 28px; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800">A</span>
+        <span style="flex: 1; display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 650"><span style="background: var(--hl); padding: 0 2px">Acme Inc</span></span><span style="font-size: 12.5px; color: var(--muted)">Owner · 12 members</span></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
+      <button role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer">
+        <span style="width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid var(--ink); box-sizing: border-box; display: grid; place-items: center; font-weight: 800">N</span>
+        <span style="flex: 1; display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600">Northwind Labs</span><span style="font-size: 12.5px; color: var(--muted)">Viewer · read only</span></span>
+      </button>
+      <button role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer">
+        <span style="width: 28px; height: 28px; border-radius: 6px; border: 1.5px dashed var(--muted); box-sizing: border-box; display: grid; place-items: center; font-weight: 800; color: var(--muted)">J</span>
+        <span style="flex: 1; display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600">Jordan's workspace</span><span style="font-size: 12.5px; color: var(--muted)">Personal · Owner</span></span>
+      </button>
+      <div style="height: 1px; background: var(--line); margin: 4px 6px"></div>
+      <a href="#" role="menuitem" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none"><span style="flex: 1">Organization settings</span><span style="display: flex; gap: 3px"><kbd style="min-width: 20px; height: 20px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600; color: var(--ink); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">G</kbd><kbd style="min-width: 20px; height: 20px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600; color: var(--ink); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">O</kbd></span></a>
+      <a href="#" role="menuitem" aria-current="{{newCurrent}}" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink); font-weight: 650; text-decoration: none"><span aria-hidden="true" style="font-size: 18px; line-height: 1">+</span><span style="flex: 1">Create organization</span></a>
+    </div>
+  </sc-if>
+
+  <nav aria-label="Workspace" style="display: flex; flex-direction: column; gap: 2px">
+    <a href="#" aria-current="{{cur.home}}" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-weight: {{fw.home}}"><span style="flex: 1"><span style="background: {{bgc.home}}; padding: 0 2px">Home</span></span><span style="display: flex; gap: 3px"><kbd style="min-width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">G</kbd><kbd style="min-width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">H</kbd></span></a>
+    <a href="#" aria-current="{{cur.agents}}" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-weight: {{fw.agents}}"><span style="flex: 1"><span style="background: {{bgc.agents}}; padding: 0 2px">Agents</span></span><span style="display: flex; gap: 3px"><kbd style="min-width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">G</kbd><kbd style="min-width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">A</kbd></span></a>
+    <a href="#" aria-current="{{cur.runs}}" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-weight: {{fw.runs}}"><span style="flex: 1"><span style="background: {{bgc.runs}}; padding: 0 2px">Runs</span></span><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"><sc-if value="{{motion}}" hint-placeholder-val="{{ true }}"><animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="2.4s" repeatCount="indefinite"></animateTransform></sc-if></path></svg>2 running</span></a>
+    <a href="#" aria-current="{{cur.approvals}}" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-weight: {{fw.approvals}}"><span style="flex: 1"><span style="background: {{bgc.approvals}}; padding: 0 2px">Approvals</span></span><span style="font-size: 12.5px; font-weight: 700; color: #111111; background: var(--solar); border-radius: 999px; padding: 1px 9px">3 waiting</span></a>
+    <a href="#" aria-current="{{cur.settings}}" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 6px; color: var(--ink2); text-decoration: none; font-weight: {{fw.settings}}"><span style="flex: 1"><span style="background: {{bgc.settings}}; padding: 0 2px">Settings</span></span></a>
+  </nav>
+
+  <h2 style="margin: 18px 10px 6px; font-size: 13px; font-weight: 600; color: var(--muted)">Pinned agents</h2>
+  <nav aria-label="Pinned agents" style="display: flex; flex-direction: column; gap: 2px">
+    <a href="#" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none"><span style="flex: 1">Release triage</span><span role="img" aria-label="Running" style="display: inline-flex"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"><sc-if value="{{motion}}" hint-placeholder-val="{{ true }}"><animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="2.4s" repeatCount="indefinite"></animateTransform></sc-if></path></svg></span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none"><span style="flex: 1">Support drafts</span><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"></circle></svg>Needs you</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none"><span style="flex: 1">Weekly digest</span><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.5 2.2"></circle></svg>Idle</span></a>
+  </nav>
+
+  <div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; position: relative">
+    <sc-if value="{{announce}}" hint-placeholder-val="{{ true }}">
+      <section aria-label="Announcement" style="border-radius: 10px; padding: 14px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; position: relative; background: var(--invBg); color: var(--invFg)">
+        <span style="align-self: flex-start; font-size: 11.5px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px; letter-spacing: .04em">NEW</span>
+        <span style="font-weight: 750; font-size: 16px; line-height: 1.2; padding-right: 26px; margin-top: 4px">Agents can open pull requests</span>
+        <a href="#" style="font-size: 14px; color: inherit; text-underline-offset: 3px">Read the post</a>
+        <button aria-label="Dismiss announcement" style="position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 18px; cursor: pointer">×</button>
+      </section>
+    </sc-if>
+    <a href="#" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; color: var(--ink2); text-decoration: none">Support</a>
+    <button aria-haspopup="menu" aria-expanded="{{userOpen}}" aria-label="Account menu, Jordan Lee" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 8px; margin-top: 6px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer">
+      <span style="width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--ink); display: grid; place-items: center; font-size: 12px; font-weight: 650">JL</span>
+      <span style="flex: 1; font-weight: 650">Jordan Lee</span><span aria-hidden="true" style="color: var(--muted)">▴</span>
+    </button>
+    <sc-if value="{{userOpen}}" hint-placeholder-val="{{ false }}">
+      <div role="menu" aria-label="Account" style="position: absolute; bottom: 58px; left: 0; width: 280px; z-index: 30; background: var(--raise); border: 2px solid var(--ink); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+        <div style="padding: 8px 10px; display: flex; flex-direction: column; line-height: 1.3"><span style="font-weight: 700">Jordan Lee</span><span style="font-size: 13px; color: var(--muted)">jordan@acme.dev</span></div>
+        <div style="height: 1px; background: var(--line); margin: 2px 6px"></div>
+        <a href="#" role="menuitem" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none">Personal settings</a>
+        <a href="#" role="menuitem" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none">Security</a>
+        <a href="#" role="menuitem" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 8px; color: var(--ink2); text-decoration: none"><span style="flex: 1">Keyboard shortcuts</span><kbd style="min-width: 20px; height: 20px; box-sizing: border-box; display: grid; place-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 11px; font-weight: 600; color: var(--ink); border: 1px solid var(--line); border-bottom-width: 2.5px; border-radius: 5px">?</kbd></a>
+        <div role="group" aria-label="Theme" style="display: flex; margin: 4px 10px; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden">
+          <button aria-pressed="{{isLight}}" style="flex: 1; min-height: 32px; border: 0; background: {{lightBg}}; color: {{lightFg}}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Light</button>
+          <button aria-pressed="{{isDark}}" style="flex: 1; min-height: 32px; border: 0; border-left: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); background: {{darkBg}}; color: {{darkFg}}; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Dark</button>
+          <button aria-pressed="false" style="flex: 1; min-height: 32px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">System</button>
+        </div>
+        <div style="height: 1px; background: var(--line); margin: 2px 6px"></div>
+        <button role="menuitem" style="display: flex; align-items: center; min-height: 40px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink2); font: inherit; text-align: left; cursor: pointer">Sign out</button>
+      </div>
+    </sc-if>
+  </div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"active":{"editor":"enum","default":"settings","options":["home","agents","runs","approvals","settings","new"]},"menu":{"editor":"enum","default":"none","options":["none","org","user"]},"announce":{"editor":"boolean","default":true},"h":{"editor":"int","default":760,"min":600,"max":1400},"motion":{"editor":"boolean","default":true},"$preview":{"width":252,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const dark = (p.theme ?? 'light') === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', raise: '#141414', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', raise: '#FFFFFF', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    const hl = dark ? 'linear-gradient(transparent 84%, #FFD23F 84%)' : 'linear-gradient(transparent 58%, #FFD23F 58%)';
+    const active = p.active ?? 'settings';
+    const menu = p.menu ?? 'none';
+    const ids = ['home', 'agents', 'runs', 'approvals', 'settings'];
+    const cur = {}, fw = {}, bgc = {};
+    ids.forEach((id) => { const on = id === active; cur[id] = on ? 'page' : 'false'; fw[id] = on ? '650' : '400'; bgc[id] = on ? hl : 'transparent'; });
+    return {
+      t, hl, cur, fw, bgc,
+      h: Number(p.h ?? 760),
+      motion: (p.motion ?? true) !== false && p.motion !== 'false',
+      announce: (p.announce ?? true) !== false && p.announce !== 'false',
+      orgOpen: menu === 'org',
+      userOpen: menu === 'user',
+      orgBorder: menu === 'org' ? '2px solid ' + t.ink : '1px solid ' + t.line,
+      newCurrent: active === 'new' ? 'page' : 'false',
+      isLight: !dark, isDark: dark,
+      lightBg: dark ? 'transparent' : t.invBg, lightFg: dark ? t.ink : t.invFg,
+      darkBg: dark ? t.invBg : 'transparent', darkFg: dark ? t.invFg : t.ink
+    };
+  }
+}
+</script>
+</body>
+</html>

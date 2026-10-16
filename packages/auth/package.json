@@ -18,6 +18,10 @@
   "dependencies": {
     "@better-auth/api-key": "1.7.7",
     "@better-auth/oauth-provider": "1.7.7",
+    "@better-auth/passkey": "1.7.7",
+    "@better-auth/scim": "1.7.7",
+    "@better-auth/sso": "1.7.7",
+    "@better-auth/stripe": "1.7.7",
     "@starter/api": "workspace:*",
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
@@ -26,7 +30,8 @@
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "1.7.7",
     "drizzle-orm": "^0.45.3",
-    "jose": "^6.2.3"
+    "jose": "^6.2.3",
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@starter/config": "workspace:*",

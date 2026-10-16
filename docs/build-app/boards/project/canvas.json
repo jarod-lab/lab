@@ -1,0 +1,26 @@
+{"v":3,"attachments":{},"createdOnFiles":{"at":"2026-10-16T16:50:00Z","v":1},"title":"Agentic App Shell — Design System","launch":{"view":"canvas"},"pages":[],"designSystems":[],
+"boards":{
+"Main.dc.html":{"x":0,"y":0,"w":1440,"h":1500,"title":"D+ design system — foundations, components, navigation"},
+"DirLift.dc.html":{"x":1520,"y":0,"w":1200,"h":760,"title":"App shell — run view (light)"},
+"DirLiftDark.dc.html":{"x":1520,"y":880,"w":1200,"h":760,"title":"App shell — run view (dark)"},
+"Auth.dc.html":{"x":0,"y":1820,"w":1640,"h":820,"title":"Sign in · Sign up · Two-factor · Invitation"},
+"OrgSwitcher.dc.html":{"x":0,"y":2960,"w":1200,"h":760,"title":"Org switcher → Create organization"},
+"OrgGeneral.dc.html":{"x":1280,"y":2960,"w":1200,"h":860,"title":"Org settings — General"},
+"OrgMembers.dc.html":{"x":2560,"y":2960,"w":1200,"h":960,"title":"Org settings — Members & roles"},
+"OrgApiKeys.dc.html":{"x":3840,"y":2960,"w":1200,"h":860,"title":"Org settings — API keys"},
+"OrgBilling.dc.html":{"x":5120,"y":2960,"w":1200,"h":960,"title":"Org settings — Billing"},
+"DirLiftSettings.dc.html":{"x":6400,"y":2960,"w":1200,"h":760,"title":"Org settings — Agents (app-specific)"},
+"Profile.dc.html":{"x":0,"y":4240,"w":1200,"h":900,"title":"Personal — Profile & account"},
+"Security.dc.html":{"x":1280,"y":4240,"w":1200,"h":1180,"title":"Personal — Security"},
+"Sidebar.dc.html":{"x":0,"y":5740,"w":252,"h":760,"title":"Component — Sidebar"},
+"Topbar.dc.html":{"x":332,"y":5740,"w":948,"h":60,"title":"Component — Top bar"},
+"SettingsTabs.dc.html":{"x":332,"y":5920,"w":948,"h":124,"title":"Component — Settings header & tabs"}
+},
+"order":["Main.dc.html","DirLift.dc.html","DirLiftDark.dc.html","Auth.dc.html","OrgSwitcher.dc.html","OrgGeneral.dc.html","OrgMembers.dc.html","OrgApiKeys.dc.html","OrgBilling.dc.html","DirLiftSettings.dc.html","Profile.dc.html","Security.dc.html","Sidebar.dc.html","Topbar.dc.html","SettingsTabs.dc.html"],
+"notes":{
+"title":{"kind":"title1","maxW":2720,"text":"D+ — lean core, budgeted lift","x":0,"y":-300},
+"auth":{"kind":"title1","maxW":1640,"text":"Authentication","x":0,"y":1540},
+"org":{"kind":"title1","maxW":7600,"text":"Organization","x":0,"y":2680},
+"personal":{"kind":"title1","maxW":2480,"text":"Personal settings","x":0,"y":3960},
+"comp":{"kind":"title1","maxW":1280,"text":"Shared components","x":0,"y":5460}
+}}

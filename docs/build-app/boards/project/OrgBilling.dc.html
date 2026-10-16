@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Organization settings — Billing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --done: {{t.done}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --hatch: {{hatch}}; --solar: #FFD23F; width: 1200px; height: 960px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="settings" h="960" hint-size="252px,960px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Acme Inc / Settings / Billing" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="org" active="billing" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 22px 36px; display: flex; flex-direction: column; gap: 18px">
+      <p style="margin: 0; font-size: 14px; color: var(--ink2)">Payments are handled by Stripe. Buttons marked <span aria-hidden="true">↗</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">with an arrow</span> open Stripe's secure portal in a new tab. Only owners and admins can see this page.</p>
+
+      <section aria-labelledby="plan-h" style="border: 2px solid var(--ink); border-radius: 12px; padding: 18px 20px; display: flex; gap: 28px; align-items: center">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 13px; color: var(--muted)">Current plan</span>
+          <h2 id="plan-h" style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Pro</h2>
+          <span style="font-size: 14.5px; color: var(--ink2)">[PRICE] per seat / month · renews [RENEWAL DATE]</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 220px">
+          <span style="font-size: 14px; font-weight: 650">12 of 15 seats used</span>
+          <div aria-hidden="true" style="display: flex; gap: 3px">
+            <sc-for list="{{seats}}" as="s" hint-placeholder-count="15"><span style="width: 12px; height: 18px; border-radius: 3px; background: {{s.bg}}; border: 1px solid var(--line); box-sizing: border-box"></span></sc-for>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <a href="#" style="display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font-weight: 700; text-decoration: none">Manage subscription <span aria-hidden="true">↗</span></a>
+          <div style="display: flex; gap: 8px">
+            <button style="flex: 1; min-height: 40px; padding: 0 12px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer">Change seats</button>
+            <a href="#" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; padding: 0 12px; border: 2px solid var(--ink); border-radius: 8px; color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none; box-sizing: border-box">Cancel plan <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <div style="border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px">
+          <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: var(--muted)">Payment method</span><span style="font-weight: 650">Card ending 4242 · expires 08/28</span></div>
+          <a href="#" style="font-size: 14px; font-weight: 650; color: var(--ink); text-underline-offset: 3px">Update in Stripe <span aria-hidden="true">↗</span></a>
+        </div>
+        <div style="border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px">
+          <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 13px; color: var(--muted)">Invoices go to</span><span style="font-weight: 650">billing@acme.dev</span></div>
+          <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Edit</button>
+        </div>
+      </div>
+
+      <section aria-labelledby="plans-h" style="display: flex; flex-direction: column; gap: 8px">
+        <h3 id="plans-h" style="margin: 0; font-size: 16px; font-weight: 700">Plans</h3>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <div style="border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: baseline; gap: 8px"><strong style="font-size: 17px">Free</strong><span style="font-size: 13.5px; color: var(--muted)">[PRICE]</span></div><span style="font-size: 13.5px; color: var(--ink2)">3 seats · 2 agents · community support</span><a href="#" style="margin-top: auto; font-size: 14px; color: var(--ink); text-underline-offset: 3px">Downgrade <span aria-hidden="true">↗</span></a></div>
+          <div style="border: 2px solid var(--ink); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: baseline; gap: 8px"><strong style="font-size: 17px"><span style="background: {{hl}}; padding: 0 2px">Pro</span></strong><span style="font-size: 13.5px; color: var(--muted)">[PRICE] / seat</span></div><span style="font-size: 13.5px; color: var(--ink2)">Up to 25 seats · unlimited agents · API keys</span><span style="margin-top: auto; font-size: 14px; font-weight: 700">Current plan</span></div>
+          <div style="border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: baseline; gap: 8px"><strong style="font-size: 17px">Team</strong><span style="font-size: 13.5px; color: var(--muted)">[PRICE] / seat</span></div><span style="font-size: 13.5px; color: var(--ink2)">SSO · audit log · custom roles · priority support</span><a href="#" style="margin-top: auto; font-size: 14px; font-weight: 650; color: var(--ink); text-underline-offset: 3px">Upgrade <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="inv-h">
+        <h3 id="inv-h" style="margin: 0 0 4px; font-size: 16px; font-weight: 700">Invoices</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14.5px">
+          <thead><tr style="text-align: left; color: var(--muted); font-size: 13px"><th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line)">Date</th><th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line)">Status</th><th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line)">Amount</th><th scope="col" style="padding: 6px 0; border-bottom: 1px solid var(--line)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Links</span></th></tr></thead>
+          <tbody>
+            <sc-for list="{{invoices}}" as="i" hint-placeholder-count="3">
+              <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid var(--line)">{{i.date}}</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid var(--line)"><span style="display: inline-flex; align-items: center; gap: 6px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink)">Paid</span></span></td>
+                <td style="padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--ink2)">[AMOUNT]</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid var(--line); text-align: right"><a href="#" style="font-size: 14px; color: var(--ink); text-underline-offset: 3px">View in Stripe <span aria-hidden="true">↗</span></a></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', done: '#86D6A2', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', done: '#1B5A31', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    const hatch = 'repeating-linear-gradient(135deg, ' + (dark ? '#3A3A36' : '#CFCFC7') + ' 0 1.5px, transparent 1.5px 5px)';
+    const seats = Array.from({ length: 15 }, (_, i) => ({ bg: i < 12 ? t.ink : hatch }));
+    const invoices = [{ date: 'Oct 1, 2026' }, { date: 'Sep 1, 2026' }, { date: 'Aug 1, 2026' }];
+    return { t, theme, hatch, seats, invoices, hl: dark ? 'linear-gradient(transparent 84%, #FFD23F 84%)' : 'linear-gradient(transparent 58%, #FFD23F 58%)' };
+  }
+}
+</script>
+</body>
+</html>

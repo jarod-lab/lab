@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Organization settings — Members and roles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --done: {{t.done}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; --solar: #FFD23F; width: 1200px; height: 960px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="settings" h="960" hint-size="252px,960px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Acme Inc / Settings / Members" hint-size="100%,60px"></dc-import>
+    <dc-import name="SettingsTabs" theme="{{theme}}" scope="org" active="members" hint-size="100%,124px"></dc-import>
+    <main style="flex: 1; padding: 22px 36px; display: flex; flex-direction: column; gap: 20px">
+
+      <form style="display: flex; align-items: flex-end; gap: 10px" aria-label="Invite members">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <label for="inv-e" style="font-size: 14px; font-weight: 650">Invite by email</label>
+          <input id="inv-e" placeholder="name@company.com, another@company.com" style="min-height: 44px; padding: 0 12px; border: 1.5px solid var(--muted); border-radius: 8px; background: transparent; color: var(--ink); font: inherit">
+        </div>
+        <div style="width: 150px; display: flex; flex-direction: column; gap: 4px">
+          <label for="inv-r" style="font-size: 14px; font-weight: 650">Role</label>
+          <select id="inv-r" style="min-height: 44px; padding: 0 10px; border: 1.5px solid var(--muted); border-radius: 8px; background: transparent; color: var(--ink); font: inherit"><option>Member</option><option>Viewer</option><option>Admin</option></select>
+        </div>
+        <button type="button" style="min-height: 44px; padding: 0 18px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-weight: 700; cursor: pointer">Send invites</button>
+      </form>
+
+      <section aria-labelledby="m-h">
+        <h2 id="m-h" style="margin: 0 0 6px; font-size: 16px; font-weight: 700">Members <span style="font-weight: 400; color: var(--muted)">12 of 15 seats</span></h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14.5px">
+          <thead>
+            <tr style="text-align: left; color: var(--muted); font-size: 13px">
+              <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line)">Member</th>
+              <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line); width: 130px">Role</th>
+              <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line); width: 110px">Two-factor</th>
+              <th scope="col" style="font-weight: 600; padding: 8px 0; border-bottom: 1px solid var(--line); width: 120px">Last active</th>
+              <th scope="col" style="padding: 8px 0; border-bottom: 1px solid var(--line); width: 48px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{members}}" as="m" hint-placeholder-count="5">
+              <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid var(--line)"><div style="display: flex; align-items: center; gap: 10px"><span style="width: 32px; height: 32px; flex: none; border-radius: 50%; border: 1.5px solid var(--ink); box-sizing: border-box; display: grid; place-items: center; font-size: 12px; font-weight: 650">{{m.initials}}</span><div style="display: flex; flex-direction: column; line-height: 1.3"><span style="font-weight: 600">{{m.name}}</span><span style="font-size: 13px; color: var(--muted)">{{m.email}}</span></div></div></td>
+                <td style="padding: 8px 0; border-bottom: 1px solid var(--line)">
+                  <sc-if value="{{m.editable}}" hint-placeholder-val="{{ true }}"><button aria-haspopup="listbox" aria-label="Role for {{m.name}}: {{m.role}}" style="min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1.5px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer">{{m.role}}<span aria-hidden="true" style="color: var(--muted)">▾</span></button></sc-if>
+                  <sc-if value="{{m.fixed}}" hint-placeholder-val="{{ false }}"><span style="font-weight: 700">{{m.role}}</span></sc-if>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid var(--line)">
+                  <sc-if value="{{m.tfa}}" hint-placeholder-val="{{ true }}"><span style="display: inline-flex; align-items: center; gap: 6px; color: var(--done)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: var(--ink)">On</span></span></sc-if>
+                  <sc-if value="{{m.noTfa}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12.5px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px">Off</span></sc-if>
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink2)">{{m.last}}</td>
+                <td style="padding: 8px 0; border-bottom: 1px solid var(--line); text-align: right"><button aria-label="More actions for {{m.name}}" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 18px; cursor: pointer">⋯</button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <a href="#" style="display: inline-flex; margin-top: 8px; font-size: 14px; color: var(--ink); text-underline-offset: 3px">Show all 12 members</a>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px">
+        <section aria-labelledby="p-h" style="display: flex; flex-direction: column">
+          <h2 id="p-h" style="margin: 0 0 6px; font-size: 16px; font-weight: 700">Pending invitations</h2>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line)">
+            <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">lee@acme.dev · Member</span><span style="font-size: 13px; color: var(--muted)">Sent 2 days ago · expires in 5 days</span></div>
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Resend</button>
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Revoke</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line)">
+            <div style="flex: 1; display: flex; flex-direction: column; line-height: 1.35"><span style="font-weight: 600">finance@acme.dev · Viewer</span><span style="font-size: 13px; color: var(--muted)"><span style="font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 5px">Expired</span> sent 9 days ago</span></div>
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Resend</button>
+            <button style="min-height: 36px; padding: 0 12px; border: 1.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer">Remove</button>
+          </div>
+        </section>
+
+        <section aria-labelledby="r-h" style="display: flex; flex-direction: column">
+          <h2 id="r-h" style="margin: 0 0 6px; font-size: 16px; font-weight: 700">What each role can do</h2>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13.5px">
+            <thead>
+              <tr style="color: var(--muted)">
+                <th scope="col" style="text-align: left; font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Permission</span></th>
+                <th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line); width: 58px">Owner</th>
+                <th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line); width: 58px">Admin</th>
+                <th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line); width: 64px">Member</th>
+                <th scope="col" style="font-weight: 600; padding: 6px 0; border-bottom: 1px solid var(--line); width: 58px">Viewer</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{perms}}" as="p" hint-placeholder-count="6">
+                <tr>
+                  <th scope="row" style="text-align: left; font-weight: 400; padding: 6px 0; border-bottom: 1px solid var(--line)">{{p.label}}</th>
+                  <td style="text-align: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-weight: 700">{{p.o}}</td>
+                  <td style="text-align: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-weight: 700">{{p.a}}</td>
+                  <td style="text-align: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-weight: 700">{{p.m}}</td>
+                  <td style="text-align: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-weight: 700">{{p.v}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', done: '#86D6A2', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', done: '#1B5A31', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    const raw = [
+      { initials: 'JL', name: 'Jordan Lee (you)', email: 'jordan@acme.dev', role: 'Owner', tfa: true, last: 'Now', fixed: true },
+      { initials: 'PS', name: 'Priya Shah', email: 'priya@acme.dev', role: 'Admin', tfa: true, last: '2 hours ago' },
+      { initials: 'MW', name: 'Marcus Webb', email: 'marcus@acme.dev', role: 'Member', tfa: true, last: 'Yesterday' },
+      { initials: 'AR', name: 'Ana Ruiz', email: 'ana@acme.dev', role: 'Member', tfa: false, last: '3 days ago' },
+      { initials: 'SO', name: 'Sam Okafor', email: 'sam@contractor.io', role: 'Viewer', tfa: true, last: '2 weeks ago' }
+    ];
+    const members = raw.map((m) => ({ ...m, fixed: !!m.fixed, editable: !m.fixed, noTfa: !m.tfa }));
+    const Y = '✓', N = '—';
+    const perms = [
+      { label: 'See agents, runs, settings', o: Y, a: Y, m: Y, v: Y },
+      { label: 'Start runs, approve actions', o: Y, a: Y, m: Y, v: N },
+      { label: 'Create and edit agents', o: Y, a: Y, m: Y, v: N },
+      { label: 'Invite and manage members', o: Y, a: Y, m: N, v: N },
+      { label: 'API keys and billing', o: Y, a: Y, m: N, v: N },
+      { label: 'Delete or transfer the org', o: Y, a: N, m: N, v: N }
+    ];
+    return { t, theme, members, perms };
+  }
+}
+</script>
+</body>
+</html>

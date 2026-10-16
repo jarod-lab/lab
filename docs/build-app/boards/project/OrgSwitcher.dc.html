@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Org switcher and create organization</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --done: {{t.done}}; --invBg: {{t.invBg}}; --invFg: {{t.invFg}}; width: 1200px; height: 760px; display: flex; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5; overflow: hidden">
+  <dc-import name="Sidebar" theme="{{theme}}" active="new" menu="org" h="760" hint-size="252px,760px"></dc-import>
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+    <dc-import name="Topbar" theme="{{theme}}" crumbs="Organizations / New" hint-size="100%,60px"></dc-import>
+    <main style="flex: 1; padding: 36px 48px; display: flex; flex-direction: column; gap: 20px; max-width: 640px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h1 style="margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.1">Create an organization</h1>
+        <p style="margin: 0; color: var(--ink2)">Organizations hold your agents, members, API keys and billing. You can belong to several.</p>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <label for="o-n" style="font-size: 14px; font-weight: 650">Organization name</label>
+        <input id="o-n" value="Acme Labs" style="min-height: 44px; padding: 0 12px; border: 1.5px solid var(--muted); border-radius: 8px; background: transparent; color: var(--ink); font: inherit">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <label for="o-s" style="font-size: 14px; font-weight: 650">URL</label>
+        <div style="display: flex; min-height: 44px; border: 1.5px solid var(--muted); border-radius: 8px; overflow: hidden">
+          <span style="display: flex; align-items: center; padding: 0 12px; background: {{t.tint}}; color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; border-right: 1px solid var(--line)">app.example.com/</span>
+          <input id="o-s" value="acme-labs" aria-describedby="o-s-ok" style="flex: 1; min-width: 0; border: 0; padding: 0 12px; background: transparent; color: var(--ink); font-family: ui-monospace, Menlo, monospace; font-size: 14px">
+        </div>
+        <span id="o-s-ok" style="display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--done); font-weight: 600"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Available</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px">
+        <span style="width: 48px; height: 48px; border-radius: 10px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 22px">A</span>
+        <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 650">Logo</span><span style="font-size: 13.5px; color: var(--muted)">Optional. We'll use the first letter until you add one.</span></div>
+        <button style="min-height: 40px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-weight: 650; cursor: pointer">Upload</button>
+      </div>
+      <ul style="margin: 0; padding: 14px 16px; list-style: none; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink2)">
+        <li style="display: flex; gap: 8px"><strong style="color: var(--ink); width: 18px">1</strong>You'll be the Owner of Acme Labs.</li>
+        <li style="display: flex; gap: 8px"><strong style="color: var(--ink); width: 18px">2</strong>Next, invite teammates. You can skip this.</li>
+        <li style="display: flex; gap: 8px"><strong style="color: var(--ink); width: 18px">3</strong>You start on the Free plan. Upgrade anytime in Billing.</li>
+      </ul>
+      <div style="display: flex; gap: 10px">
+        <button style="min-height: 48px; padding: 0 20px; border: 2px solid var(--ink); border-radius: 8px; background: var(--invBg); color: var(--invFg); font: inherit; font-weight: 700; cursor: pointer">Create organization</button>
+        <button style="min-height: 48px; padding: 0 20px; border: 2px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer">Cancel</button>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"],"section":"Theme"},"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const dark = theme === 'dark';
+    const t = dark ? {
+      bg: '#0A0A0A', tint: '#141414', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B', done: '#86D6A2', invBg: '#F5F5F0', invFg: '#0A0A0A'
+    } : {
+      bg: '#FAFAF7', tint: '#F0F0EA', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF', done: '#1B5A31', invBg: '#111111', invFg: '#FAFAF7'
+    };
+    return { t, theme };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings header and tabs component</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="--bg: {{t.bg}}; --ink: {{t.ink}}; --ink2: {{t.ink2}}; --muted: {{t.muted}}; --line: {{t.line}}; --solar: #FFD23F; width: 100%; min-width: 600px; box-sizing: border-box; padding: 20px 36px 0; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.5">
+  <div style="display: flex; align-items: baseline; gap: 14px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.1">{{title}}</h1>
+    <span style="font-size: 14px; color: var(--muted)">{{context}}</span>
+  </div>
+  <nav aria-label="{{title}} sections">
+    <ul style="display: flex; gap: 2px; list-style: none; margin: 0 0 -1px; padding: 0; overflow-x: auto">
+      <sc-for list="{{tabs}}" as="tab" hint-placeholder-count="5">
+        <li><a href="#" aria-current="{{tab.current}}" style="display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; box-sizing: border-box; color: {{tab.color}}; font-weight: {{tab.fw}}; text-decoration: none; border-bottom: 3px solid {{tab.bar}}; white-space: nowrap">{{tab.label}}<sc-if value="{{tab.hasCount}}" hint-placeholder-val="{{ false }}"><span style="font-size: 13px; font-weight: 400; color: var(--muted)">{{tab.count}}</span></sc-if><sc-if value="{{tab.hasBadge}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; font-weight: 800; color: #111111; background: var(--solar); border-radius: 4px; padding: 0 6px">{{tab.badge}}</span></sc-if></a></li>
+      </sc-for>
+    </ul>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"scope":{"editor":"enum","default":"org","options":["org","personal"]},"active":{"editor":"enum","default":"members","options":["general","members","api-keys","billing","agents","integrations","profile","security"]},"$preview":{"width":948,"height":124}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const dark = (p.theme ?? 'light') === 'dark';
+    const t = dark ? { bg: '#0A0A0A', ink: '#F5F5F0', ink2: '#DADAD4', muted: '#B3B3AE', line: '#2E2E2B' } : { bg: '#FAFAF7', ink: '#111111', ink2: '#2E2E2E', muted: '#555555', line: '#D6D6CF' };
+    const scope = p.scope ?? 'org';
+    const active = p.active ?? (scope === 'org' ? 'members' : 'profile');
+    const defs = scope === 'org' ? [
+      { id: 'general', label: 'General' },
+      { id: 'members', label: 'Members', count: '12' },
+      { id: 'api-keys', label: 'API keys' },
+      { id: 'billing', label: 'Billing' },
+      { id: 'agents', label: 'Agents' },
+      { id: 'integrations', label: 'Integrations', badge: '1 expired' }
+    ] : [
+      { id: 'profile', label: 'Profile & account' },
+      { id: 'security', label: 'Security' }
+    ];
+    const tabs = defs.map((d) => {
+      const on = d.id === active;
+      return { ...d, current: on ? 'page' : 'false', color: on ? t.ink : t.ink2, fw: on ? '700' : '400', bar: on ? t.ink : 'transparent', hasCount: !!d.count, hasBadge: !!d.badge };
+    });
+    return {
+      t, tabs,
+      title: scope === 'org' ? 'Organization settings' : 'Personal settings',
+      context: scope === 'org' ? 'Acme Inc · you are Owner' : 'Jordan Lee · jordan@acme.dev'
+    };
+  }
+}
+</script>
+</body>
+</html>

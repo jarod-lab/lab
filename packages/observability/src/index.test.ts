@@ -90,6 +90,21 @@ describe("observe", () => {
     expect(reporter).not.toHaveBeenCalled()
   })
 
+  it("sends the error's own headers, such as retry-after on a 429", async () => {
+    const { logger } = capture()
+    const handler = observe(
+      () => {
+        throw new AppError("RATE_LIMITED", "Slow down", { headers: { "retry-after": "30" } })
+      },
+      { logger },
+    )
+
+    const res = await handler(get("/"))
+    expect(res.status).toBe(429)
+    expect(res.headers.get("retry-after")).toBe("30")
+    expect(res.headers.get(REQUEST_ID_HEADER)).toBeTruthy()
+  })
+
   it("hides an unknown error's message, reports it, and logs only allowlisted headers", async () => {
     const { logger, lines } = capture()
     const reporter = vi.fn()

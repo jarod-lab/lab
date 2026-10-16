@@ -61,8 +61,8 @@ function withRequestId(res: Response, requestId: string): Response {
  * id, a per-request logger, one access-log line per request, and error handling. Arguments after
  * the request (Next's `{ params }`) are forwarded to the handler untouched.
  *
- * Thrown errors become `{ error: { code, message }, requestId }` via `AppError.toPublic()`, so an
- * INTERNAL message never reaches the client. Only server-side failures (5xx or non-exposed) go to
+ * Thrown errors become `{ error: { code, message }, requestId }` via `AppError.toPublic()`, with
+ * the error's `headers` (e.g. `retry-after`), so an INTERNAL message never reaches the client. Only server-side failures (5xx or non-exposed) go to
  * the registered error reporter; 4xx are expected and are just logged.
  *
  * The query string is left out of the logged path because it can carry tokens.
@@ -97,7 +97,10 @@ export function observe<Rest extends unknown[] = []>(
         log.warn(fields, "request rejected")
       }
       return withRequestId(
-        Response.json({ error: error.toPublic(), requestId }, { status: error.status }),
+        Response.json(
+          { error: error.toPublic(), requestId },
+          { status: error.status, headers: error.headers },
+        ),
         requestId,
       )
     }

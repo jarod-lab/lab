@@ -3,7 +3,9 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import {
   CallToolRequestSchema,
   type CallToolResult,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import {
@@ -141,12 +143,8 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
     // the scope or permission that would allow it, which is more use to an agent than "unknown".
     // The operation list is public anyway (openapi.json, llms.txt).
     const op = opts.operations.find((o) => o.name === req.params.name)
-    if (!op) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: `Unknown tool: ${req.params.name}` }],
-      } satisfies CallToolResult
-    }
+    // A name that is no operation at all is a protocol error, as the MCP spec has it.
+    if (!op) throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${req.params.name}`)
     return callTool(op, req.params.arguments, caller, {
       requestId,
       invokeOptions: opts.invokeOptions,

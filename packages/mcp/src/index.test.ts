@@ -130,8 +130,11 @@ describe("createMcpHandler", () => {
     const hidden = await client.callTool({ name: "shout", arguments: { text: "x" } })
     expect(hidden).toMatchObject({ isError: true })
     expect(JSON.stringify(hidden.content)).toContain("FORBIDDEN")
-    const unknown = await client.callTool({ name: "nope", arguments: {} })
-    expect(unknown).toMatchObject({ isError: true, content: [{ text: "Unknown tool: nope" }] })
+    // An unknown tool is a protocol error (-32602, invalid params), not a tool result.
+    await expect(client.callTool({ name: "nope", arguments: {} })).rejects.toMatchObject({
+      code: -32602,
+      message: expect.stringContaining("Unknown tool: nope"),
+    })
   })
 })
 

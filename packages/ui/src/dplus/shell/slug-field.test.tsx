@@ -59,3 +59,20 @@ describe("SlugField", () => {
     h.cleanup()
   })
 })
+
+describe("SlugField disabled", () => {
+  it("is read-only and dashed when a viewer cannot change the address", () => {
+    const html = renderToStaticMarkup(
+      <SlugField
+        label="URL"
+        prefix="app.example.com/"
+        value="acme"
+        onChange={() => {}}
+        status="idle"
+        disabled
+      />,
+    )
+    expect(html).toMatch(/<input[^>]*disabled/)
+    expect(html).toContain("border-dashed")
+  })
+})

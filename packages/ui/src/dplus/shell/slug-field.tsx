@@ -19,6 +19,7 @@ export function SlugField({
   onChange,
   status,
   name,
+  disabled = false,
   className,
 }: {
   label: string
@@ -28,6 +29,8 @@ export function SlugField({
   onChange: (value: string) => void
   status: SlugStatus
   name?: string
+  /** A viewer's read-only address: dashed, not editable. */
+  disabled?: boolean
   className?: string
 }) {
   const id = useId()
@@ -42,6 +45,7 @@ export function SlugField({
       <div
         className={cn(
           "flex min-h-11 overflow-hidden rounded-lg border-[1.5px] border-input",
+          disabled && "border-dashed border-muted-foreground",
           bad && "border-2 border-destructive",
         )}
       >
@@ -53,11 +57,12 @@ export function SlugField({
           name={name}
           value={value}
           onChange={(e) => onChange(e.currentTarget.value)}
+          disabled={disabled}
           aria-invalid={bad || undefined}
           aria-describedby={shown ? statusId : undefined}
           autoComplete="off"
           spellCheck={false}
-          className="type-mono min-w-0 flex-1 bg-transparent px-3 text-foreground"
+          className="type-mono min-w-0 flex-1 bg-transparent px-3 text-foreground disabled:text-muted-foreground"
         />
       </div>
       <output id={statusId} className="block">

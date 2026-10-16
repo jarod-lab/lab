@@ -7,13 +7,13 @@
     try {
       var stored = window.localStorage.getItem("starter.theme")
       if (stored === "light" || stored === "dark" || stored === "system") choice = stored
-    } catch (error) {
+    } catch {
       // Storage blocked: follow the OS setting.
     }
     var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
     var dark = choice === "dark" || (choice === "system" && prefersDark)
     document.documentElement.classList.toggle("dark", dark)
-  } catch (error) {
+  } catch {
     // No matchMedia: the page stays in light mode.
   }
 })()

@@ -25,7 +25,9 @@ import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accep
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as SettingsAgentsRouteImport } from './routes/settings/agents'
+import { Route as OrgSettingsIndexRouteImport } from './routes/$org/settings/index'
 import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
+import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -108,9 +110,19 @@ const SettingsAgentsRoute = SettingsAgentsRouteImport.update({
   path: '/settings/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrgSettingsIndexRoute = OrgSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => OrgRoute,
+} as any)
 const OrgSettingsAgentsRoute = OrgSettingsAgentsRouteImport.update({
   id: '/settings/agents',
   path: '/settings/agents',
+  getParentRoute: () => OrgRoute,
+} as any)
+const OrgSettingsGeneralRoute = OrgSettingsGeneralRouteImport.update({
+  id: '/settings/general',
+  path: '/settings/general',
   getParentRoute: () => OrgRoute,
 } as any)
 
@@ -132,6 +144,8 @@ export interface FileRoutesByFullPath {
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
+  '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -149,6 +163,8 @@ export interface FileRoutesByTo {
   '/$org': typeof OrgIndexRoute
   '/account': typeof AccountIndexRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
+  '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -169,6 +185,8 @@ export interface FileRoutesById {
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
+  '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -190,6 +208,8 @@ export interface FileRouteTypes {
     | '/$org/'
     | '/account/'
     | '/$org/settings/agents'
+    | '/$org/settings/general'
+    | '/$org/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -207,6 +227,8 @@ export interface FileRouteTypes {
     | '/$org'
     | '/account'
     | '/$org/settings/agents'
+    | '/$org/settings/general'
+    | '/$org/settings'
   id:
     | '__root__'
     | '/'
@@ -226,6 +248,8 @@ export interface FileRouteTypes {
     | '/$org/'
     | '/account/'
     | '/$org/settings/agents'
+    | '/$org/settings/general'
+    | '/$org/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -359,11 +383,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$org/settings/': {
+      id: '/$org/settings/'
+      path: '/settings'
+      fullPath: '/$org/settings/'
+      preLoaderRoute: typeof OrgSettingsIndexRouteImport
+      parentRoute: typeof OrgRoute
+    }
     '/$org/settings/agents': {
       id: '/$org/settings/agents'
       path: '/settings/agents'
       fullPath: '/$org/settings/agents'
       preLoaderRoute: typeof OrgSettingsAgentsRouteImport
+      parentRoute: typeof OrgRoute
+    }
+    '/$org/settings/general': {
+      id: '/$org/settings/general'
+      path: '/settings/general'
+      fullPath: '/$org/settings/general'
+      preLoaderRoute: typeof OrgSettingsGeneralRouteImport
       parentRoute: typeof OrgRoute
     }
   }
@@ -372,11 +410,15 @@ declare module '@tanstack/react-router' {
 interface OrgRouteChildren {
   OrgIndexRoute: typeof OrgIndexRoute
   OrgSettingsAgentsRoute: typeof OrgSettingsAgentsRoute
+  OrgSettingsGeneralRoute: typeof OrgSettingsGeneralRoute
+  OrgSettingsIndexRoute: typeof OrgSettingsIndexRoute
 }
 
 const OrgRouteChildren: OrgRouteChildren = {
   OrgIndexRoute: OrgIndexRoute,
   OrgSettingsAgentsRoute: OrgSettingsAgentsRoute,
+  OrgSettingsGeneralRoute: OrgSettingsGeneralRoute,
+  OrgSettingsIndexRoute: OrgSettingsIndexRoute,
 }
 
 const OrgRouteWithChildren = OrgRoute._addFileChildren(OrgRouteChildren)

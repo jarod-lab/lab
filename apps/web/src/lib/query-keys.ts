@@ -15,6 +15,10 @@ const org = (orgId: string) => {
     all: () => base,
     /** The caller's own role in this organization (a membership, not org data). */
     role: () => [...base, "role"] as const,
+    /** The organization's own settings (name, slug, metadata) as the server returns them. */
+    settings: () => [...base, "settings"] as const,
+    /** Live counts shown in the danger zone (API keys, ...). */
+    counts: () => [...base, "counts"] as const,
     members: () => [...base, "members"] as const,
     invitations: () => [...base, "invitations"] as const,
     apiKeys: () => [...base, "api-keys"] as const,

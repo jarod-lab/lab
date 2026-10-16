@@ -1,0 +1,656 @@
+import { useForm } from "@tanstack/react-form"
+import { useDebouncedValue } from "@tanstack/react-pacer"
+import { useEffect, useId, useState } from "react"
+import { z } from "zod"
+
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@starter/ui/components/ui/alert-dialog"
+import { Button } from "@starter/ui/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@starter/ui/components/ui/dialog"
+import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Input } from "@starter/ui/components/ui/input"
+import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
+import { CopyField } from "@starter/ui/dplus/shell/copy-field"
+import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
+import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
+import { type SlugStatus, SlugField } from "@starter/ui/dplus/shell/slug-field"
+import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
+import { OrgMark } from "@starter/ui/dplus/org-mark"
+
+import {
+  INVITE_ROLES,
+  INVITE_ROLE_LABEL,
+  type InviteRole,
+  ORG_SETTINGS_SECTIONS,
+  countOrPlaceholder,
+  slugChangeWarning,
+} from "../lib/org-settings"
+import { type SlugProblem, slugProblem } from "../lib/org-slug"
+
+export type GeneralValues = { name: string; slug: string; defaultInviteRole: InviteRole }
+
+export interface OrgGeneralPageProps {
+  organization: { id: string; name: string; slug: string }
+  /** The app's host, shown before the URL slug (e.g. "app.example.com"). */
+  host: string
+  /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
+  roleLabel: string
+  /** owner/admin: may change the name, URL and default invite role. */
+  canEdit: boolean
+  /** owner: the danger zone (transfer, delete). */
+  isOwner: boolean
+  /** The owner is the only owner, so they cannot leave yet. */
+  soleOwner: boolean
+  defaultInviteRole: InviteRole
+  /** Live counts where known; `undefined` shows [PLACEHOLDER]. */
+  counts: { members?: number; apiKeys?: number }
+  /** Admins who can be made owner. */
+  admins: { memberId: string; label: string }[]
+  checkSlug: (slug: string) => Promise<boolean>
+  onSave: (values: GeneralValues) => Promise<void>
+  onTransfer: (memberId: string) => Promise<void>
+  onLeave: () => Promise<void>
+  onDelete: () => Promise<void>
+  renderLink?: RenderLink
+}
+
+const schema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter a name for the organization.")
+    .max(80, "Use 80 characters or fewer."),
+  slug: z.string().refine((value) => slugProblem(value) === null, {
+    message: "Choose a valid URL.",
+  }),
+  defaultInviteRole: z.enum(INVITE_ROLES),
+})
+
+const PROBLEM_TEXT: Record<Exclude<SlugProblem, null>, string> = {
+  empty: "Enter a URL for the organization.",
+  shape: "Use lowercase letters, numbers and hyphens, up to 48 characters.",
+  reserved: "That address is reserved. Choose another.",
+}
+
+/** The organization settings "General" page (board OrgGeneral). Props in, callbacks out. */
+export function OrgGeneralPage({
+  organization,
+  host,
+  roleLabel,
+  canEdit,
+  isOwner,
+  soleOwner,
+  defaultInviteRole,
+  counts,
+  admins,
+  checkSlug,
+  onSave,
+  onTransfer,
+  onLeave,
+  onDelete,
+  renderLink = anchorLink,
+}: OrgGeneralPageProps) {
+  const defaults: GeneralValues = {
+    name: organization.name,
+    slug: organization.slug,
+    defaultInviteRole,
+  }
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const nameId = useId()
+  const inviteId = useId()
+
+  const form = useForm({
+    defaultValues: defaults,
+    validators: { onChange: schema },
+    onSubmit: async ({ value }) => {
+      setSaveError(null)
+      try {
+        await onSave({ ...value, name: value.name.trim() })
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Could not save the changes.")
+      }
+    },
+  })
+
+  const tabs = ORG_SETTINGS_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.label,
+    href: `/${organization.slug}/settings/${section.id}`,
+    count:
+      section.id === "members" && counts.members !== undefined ? String(counts.members) : undefined,
+  }))
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SettingsHeader
+        title="Organization settings"
+        context={`${organization.name} · you are ${roleLabel}`}
+        tabs={tabs}
+        activeTab="general"
+        renderLink={renderLink}
+      />
+
+      <main className="flex max-w-[720px] flex-col gap-5 px-4 py-6 md:px-9">
+        {!canEdit ? (
+          <ViewOnlyNotice subject={organization.name}>
+            Ask an owner or admin to change these settings.
+          </ViewOnlyNotice>
+        ) : null}
+
+        <form
+          noValidate
+          className="flex flex-col gap-5"
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <form.Field name="name">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={nameId}>Organization name</FieldLabel>
+                  <Input
+                    id={nameId}
+                    name="name"
+                    value={field.state.value}
+                    disabled={!canEdit}
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={field.handleBlur}
+                    autoComplete="organization"
+                  />
+                  {field.state.meta.errors.length > 0 ? (
+                    <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
+                  ) : null}
+                </Field>
+              )}
+            </form.Field>
+
+            <form.Field name="slug">
+              {(field) => (
+                <SlugEditor
+                  host={host}
+                  currentSlug={organization.slug}
+                  value={field.state.value}
+                  disabled={!canEdit}
+                  checkSlug={checkSlug}
+                  onChange={(slug) => field.handleChange(slug)}
+                  errors={field.state.meta.errors}
+                />
+              )}
+            </form.Field>
+          </div>
+
+          <div className="flex items-center gap-3.5">
+            <OrgMark name={organization.name} size="lg" />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm font-semibold">Logo</span>
+              <span id="logo-reason" className="text-[13.5px] text-muted-foreground">
+                Square, at least 128px. SVG or PNG. Upload is not available yet, so the first letter
+                is shown.
+              </span>
+            </div>
+            {canEdit ? (
+              <Button variant="outline" disabled aria-describedby="logo-reason">
+                Upload
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <form.Field name="defaultInviteRole">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={inviteId}>Default role for new invites</FieldLabel>
+                  <NativeSelect
+                    id={inviteId}
+                    name="defaultInviteRole"
+                    value={field.state.value}
+                    disabled={!canEdit}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value as InviteRole)
+                    }
+                    onBlur={field.handleBlur}
+                  >
+                    {INVITE_ROLES.map((role) => (
+                      <NativeSelectOption key={role} value={role}>
+                        {INVITE_ROLE_LABEL[role]}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <FieldDescription>
+                    Used when you invite someone without choosing a role.
+                  </FieldDescription>
+                </Field>
+              )}
+            </form.Field>
+
+            <CopyField label="Organization ID" value={organization.id} />
+          </div>
+
+          {canEdit ? (
+            <form.Subscribe
+              selector={(state) => ({
+                values: state.values,
+                canSubmit: state.canSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ values, canSubmit, isSubmitting }) => {
+                const dirty =
+                  values.name.trim() !== defaults.name ||
+                  values.slug !== defaults.slug ||
+                  values.defaultInviteRole !== defaults.defaultInviteRole
+                return (
+                  <div className="flex flex-col gap-2">
+                    {saveError ? (
+                      <p role="alert" className="text-sm text-destructive">
+                        {saveError}
+                      </p>
+                    ) : null}
+                    <div className="flex justify-end gap-2.5 border-b border-border pb-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!dirty || isSubmitting}
+                        onClick={() => {
+                          setSaveError(null)
+                          form.reset()
+                        }}
+                      >
+                        Discard
+                      </Button>
+                      <Button type="submit" disabled={!dirty || !canSubmit || isSubmitting}>
+                        {isSubmitting ? "Saving…" : "Save changes"}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }}
+            </form.Subscribe>
+          ) : null}
+        </form>
+
+        {isOwner ? (
+          <OwnerDangerZone
+            organizationName={organization.name}
+            counts={counts}
+            admins={admins}
+            soleOwner={soleOwner}
+            onTransfer={onTransfer}
+            onLeave={onLeave}
+            onDelete={onDelete}
+          />
+        ) : (
+          <div className="border-t border-border pt-4">
+            <LeaveRow organizationName={organization.name} onLeave={onLeave} />
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+/** The URL field: availability is checked after a pause, and not for the address already in use. */
+function SlugEditor({
+  host,
+  currentSlug,
+  value,
+  disabled,
+  checkSlug,
+  onChange,
+  errors,
+}: {
+  host: string
+  currentSlug: string
+  value: string
+  disabled: boolean
+  checkSlug: (slug: string) => Promise<boolean>
+  onChange: (slug: string) => void
+  errors: unknown[]
+}) {
+  const status = useSlugAvailability(value, currentSlug, checkSlug)
+  const problem = slugProblem(value)
+  const changed = value !== currentSlug
+  return (
+    <div className="flex flex-col gap-1.5">
+      <SlugField
+        label="URL"
+        prefix={`${host}/`}
+        value={value}
+        name="slug"
+        status={disabled ? "idle" : status}
+        disabled={disabled}
+        onChange={onChange}
+      />
+      {!disabled && problem ? <FieldDescription>{PROBLEM_TEXT[problem]}</FieldDescription> : null}
+      {!disabled && errors.length > 0 && !problem ? (
+        <FieldError>{messageOf(errors)}</FieldError>
+      ) : null}
+      {!disabled && changed && problem === null ? (
+        <FieldDescription>{slugChangeWarning(host, currentSlug)}</FieldDescription>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The availability of a slug as the field shows it. The current address is never checked (the server
+ * reports it as taken), and a check that fails shows nothing rather than a wrong answer.
+ */
+function useSlugAvailability(
+  value: string,
+  currentSlug: string,
+  checkSlug: (slug: string) => Promise<boolean>,
+): SlugStatus {
+  const [settled] = useDebouncedValue(value, { wait: 300 })
+  const [result, setResult] = useState<{ slug: string; available: boolean | null } | null>(null)
+
+  const checkable = settled !== currentSlug && settled.length > 0 && slugProblem(settled) === null
+
+  useEffect(() => {
+    if (!checkable) return
+    let live = true
+    checkSlug(settled)
+      .then((available) => {
+        if (live) setResult({ slug: settled, available })
+      })
+      .catch(() => {
+        if (live) setResult({ slug: settled, available: null })
+      })
+    return () => {
+      live = false
+    }
+  }, [checkable, settled, checkSlug])
+
+  if (value.length === 0 || value === currentSlug) return "idle"
+  if (slugProblem(value) !== null) return "invalid"
+  if (value !== settled) return "checking"
+  if (!checkable || result === null || result.slug !== settled) return "checking"
+  if (result.available === null) return "idle"
+  return result.available ? "available" : "taken"
+}
+
+function OwnerDangerZone({
+  organizationName,
+  counts,
+  admins,
+  soleOwner,
+  onTransfer,
+  onLeave,
+  onDelete,
+}: {
+  organizationName: string
+  counts: { members?: number; apiKeys?: number }
+  admins: { memberId: string; label: string }[]
+  soleOwner: boolean
+  onTransfer: (memberId: string) => Promise<void>
+  onLeave: () => Promise<void>
+  onDelete: () => Promise<void>
+}) {
+  return (
+    <DangerZone>
+      <TransferRow admins={admins} onTransfer={onTransfer} />
+      <DeleteRow organizationName={organizationName} counts={counts} onDelete={onDelete} />
+      <LeaveRow
+        organizationName={organizationName}
+        onLeave={onLeave}
+        disabled={soleOwner}
+        disabledReason="You are the only owner, so you can't leave yet. Transfer ownership to an admin first."
+      />
+    </DangerZone>
+  )
+}
+
+function TransferRow({
+  admins,
+  onTransfer,
+}: {
+  admins: { memberId: string; label: string }[]
+  onTransfer: (memberId: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [memberId, setMemberId] = useState(admins[0]?.memberId ?? "")
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const selectId = useId()
+  const chosen = admins.some((admin) => admin.memberId === memberId)
+    ? memberId
+    : (admins[0]?.memberId ?? "")
+
+  return (
+    <>
+      <DangerAction
+        label="Transfer…"
+        consequence="Make another admin the owner. You become an admin."
+        disabled={admins.length === 0}
+        disabledReason="Make another member an admin first, then transfer ownership to them."
+        onAction={() => {
+          setError(null)
+          setOpen(true)
+        }}
+      />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer ownership</DialogTitle>
+            <DialogDescription>
+              The new owner gets every owner permission, including deleting the organization. You
+              become an admin straight away.
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor={selectId}>New owner</FieldLabel>
+            <NativeSelect
+              id={selectId}
+              value={chosen}
+              onChange={(event) => setMemberId(event.currentTarget.value)}
+            >
+              {admins.map((admin) => (
+                <NativeSelectOption key={admin.memberId} value={admin.memberId}>
+                  {admin.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy || chosen === ""}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  await onTransfer(chosen)
+                  setOpen(false)
+                } catch (caught) {
+                  setError(
+                    caught instanceof Error
+                      ? `${caught.message} Try again to finish the transfer.`
+                      : "Could not transfer ownership. Try again.",
+                  )
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              {busy ? "Transferring…" : "Transfer ownership"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function DeleteRow({
+  organizationName,
+  counts,
+  onDelete,
+}: {
+  organizationName: string
+  counts: { members?: number; apiKeys?: number }
+  onDelete: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputId = useId()
+  const consequence = `Permanently deletes ${countOrPlaceholder(undefined)} agents, ${countOrPlaceholder(counts.apiKeys)} API keys (they stop working) and all run history, removes ${countOrPlaceholder(counts.members)} members, and cancels the subscription [PLACEHOLDER: billing is not built yet]. You'll type the organization name to confirm.`
+
+  return (
+    <>
+      <DangerAction
+        label="Delete organization"
+        consequence={consequence}
+        onAction={() => {
+          setTyped("")
+          setError(null)
+          setOpen(true)
+        }}
+      />
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {organizationName}?</AlertDialogTitle>
+            <AlertDialogDescription>{consequence}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Field>
+            <FieldLabel htmlFor={inputId}>Type {organizationName} to confirm</FieldLabel>
+            <Input
+              id={inputId}
+              value={typed}
+              autoComplete="off"
+              onChange={(event) => setTyped(event.currentTarget.value)}
+            />
+          </Field>
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={typed !== organizationName || busy}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  await onDelete()
+                } catch (caught) {
+                  setError(
+                    caught instanceof Error ? caught.message : "Could not delete the organization.",
+                  )
+                  setBusy(false)
+                }
+              }}
+            >
+              {busy ? "Deleting…" : "Delete organization"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+/** Leave the organization: the consequence, then a confirmation. Red outline, not the page's primary action. */
+function LeaveRow({
+  organizationName,
+  onLeave,
+  disabled = false,
+  disabledReason,
+}: {
+  organizationName: string
+  onLeave: () => Promise<void>
+  disabled?: boolean
+  disabledReason?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const consequence = `You'll lose access to ${organizationName} right away. An admin can invite you again.`
+  return (
+    <>
+      <DangerAction
+        label="Leave organization"
+        consequence={consequence}
+        disabled={disabled}
+        disabledReason={disabledReason}
+        onAction={() => {
+          setError(null)
+          setOpen(true)
+        }}
+      />
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave {organizationName}?</AlertDialogTitle>
+            <AlertDialogDescription>{consequence}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                setError(null)
+                try {
+                  await onLeave()
+                } catch (caught) {
+                  setError(
+                    caught instanceof Error ? caught.message : "Could not leave the organization.",
+                  )
+                  setBusy(false)
+                }
+              }}
+            >
+              {busy ? "Leaving…" : "Leave organization"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+function messageOf(errors: unknown[]): string {
+  const first = errors[0]
+  if (typeof first === "string") return first
+  if (first && typeof first === "object" && "message" in first) return String(first.message)
+  return "Check this field."
+}

@@ -29,7 +29,8 @@ describe.skipIf(!built)("prerendered shell (dist/index.html)", () => {
 
   it("keeps the document shell and its inline bootstrap", () => {
     expect(html).toMatch(/<html[\s>]/i)
-    expect(html).toMatch(/<script src="\/assets\/theme\.js"/)
+    // The theme boot script is inline (apps/api's CSP allows it by hash), not an /assets file.
+    expect(html).toMatch(/<script>(?:(?!<\/script>)[\s\S])*starter\.theme/)
   })
 })
 

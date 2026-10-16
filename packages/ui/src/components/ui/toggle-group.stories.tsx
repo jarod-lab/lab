@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ToggleGroupExample from "../toggle-group-example"
+import ToggleGroupExample from "../examples/toggle-group-example"
 import { ToggleGroup } from "./toggle-group"
 
 const meta = {

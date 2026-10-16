@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import AttachmentExample from "../attachment-example"
+import AttachmentExample from "../examples/attachment-example"
 import { Attachment } from "./attachment"
 
 const meta = {

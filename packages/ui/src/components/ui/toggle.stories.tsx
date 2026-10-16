@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ToggleExample from "../toggle-example"
+import ToggleExample from "../examples/toggle-example"
 import { Toggle } from "./toggle"
 
 const meta = {

@@ -30,9 +30,9 @@ const bubbleVariants = cva(
         outline:
           "*:data-[slot=bubble-content]:border-border *:data-[slot=bubble-content]:bg-background [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-input/30",
         ghost:
-          "border-none *:data-[slot=bubble-content]:rounded-none *:data-[slot=bubble-content]:bg-transparent *:data-[slot=bubble-content]:p-0 [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted/50",
+          "border-none *:data-[slot=bubble-content]:rounded-md *:data-[slot=bubble-content]:bg-transparent *:data-[slot=bubble-content]:p-0 [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted/50",
         destructive:
-          "*:data-[slot=bubble-content]:bg-destructive/10 *:data-[slot=bubble-content]:text-destructive dark:*:data-[slot=bubble-content]:bg-destructive/20 [&>[data-slot=bubble-content]:is(button,a):hover]:bg-destructive/20 dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-destructive/30",
+          "*:data-[slot=bubble-content]:border-destructive *:data-[slot=bubble-content]:bg-background *:data-[slot=bubble-content]:text-destructive [&>[data-slot=bubble-content]:is(button,a):hover]:bg-destructive/10",
       },
     },
     defaultVariants: {
@@ -67,7 +67,7 @@ function BubbleContent({ className, render, ...props }: useRender.ComponentProps
     props: mergeProps<"div">(
       {
         className: cn(
-          "w-fit max-w-full min-w-0 overflow-hidden rounded-none border border-transparent px-4 py-3 text-sm leading-relaxed wrap-break-word group-data-[align=end]/bubble:self-end [button]:text-left [button,a]:transition-colors [button,a]:outline-none [button,a]:focus-visible:border-ring [button,a]:focus-visible:ring-2 [button,a]:focus-visible:ring-ring/30",
+          "w-fit max-w-full min-w-0 overflow-hidden rounded-xl border border-transparent px-4 py-3 text-sm leading-relaxed wrap-break-word group-data-[align=end]/bubble:self-end [button]:text-left [button,a]:transition-colors [button,a]:outline-none [button,a]:focus-visible:border-ring [button,a]:focus-visible:ring-2 [button,a]:focus-visible:ring-ring",
           className,
         ),
       },
@@ -81,7 +81,7 @@ function BubbleContent({ className, render, ...props }: useRender.ComponentProps
 }
 
 const bubbleReactionsVariants = cva(
-  "absolute z-10 flex w-fit shrink-0 items-center justify-center gap-1 rounded-none bg-muted px-2 py-0.5 text-sm ring-3 ring-card has-[button]:p-0",
+  "absolute z-10 flex w-fit shrink-0 items-center justify-center gap-1 rounded-md bg-muted px-2 py-0.5 text-sm ring-3 ring-card has-[button]:p-0",
   {
     variants: {
       side: {

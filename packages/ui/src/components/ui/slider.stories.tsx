@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import SliderExample from "../slider-example"
+import SliderExample from "../examples/slider-example"
 import { Slider } from "./slider"
 
 const meta = {

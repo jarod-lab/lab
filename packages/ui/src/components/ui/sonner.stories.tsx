@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import SonnerExample from "../sonner-example"
+import SonnerExample from "../examples/sonner-example"
 import { Toaster } from "./sonner"
 
 const meta = {

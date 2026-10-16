@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ContextMenuExample from "../context-menu-example"
+import ContextMenuExample from "../examples/context-menu-example"
 import { ContextMenu } from "./context-menu"
 
 const meta = {

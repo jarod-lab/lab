@@ -48,7 +48,10 @@ function CommandDialog({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent
-        className={cn("top-1/3 translate-y-0 overflow-hidden p-0", className)}
+        className={cn(
+          "top-1/3 translate-y-0 overflow-hidden rounded-xl border-2 border-foreground p-0 shadow-none",
+          className,
+        )}
         showCloseButton={showCloseButton}
       >
         {children}
@@ -63,11 +66,11 @@ function CommandInput({
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div data-slot="command-input-wrapper" className="p-1">
-      <InputGroup className="border-transparent border-b-input bg-transparent px-3">
+      <InputGroup className="rounded-lg border-[1.5px] border-input bg-transparent px-3">
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full px-2 text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full px-2 text-sm outline-hidden disabled:cursor-not-allowed disabled:text-muted-foreground",
             className,
           )}
           {...props}
@@ -114,7 +117,7 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden p-1.5 text-foreground **:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:py-2 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase",
+        "overflow-hidden p-1.5 text-foreground **:[[cmdk-group-heading]]:px-2.5 **:[[cmdk-group-heading]]:py-2 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:text-muted-foreground",
         className,
       )}
       {...props}
@@ -129,7 +132,7 @@ function CommandSeparator({
   return (
     <CommandPrimitive.Separator
       data-slot="command-separator"
-      className={cn("-mx-1.5 my-1.5 h-px bg-border/50", className)}
+      className={cn("-mx-1.5 my-1.5 h-px bg-border", className)}
       {...props}
     />
   )
@@ -144,7 +147,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex cursor-default items-center gap-2 rounded-none px-3 py-2 text-sm outline-hidden select-none in-data-[slot=dialog-content]:rounded-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 data-selected:*:[svg]:text-foreground",
+        "group/command-item relative flex cursor-default items-center gap-2 min-h-9 rounded-md px-2.5 py-2 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:text-muted-foreground data-selected:bg-accent data-selected:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 data-selected:*:[svg]:text-accent-foreground",
         className,
       )}
       {...props}
@@ -160,7 +163,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
     <span
       data-slot="command-shortcut"
       className={cn(
-        "ml-auto text-xs tracking-widest text-muted-foreground group-data-selected/command-item:text-foreground",
+        "ml-auto text-xs text-muted-foreground group-data-selected/command-item:text-foreground",
         className,
       )}
       {...props}

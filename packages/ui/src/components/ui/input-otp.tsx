@@ -14,7 +14,7 @@ function InputOTP({
     <OTPInput
       data-slot="input-otp"
       containerClassName={cn(
-        "cn-input-otp flex items-center has-disabled:opacity-50",
+        "cn-input-otp flex items-center has-disabled:text-muted-foreground",
         containerClassName,
       )}
       spellCheck={false}
@@ -28,10 +28,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-otp-group"
-      className={cn(
-        "flex items-center gap-1 rounded-none has-aria-invalid:border-b-destructive dark:has-aria-invalid:border-b-destructive/50",
-        className,
-      )}
+      className={cn("flex items-center gap-2 has-aria-invalid:text-destructive", className)}
       {...props}
     />
   )
@@ -52,7 +49,7 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        "relative flex size-10 items-center justify-center border border-transparent border-b-input bg-transparent text-sm transition-[color,border-color] outline-none first:rounded-none last:rounded-none aria-invalid:border-b-destructive data-[active=true]:z-10 data-[active=true]:border-b-ring dark:aria-invalid:border-b-destructive/50",
+        "relative flex size-14 items-center justify-center rounded-lg border-[1.5px] border-input bg-transparent text-xl font-bold text-foreground transition-[color,border-color,box-shadow] outline-none aria-invalid:border-2 aria-invalid:border-destructive data-[active=true]:z-10 data-[active=true]:border-[2.5px] data-[active=true]:border-foreground data-[active=true]:shadow-[inset_0_-4px_0_var(--solar)]",
         className,
       )}
       {...props}

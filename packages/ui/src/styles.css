@@ -4,81 +4,99 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Light and dark tokens. The shadcn `neutral` values (registry for style base-sera) fill in the
-   card, popover, secondary, muted, accent, destructive, border, input, ring, chart and radius
-   tokens. Values this file already had are kept as the app set them, so they differ from the
-   registry: dark --primary (0.985 here, 0.922 upstream) and every sidebar token (hsl here, oklch
-   upstream). */
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+/* Light and dark tokens: the D+ design system ("lean core, budgeted lift"). Warm paper and ink,
+   system fonts, one accent. Text on every surface clears 7:1. `--input` is the muted ink rather
+   than the line colour so field borders keep 3:1 against the page. `--solar` is the only colour
+   accent, the same in both themes and always with dark text: it means "needs you" (badges,
+   counts, the current item's highlighter). `--success` is the done state; the hatch marks things
+   not done yet (an off switch, an empty progress track). */
+:root,
+.light {
+  --radius: 0.5rem;
+  --background: #fafaf7;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #fafaf7;
+  --secondary: #f2f2ec;
+  --secondary-foreground: #2e2e2e;
+  --muted: #f2f2ec;
+  --muted-foreground: #555555;
+  --accent: #ecece5;
+  --accent-foreground: #111111;
+  --destructive: #9e1a12;
+  --success: #1b5a31;
+  --solar: #ffd23f;
+  --solar-foreground: #111111;
+  --hatch: #cfcfc7;
+  --border: #d6d6cf;
+  --input: #555555;
+  --ring: #111111;
+  --chart-1: #111111;
+  --chart-2: #555555;
+  --chart-3: #8a8a84;
+  --chart-4: #b3b3ae;
+  --chart-5: #d6d6cf;
+  --sidebar: #fafaf7;
+  --sidebar-foreground: #2e2e2e;
+  --sidebar-primary: #111111;
+  --sidebar-primary-foreground: #fafaf7;
+  --sidebar-accent: #ecece5;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #d6d6cf;
+  --sidebar-ring: #111111;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --background: #0a0a0a;
+  --foreground: #f5f5f0;
+  --card: #141414;
+  --card-foreground: #f5f5f0;
+  --popover: #141414;
+  --popover-foreground: #f5f5f0;
+  --primary: #f5f5f0;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1c1c1a;
+  --secondary-foreground: #dadad4;
+  --muted: #1c1c1a;
+  --muted-foreground: #b3b3ae;
+  --accent: #242422;
+  --accent-foreground: #f5f5f0;
+  --destructive: #ff8a80;
+  --success: #86d6a2;
+  --hatch: #3a3a36;
+  --border: #2e2e2b;
+  --input: #b3b3ae;
+  --ring: #f5f5f0;
+  --chart-1: #f5f5f0;
+  --chart-2: #b3b3ae;
+  --chart-3: #8a8a84;
+  --chart-4: #55554f;
+  --chart-5: #2e2e2b;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #dadad4;
+  --sidebar-primary: #f5f5f0;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #242422;
+  --sidebar-accent-foreground: #f5f5f0;
+  --sidebar-border: #2e2e2b;
+  --sidebar-ring: #f5f5f0;
 }
 
 @theme inline {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-success: var(--success);
+  --color-solar: var(--solar);
+  --color-solar-foreground: var(--solar-foreground);
+  --color-hatch: var(--hatch);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -119,6 +137,72 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground;
   }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* The two budgeted lifts that need more than a utility: the highlighter under the current item
+   and the hatch for "not done yet". */
+@utility highlight {
+  background-image: linear-gradient(transparent 58%, var(--solar) 58%);
+  .dark & {
+    background-image: linear-gradient(transparent 84%, var(--solar) 84%);
+  }
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(135deg, var(--hatch) 0 1.5px, transparent 1.5px 6px);
+}
+
+/* Type scale from the D+ board (system-ui, no downloads). */
+@utility type-display {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+@utility type-h1 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+@utility type-h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+@utility type-h3 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+@utility type-body {
+  font-size: 15px;
+  line-height: 1.5;
+}
+@utility type-small {
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+@utility type-mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+/* Section labels ("COLOR TOKENS", "● NEEDS YOUR APPROVAL"): write the text in capitals. */
+@utility type-eyebrow {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
 }

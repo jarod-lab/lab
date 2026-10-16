@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import InputOTPExample from "../input-otp-example"
+import InputOTPExample from "../examples/input-otp-example"
 import { InputOTP } from "./input-otp"
 
 const meta = {

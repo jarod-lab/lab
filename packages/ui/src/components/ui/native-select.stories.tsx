@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import NativeSelectExample from "../native-select-example"
+import NativeSelectExample from "../examples/native-select-example"
 import { NativeSelect } from "./native-select"
 
 const meta = {

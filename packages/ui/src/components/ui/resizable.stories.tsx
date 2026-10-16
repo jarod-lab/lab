@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ResizableExample from "../resizable-example"
+import ResizableExample from "../examples/resizable-example"
 import { ResizableHandle } from "./resizable"
 
 const meta = {

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import AccordionExample from "../accordion-example"
+import AccordionExample from "../examples/accordion-example"
 import { Accordion } from "./accordion"
 
 const meta = {

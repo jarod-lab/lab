@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import DropdownMenuExample from "../dropdown-menu-example"
+import DropdownMenuExample from "../examples/dropdown-menu-example"
 import { DropdownMenu } from "./dropdown-menu"
 
 const meta = {

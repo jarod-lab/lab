@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import SelectExample from "../select-example"
+import SelectExample from "../examples/select-example"
 import { Select } from "./select"
 
 const meta = {

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import CommandExample from "../command-example"
+import CommandExample from "../examples/command-example"
 import { Command } from "./command"
 
 const meta = {

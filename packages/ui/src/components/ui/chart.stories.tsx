@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ChartExample from "../chart-example"
+import ChartExample from "../examples/chart-example"
 import { ChartContainer } from "./chart"
 
 const meta = {

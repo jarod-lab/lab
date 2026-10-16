@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import PaginationExample from "../pagination-example"
+import PaginationExample from "../examples/pagination-example"
 import { Pagination } from "./pagination"
 
 const meta = {

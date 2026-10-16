@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import EmptyExample from "../empty-example"
+import EmptyExample from "../examples/empty-example"
 import { Empty } from "./empty"
 
 const meta = {

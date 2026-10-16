@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import DrawerExample from "../drawer-example"
+import DrawerExample from "../examples/drawer-example"
 import { Drawer } from "./drawer"
 
 const meta = {

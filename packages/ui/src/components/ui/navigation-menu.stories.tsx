@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import NavigationMenuExample from "../navigation-menu-example"
+import NavigationMenuExample from "../examples/navigation-menu-example"
 import { NavigationMenu } from "./navigation-menu"
 
 const meta = {

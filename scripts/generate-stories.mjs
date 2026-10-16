@@ -2,12 +2,26 @@
 // Generates a Storybook story for every shadcn example in packages/ui that has none.
 //   cd packages/ui && npx shadcn@latest add <name>-example --overwrite   # then
 //   pnpm stories
-// Existing *.stories.tsx files are never overwritten.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+// shadcn writes examples into src/components/; this moves them into src/components/examples/
+// first. Existing *.stories.tsx files are never overwritten.
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-const root = join(import.meta.dirname, "..", "packages", "ui", "src", "components")
-const uiDir = join(root, "ui")
+const components = join(import.meta.dirname, "..", "packages", "ui", "src", "components")
+const root = join(components, "examples")
+const uiDir = join(components, "ui")
+
+// Demos and their helpers land beside ui/ when shadcn installs them; they live in examples/.
+const isDemo = (f) =>
+  f.endsWith("-example.tsx") || f === "example.tsx" || f === "example-compat.tsx"
+const moved = []
+for (const file of readdirSync(components).filter(isDemo)) {
+  const target = join(root, file)
+  // A fresh copy of a helper we already keep (example.tsx) replaces nothing: ours is patched.
+  if (!file.endsWith("-example.tsx") && existsSync(target)) rmSync(join(components, file))
+  else renameSync(join(components, file), target)
+  moved.push(file)
+}
 
 const pascal = (kebab) =>
   kebab
@@ -47,9 +61,14 @@ const SKIP = new Set(["message", "message-scroller"])
 const IMPORT_SWAPS = [
   [
     'import Image from "next/image"',
-    'import { Image } from "@starter/ui/components/example-compat"',
+    'import { Image } from "@starter/ui/components/examples/example-compat"',
   ],
-  ['import Link from "next/link"', 'import { Link } from "@starter/ui/components/example-compat"'],
+  [
+    'import Link from "next/link"',
+    'import { Link } from "@starter/ui/components/examples/example-compat"',
+  ],
+  // shadcn imports its wrapper from the components alias; ours lives in examples/.
+  ['"@starter/ui/components/example"', '"@starter/ui/components/examples/example"'],
 ]
 
 // Exact-string fixes for strict-mode errors in upstream demos (noUncheckedIndexedAccess).
@@ -106,7 +125,7 @@ for (const file of readdirSync(root).filter((f) => f.endsWith("-example.tsx"))) 
   writeFileSync(
     storyPath,
     `import type { Meta, StoryObj } from "@storybook/react-vite"
-import ${example} from "../${name}-example"
+import ${example} from "../examples/${name}-example"
 import { ${component} } from "./${name}"
 
 const meta = {
@@ -125,5 +144,6 @@ export const Examples: StoryObj = {
   written++
 }
 
+if (moved.length) console.log(`Moved into examples/: ${moved.join(", ")}`)
 console.log(`Wrote ${written} stories.`)
 if (skipped.length) console.log(`Skipped:\n  ${skipped.join("\n  ")}`)

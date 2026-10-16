@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import KbdExample from "../kbd-example"
+import KbdExample from "../examples/kbd-example"
 import { Kbd } from "./kbd"
 
 const meta = {

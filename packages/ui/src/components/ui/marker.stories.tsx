@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import MarkerExamples from "../marker-example"
+import MarkerExamples from "../examples/marker-example"
 import { Marker } from "./marker"
 
 const meta = {

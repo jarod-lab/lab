@@ -13,14 +13,14 @@ function Switch({
       data-slot="switch"
       data-size={size}
       className={cn(
-        "peer group/switch relative inline-flex shrink-0 items-center rounded-none border transition-all outline-none group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-[size=default]:h-4.5 data-[size=default]:w-8.25 data-[size=sm]:h-3.5 data-[size=sm]:w-6.25 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary group-has-[:focus-visible]/field-label:data-checked:border-primary data-unchecked:border-input/50 data-unchecked:bg-input group-has-[:focus-visible]/field-label:data-unchecked:border-input/50 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        "peer group/switch relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-foreground p-0.5 transition-all outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:border-destructive data-[size=default]:h-7 data-[size=default]:w-12 data-[size=sm]:h-5 data-[size=sm]:w-8.5 data-checked:bg-foreground data-unchecked:hatch data-disabled:cursor-not-allowed data-disabled:border-dashed data-disabled:border-muted-foreground",
         className,
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="pointer-events-none block bg-background ring-0 transition-transform group-data-[size=default]/switch:size-3.5 group-data-[size=sm]/switch:size-2.5 data-checked:translate-x-[calc(100%+2px)] dark:data-checked:bg-primary-foreground data-unchecked:translate-x-0.25 dark:data-unchecked:bg-foreground"
+        className="pointer-events-none block rounded-full transition-transform group-data-[size=default]/switch:size-[18px] group-data-[size=sm]/switch:size-3 data-checked:translate-x-5 data-checked:bg-background group-data-[size=sm]/switch:data-checked:translate-x-3.5 data-unchecked:translate-x-0 data-unchecked:bg-foreground group-data-disabled/switch:bg-muted-foreground"
       />
     </SwitchPrimitive.Root>
   )

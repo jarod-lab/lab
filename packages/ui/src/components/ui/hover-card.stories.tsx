@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import HoverCardExample from "../hover-card-example"
+import HoverCardExample from "../examples/hover-card-example"
 import { HoverCard } from "./hover-card"
 
 const meta = {

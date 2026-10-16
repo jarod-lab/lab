@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import DialogExample from "../dialog-example"
+import DialogExample from "../examples/dialog-example"
 import { Dialog } from "./dialog"
 
 const meta = {

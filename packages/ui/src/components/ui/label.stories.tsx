@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import LabelExample from "../label-example"
+import LabelExample from "../examples/label-example"
 import { Label } from "./label"
 
 const meta = {

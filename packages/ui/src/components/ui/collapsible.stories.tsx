@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import CollapsibleExample from "../collapsible-example"
+import CollapsibleExample from "../examples/collapsible-example"
 import { Collapsible } from "./collapsible"
 
 const meta = {

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import ComboboxExample from "../combobox-example"
+import ComboboxExample from "../examples/combobox-example"
 import { Combobox } from "./combobox"
 
 const meta = {

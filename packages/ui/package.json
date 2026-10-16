@@ -9,6 +9,7 @@
     "./components/*": "./src/components/*.tsx",
     "./components/ui/*": "./src/components/ui/*.tsx",
     "./hooks/*": "./src/hooks/*.ts",
+    "./dplus/*": "./src/dplus/*.tsx",
     "./a11y": "./src/a11y.ts"
   },
   "scripts": {

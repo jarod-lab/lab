@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import FieldExample from "../field-example"
+import FieldExample from "../examples/field-example"
 import { Field } from "./field"
 
 const meta = {

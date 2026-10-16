@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import CarouselExample from "../carousel-example"
+import CarouselExample from "../examples/carousel-example"
 import { Carousel } from "./carousel"
 
 const meta = {

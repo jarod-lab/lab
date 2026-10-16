@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import PopoverExample from "../popover-example"
+import PopoverExample from "../examples/popover-example"
 import { Popover } from "./popover"
 
 const meta = {

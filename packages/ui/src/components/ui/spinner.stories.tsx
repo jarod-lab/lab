@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import SpinnerExample from "../spinner-example"
+import SpinnerExample from "../examples/spinner-example"
 import { Spinner } from "./spinner"
 
 const meta = {

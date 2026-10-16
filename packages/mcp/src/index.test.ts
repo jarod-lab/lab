@@ -144,6 +144,26 @@ describe("createMcpHandler", () => {
   })
 })
 
+describe("malformed tools/call", () => {
+  it("answers -32602 (invalid params), not an internal error", async () => {
+    const call = (params: unknown) =>
+      setup(full)(
+        new Request(URL_, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params }),
+        }),
+      )
+    for (const params of [undefined, { arguments: {} }, { name: 42 }]) {
+      const body = (await (await call(params)).json()) as { error?: { code: number } }
+      expect(body.error?.code, JSON.stringify(params)).toBe(-32602)
+    }
+  })
+})
+
 describe("toTool", () => {
   it("maps hints to MCP annotations", () => {
     expect(toTool(whoami).annotations).toMatchObject({ readOnlyHint: true, title: "Who am I" })

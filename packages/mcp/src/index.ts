@@ -1,6 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import {
+  type CallToolRequest,
   CallToolRequestSchema,
   type CallToolResult,
   ErrorCode,
@@ -36,6 +37,12 @@ export interface McpHandlerOptions {
 }
 
 const canCall = (op: AnyOperation, caller: Caller) => allowed(caller.grants, op.permissions)
+
+/**
+ * tools/call with params left to the SDK's own check. Registered with the strict schema, a malformed
+ * call fails the registration's parse first and comes back as -32603 (internal error) instead.
+ */
+const LooseCallToolRequestSchema = CallToolRequestSchema.extend({ params: z.unknown().optional() })
 
 /** Writes (non-readOnly operations) take an optional `idempotencyKey` argument; the server strips it. */
 const IDEMPOTENCY_ARG = "idempotencyKey"
@@ -141,7 +148,9 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
   )
   const visible = opts.operations.filter((op) => canCall(op, caller))
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
-  server.setRequestHandler(CallToolRequestSchema, (req) => {
+  server.setRequestHandler(LooseCallToolRequestSchema, (loose) => {
+    // The SDK validates the strict schema itself, as invalid params (-32602), before this runs.
+    const req = loose as CallToolRequest
     // Hidden tools are still callable by name: invoke refuses them with FORBIDDEN and a hint naming
     // the scope or permission that would allow it, which is more use to an agent than "unknown".
     // The operation list is public anyway (openapi.json, llms.txt).

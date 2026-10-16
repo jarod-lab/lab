@@ -127,6 +127,28 @@ describe("login", () => {
     })
   })
 
+  it("keeps polling through a dropped connection or a 5xx while the person approves", async () => {
+    const { api, run } = harness
+    const real = api.fetch
+    let dropped = false
+    api.fetch = async (request) => {
+      if (!dropped && new URL(request.url).pathname === "/api/auth/oauth2/token") {
+        dropped = true
+        throw new TypeError("fetch failed")
+      }
+      return real(request)
+    }
+    api.tokenPolls = [
+      { status: 503, body: { error: "server_error" } },
+      { status: 400, body: { error: "authorization_pending" } },
+      { status: 200, body: TOKENS },
+    ]
+    const result = await run(["login"])
+
+    expect(result.code, result.stderr).toBe(0)
+    expect((await harness.creds()).profiles[BASE]).toMatchObject({ accessToken: "at_1" })
+  })
+
   it("stores the credentials owner-only (0600)", async () => {
     await harness.run(["login"])
     const mode = (await stat(credentialsPath({ STARTER_CONFIG_DIR: harness.dir }))).mode & 0o777
@@ -323,6 +345,18 @@ describe("whoami and authentication", () => {
       status: 400,
       error: { code: "SESSION_EXPIRED", hint: "Run starter login again." },
     })
+  })
+
+  it("does not call an unavailable server an expired session", async () => {
+    await storeLogin(harness.dir, Date.now() - 1000)
+    harness.api.refreshReply = { status: 503, body: { error: "server_error" } }
+    const result = await harness.run(["whoami"])
+    expect(result.code).toBe(1)
+    const failure = errorOf(result.stderr) as { status: number; error: { code: string } }
+    expect(failure.status).toBe(503)
+    expect(failure.error.code).not.toBe("SESSION_EXPIRED")
+    // The saved refresh token is still good, so it stays.
+    expect((await harness.creds()).profiles[BASE]).toMatchObject({ refreshToken: "rt_1" })
   })
 
   it("refuses to call the API with no login and no key", async () => {

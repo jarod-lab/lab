@@ -167,7 +167,8 @@ export async function requestDeviceCode(
 
 /**
  * Polls the token endpoint until the person approves, honouring the interval the server gave and
- * backing off on slow_down. Fails when the person refuses or the code expires.
+ * backing off on slow_down. A dropped connection or a 5xx counts as still pending. Fails when the
+ * person refuses or the code expires.
  */
 export async function pollForTokens(
   baseUrl: string,
@@ -191,7 +192,12 @@ export async function pollForTokens(
       grant_type: DEVICE_GRANT,
       device_code: device.deviceCode,
       client_id: clientId,
+    }).catch((e: unknown) => {
+      // A dropped connection mid-wait is not a refusal: poll again until the code expires.
+      if (e instanceof StarterError && e.code === "NETWORK_ERROR") return undefined
+      throw e
     })
+    if (!res || res.status >= 500) continue
     if (res.ok) return tokenSetFrom(res.body, deps.now())
     switch (str(res.body.error)) {
       case "authorization_pending":
@@ -230,6 +236,10 @@ export async function refreshTokens(
     refresh_token: profile.refreshToken,
     client_id: profile.clientId,
   })
+  // Only a client error means the refresh token is no good; a 5xx or 429 is the server's trouble.
+  if (!res.ok && (res.status >= 500 || res.status === 429)) {
+    throw failure(res.status, res.body, "The saved session could not be refreshed right now")
+  }
   if (!res.ok) {
     throw new StarterError({
       status: res.status,

@@ -12,6 +12,10 @@ export const statements = {
   ...defaultStatements,
   apiKey: ["create", "read", "update", "delete"],
   project: ["create", "read", "update", "delete"],
+  // Owner only (see roles): single sign-on providers, SCIM provisioning tokens and the subscription.
+  sso: ["read", "update"],
+  scim: ["create"],
+  subscription: ["read", "update"],
 } as const
 
 export type Catalog = typeof statements
@@ -21,13 +25,20 @@ const all = Object.fromEntries(
   Object.entries(statements).map(([resource, actions]) => [resource, [...actions]]),
 ) as { -readonly [R in keyof Catalog]: Catalog[R][number][] }
 
+/** Resources only the owner role holds: the admin role is built without them. */
+const OWNER_ONLY = ["sso", "scim", "subscription"] as const
+
+const adminStatements = Object.fromEntries(
+  Object.entries(all).filter(([resource]) => !(OWNER_ONLY as readonly string[]).includes(resource)),
+) as typeof all
+
 /**
  * Fixed roles. To let organizations define their own, enable the organization plugin's
  * `dynamicAccessControl` and resolve roles through `rolePermissions` in ./permissions.
  */
 export const roles = {
   owner: ac.newRole(all),
-  admin: ac.newRole({ ...all, organization: ["update"] }),
+  admin: ac.newRole({ ...adminStatements, organization: ["update"] }),
   member: ac.newRole({
     ac: ["read"],
     apiKey: ["read"],

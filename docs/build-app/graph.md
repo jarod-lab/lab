@@ -94,3 +94,14 @@ then the node's report. Failed gate → back to the node with the evidence, thre
 
 ## Learning rules (append as nodes pass)
 
+- L1 (N0): React ships `__REACT_DEVTOOLS_GLOBAL_HOOK__`; gate devtools on TanStack names. Devtools are gated by
+  `import.meta.env.DEV && MODE !== "test"`.
+- L2 (N0): apps/api `static.ts` `PAGE_PATHS` is an allowlist; every new web route needs an entry (N5 adds
+  `/:org/...` with a slug regex + reserved list, and a test deriving paths from the route tree).
+- L3 (E0): e2e can't emulate dark mode or WebAuthn; override `matchMedia` via init scripts; email needs an
+  env-gated dev mail sink under `/api/dev/mail`; screenshots are withheld after a secret fill, so visual checks
+  sign in with `fetch` + `setCookies`. Ctrl+K must work as well as ⌘K.
+- L4 (N4): fixtures must not look like real secrets (gitleaks flags `sk_live_<hex>`); use masked values like `sk_••••3f9a`. Base UI menus: run a11y on a snapshot before cleanup; cmdk in jsdom needs ResizeObserver/scrollIntoView stubs.
+- L5 (N5): never run two vitest processes at once (PGlite hangs); scope `biome format` to your own paths while
+  other nodes are mid-edit; theme boot script is inline (`src/theme-boot.js?raw`, CSP hash) — never put
+  un-hashed files under `/assets` (immutable cache).

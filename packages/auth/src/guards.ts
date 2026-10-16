@@ -14,6 +14,13 @@ export const IMPERSONATION_REFUSED_PATHS = [
   "/device/approve",
   "/api-key/create",
   "/api-key/update",
+  // Owner-only SSO and SCIM (owner-only.ts): an impersonating admin can't change who signs in.
+  "/sso/register",
+  "/sso/update-provider",
+  "/sso/delete-provider",
+  "/sso/request-domain-verification",
+  "/sso/verify-domain",
+  "/scim/generate-token",
 ] as const
 
 export const impersonationGuard = {

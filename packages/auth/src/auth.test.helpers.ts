@@ -6,14 +6,32 @@ import { firstMembership } from "./membership"
 export const BASE = "http://localhost:3000"
 export const AUDIENCE = `${BASE}/mcp`
 
+/** An auth email as the fake SES client received it: who it's for and its first link to the app. */
+export interface SentMail {
+  to: string
+  link: string
+}
+
 export async function createTestAuth() {
   const t = await createTestDb()
+  // Stands in for SES: records who each auth email is for and the first link in it.
+  const outbox: SentMail[] = []
+  const ses = {
+    send: async (command: { input: unknown }) => {
+      const raw = JSON.stringify(command.input)
+      const to = (command.input as { Destination?: { ToAddresses?: string[] } }).Destination
+      const link = (raw.match(/https?:\/\/[^"\s<>\\]+/g) ?? []).find((l) => l.startsWith(BASE))
+      outbox.push({ to: to?.ToAddresses?.[0] ?? "", link: (link ?? "").replaceAll("&amp;", "&") })
+      return { MessageId: `test-${outbox.length}`, $metadata: { requestId: "test" } }
+    },
+  }
   const auth = createAuth({
     db: t.db,
     secret: "a-test-secret-that-is-long-enough-123456", // gitleaks:allow
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, AUDIENCE],
+    ses: { client: ses },
   })
   let n = 0
 
@@ -39,5 +57,5 @@ export async function createTestAuth() {
   const setActive = (cookie: string, organizationId: string) =>
     auth.api.setActiveOrganization({ headers: new Headers({ cookie }), body: { organizationId } })
 
-  return { auth, signUp, addMember, setActive, close: t.close }
+  return { auth, signUp, addMember, setActive, outbox, close: t.close }
 }

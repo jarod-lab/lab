@@ -39,9 +39,38 @@ export const env = createEnv({
     API_URL: z.url().optional(),
     /** e2e only: the model credential the e2e tester (`pnpm e2e`) uses for its agent steps. */
     AI_GATEWAY_API_KEY: z.string().min(1).optional(),
+    NODE_ENV: z.enum(["development", "test", "production"]).optional(),
+    /**
+     * Dev and e2e only: keep auth emails in memory instead of sending them, readable at
+     * GET /api/dev/mail. Refused when NODE_ENV is production (checked below).
+     */
+    DEV_MAIL_SINK: z.stringbool().optional(),
+    /** Stripe, test mode only: the key must be an sk_test_ key (checked below, with a clear message). */
+    STRIPE_SECRET_KEY: z.string().min(1).optional(),
+    /** The signing secret of the Stripe webhook endpoint (whsec_...). Needed with STRIPE_SECRET_KEY. */
+    STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+    /**
+     * The plans billing offers, as JSON: `[{"name":"pro","priceId":"price_..."}]`. Price ids come from
+     * your Stripe test dashboard; none are made up here. Unset, no plans are offered.
+     */
+    STRIPE_PLANS: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   // Only an explicit yes: "false" or "0" must not turn validation off.
   skipValidation: ["1", "true"].includes(String(process.env.SKIP_ENV_VALIDATION).toLowerCase()),
   emptyStringAsUndefined: true,
 })
+
+// A mail sink holds real addresses and tokens in memory, so it must never run in production.
+if (env.DEV_MAIL_SINK && env.NODE_ENV === "production") {
+  throw new Error(
+    "DEV_MAIL_SINK is for development and e2e only. Unset it when NODE_ENV=production.",
+  )
+}
+
+// Billing runs in Stripe test mode only: a live key is refused here, before anything is charged.
+if (env.STRIPE_SECRET_KEY && !env.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
+  throw new Error(
+    "STRIPE_SECRET_KEY must be a Stripe test-mode key (sk_test_...). Live keys are refused by this app.",
+  )
+}

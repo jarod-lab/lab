@@ -50,6 +50,10 @@ export const OAUTH_EXCLUDED: Permissions = {
   organization: ["delete"],
   ac: ["create", "read", "update", "delete"],
   team: ["create", "update", "delete"],
+  // Owner-only: an agent never sets up SSO, mints SCIM tokens or changes the subscription.
+  sso: ["read", "update"],
+  scim: ["create"],
+  subscription: ["read", "update"],
 }
 
 /** What a set of granted OAuth scopes allows (unknown scopes such as `openid` allow nothing). */

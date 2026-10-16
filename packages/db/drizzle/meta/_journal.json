@@ -36,6 +36,13 @@
       "when": 1792188685672,
       "tag": "0004_auth_plugins",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792190711024,
+      "tag": "0005_sso_scim_stripe",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,7 @@ import { type Context, Hono } from "hono"
 
 import { BEARER_PATHS, bearerCors } from "./cors"
 import type { ApiHooks } from "./hooks"
+import { type DevMailSink, devMailRoute } from "./dev-mail"
 import { mountWeb } from "./static"
 import { REST_ONLY_OPERATIONS, signupInput } from "./operations"
 
@@ -63,6 +64,11 @@ export interface AppOptions {
    * is no /status. `fetch` is for tests.
    */
   status?: { providers: readonly StatusProvider[]; fetch?: StatusOptions["fetch"] }
+  /**
+   * Dev and e2e only: the in-memory mail sink the auth emails go to (dev-mail.ts). Unset, there is no
+   * /api/dev/mail route at all.
+   */
+  devMail?: DevMailSink
 }
 
 /** Operations that take no credential. Everything else needs an API key or OAuth token. */
@@ -256,6 +262,9 @@ export function createApp(opts: AppOptions) {
     if (accept.includes("text/html")) return c.redirect("/llms.txt")
     return markdown(llms)()
   })
+
+  // Dev and e2e only: the captured auth emails. Not mounted unless a sink was passed (DEV_MAIL_SINK).
+  if (opts.devMail) app.get("/api/dev/mail", devMailRoute(opts.devMail))
 
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))

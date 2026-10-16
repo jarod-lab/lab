@@ -72,4 +72,53 @@ describe("env", () => {
       TRUST_PROXY: true,
     })
   })
+
+  describe("dev mail sink and Stripe (both optional)", () => {
+    const base = () => {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+      vi.stubEnv("SKIP_ENV_VALIDATION", "")
+      vi.stubEnv("DATABASE_URL", "postgres://u:p@localhost:5432/db")
+      vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
+      vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
+      vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+    }
+
+    it("leaves the dev mail sink and billing off when unset", async () => {
+      base()
+      const { env } = await import("./index")
+      expect(env.DEV_MAIL_SINK).toBeUndefined()
+      expect(env.STRIPE_SECRET_KEY).toBeUndefined()
+    })
+
+    it("allows the dev mail sink outside production", async () => {
+      base()
+      vi.stubEnv("NODE_ENV", "development")
+      vi.stubEnv("DEV_MAIL_SINK", "true")
+      const { env } = await import("./index")
+      expect(env.DEV_MAIL_SINK).toBe(true)
+    })
+
+    it("refuses the dev mail sink when NODE_ENV is production", async () => {
+      base()
+      vi.stubEnv("NODE_ENV", "production")
+      vi.stubEnv("DEV_MAIL_SINK", "true")
+      await expect(import("./index")).rejects.toThrow(
+        /DEV_MAIL_SINK is for development and e2e only/,
+      )
+    })
+
+    it("accepts a Stripe test-mode key", async () => {
+      base()
+      vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_placeholder") // gitleaks:allow
+      const { env } = await import("./index")
+      expect(env.STRIPE_SECRET_KEY).toBe("sk_test_placeholder") // gitleaks:allow
+    })
+
+    it("refuses a Stripe live-mode key at startup, with the reason", async () => {
+      base()
+      vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_placeholder") // gitleaks:allow
+      await expect(import("./index")).rejects.toThrow(/must be a Stripe test-mode key \(sk_test_/)
+    })
+  })
 })

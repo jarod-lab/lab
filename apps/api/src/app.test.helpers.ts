@@ -9,6 +9,7 @@ import { createTestDb } from "@starter/db/testing"
 import { type Logger, createLogger } from "@starter/logger"
 import { type AppOptions, createApp } from "./app"
 import { createApiHooks } from "./hooks"
+import { createDevMailSink } from "./dev-mail"
 import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
 
@@ -40,6 +41,10 @@ export interface TestAppOptions {
   /** GitHub and Google sign-in, when a test wants those buttons. */
   github?: { clientId: string; clientSecret: string }
   google?: { clientId: string; clientSecret: string }
+  /** Mount GET /api/dev/mail, with auth emails going to the dev mail sink instead of the fake SES. */
+  devMail?: boolean
+  /** Stripe test mode, with these plans (see auth's stripe option). Unset, billing is not mounted. */
+  stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
 }
 
 export async function createTestApp(
@@ -62,13 +67,15 @@ export async function createTestApp(
       return { MessageId: `test-${outbox.length}`, $metadata: { requestId: "test" } }
     },
   }
+  const devMail = options.devMail ? createDevMailSink() : undefined
   const auth = createAuth({
     db: t.db,
     secret: SECRET,
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, `${BASE}/mcp`],
-    ses: { client: ses },
+    ses: { client: devMail?.client ?? ses },
+    stripe: options.stripe,
     // Senders swallow failures; a test must not pass because an email silently failed.
     onEmailError: (error) => {
       throw error
@@ -87,6 +94,7 @@ export async function createTestApp(
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
     status: options.status,
+    devMail,
     auth,
     operations,
     baseURL: BASE,
@@ -182,6 +190,7 @@ export async function createTestApp(
     readKey,
     otherKey,
     outbox,
+    devMail,
     db: t.db,
     close: t.close,
   }

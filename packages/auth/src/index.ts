@@ -1,10 +1,14 @@
 import { apiKey } from "@better-auth/api-key"
 import { oauthProvider } from "@better-auth/oauth-provider"
 import { passkey } from "@better-auth/passkey"
+import { scim } from "@better-auth/scim"
+import { sso } from "@better-auth/sso"
+import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { wraps } from "@wraps.dev/better-auth"
-import { betterAuth } from "better-auth"
+import Stripe from "stripe"
+import { type DBTransactionAdapter, betterAuth, getCurrentAdapter } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { APIError, createAuthMiddleware } from "better-auth/api"
 import {
@@ -21,15 +25,24 @@ import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { impersonationGuard } from "./guards"
 import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
 import { type Adapter, findMember, firstMembership, personalOrganization } from "./membership"
+import { ownerOnlyGuard, ownsBilling } from "./owner-only"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
+import { twoFactorMagicLink } from "./magic-link-two-factor"
 import { resumeMagicLinkAuthorization } from "./resume"
 import { endProvisionalKeys, registerSignupDatabase } from "./signup"
+import {
+  type ScimConnection,
+  type ScimConnectionInput,
+  scimCredentialHashSecret,
+  scimTokenPlugin,
+} from "./scim-token"
 
 export { DEVICE_VERIFICATION_PATH } from "./device"
 export { IMPERSONATION_REFUSED_PATHS } from "./guards"
 export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
 export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
+export { parseStripePlans, type StripePlanConfig } from "./stripe-plans"
 
 /** Where better-auth's routes are mounted; the OAuth issuer is `${baseURL}${AUTH_BASE_PATH}`. */
 export const AUTH_BASE_PATH = "/api/auth"
@@ -101,6 +114,12 @@ export interface AuthOptions {
    * Off by default so tests make no network calls; server.ts turns it on.
    */
   passwordBreachCheck?: boolean
+  /**
+   * Stripe billing, in test mode only: the secret key must be an `sk_test_` key (a live key is refused
+   * here and in packages/env). Unset, the stripe plugin is not mounted at all. Plans are the app's own
+   * (price ids from the Stripe test dashboard); none are invented. No plans means no subscriptions.
+   */
+  stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
 }
 
 const refuseReservedSlug = (slug: string) => {
@@ -113,11 +132,21 @@ const refuseReservedSlug = (slug: string) => {
 }
 
 export function createAuth(opts: AuthOptions) {
+  if (opts.stripe && !opts.stripe.secretKey.startsWith("sk_test_")) {
+    throw new Error("Stripe is test mode only: the secret key must start with sk_test_.")
+  }
+  // The SCIM plugin's managed-connection endpoint is server-only; it is called on the instance built below.
+  const scimApi: { connect?: (input: ScimConnectionInput) => Promise<ScimConnection> } = {}
+
   // Callbacks below run after construction and need the adapter, so they read it from this ref.
   const ref: { context?: Promise<{ adapter: Adapter }> } = {}
+  // Inside a better-auth transaction (native transactions are on, for the scim plugin) this is the
+  // transaction's adapter: a query on the outer one would wait on the transaction it's inside of.
   const adapter = async (): Promise<Adapter> => {
     if (!ref.context) throw new Error("auth is not initialised")
-    return (await ref.context).adapter
+    // better-auth types the outer adapter as a transaction adapter; ours is the narrower Pick of it.
+    const outer = (await ref.context).adapter as DBTransactionAdapter
+    return (await getCurrentAdapter(outer)) as Adapter
   }
 
   // Auth emails go through the user's own SES via Wraps. The plugin fills in better-auth's top-level
@@ -139,7 +168,8 @@ export function createAuth(opts: AuthOptions) {
     secret: opts.secret,
     baseURL: opts.baseURL,
     basePath: AUTH_BASE_PATH,
-    database: drizzleAdapter(opts.db, { provider: "pg", schema }),
+    // Native transactions: the scim plugin refuses an adapter without them (SCIM writes are atomic).
+    database: drizzleAdapter(opts.db, { provider: "pg", schema, transaction: true }),
     // A reset means the password may be compromised: sign out every session, not just future ones.
     emailAndPassword: {
       enabled: true,
@@ -216,9 +246,24 @@ export function createAuth(opts: AuthOptions) {
       twoFactor({ issuer: opts.appName ?? "Starter" }),
       // Sign-in links; the wraps plugin sends them through the same SES path as other auth emails.
       magicLink({ sendMagicLink: wrapsPlugin.emails.magicLink }),
+      // A link proves the mailbox, not the second factor: a user with two-factor on gets the code next.
+      twoFactorMagicLink({ baseURL: opts.baseURL }),
       // Platform admins: a user whose `role` is "admin". Impersonation is limited by impersonationGuard.
       admin({ adminRoles: ["admin"], defaultRole: "user" }),
       impersonationGuard,
+      // Owner-only single sign-on, SCIM provisioning and billing (catalog in access.ts, checks in owner-only.ts).
+      ownerOnlyGuard,
+      sso(),
+      scim({
+        connections: [],
+        managedConnections: { credentialHashSecret: scimCredentialHashSecret(opts.secret) },
+      }),
+      scimTokenPlugin({
+        connect: async (input) => {
+          if (!scimApi.connect) throw new Error("auth is not initialised")
+          return scimApi.connect(input)
+        },
+      }),
       organization({
         ac,
         roles,
@@ -293,11 +338,42 @@ export function createAuth(opts: AuthOptions) {
       }),
       // RFC 8628 device grant on the same token endpoint (see device.ts).
       deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
+      ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
     ],
   })
+  scimApi.connect = (input) =>
+    (
+      auth.api as unknown as {
+        createSCIMManagedConnection: (i: ScimConnectionInput) => Promise<ScimConnection>
+      }
+    ).createSCIMManagedConnection(input)
   ref.context = auth.$context
   registerSignupDatabase(auth, opts.db)
   return auth
+}
+
+/** The stripe plugin, in test mode. Organizations are the billing customers; only an owner may change one. */
+function stripeBilling(
+  config: NonNullable<AuthOptions["stripe"]>,
+  adapter: () => Promise<Adapter>,
+) {
+  const plans = config.plans ?? []
+  return stripe({
+    stripeClient: new Stripe(config.secretKey, { typescript: true }),
+    stripeWebhookSecret: config.webhookSecret,
+    // Customers are made when an organization subscribes, not when a person signs up.
+    createCustomerOnSignUp: false,
+    organization: { enabled: true },
+    subscription:
+      plans.length > 0
+        ? {
+            enabled: true,
+            plans,
+            authorizeReference: async ({ user, referenceId }) =>
+              ownsBilling(await adapter(), user.id, referenceId),
+          }
+        : { enabled: false },
+  })
 }
 
 export type Auth = ReturnType<typeof createAuth>

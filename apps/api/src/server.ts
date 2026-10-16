@@ -1,11 +1,12 @@
 import { serve } from "@hono/node-server"
-import { createAuth } from "@starter/auth"
+import { createAuth, parseStripePlans } from "@starter/auth"
 import { createDb } from "@starter/db"
 import { env } from "@starter/env"
 import { createLogger } from "@starter/logger"
 import { parseStatusProviders } from "@starter/observability"
 
 import { createApp } from "./app"
+import { createDevMailSink } from "./dev-mail"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createOperations } from "./operations"
@@ -15,12 +16,25 @@ const logger = createLogger({ name: "api" })
 const baseURL = (env.PORTLESS_URL ?? env.BETTER_AUTH_URL).replace(/\/$/, "")
 
 const db = createDb(env.DATABASE_URL)
+// Dev and e2e only (env refuses it in production): auth emails are kept in memory for GET /api/dev/mail.
+const devMail = env.DEV_MAIL_SINK ? createDevMailSink() : undefined
+if (devMail) logger.warn("DEV_MAIL_SINK is on: auth emails are not sent, they are kept in memory")
 const auth = createAuth({
   db,
   secret: env.BETTER_AUTH_SECRET,
   baseURL,
   emailFrom: env.EMAIL_FROM,
   wrapsApiKey: env.WRAPS_API_KEY,
+  ses: devMail ? { client: devMail.client } : undefined,
+  // Stripe runs only in test mode, and only with both keys (createAuth refuses a live key).
+  stripe:
+    env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
+      ? {
+          secretKey: env.STRIPE_SECRET_KEY,
+          webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+          plans: parseStripePlans(env.STRIPE_PLANS),
+        }
+      : undefined,
   oauthResources: [baseURL, `${baseURL}/mcp`],
   github:
     env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
@@ -42,6 +56,7 @@ const meter = createMeter({
 })
 
 const app = createApp({
+  devMail,
   auth,
   operations: createOperations({ auth, db, meter }),
   baseURL,

@@ -533,6 +533,67 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("magic links and two-factor", () => {
+    /** A user with an authenticator enrolled, signed out. */
+    async function enrolled(name: string) {
+      const { b, email: address } = await signedUp(name)
+      const enrol = await b.client.twoFactor.enable({ password: PASSWORD })
+      const secret =
+        new URL((enrol.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+          "secret",
+        ) ?? ""
+      await b.client.twoFactor.verifyTotp({ code: totp(secret) })
+      await b.client.signOut()
+      return { address, secret }
+    }
+
+    /** The newest link emailed to an address, after asking for one. */
+    async function requestLink(address: string, callbackURL?: string) {
+      const before = inbox(address).length
+      const visitor = open()
+      await visitor.client.signIn.magicLink(
+        callbackURL === undefined ? { email: address } : { email: address, callbackURL },
+      )
+      await delivered(address, before + 1)
+      return { visitor, link: inbox(address).at(-1)?.link ?? "" }
+    }
+
+    it("a second-factor user who opens a link gets the code entry, not a session", async () => {
+      const { address, secret } = await enrolled("Linked")
+      const { visitor, link } = await requestLink(address, "/welcome")
+
+      const landing = await visitor.request(link)
+      expect(landing.status).toBe(302)
+      const next = new URL(landing.headers.get("location") ?? "")
+      expect(next.origin + next.pathname).toBe(`${BASE}/two-factor`)
+      // The link's callbackURL is the app path it was sent with: the code entry sends the person there.
+      expect(next.searchParams.get("callbackURL")).toBe("/welcome")
+      expect((await whoami(visitor)).status).toBe(401)
+      expect((await visitor.client.getSession()).data).toBeNull()
+
+      const code = await visitor.client.twoFactor.verifyTotp({ code: totp(secret) })
+      expect(code.error).toBeNull()
+      expect((await whoami(visitor)).status).toBe(200)
+    })
+
+    it("a wrong code after a link does not open the session", async () => {
+      const { address } = await enrolled("Guessed")
+      const { visitor, link } = await requestLink(address, "/welcome")
+      await visitor.request(link)
+      const wrong = await visitor.client.twoFactor.verifyTotp({ code: "000000" })
+      expect(wrong.error).toMatchObject({ status: 401 })
+      expect((await whoami(visitor)).status).toBe(401)
+    })
+
+    it("a user without two-factor still signs straight in from the link", async () => {
+      const { email: address } = await signedUp("Plainly")
+      const { visitor, link } = await requestLink(address, "/welcome")
+      const landing = await visitor.request(link)
+      expect(landing.headers.get("location")).toBe(`${BASE}/welcome`)
+      expect((await whoami(visitor)).status).toBe(200)
+    })
+  })
+
   describe("two-factor (TOTP)", () => {
     it("enrols an authenticator, then requires its code on the next sign-in", async () => {
       const { b, email: address } = await signedUp()
@@ -951,6 +1012,161 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("impersonation and the device grant", () => {
+    it("an impersonated session cannot approve a device code, so no token is issued", async () => {
+      const { userId: ownerId } = await signedUp("Device owner")
+      const { b: admin, userId: adminId } = await signedUp("Root device")
+      await (await t.auth.$context).adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: adminId }],
+        update: { role: "admin" },
+      })
+      expect((await admin.client.admin.impersonateUser({ userId: ownerId })).error).toBeNull()
+
+      const registered = await t.req("/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Device CLI",
+          token_endpoint_auth_method: "none",
+          grant_types: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+        }),
+      })
+      const clientId = ((await registered.json()) as { client_id: string }).client_id
+      const device = await t.req("/api/auth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, scope: "read offline_access" }),
+      })
+      const { device_code, user_code } = (await device.json()) as {
+        device_code: string
+        user_code: string
+      }
+
+      const approve = await admin.request("/api/auth/device/approve", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userCode: user_code }),
+      })
+      expect(approve.status).toBe(403)
+      expect(await approve.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+
+      // Nothing was approved, so the client is still told to wait.
+      const poll = await t.req("/api/auth/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          device_code,
+          client_id: clientId,
+        }),
+      })
+      expect(poll.status).toBe(400)
+      expect(await poll.json()).toMatchObject({ error: "authorization_pending" })
+    })
+  })
+
+  describe("owner-only single sign-on, SCIM and billing", () => {
+    let org: string
+    let owner: Awaited<ReturnType<typeof signedUp>>
+    const roleUsers: Record<"member" | "viewer" | "admin", ReturnType<typeof open>> = {
+      member: open(),
+      viewer: open(),
+      admin: open(),
+    }
+
+    beforeAll(async () => {
+      owner = await signedUp("Owner of SSO")
+      org = (await whoami(owner.b)).body.organizationId ?? ""
+      for (const role of ["member", "viewer", "admin"] as const) {
+        const user = await signedUp(`Ruled ${role}`)
+        roleUsers[role] = user.b
+        await t.auth.api.addMember({
+          body: { organizationId: org, userId: user.userId, role },
+        })
+      }
+    })
+
+    const json = (body: unknown) => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    const providerBody = (providerId: string) => ({
+      providerId,
+      issuer: "https://idp.acme.test",
+      domain: "acme.test",
+      organizationId: org,
+      oidcConfig: {
+        clientId: "acme-client",
+        clientSecret: "acme-secret", // gitleaks:allow
+        authorizationEndpoint: "https://idp.acme.test/authorize",
+        tokenEndpoint: "https://idp.acme.test/token",
+        jwksEndpoint: "https://idp.acme.test/jwks",
+        skipDiscovery: true,
+      },
+    })
+
+    it("lets the owner register an SSO provider for the organization", async () => {
+      const res = await owner.b.request("/api/auth/sso/register", json(providerBody("acme-owner")))
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ providerId: "acme-owner" })
+    })
+
+    it("refuses SSO registration to an admin, a member and a viewer of the same organization", async () => {
+      for (const role of ["admin", "member", "viewer"] as const) {
+        const res = await roleUsers[role].request(
+          "/api/auth/sso/register",
+          json(providerBody(`acme-${role}`)),
+        )
+        expect(res.status, role).toBe(403)
+        expect(await res.json(), role).toMatchObject({ code: "ORGANIZATION_OWNER_REQUIRED" })
+      }
+    })
+
+    it("mints a SCIM token for the owner only, and the token opens the SCIM API", async () => {
+      const res = await owner.b.request(
+        "/api/auth/scim/generate-token",
+        json({ organizationId: org }),
+      )
+      expect(res.status).toBe(200)
+      const { token } = (await res.json()) as { token: string }
+      expect(token.length).toBeGreaterThan(20)
+
+      const scim = await owner.b.request("/api/auth/scim/v2/Users", {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(scim.status).toBe(200)
+    })
+
+    it("refuses a SCIM token to an admin, a member and a viewer", async () => {
+      for (const role of ["admin", "member", "viewer"] as const) {
+        const res = await roleUsers[role].request(
+          "/api/auth/scim/generate-token",
+          json({ organizationId: org }),
+        )
+        expect(res.status, role).toBe(403)
+        expect(await res.json(), role).toMatchObject({ code: "ORGANIZATION_OWNER_REQUIRED" })
+      }
+    })
+
+    it("refuses a SCIM token for an organization the caller is not in", async () => {
+      const res = await roleUsers.member.request(
+        "/api/auth/scim/generate-token",
+        json({ organizationId: owner.userId }),
+      )
+      expect(res.status).toBe(403)
+    })
+
+    it("with Stripe unset, the billing endpoints are absent", async () => {
+      for (const path of ["/api/auth/stripe/webhook", "/api/auth/subscription/upgrade"]) {
+        const res = await owner.b.request(path, json({ referenceId: org }))
+        expect(res.status, path).toBe(404)
+      }
+    })
+  })
+
   describe("reserved organization slugs", () => {
     it("refuses a reserved slug on create and on update", async () => {
       const { b } = await signedUp("Owner")
@@ -1036,5 +1252,29 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       })
       expect(good.error).toBeNull()
     })
+  })
+})
+
+describe("billing with Stripe test-mode keys set", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp([], {
+      stripe: {
+        secretKey: "sk_test_placeholder_for_tests", // gitleaks:allow
+        webhookSecret: "whsec_placeholder_for_tests", // gitleaks:allow
+        plans: [{ name: "pro", priceId: "price_placeholder_for_tests" }], // gitleaks:allow
+      },
+    })
+  })
+  afterAll(() => t.close())
+
+  it("mounts the stripe webhook, which refuses an unsigned request", async () => {
+    const res = await t.req("/api/auth/stripe/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    })
+    expect(res.status).not.toBe(404)
+    expect(res.status).toBeGreaterThanOrEqual(400)
   })
 })

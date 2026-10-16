@@ -1,5 +1,5 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router"
-import { type ReactNode, useEffect } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 
 import "../app.css"
 
@@ -30,15 +30,29 @@ function useSystemDarkMode() {
   }, [])
 }
 
+/**
+ * The prerendered shell holds the root alone, with no route content. Hydration would otherwise
+ * render the matched page where the shell has its pending boundary (React #418). So the first
+ * client render matches the shell (empty), and the route renders after mount. The browser only
+ * ever sees the shell for an instant.
+ */
+function useHydrated() {
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => setHydrated(true), [])
+  return hydrated
+}
+
 function RootDocument({ children }: { children: ReactNode }) {
   useSystemDarkMode()
+  const hydrated = useHydrated()
   return (
-    <html lang="en">
+    // suppressHydrationWarning: theme.js sets the dark class before React hydrates.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body className="min-h-svh bg-background text-foreground antialiased">
-        {children}
+        {hydrated ? children : null}
         <Scripts />
       </body>
     </html>

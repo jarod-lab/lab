@@ -132,7 +132,9 @@ so REST and MCP behave the same:
   user with a random password, a personal org, and an `sk_` key with project read, create, update and delete, and
   sends one claim email (a reset link to `/claim`, which verifies the address). Limits: `SIGNUP_LIMITS` (5 per IP
   per hour, 20 per email domain per day) answer RATE_LIMITED with `Retry-After`; an existing email is CONFLICT.
-  Attempts are recorded in `signup_attempt` before the checks.
+  Attempts are recorded in `signup_attempt` before the checks. The key carries `metadata.provisional`; verifying the
+  email (the reset in `onPasswordReset`, or the `user.update` hook for verify-email) disables it through
+  `endProvisionalKeys`, and `resolvePrincipal` answers a disabled key with UNAUTHORIZED and a device-grant hint.
 - API keys: org-owned, no default permissions, created only via `create_api_key` (user actor, subset of the
   caller's grants). Keep the `rateLimit` override (better-auth defaults to 10 per day). A key is `enabled` and
   unexpired to count as connected; `revoke_agent_access` deletes it.

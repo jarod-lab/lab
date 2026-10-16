@@ -12,7 +12,7 @@ import * as schema from "@starter/db/schema"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { type Adapter, firstMembership, findMember, personalOrganization } from "./membership"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
-import { registerSignupDatabase } from "./signup"
+import { endProvisionalKeys, registerSignupDatabase } from "./signup"
 
 export { DEVICE_VERIFICATION_PATH } from "./device"
 export { isClaimed, provisionalSignup, type ProvisionalSignup } from "./signup"
@@ -114,12 +114,15 @@ export function createAuth(opts: AuthOptions) {
       // an emailed link proves the mailbox, so the address counts as verified: provisional signups
       // (see signup.ts) are claimed this way.
       onPasswordReset: async ({ user }) => {
-        // Verified first: a failing notice must not leave the claim unrecorded.
-        await (await adapter()).updateMany({
+        // Verified first: a failing notice must not leave the claim unrecorded. This write skips
+        // the user update hook, so the provisional key is ended here too.
+        const db = await adapter()
+        await db.updateMany({
           model: "user",
           where: [{ field: "id", value: user.id }],
           update: { emailVerified: true },
         })
+        await endProvisionalKeys(db, user.id)
         await wrapsPlugin.emails.passwordChanged({ user })
       },
     },
@@ -132,7 +135,15 @@ export function createAuth(opts: AuthOptions) {
     hooks: { before: nativeLoopbackRegistration },
     databaseHooks: {
       // Every account works inside an organization: signing up creates a personal one.
-      user: { create: { after: async (user) => personalOrganization(await adapter(), user) } },
+      // A verified address is a claimed account (verify-email, or any other path that sets it).
+      user: {
+        create: { after: async (user) => personalOrganization(await adapter(), user) },
+        update: {
+          after: async (user) => {
+            if (user.emailVerified) await endProvisionalKeys(await adapter(), user.id)
+          },
+        },
+      },
       // New sessions start in the user's first organization. Membership is still checked per request.
       session: {
         create: {

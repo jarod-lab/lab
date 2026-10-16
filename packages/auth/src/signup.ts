@@ -10,7 +10,7 @@ import { AppError } from "@starter/errors"
 import { and, count, eq, gte } from "drizzle-orm"
 
 import type { Auth } from "./index"
-import { firstMembership } from "./membership"
+import { type Adapter, firstMembership } from "./membership"
 
 // The signup-attempt table is ours, not better-auth's, so it is reached through the app's Drizzle
 // database, which createAuth registers against the auth instance it returns.
@@ -129,6 +129,7 @@ export async function provisionalSignup(
       userId: user.id,
       name: "Provisional",
       permissions: PROVISIONAL_PERMISSIONS,
+      metadata: { provisional: true, userId: user.id },
     },
   })
 
@@ -138,4 +139,46 @@ export async function provisionalSignup(
   })
 
   return { organizationId: member.organizationId, userId: user.id, apiKey: created.key }
+}
+
+/**
+ * Turn off the user's provisional signup keys. Called when the address is verified (the claim):
+ * anyone could have called signup with this address and kept the key, so once the person who owns
+ * the mailbox takes over, the key stops working. The agent then signs in with the device grant,
+ * which the person approves. Disabled, not deleted, so a call with the key gets a hint saying why.
+ */
+export async function endProvisionalKeys(db: Adapter, userId: string): Promise<void> {
+  const memberships = await db.findMany<{ organizationId: string }>({
+    model: "member",
+    where: [{ field: "userId", value: userId }],
+  })
+  if (memberships.length === 0) return
+  const keys = await db.findMany<{ id: string; metadata: unknown }>({
+    model: "apikey",
+    where: [
+      { field: "referenceId", value: memberships.map((m) => m.organizationId), operator: "in" },
+      { field: "enabled", value: true },
+    ],
+  })
+  for (const key of keys) {
+    if (!isProvisionalKeyOf(key.metadata, userId)) continue
+    await db.updateMany({
+      model: "apikey",
+      where: [{ field: "id", value: key.id }],
+      update: { enabled: false },
+    })
+  }
+}
+
+function isProvisionalKeyOf(metadata: unknown, userId: string): boolean {
+  let value = metadata
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return false
+    }
+  }
+  const m = value as { provisional?: unknown; userId?: unknown } | null
+  return m?.provisional === true && m.userId === userId
 }

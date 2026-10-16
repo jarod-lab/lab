@@ -266,6 +266,7 @@ export function createApp(opts: AppOptions) {
       organizationId: created.organizationId,
       apiKey: created.apiKey,
       claimUrlSentTo: input.data.email.trim().toLowerCase(),
+      apiKeyEndsWhenClaimed: true,
       limits: { requestsPerDay: hooks.limits.unclaimed },
     })
   })

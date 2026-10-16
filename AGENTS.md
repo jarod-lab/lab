@@ -167,7 +167,9 @@ or `resolvePrincipal`.
 - **Provisional signup.** `POST /v1/signup` with `{ email, name? }` and no credential (REST only, not an MCP tool). It
   creates an unverified user, a personal org and an `sk_` key with project permissions, and sends one claim email.
   Limits: 5 attempts per IP per hour, 20 per email domain per day. Until an owner verifies the email the org gets
-  `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT`; `whoami` reports `claimed`.
+  `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT`; `whoami` reports `claimed`. The claim (any path that verifies the email)
+  disables the signup key (`endProvisionalKeys`), since whoever called signup holds it; a call with it then gets
+  UNAUTHORIZED with a hint naming the device grant. The response says so (`apiKeyEndsWhenClaimed`).
 - **Invoke hooks.** `apps/api/src/hooks.ts` wires metering, idempotency and audit into `invoke`, identically for REST
   and MCP. `after` does not see FORBIDDEN or BAD_REQUEST, so those attempts are not audited. Details: agent-api skill.
 - **Idempotency and pagination.** `Idempotency-Key` header (REST) or `idempotencyKey` argument (MCP, writes only). The

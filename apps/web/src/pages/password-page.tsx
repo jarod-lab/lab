@@ -32,7 +32,9 @@ export function PasswordPage({
     mode === "claim"
       ? {
           title: "Claim your account",
-          description: "An agent created this account for you. Set a password to claim it.",
+          description:
+            "An agent created this account for you. Set a password to claim it. Claiming turns off " +
+            "the agent's temporary key; it reconnects by asking you to approve a sign-in.",
           submit: "Claim account",
           success: "Your account is claimed. Sign in with the password you just set.",
         }

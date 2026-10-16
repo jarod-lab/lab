@@ -175,14 +175,23 @@ export function createOperations({ auth, db, meter }: { auth: Auth; db: Database
       "Creates a personal organization, an API key with project permissions, and sends one email " +
       "to the address to claim the account. Send it with no credentials: this is the only " +
       "operation that needs none. Use the returned apiKey straight away, as x-api-key or a Bearer " +
-      "token. Until the owner follows the claim link the organization has a lower daily request " +
-      "limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.",
+      "token. The key is temporary: it stops working when the person claims the account by opening " +
+      "the emailed link, since whoever called signup holds it. Tell them that. After the claim, " +
+      "calls with it get UNAUTHORIZED; sign in with the device grant (POST /api/auth/device/code, " +
+      "which the person approves at /device). Until the claim the organization has a lower daily " +
+      "request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email " +
+      "domain per day.",
     permissions: {},
     input: signupInput,
     output: z.object({
       organizationId: z.string(),
       apiKey: z.string().describe("Shown once. Stores project read, create, update and delete."),
       claimUrlSentTo: z.string(),
+      apiKeyEndsWhenClaimed: z
+        .literal(true)
+        .describe(
+          "apiKey stops working once the person claims the account; then use the device grant",
+        ),
       limits: z.object({
         requestsPerDay: z.number().int().describe("Until the email is verified"),
       }),

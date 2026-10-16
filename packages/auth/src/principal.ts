@@ -72,6 +72,15 @@ async function fromSession(auth: Auth, headers: Headers): Promise<Principal | nu
 
 async function fromApiKey(auth: Auth, key: string): Promise<Principal | null> {
   const res = await auth.api.verifyApiKey({ body: { key } })
+  if (res.error?.code === "KEY_DISABLED") {
+    // The only keys this app turns off are provisional signup keys, at the claim.
+    throw new AppError("UNAUTHORIZED", "This API key is turned off", {
+      hint:
+        "A key from signup stops working once the person claims the account (opens the emailed " +
+        "link). Sign in with the device grant instead: POST /api/auth/device/code, then the " +
+        "person approves at /device (see /llms.txt, or run `starter login`).",
+    })
+  }
   if (res.error?.code === "RATE_LIMITED") {
     // better-auth reports the wait in milliseconds; Retry-After is whole seconds, at least one.
     const details = (res.error as { details?: { tryAgainIn?: unknown } }).details

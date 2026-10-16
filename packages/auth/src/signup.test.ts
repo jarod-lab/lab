@@ -116,12 +116,30 @@ describe("provisionalSignup", () => {
       where: [{ field: "id", value: signup.userId }],
     })
     expect(isClaimed(user ?? { emailVerified: false })).toBe(true)
-    // The key keeps working: a claim doesn't rotate it.
-    expect(
-      await resolvePrincipal(s.auth, new Headers({ "x-api-key": signup.apiKey }), {
-        audience: AUDIENCE,
-      }),
-    ).not.toBeNull()
+    // Whoever called signup held the key, and it may not be the person who owns the address: the
+    // claim turns it off, and the refusal tells the agent how to get a credential the person grants.
+    const refused = await resolvePrincipal(s.auth, new Headers({ "x-api-key": signup.apiKey }), {
+      audience: AUDIENCE,
+    }).catch((e: unknown) => e)
+    expect(refused).toBeInstanceOf(AppError)
+    expect(refused).toMatchObject({ code: "UNAUTHORIZED" })
+    expect((refused as AppError).hint).toMatch(/claims the account.*device grant/is)
+  })
+
+  it("turns the key off when the address is verified by email instead", async () => {
+    const signup = await provisionalSignup(s.auth, {
+      email: "verifies@example.org",
+      ip: "203.0.113.30",
+    })
+    await waitFor(() => expect(mailTo("verifies@example.org")).toHaveLength(1))
+    const ctx = await s.auth.$context
+    // What better-auth's /verify-email does once the emailed link is opened.
+    await ctx.internalAdapter.updateUser(signup.userId, { emailVerified: true })
+
+    const refused = await resolvePrincipal(s.auth, new Headers({ "x-api-key": signup.apiKey }), {
+      audience: AUDIENCE,
+    }).catch((e: unknown) => e)
+    expect(refused).toMatchObject({ code: "UNAUTHORIZED" })
   })
 
   it("refuses an existing email with CONFLICT, without saying more than that it exists", async () => {

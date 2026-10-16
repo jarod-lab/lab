@@ -29,7 +29,9 @@ describe("PasswordPage", () => {
   it("uses the claim wording for an account an agent created", async () => {
     const { container } = render(<PasswordPage auth={fakeAuth()} mode="claim" token="tok" />)
     expect(
-      await screen.findByText("An agent created this account for you. Set a password to claim it."),
+      await screen.findByText(
+        /An agent created this account for you\. Set a password to claim it\./,
+      ),
     ).toBeTruthy()
     expect(screen.getByRole("button", { name: "Claim account" })).toBeTruthy()
     await expectNoA11yViolations(container.innerHTML)

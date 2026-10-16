@@ -389,7 +389,7 @@ describe("onboarding journey B: self-signup and claim", () => {
   })
   afterAll(() => t.close())
 
-  it("signs up with no credential, uses the key at the unclaimed limit, then claims the account", async () => {
+  it("signs up with no credential, uses the key until the claim, then signs in with the device grant", async () => {
     const email = "ada@example.com"
     // Signup is the one operation discovery lists with no credential.
     const signup = await t.req("/v1/signup", {
@@ -402,10 +402,13 @@ describe("onboarding journey B: self-signup and claim", () => {
       organizationId: string
       apiKey: string
       claimUrlSentTo: string
+      apiKeyEndsWhenClaimed: boolean
       limits: { requestsPerDay: number }
     }
     expect(created.apiKey).toMatch(/^sk_/)
     expect(created.claimUrlSentTo).toBe(email)
+    // The response says up front that the key is temporary.
+    expect(created.apiKeyEndsWhenClaimed).toBe(true)
 
     const before = await ok(await t.req("/v1/whoami", t.as(created.apiKey)))
     expect(before).toMatchObject({
@@ -432,12 +435,61 @@ describe("onboarding journey B: self-signup and claim", () => {
     const reset = await person.client.resetPassword({ newPassword: PASSWORD, token })
     expect(reset.error).toBeNull()
 
-    const after = await ok(await t.req("/v1/whoami", t.as(created.apiKey)))
-    expect(after).toMatchObject({
+    // The claim ends the signup key (whoever called signup held it), and the refusal says what next.
+    const ended = await t.req("/v1/whoami", t.as(created.apiKey))
+    expect(ended.status).toBe(401)
+    const refusal = ((await ended.json()) as { error: { hint?: string } }).error
+    expect(refusal.hint).toMatch(/claims the account/)
+    expect(refusal.hint).toContain("POST /api/auth/device/code")
+
+    // Following the hint: the device grant, approved by the person who now owns the account.
+    const reg = await ok(
+      await t.req("/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Agent",
+          token_endpoint_auth_method: "none",
+          grant_types: [DEVICE_GRANT, "refresh_token"],
+        }),
+      }),
+    )
+    const clientId = String(reg.client_id)
+    const device = (await ok(
+      await t.req("/api/auth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, scope: AGENT_SCOPE, resource: `${BASE}/mcp` }),
+      }),
+    )) as unknown as DeviceCode
+    expect((await person.client.signIn.email({ email, password: PASSWORD })).error).toBeNull()
+    await person.request(`/api/auth/device?user_code=${encodeURIComponent(device.user_code)}`)
+    const approved = await person.request("/api/auth/device/approve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userCode: device.user_code }),
+    })
+    expect(approved.status).toBe(200)
+    const tokens = await ok(
+      await t.req("/api/auth/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: DEVICE_GRANT,
+          device_code: device.device_code,
+          client_id: clientId,
+        }),
+      }),
+    )
+
+    const mcp = await t.mcpClient({ authorization: `Bearer ${String(tokens.access_token)}` })
+    const after = await mcp.callTool({ name: "whoami", arguments: {} })
+    expect(after.structuredContent).toMatchObject({
       organizationId: created.organizationId,
       claimed: true,
       usage: { limit: 10_000 },
     })
+    await mcp.close()
   }, 60_000)
 })
 

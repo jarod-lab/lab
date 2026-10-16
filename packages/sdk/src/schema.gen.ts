@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Create an agent account without signing in
-         * @description Creates a personal organization, an API key with project permissions, and sends one email to the address to claim the account. Send it with no credentials: this is the only operation that needs none. Use the returned apiKey straight away, as x-api-key or a Bearer token. Until the owner follows the claim link the organization has a lower daily request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.
+         * @description Creates a personal organization, an API key with project permissions, and sends one email to the address to claim the account. Send it with no credentials: this is the only operation that needs none. Use the returned apiKey straight away, as x-api-key or a Bearer token. The key is temporary: it stops working when the person claims the account by opening the emailed link, since whoever called signup holds it. Tell them that. After the claim, calls with it get UNAUTHORIZED; sign in with the device grant (POST /api/auth/device/code, which the person approves at /device). Until the claim the organization has a lower daily request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.
          */
         post: operations["signup"];
         delete?: never;
@@ -286,6 +286,11 @@ export interface operations {
                         /** @description Shown once. Stores project read, create, update and delete. */
                         apiKey: string;
                         claimUrlSentTo: string;
+                        /**
+                         * @description apiKey stops working once the person claims the account; then use the device grant
+                         * @constant
+                         */
+                        apiKeyEndsWhenClaimed: true;
                         limits: {
                             /** @description Until the email is verified */
                             requestsPerDay: number;

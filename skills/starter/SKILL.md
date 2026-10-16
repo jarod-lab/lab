@@ -63,6 +63,11 @@ operation that takes no credential. The response carries an API key and `claimUr
 low daily limit (`limits.requestsPerDay`) until the person opens the claim email sent to that address. Give
 them the address to check, and don't invent one. Unclaimed accounts that exceed the limit get `RATE_LIMITED`.
 
+The signup key is temporary (`apiKeyEndsWhenClaimed: true`): it stops working the moment the person claims
+the account, because whoever called signup holds it. Tell the person this when you give them the address.
+After the claim, calls with the key get `UNAUTHORIZED` with a hint; sign in with the device grant (see Authenticate),
+which the person approves, and use that token from then on.
+
 ## Find operations
 
 Read `https://api.example.com/llms.txt` for the list, and `llms-full.txt` for every operation's input, output

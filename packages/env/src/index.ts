@@ -30,9 +30,17 @@ export const env = createEnv({
     TRUST_PROXY: z.stringbool().default(false),
     /**
      * Vendors whose own status pages `GET /status` reports (never pinged by /health). Comma-separated
-     * `Name=https://status.example.com` (a Statuspage) or `aws:<service>@<region>` (AWS Health).
+     * `Name=https://status.example.com` (a Statuspage), `Name=statusio:<page id>` (status.io), or
+     * `aws`, `aws@<region>`, `aws:<service>@<region>` (AWS Health). Unset: the broad default below,
+     * to narrow to what the app actually uses.
      */
-    STATUS_PROVIDERS: z.string().min(1).optional(),
+    STATUS_PROVIDERS: z
+      .string()
+      .min(1)
+      .default(
+        "aws,Cloudflare=https://www.cloudflarestatus.com,Vercel=https://www.vercel-status.com," +
+          "Neon=statusio:6878fc85709daa75be6c7e3c,PlanetScale=https://www.planetscalestatus.com",
+      ),
     /** Directory of the built web app (apps/web/dist). When set, apps/api serves its pages and assets. */
     WEB_DIST_DIR: z.string().min(1).optional(),
     /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */

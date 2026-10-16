@@ -7,8 +7,13 @@ import type { Logger } from "@starter/logger"
 export type StatusProvider =
   /** An Atlassian Statuspage (most vendors): `${url}/api/v2/status.json`. */
   | { kind: "statuspage"; name: string; url: string }
-  /** AWS Health's public feed, filtered to one service in one region (e.g. ses, us-east-1). */
-  | { kind: "aws"; name: string; service: string; region: string }
+  /** A status.io page (Neon, among others), by its page id. */
+  | { kind: "statusio"; name: string; pageId: string }
+  /**
+   * AWS Health's public feed: every open event, or only those in one region, or one service in one
+   * region (e.g. ses, us-east-1).
+   */
+  | { kind: "aws"; name: string; service?: string; region?: string }
 
 export type ProviderState = "operational" | "degraded" | "outage" | "unknown"
 
@@ -29,34 +34,47 @@ export interface StatusReport {
 }
 
 export const AWS_HEALTH_URL = "https://health.aws.amazon.com/public/currentevents"
+const AWS_STATUS_PAGE = "https://health.aws.amazon.com/health/status"
+export const statusioUrl = (pageId: string) => `https://api.status.io/1.0/status/${pageId}`
 
 /**
- * Parse a provider list: comma-separated `Name=https://status.example.com` (a Statuspage) or
- * `aws:<service>@<region>` (AWS Health), e.g. `Vercel=https://www.vercel-status.com,aws:ses@us-east-1`.
+ * Parse a provider list, comma-separated:
+ * - `Name=https://status.example.com`: an Atlassian Statuspage (Vercel, Cloudflare, PlanetScale...)
+ * - `Name=statusio:<page id>`: a status.io page (Neon)
+ * - `aws` (every AWS event), `aws@<region>` or `aws:<service>@<region>`: AWS Health
+ *
  * Throws on an entry it can't read, so a typo fails at startup rather than showing nothing.
  */
 export function parseStatusProviders(spec: string | undefined): StatusProvider[] {
   if (!spec?.trim()) return []
   return spec.split(",").map((raw): StatusProvider => {
     const entry = raw.trim()
-    const aws = /^aws:([a-z0-9-]+)@([a-z0-9-]+)$/.exec(entry)
-    if (aws?.[1] && aws[2]) {
+    const aws = /^aws(?::([a-z0-9-]+))?(?:@([a-z0-9-]+))?$/.exec(entry)
+    // A service without a region would match nothing in the feed, which names `<service>-<region>`.
+    if (aws && !(aws[1] && !aws[2])) {
+      const [, service, region] = aws
+      const label = ["AWS", service?.toUpperCase()].filter(Boolean).join(" ")
       return {
         kind: "aws",
-        name: `AWS ${aws[1].toUpperCase()} (${aws[2]})`,
-        service: aws[1],
-        region: aws[2],
+        name: region ? `${label} (${region})` : label,
+        ...(service && { service }),
+        ...(region && { region }),
       }
     }
     const at = entry.indexOf("=")
     const name = entry.slice(0, at).trim()
-    const url = entry
+    const target = entry
       .slice(at + 1)
       .trim()
       .replace(/\/+$/, "")
-    if (at > 0 && name && /^https:\/\/[^\s/]+/.test(url)) return { kind: "statuspage", name, url }
+    const statusio = /^statusio:([0-9a-f]{24})$/.exec(target)
+    if (at > 0 && name && statusio?.[1]) return { kind: "statusio", name, pageId: statusio[1] }
+    if (at > 0 && name && /^https:\/\/[^\s/]+/.test(target)) {
+      return { kind: "statuspage", name, url: target }
+    }
     throw new Error(
-      `Can't read status provider "${entry}": use Name=https://status.example.com or aws:ses@us-east-1`,
+      `Can't read status provider "${entry}": use Name=https://status.example.com, ` +
+        "Name=statusio:<page id>, aws, aws@us-east-1 or aws:ses@us-east-1",
     )
   })
 }
@@ -102,6 +120,33 @@ async function checkStatuspage(
   }
 }
 
+/** status.io's overall code: 100 operational, 200 maintenance, 300-400 degraded, 500-600 down. */
+function fromStatusioCode(code: unknown): ProviderState {
+  if (code === 100) return "operational"
+  if (code === 200 || code === 300 || code === 400) return "degraded"
+  if (code === 500 || code === 600) return "outage"
+  return "unknown"
+}
+
+async function checkStatusio(
+  p: Extract<StatusProvider, { kind: "statusio" }>,
+  fetchFn: Fetch,
+  signal: AbortSignal,
+): Promise<ProviderStatus> {
+  const res = await fetchFn(statusioUrl(p.pageId), { signal })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const body = (await res.json()) as {
+    result?: { status_overall?: { status?: unknown; status_code?: unknown } }
+  }
+  const overall = body.result?.status_overall
+  return {
+    name: p.name,
+    status: fromStatusioCode(overall?.status_code),
+    ...(typeof overall?.status === "string" && { description: overall.status }),
+    url: `https://status.io/pages/${p.pageId}`,
+  }
+}
+
 interface AwsEvent {
   service?: unknown
   summary?: unknown
@@ -139,19 +184,32 @@ function awsStatus(
   p: Extract<StatusProvider, { kind: "aws" }>,
   events: readonly AwsEvent[],
 ): ProviderStatus {
-  const id = `${p.service}-${p.region}`
-  // `impacted_services` arrives as a string, so a quoted id inside it counts as a match.
-  const hits = events.filter(
-    (e) =>
-      e.service === id ||
-      (typeof e.impacted_services === "string" && e.impacted_services.includes(`'${id}'`)),
-  )
-  const summary = hits.map((e) => e.summary).find((s) => typeof s === "string")
+  // Feed ids are `<service>-<region>`. `impacted_services` arrives as a string of quoted ids.
+  const ids = (e: AwsEvent): string[] => [
+    ...(typeof e.service === "string" ? [e.service] : []),
+    ...(typeof e.impacted_services === "string"
+      ? [...e.impacted_services.matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1] as string)
+      : []),
+  ]
+  const matches = (id: string) =>
+    p.service && p.region
+      ? id === `${p.service}-${p.region}`
+      : p.region
+        ? id.endsWith(`-${p.region}`)
+        : true
+  const hits = events.filter((e) => ids(e).some(matches))
+  // Each open event, with where it is: "Region Availability (multipleservices-me-central-1)".
+  const description = hits
+    .map((e) => [e.summary, e.service].filter((x) => typeof x === "string"))
+    .filter((parts) => parts.length > 0)
+    .map(([summary, where]) => (where ? `${summary} (${where})` : summary))
+    .join("; ")
   return {
     name: p.name,
+    // The feed only lists open events; a regional one doesn't make all of AWS an outage.
     status: hits.length > 0 ? "degraded" : "operational",
-    ...(typeof summary === "string" && { description: summary }),
-    url: "https://health.aws.amazon.com/health/status",
+    ...(description && { description }),
+    url: AWS_STATUS_PAGE,
   }
 }
 
@@ -188,12 +246,17 @@ export function createStatusHandler(
       providers.map(async (p): Promise<ProviderStatus> => {
         try {
           if (p.kind === "statuspage") return await checkStatuspage(p, fetchFn, signal)
+          if (p.kind === "statusio") return await checkStatusio(p, fetchFn, signal)
           aws ??= awsEvents(fetchFn, signal)
           return awsStatus(p, await aws)
         } catch (e) {
           logger?.warn({ err: e, provider: p.name }, "status provider unreachable")
           const url =
-            p.kind === "statuspage" ? p.url : "https://health.aws.amazon.com/health/status"
+            p.kind === "statuspage"
+              ? p.url
+              : p.kind === "statusio"
+                ? `https://status.io/pages/${p.pageId}`
+                : AWS_STATUS_PAGE
           return { name: p.name, status: "unknown", url }
         }
       }),

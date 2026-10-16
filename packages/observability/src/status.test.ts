@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { AWS_HEALTH_URL, createStatusHandler, parseStatusProviders } from "./status"
+import { AWS_HEALTH_URL, createStatusHandler, parseStatusProviders, statusioUrl } from "./status"
 
 const statuspage = (indicator: string, description = "All Systems Operational") =>
   Response.json({ page: { name: "X" }, status: { indicator, description } })
@@ -33,12 +33,23 @@ describe("parseStatusProviders", () => {
     expect(parseStatusProviders(" ")).toEqual([])
   })
 
+  it("reads all of AWS, one AWS region, and status.io pages", () => {
+    expect(
+      parseStatusProviders("aws,aws@eu-west-1,Neon=statusio:6878fc85709daa75be6c7e3c"),
+    ).toEqual([
+      { kind: "aws", name: "AWS" },
+      { kind: "aws", name: "AWS (eu-west-1)", region: "eu-west-1" },
+      { kind: "statusio", name: "Neon", pageId: "6878fc85709daa75be6c7e3c" },
+    ])
+  })
+
   it("fails loudly on an entry it can't read", () => {
     for (const bad of [
       "Vercel",
       "Vercel=http://insecure.example",
       "=https://x.example",
       "aws:ses",
+      "Neon=statusio:not-a-page-id",
     ]) {
       expect(() => parseStatusProviders(bad), bad).toThrow(/Can't read status provider/)
     }
@@ -90,7 +101,7 @@ describe("createStatusHandler", () => {
       "degraded",
       "operational",
     ])
-    expect(report.providers[0].description).toBe("Increased send latency")
+    expect(report.providers[0].description).toBe("Increased send latency (ses-us-east-1)")
     // One feed request serves every AWS provider.
     expect(fetch).toHaveBeenCalledTimes(1)
   })
@@ -105,17 +116,73 @@ describe("createStatusHandler", () => {
     }
   })
 
+  it("reads AWS as a whole or by region, naming each open event", async () => {
+    const fetch = vi.fn(async () =>
+      awsFeed([
+        { service: "multipleservices-me-central-1", summary: "Region Availability" },
+        { service: "multipleservices-eu-west-2", impacted_services: "{'ses-eu-west-2': {}}" },
+      ]),
+    )
+    const report = await body(
+      await createStatusHandler(parseStatusProviders("aws,aws@me-central-1,aws@us-east-1"), {
+        fetch,
+      })(),
+    )
+    expect(report.providers).toMatchObject([
+      {
+        name: "AWS",
+        status: "degraded",
+        description:
+          "Region Availability (multipleservices-me-central-1); multipleservices-eu-west-2",
+      },
+      { name: "AWS (me-central-1)", status: "degraded" },
+      { name: "AWS (us-east-1)", status: "operational" },
+    ])
+    // A regional event is "degraded", never an outage of AWS as a whole.
+    expect(report.status).toBe("degraded")
+  })
+
+  it("maps a status.io page's overall code", async () => {
+    const page = (status_code: number, status: string) =>
+      Response.json({ result: { status_overall: { status_code, status } } })
+    const codes: Record<string, [number, string]> = {
+      aaaaaaaaaaaaaaaaaaaaaaaa: [100, "Operational"],
+      bbbbbbbbbbbbbbbbbbbbbbbb: [400, "Partial Service Disruption"],
+      cccccccccccccccccccccccc: [500, "Service Disruption"],
+      dddddddddddddddddddddddd: [999, "Something new"],
+    }
+    const fetch = vi.fn(async (url: string) => {
+      const id = Object.keys(codes).find((k) => url === statusioUrl(k))
+      if (!id) throw new Error(`unexpected ${url}`)
+      return page(...(codes[id] as [number, string]))
+    })
+    const providers = Object.keys(codes).map((id) => ({
+      kind: "statusio" as const,
+      name: id.slice(0, 1),
+      pageId: id,
+    }))
+    const report = await body(await createStatusHandler(providers, { fetch })())
+    expect(report.providers).toMatchObject([
+      { status: "operational", description: "Operational" },
+      { status: "degraded", description: "Partial Service Disruption" },
+      { status: "outage", url: "https://status.io/pages/cccccccccccccccccccccccc" },
+      { status: "unknown" },
+    ])
+  })
+
   it("reports an unreachable or slow vendor as unknown, never failing itself", async () => {
     const handler = createStatusHandler(
       [
         { kind: "statuspage", name: "Down", url: "https://down.example" },
         { kind: "statuspage", name: "Slow", url: "https://slow.example" },
         { kind: "statuspage", name: "Odd", url: "https://odd.example" },
+        { kind: "statusio", name: "Gone", pageId: "eeeeeeeeeeeeeeeeeeeeeeee" },
       ],
       {
         timeoutMs: 20,
         fetch: async (url, init) => {
           if (url.startsWith("https://down.example")) return new Response("no", { status: 503 })
+          if (url.includes("status.io")) return new Response("no", { status: 404 })
           if (url.startsWith("https://odd.example")) return Response.json({ status: {} })
           return new Promise((_, reject) =>
             init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))),
@@ -127,7 +194,12 @@ describe("createStatusHandler", () => {
     expect(res.status).toBe(200)
     expect(await body(res)).toMatchObject({
       status: "unknown",
-      providers: [{ status: "unknown" }, { status: "unknown" }, { status: "unknown" }],
+      providers: [
+        { status: "unknown" },
+        { status: "unknown" },
+        { status: "unknown" },
+        { status: "unknown", url: "https://status.io/pages/eeeeeeeeeeeeeeeeeeeeeeee" },
+      ],
     })
   })
 

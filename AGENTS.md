@@ -15,9 +15,9 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 ## Layout
 
 - `apps/api` — Hono on Node (`@hono/node-server`, run with `tsx`). `createApp` in `app.ts` serves REST, `/mcp`,
-  `/openapi.json`, `/llms.txt`, `/llms-full.txt`, `/.well-known/mcp/server.json`, `/health`, `/status` (when
-  `STATUS_PROVIDERS` is set), OAuth discovery under
-  `/.well-known/` and better-auth at `/api/auth/*`. With `WEB_DIST_DIR` set it also serves the web app's pages.
+  `/openapi.json`, `/llms.txt`, `/llms-full.txt`, `/.well-known/mcp/server.json`, `/health`, `/status`, OAuth
+  discovery under `/.well-known/` and better-auth at `/api/auth/*`. With `WEB_DIST_DIR` set it also serves the
+  web app's pages.
   Operations live in `src/operations.ts`; invoke hooks (metering, idempotency, audit) in `src/hooks.ts`; tenant data in
   `src/data/`. `server.ts` only wires env, the DB and the listener (excluded from coverage)
 - `apps/web` — `@starter/web`: TanStack Start in SPA mode (sign-in, consent, device, agents settings). `vite build` writes
@@ -76,9 +76,11 @@ CI runs the same, plus gitleaks over history, commitlint over PR commits, an oas
   startup with `setErrorReporter`.
 - **Observability:** wrap every route handler in `observe` from `@starter/observability` (apps/api has its own
   request-id and access-log middleware instead). Health is liveness only: `/health` pings no dependency. Vendor
-  health comes from the vendors themselves: `GET /status` reads each one's status page (Atlassian Statuspage, or
-  AWS Health for `aws:<service>@<region>`), caches it for 60s and reports `unknown` when one can't be reached; set
-  the list in `STATUS_PROVIDERS`. `observe` reports only 5xx (thrown or returned) or non-exposed errors; 4xx are
+  health comes from the vendors themselves: `GET /status` reads each one's status page (Atlassian Statuspage,
+  status.io, or AWS Health for `aws`, `aws@<region>` or `aws:<service>@<region>`), caches it for 60s and reports
+  `unknown` when one can't be reached. `STATUS_PROVIDERS` sets the list; unset, it is a broad default (all of AWS,
+  Cloudflare, Vercel, Neon, PlanetScale) to narrow to what the app uses. Any open AWS event, in any region, shows
+  `aws` as degraded. `observe` reports only 5xx (thrown or returned) or non-exposed errors; 4xx are
   logged. Server-error logs include only
   allowlisted request headers (`safeHeaders`), never the full set. No error-tracking SDK is installed yet:
   until an app registers one with `setErrorReporter`, reported errors go nowhere (only the logs).

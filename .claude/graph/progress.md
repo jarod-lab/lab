@@ -15,4 +15,4 @@
   - `list_projects` now returns at most 50 per page by default (silent behaviour change).
   - GET / from a browser goes to /llms.txt (agent negotiation), not /sign-in.
   - Real-browser OAuth round trip with an actual MCP client (Claude Code/Cursor) not exercised.
-- **Next action (user):** review, apply 0003, rename registry entry, push + PR, publishing steps.
+- **Next action (user):** review, apply 0003, push + PR, publishing steps.

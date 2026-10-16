@@ -7,7 +7,7 @@ Turborepo + pnpm 11 monorepo, TypeScript. `apps/api` is a reference Hono API; ad
 ```bash
 mise trust && mise install   # Node 24, pnpm 11, gitleaks (a fresh clone is untrusted until you do this)
 pnpm install
-pnpm init-project <name>     # template only: renames the @starter scope, DB name and display name
+pnpm init-project <name> [owner]  # template only: renames the scope, DB name, display name and MCP registry name
 cp .env.example .env         # mise loads it; BETTER_AUTH_SECRET: openssl rand -base64 32
 docker compose up -d db      # optional local Postgres; tests don't need it
 ```

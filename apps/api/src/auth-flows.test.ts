@@ -3,6 +3,7 @@
 // flows that must keep working across better-auth upgrades, including minor and patch releases,
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
 
@@ -12,8 +13,11 @@ const SIGNED_OUT = { status: 401, body: { error: { code: "UNAUTHORIZED" } } }
 
 describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
+  /** Every access-log line the app writes. */
+  const logLines: string[] = []
   beforeAll(async () => {
-    t = await createTestApp()
+    const logger = createLogger({ level: "info", destination: { write: (s) => logLines.push(s) } })
+    t = await createTestApp([], { logger })
   })
   afterAll(() => t.close())
 
@@ -156,6 +160,21 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
   })
 
   describe("password reset by email", () => {
+    it("keeps the reset token out of the access log", async () => {
+      const { email: address } = await signedUp()
+      const visitor = open()
+      await visitor.client.requestPasswordReset({ email: address, redirectTo: `${BASE}/reset` })
+      const [mail] = await delivered(address)
+      const token = new URL(mail?.link ?? "").pathname.split("/").at(-1) ?? ""
+      expect(token.length).toBeGreaterThan(8)
+
+      const before = logLines.length
+      await visitor.request(mail?.link ?? "")
+      const visit = logLines.slice(before).join("")
+      expect(visit).not.toContain(token)
+      expect(visit).toContain("/api/auth/reset-password/[Redacted]")
+    })
+
     it("emails a link that leads to a working new password", async () => {
       const { b: old, email: address } = await signedUp()
       const visitor = open()

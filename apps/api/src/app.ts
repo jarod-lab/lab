@@ -118,6 +118,13 @@ function openApi(doc: ReturnType<typeof openApiDocument>) {
 }
 
 /**
+ * The request path for the access log. better-auth's emailed reset link (also the claim link) puts a
+ * live token in the path, `/api/auth/reset-password/<token>`, so that segment is replaced.
+ */
+const loggedPath = (path: string) =>
+  path.replace(/^(\/api\/auth\/reset-password\/)[^/]+/, "$1[Redacted]")
+
+/**
  * The API surface for people and agents, all generated from one operation registry:
  * REST under the operations' paths, MCP at /mcp, OpenAPI, llms.txt and OAuth discovery.
  */
@@ -184,7 +191,7 @@ export function createApp(opts: AppOptions) {
       {
         requestId,
         method: c.req.method,
-        path: c.req.path,
+        path: loggedPath(c.req.path),
         status: c.res.status,
         ms: Math.round(performance.now() - start),
         agent: c.req.header("user-agent"),
@@ -201,7 +208,7 @@ export function createApp(opts: AppOptions) {
     const error = toAppError(e)
     // Agents sending bad requests is normal traffic; only report what we'd want to be paged for.
     if (error.status >= 500 || !error.expose) {
-      reportError(error, { requestId: c.get("requestId"), path: c.req.path })
+      reportError(error, { requestId: c.get("requestId"), path: loggedPath(c.req.path) })
       logger.error({ err: error, requestId: c.get("requestId") }, error.message)
     }
     for (const [name, value] of Object.entries(errorHeaders(error))) c.header(name, value)

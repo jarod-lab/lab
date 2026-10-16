@@ -6,7 +6,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { AnyOperation } from "@starter/api"
 import { createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
-import { createLogger } from "@starter/logger"
+import { type Logger, createLogger } from "@starter/logger"
 import { createApp } from "./app"
 import { createApiHooks } from "./hooks"
 import { type MeterLimits, createMeter } from "./meter"
@@ -29,6 +29,8 @@ export interface TestAppOptions {
   trustProxy?: boolean
   /** A built web app to serve (see static.test.ts). */
   webDistDir?: string
+  /** Defaults to a silent logger; pass one with a destination to read the access log. */
+  logger?: Logger
 }
 
 export async function createTestApp(
@@ -78,7 +80,7 @@ export async function createTestApp(
     name: "Test API",
     version: "1.0.0",
     description: "A test API.",
-    logger: createLogger({ level: "silent" }),
+    logger: options.logger ?? createLogger({ level: "silent" }),
   })
   const req = (path: string, init: RequestInit = {}) => app.request(`${BASE}${path}`, init)
 

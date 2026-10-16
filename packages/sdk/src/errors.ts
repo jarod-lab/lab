@@ -56,7 +56,11 @@ export function parseRetryAfter(
 ): number | undefined {
   if (value === null) return undefined
   const trimmed = value.trim()
-  if (/^\d+$/.test(trimmed)) return Number(trimmed)
+  // Delta-seconds; a fraction (not in the spec, but sent) rounds up so the wait is never short.
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.ceil(Number(trimmed))
+  // Anything else must look like an HTTP date (it names a weekday or month). Date.parse would
+  // otherwise read "-1" or "1e3" as a year.
+  if (!/[a-z]/i.test(trimmed)) return undefined
   const date = Date.parse(trimmed)
   if (Number.isNaN(date)) return undefined
   return Math.max(0, Math.ceil((date - now) / 1000))

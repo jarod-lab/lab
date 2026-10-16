@@ -7,6 +7,14 @@ describe("parseRetryAfter", () => {
     expect(parseRetryAfter(" 0 ")).toBe(0)
   })
 
+  it("rounds fractional seconds up, and refuses other numbers rather than reading them as years", () => {
+    // Date.parse("1.5") and Date.parse("-1") are dates in 2001, which came out as "retry now".
+    expect(parseRetryAfter("1.5")).toBe(2)
+    expect(parseRetryAfter("-1")).toBeUndefined()
+    expect(parseRetryAfter("2030")).toBe(2030)
+    expect(parseRetryAfter("1e3")).toBeUndefined()
+  })
+
   it("reads an HTTP date relative to now, never negative", () => {
     const now = Date.parse("2030-01-01T00:00:00Z")
     expect(parseRetryAfter("Tue, 01 Jan 2030 00:01:00 GMT", now)).toBe(60)

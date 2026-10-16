@@ -1,5 +1,6 @@
 // Idempotency-Key records. Reserve before the handler runs and complete after, so two concurrent
-// retries can't both run it. Keys live 24 hours; an expired key is reclaimed by the next reserve.
+// retries can't both run it. A reservation holds for LEASE_MS and a completed key for 24 hours; an
+// expired key is reclaimed by the next reserve.
 //
 // Nothing in a row is readable from the database alone. The client's key is stored as an HMAC under
 // the server secret, and the response (which can hold a new API key) is sealed with AES-256-GCM
@@ -11,6 +12,12 @@ import { type Database, idempotencyKey } from "@starter/db"
 import { and, eq, lt } from "drizzle-orm"
 
 const TTL_MS = 24 * 60 * 60 * 1000
+/**
+ * How long a reservation holds before a retry may claim it. Completing the key extends it to TTL_MS.
+ * If the completion write fails after the handler ran, retries get CONFLICT for this long and then
+ * run the operation again, instead of being refused for a day. Handlers must finish well inside it.
+ */
+export const LEASE_MS = 5 * 60 * 1000
 
 /** The server secret, the organization and the client's key, which together name one record. */
 export interface IdempotencyRef {
@@ -86,7 +93,7 @@ export async function reserveIdempotencyKey<O>(
     status: "in_progress",
     response: null,
     createdAt: now,
-    expiresAt: new Date(now.getTime() + TTL_MS),
+    expiresAt: new Date(now.getTime() + LEASE_MS),
   }
   // One statement claims the key when it is new, or when its record has expired.
   const claimed = await db
@@ -125,7 +132,11 @@ export async function completeIdempotencyKey<O>(
   const lookup = idempotencyLookup(input.secret, org.value, input.key)
   await db
     .update(idempotencyKey)
-    .set({ status: "done", response: seal(input.response, input.secret, org.value, input.key) })
+    .set({
+      status: "done",
+      response: seal(input.response, input.secret, org.value, input.key),
+      expiresAt: new Date(Date.now() + TTL_MS),
+    })
     .where(and(eq(idempotencyKey.organizationId, org.value), eq(idempotencyKey.key, lookup)))
 }
 

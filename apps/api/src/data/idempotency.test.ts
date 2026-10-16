@@ -120,4 +120,21 @@ describe("idempotency keys", () => {
     expect(JSON.stringify(row?.response)).not.toContain("sk_x")
     expect(idempotencyLookup("another-secret", "org_a", "k7")).not.toBe(row?.key)
   })
+
+  it("holds a reservation for a short lease, and a completed key for 24 hours", async () => {
+    const expiresIn = async (key: string) => {
+      const [row] = await t.db
+        .select()
+        .from(idempotencyKey)
+        .where(eq(idempotencyKey.key, idempotencyLookup(secret, "org_a", key)))
+      return (row?.expiresAt.getTime() ?? 0) - Date.now()
+    }
+    await reserve("k8")
+    // If completing the key fails after the handler ran, a retry isn't refused for a day.
+    expect(await expiresIn("k8")).toBeLessThanOrEqual(5 * 60_000)
+    await acting("org_a", (o, proof) =>
+      completeIdempotencyKey(t.db, o, proof, { secret, key: "k8", response: { ok: true } }),
+    )
+    expect(await expiresIn("k8")).toBeGreaterThan(23 * 60 * 60_000)
+  })
 })

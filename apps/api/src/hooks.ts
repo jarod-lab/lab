@@ -149,7 +149,9 @@ export function createApiHooks({
       if (state.state === "done") return { result: state.response }
       if (state.state === "in_progress") {
         throw new AppError("CONFLICT", "A request with this Idempotency-Key is still running", {
-          hint: "Wait a moment, then retry with the same Idempotency-Key and the same body.",
+          hint:
+            "Wait a moment, then retry with the same Idempotency-Key and the same body. A call " +
+            "that never finished frees its key after 5 minutes.",
         })
       }
       if (state.state === "mismatch") {

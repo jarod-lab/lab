@@ -77,7 +77,8 @@ and a working example. Don't guess parameters: the schemas are exact.
 
 - **Idempotency**: send a unique `Idempotency-Key` header with every write (over MCP, pass the optional
   `idempotencyKey` argument). A retry with the same key and the same body returns the first response and runs
-  nothing twice. The same key with a different body is `CONFLICT`. A key is kept for 24 hours.
+  nothing twice. The same key with a different body is `CONFLICT`. A key is kept for 24 hours. While the first
+  call is still running a retry gets `CONFLICT`; a call that never finished frees its key after 5 minutes.
 - **Pagination**: list operations take `limit` (1 to 100) and `cursor`, and return `nextCursor`. Pass
   `nextCursor` back as `cursor`; it is `null` on the last page. Don't assume one call returns everything.
 - **Rate limits and quota**: a `429` is `RATE_LIMITED`. Read the `Retry-After` header (seconds) and wait that

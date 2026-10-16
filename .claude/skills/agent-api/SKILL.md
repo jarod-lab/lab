@@ -82,7 +82,9 @@ so REST and MCP behave the same:
   RATE_LIMITED and CONFLICT refusals, and nothing audits FORBIDDEN or BAD_REQUEST attempts yet.
 - **Idempotency-Key**: header on REST (1-255 characters), `idempotencyKey` argument on MCP (non-readOnly tools
   only, stripped by the registry). The stored key is bound to the operation, actor and validated input; keys
-  expire after 24 hours (`idempotency_key`, reads ignore expired rows, reserve reclaims them). Rows hold no
+  expire after 24 hours once completed, and a reservation after `LEASE_MS` (5 minutes), so a failed completion
+  write doesn't refuse retries for a day (they run again after the lease) (`idempotency_key`, reads ignore
+  expired rows, reserve reclaims them). Rows hold no
   readable secrets: `key` is an HMAC of the client's key under the server secret, and `response` is sealed with
   AES-256-GCM under a key derived from the secret, the org and the client's raw key (`data/idempotency.ts`), so
   a replayed `create_api_key` still returns its key but a table dump doesn't. `createApiHooks` takes `secret`.

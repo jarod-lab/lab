@@ -154,6 +154,22 @@ describe("llms.txt", () => {
     expect(full).toContain('"id": "n 1"')
   })
 
+  it("fills each path parameter by its whole name, not a prefix of another", () => {
+    const pair = defineOperation({
+      name: "get_pair",
+      method: "GET",
+      path: "/v1/:idx/:id",
+      summary: "Get a pair",
+      description: "Returns a pair.",
+      permissions: {},
+      input: z.object({ id: z.string(), idx: z.string() }),
+      output: z.object({ id: z.string() }),
+      examples: [{ input: { id: "a", idx: "b" }, output: { id: "a" } }],
+      handler: (input) => ({ id: input.id }),
+    })
+    expect(llmsFullTxt([pair], info)).toContain('curl -X GET "https://api.acme.test/v1/b/a"')
+  })
+
   it("carries install snippets for each client in both files and the root", () => {
     for (const txt of [llmsTxt(ops, info), llmsFullTxt(ops, info)]) {
       expect(txt).toContain("## Install")

@@ -26,14 +26,13 @@ export function serverName(info: ApiInfo): string {
 /** An example call. Anonymous operations (no credential) get no auth header. */
 function curl(op: AnyOperation, baseURL: string, anonymous: boolean): string {
   const input = (op.examples?.[0]?.input ?? {}) as Record<string, unknown>
-  let path = op.path
   const rest: Record<string, unknown> = { ...input }
-  for (const [k, v] of Object.entries(input)) {
-    if (path.includes(`:${k}`)) {
-      path = path.replace(`:${k}`, encodeURIComponent(String(v)))
-      delete rest[k]
-    }
-  }
+  // Whole parameter names only: `:id` must not match the start of `:idx`.
+  const path = op.path.replace(/:([A-Za-z0-9_]+)/g, (param, k: string) => {
+    if (!(k in input)) return param
+    delete rest[k]
+    return encodeURIComponent(String(input[k]))
+  })
   const lines = [`curl -X ${op.method} "${baseURL}${path}`]
   if (op.method === "GET" || op.method === "DELETE") {
     const qs = new URLSearchParams(Object.entries(rest).map(([k, v]) => [k, String(v)])).toString()

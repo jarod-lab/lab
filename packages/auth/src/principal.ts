@@ -4,7 +4,8 @@ import { createLocalJWKSet, type JSONWebKeySet, jwtVerify } from "jose"
 
 import { API_KEY_PREFIX, AUTH_BASE_PATH, type Auth } from "./index"
 import { findMember } from "./membership"
-import { narrow, rolePermissions, scopePermissions } from "./permissions"
+import { IMPERSONATION_GRANTS, narrow, rolePermissions, scopePermissions } from "./permissions"
+import { isImpersonated } from "./guards"
 
 export type Actor = { type: "user"; userId: string } | { type: "apiKey"; keyId: string }
 
@@ -62,11 +63,13 @@ async function fromSession(auth: Auth, headers: Headers): Promise<Principal | nu
   if (!session || !orgId) return null
   const member = await findMember((await auth.$context).adapter, session.user.id, orgId)
   if (!member) return null
+  const roles = rolePermissions(member.role)
   return {
     organizationId: orgId,
     actor: { type: "user", userId: session.user.id },
     via: "session",
-    grants: rolePermissions(member.role),
+    // An admin impersonating this user gets read-only access, whatever the user's role allows.
+    grants: isImpersonated(session) ? narrow(roles, IMPERSONATION_GRANTS as PermissionSet) : roles,
   }
 }
 

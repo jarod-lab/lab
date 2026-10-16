@@ -22,6 +22,15 @@ const auth = createAuth({
   emailFrom: env.EMAIL_FROM,
   wrapsApiKey: env.WRAPS_API_KEY,
   oauthResources: [baseURL, `${baseURL}/mcp`],
+  github:
+    env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+      ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET }
+      : undefined,
+  google:
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+      : undefined,
+  passwordBreachCheck: true,
 })
 
 const meter = createMeter({

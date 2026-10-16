@@ -1,25 +1,40 @@
 import { apiKey } from "@better-auth/api-key"
 import { oauthProvider } from "@better-auth/oauth-provider"
+import { passkey } from "@better-auth/passkey"
+import type { Database } from "@starter/db"
+import * as schema from "@starter/db/schema"
 import { wraps } from "@wraps.dev/better-auth"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { createAuthMiddleware } from "better-auth/api"
-import { jwt, organization } from "better-auth/plugins"
-
-import type { Database } from "@starter/db"
-import * as schema from "@starter/db/schema"
-
+import { APIError, createAuthMiddleware } from "better-auth/api"
+import {
+  admin,
+  haveIBeenPwned,
+  jwt,
+  lastLoginMethod,
+  magicLink,
+  organization,
+  twoFactor,
+} from "better-auth/plugins"
+import { PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
+import { impersonationGuard } from "./guards"
 import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
-import { type Adapter, firstMembership, findMember, personalOrganization } from "./membership"
+import { type Adapter, findMember, firstMembership, personalOrganization } from "./membership"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
+import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
+import { resumeMagicLinkAuthorization } from "./resume"
 import { endProvisionalKeys, registerSignupDatabase } from "./signup"
 
 export { DEVICE_VERIFICATION_PATH } from "./device"
-export { isClaimed, provisionalSignup, type ProvisionalSignup } from "./signup"
+export { IMPERSONATION_REFUSED_PATHS } from "./guards"
+export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
+export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
 
 /** Where better-auth's routes are mounted; the OAuth issuer is `${baseURL}${AUTH_BASE_PATH}`. */
 export const AUTH_BASE_PATH = "/api/auth"
+
+export { PASSWORD_COMPROMISED_CODE, PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 
 /** Every API key starts with this, so a bearer token can be routed without a lookup. */
 export const API_KEY_PREFIX = "sk_"
@@ -77,6 +92,24 @@ export interface AuthOptions {
   ses?: Record<string, unknown>
   /** Called when an auth email fails to send. Sends never block the auth flow. */
   onEmailError?: (error: Error) => void
+  /** GitHub OAuth app. The sign-in button is offered only when both values are set. */
+  github?: { clientId: string; clientSecret: string }
+  /** Google OAuth client. Offered only when both values are set. */
+  google?: { clientId: string; clientSecret: string }
+  /**
+   * Check new and changed passwords against Have I Been Pwned (sends a 5-character hash prefix).
+   * Off by default so tests make no network calls; server.ts turns it on.
+   */
+  passwordBreachCheck?: boolean
+}
+
+const refuseReservedSlug = (slug: string) => {
+  if (isReservedOrgSlug(slug)) {
+    throw APIError.from("BAD_REQUEST", {
+      message: "That address is reserved. Choose another organization URL.",
+      code: "RESERVED_ORGANIZATION_SLUG",
+    })
+  }
 }
 
 export function createAuth(opts: AuthOptions) {
@@ -134,6 +167,14 @@ export function createAuth(opts: AuthOptions) {
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
     disabledPaths: ["/token", "/device/token"],
     hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave },
+    socialProviders: {
+      ...(opts.github && {
+        github: { clientId: opts.github.clientId, clientSecret: opts.github.clientSecret },
+      }),
+      ...(opts.google && {
+        google: { clientId: opts.google.clientId, clientSecret: opts.google.clientSecret },
+      }),
+    },
     databaseHooks: {
       // Every account works inside an organization: signing up creates a personal one.
       // A verified address is a claimed account (verify-email, or any other path that sets it).
@@ -157,13 +198,41 @@ export function createAuth(opts: AuthOptions) {
     },
     plugins: [
       wrapsPlugin,
+      // Before the password is stored, so a breached one never reaches the hash.
+      haveIBeenPwned({
+        enabled: opts.passwordBreachCheck ?? false,
+        customPasswordCompromisedMessage: PASSWORD_COMPROMISED_MESSAGE,
+      }),
+      // Recorded on the user row (lastLoginMethod) for the sign-in screens.
+      lastLoginMethod({ storeInDatabase: true }),
+      // Passkeys are bound to the app's own origin: the host of the base URL.
+      passkey({
+        rpID: new URL(opts.baseURL).hostname,
+        rpName: opts.appName ?? "Starter",
+        origin: opts.baseURL,
+      }),
+      // TOTP with backup codes and trusted devices. Signing in with a second factor pending answers
+      // `twoFactorRedirect`; the web app sends the person to /two-factor (see client.ts).
+      twoFactor({ issuer: opts.appName ?? "Starter" }),
+      // Sign-in links; the wraps plugin sends them through the same SES path as other auth emails.
+      magicLink({ sendMagicLink: wrapsPlugin.emails.magicLink }),
+      // Platform admins: a user whose `role` is "admin". Impersonation is limited by impersonationGuard.
+      admin({ adminRoles: ["admin"], defaultRole: "user" }),
+      impersonationGuard,
       organization({
         ac,
         roles,
         creatorRole: "owner",
         sendInvitationEmail: wrapsPlugin.emails.invitation,
-        // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
+        // Organization slugs are URL segments, so the app's own paths are refused (RESERVED_ORG_SLUGS).
         organizationHooks: {
+          beforeCreateOrganization: async ({ organization }) => {
+            refuseReservedSlug(organization.slug ?? slugOf(organization.name ?? ""))
+          },
+          beforeUpdateOrganization: async ({ organization }) => {
+            if (typeof organization.slug === "string") refuseReservedSlug(organization.slug)
+          },
+          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
           afterRemoveMember: async ({ member, organization }) =>
             revokeMemberGrants(await adapter(), member.userId, organization.id),
         },
@@ -216,6 +285,12 @@ export function createAuth(opts: AuthOptions) {
         },
         customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
       }),
+      // A pending OAuth authorization survives the emailed link (see resume.ts). After oauthProvider,
+      // so its signature check has already run on the sign-in request.
+      resumeMagicLinkAuthorization({
+        authorizeUrl: `${opts.baseURL}${AUTH_BASE_PATH}/oauth2/authorize`,
+        signInUrl: `${opts.baseURL}${opts.oauthPages?.login ?? "/sign-in"}`,
+      }),
       // RFC 8628 device grant on the same token endpoint (see device.ts).
       deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
     ],
@@ -227,9 +302,9 @@ export function createAuth(opts: AuthOptions) {
 
 export type Auth = ReturnType<typeof createAuth>
 
-export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
-export * from "./permissions"
 export {
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
 } from "@better-auth/oauth-provider"
+export * from "./permissions"
+export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"

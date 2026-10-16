@@ -36,6 +36,15 @@ export const OAUTH_SCOPE_GRANTS = {
 export type OAuthScope = keyof typeof OAUTH_SCOPE_GRANTS
 export const OAUTH_SCOPES = Object.keys(OAUTH_SCOPE_GRANTS) as OAuthScope[]
 
+/**
+ * What an impersonated session (an admin acting as the user, see guards.ts) may do through the API:
+ * reads only. Narrows whatever the member's roles allow, so no key can be created while impersonating.
+ */
+export const IMPERSONATION_GRANTS = {
+  project: ["read"],
+  apiKey: ["read"],
+} as const satisfies Permissions
+
 /** Actions no OAuth token can ever get: an agent should not delete orgs or edit roles. */
 export const OAUTH_EXCLUDED: Permissions = {
   organization: ["delete"],

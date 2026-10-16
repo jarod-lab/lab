@@ -2,12 +2,47 @@
 // a cookie jar and an Origin header, through the app's router into better-auth. These are the
 // flows that must keep working across better-auth upgrades, including minor and patch releases,
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
+import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
 
 const PASSWORD = "correct-horse-battery"
+/** RFC 4648 base32, as authenticator secrets are written. */
+function base32Decode(input: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+  const out: number[] = []
+  let bits = 0
+  let value = 0
+  for (const c of input.replace(/=+$/, "").toUpperCase()) {
+    value = ((value << 5) | alphabet.indexOf(c)) & 0xffff
+    bits += 5
+    if (bits >= 8) {
+      out.push((value >> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+  return Buffer.from(out)
+}
+
+/** The 6-digit TOTP (RFC 6238, 30 seconds, SHA-1) an authenticator app shows for a secret. */
+function totp(secret: string, at = Date.now()): string {
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)))
+  const hash = createHmac("sha1", base32Decode(secret)).update(counter).digest()
+  const offset = (hash[hash.length - 1] ?? 0) & 0xf
+  const code =
+    (((hash[offset] ?? 0) & 0x7f) << 24) |
+    ((hash[offset + 1] ?? 0) << 16) |
+    ((hash[offset + 2] ?? 0) << 8) |
+    (hash[offset + 3] ?? 0)
+  return String(code % 1_000_000).padStart(6, "0")
+}
+
+const REDIRECT = "http://127.0.0.1:33418/callback"
+const MCP = `${BASE}/mcp`
+
 /** What the product API answers for a session that no longer works. */
 const SIGNED_OUT = { status: 401, body: { error: { code: "UNAUTHORIZED" } } }
 
@@ -430,6 +465,576 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(res.status).toBe(200)
       const { keys } = (await res.json()) as { keys: { kid: string }[] }
       expect(keys.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe("magic links", () => {
+    it("emails a sign-in link that signs the person in and records the method", async () => {
+      const { b, email: address } = await signedUp()
+      await b.client.signOut()
+
+      const visitor = open()
+      const { error } = await visitor.client.signIn.magicLink({
+        email: address,
+        callbackURL: "/welcome",
+      })
+      expect(error).toBeNull()
+      const [mail] = await delivered(address)
+      expect(mail?.link).toMatch(/^http:\/\/localhost:3000\/api\/auth\/magic-link\/verify\?token=/)
+
+      const landing = await visitor.request(mail?.link ?? "")
+      expect(landing.status).toBe(302)
+      expect(landing.headers.get("location")).toBe(`${BASE}/welcome`)
+      expect((await whoami(visitor)).status).toBe(200)
+      expect(
+        ((await visitor.client.getSession()).data?.user as { lastLoginMethod?: string } | undefined)
+          ?.lastLoginMethod,
+      ).toBe("magic-link")
+    })
+
+    it("refuses a link twice, and a forged one, with an error the app can show", async () => {
+      const { email: address } = await signedUp()
+      const visitor = open()
+      await visitor.client.signIn.magicLink({ email: address, callbackURL: "/welcome" })
+      const [mail] = await delivered(address, 1)
+      expect((await visitor.request(mail?.link ?? "")).status).toBe(302)
+
+      const again = await open().request(mail?.link ?? "")
+      expect(again.headers.get("location")).toContain("error=INVALID_TOKEN")
+
+      const forged = await open().request("/api/auth/magic-link/verify?token=forged")
+      expect(forged.headers.get("location")).toContain("error=INVALID_TOKEN")
+    })
+
+    it("claims a provisional signup: the magic link verifies the address and ends its key", async () => {
+      const address = `magic-claim-${++n}@example.com`
+      const made = await t.req("/v1/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, name: "Agent" }),
+      })
+      const { apiKey } = (await made.json()) as { apiKey: string }
+      expect((await t.req("/v1/whoami", { headers: { "x-api-key": apiKey } })).status).toBe(200)
+
+      const visitor = open()
+      await visitor.client.signIn.magicLink({ email: address, callbackURL: "/" })
+      const link = (await delivered(address, 2)).find((m) =>
+        m.link.includes("/magic-link/verify"),
+      )?.link
+      expect(link).toBeTruthy()
+      expect((await visitor.request(link ?? "")).status).toBe(302)
+
+      const stopped = await t.req("/v1/whoami", { headers: { "x-api-key": apiKey } })
+      expect(stopped.status).toBe(401)
+      expect(await stopped.json()).toMatchObject({
+        error: { code: "UNAUTHORIZED", hint: expect.stringContaining("device") },
+      })
+      expect((await whoami(visitor)).status).toBe(200)
+    })
+  })
+
+  describe("two-factor (TOTP)", () => {
+    it("enrols an authenticator, then requires its code on the next sign-in", async () => {
+      const { b, email: address } = await signedUp()
+      const enabling = await b.client.twoFactor.enable({ password: PASSWORD })
+      expect(enabling.error).toBeNull()
+      const secret =
+        new URL((enabling.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+          "secret",
+        ) ?? ""
+      expect(secret.length).toBeGreaterThan(8)
+      expect((await b.client.twoFactor.verifyTotp({ code: totp(secret) })).error).toBeNull()
+      expect((await b.client.getSession()).data?.user.twoFactorEnabled).toBe(true)
+      await b.client.signOut()
+
+      const visitor = open()
+      const first = await visitor.client.signIn.email({ email: address, password: PASSWORD })
+      expect((first.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect).toBe(true)
+      expect(first.data?.user).toBeUndefined()
+      expect((await whoami(visitor)).status).toBe(401)
+
+      const wrong = await visitor.client.twoFactor.verifyTotp({ code: "000000" })
+      expect(wrong.error).toMatchObject({ status: 401 })
+      const right = await visitor.client.twoFactor.verifyTotp({ code: totp(secret) })
+      expect(right.error).toBeNull()
+      expect((await whoami(visitor)).status).toBe(200)
+    })
+  })
+
+  describe("two-factor: backup codes and trusted devices", () => {
+    it("trusts a device after its second factor, and takes a backup code once", async () => {
+      const { b, email: address } = await signedUp()
+      const enrol = await b.client.twoFactor.enable({ password: PASSWORD })
+      const secret =
+        new URL((enrol.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+          "secret",
+        ) ?? ""
+      const backupCodes = (enrol.data as { backupCodes?: string[] } | null)?.backupCodes ?? []
+      expect(backupCodes.length).toBeGreaterThan(0)
+      await b.client.twoFactor.verifyTotp({ code: totp(secret) })
+      await b.client.signOut()
+
+      // This browser passes the second factor once, and asks to trust the device.
+      const device = open()
+      await device.client.signIn.email({ email: address, password: PASSWORD })
+      const trusting = await device.client.twoFactor.verifyTotp({
+        code: totp(secret),
+        trustDevice: true,
+      })
+      expect(trusting.error).toBeNull()
+      await device.client.signOut()
+      const again = await device.client.signIn.email({ email: address, password: PASSWORD })
+      expect((again.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect).toBeFalsy()
+      expect((await whoami(device)).status).toBe(200)
+
+      // Another browser has no trusted device: a backup code gets it in, once.
+      const other = open()
+      const first = await other.client.signIn.email({ email: address, password: PASSWORD })
+      expect((first.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect).toBe(true)
+      const used = await other.client.twoFactor.verifyBackupCode({ code: backupCodes[0] ?? "" })
+      expect(used.error).toBeNull()
+      expect((await whoami(other)).status).toBe(200)
+
+      const replay = await open().client.signIn.email({ email: address, password: PASSWORD })
+      expect((replay.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect).toBe(true)
+      const reused = await open().client.twoFactor.verifyBackupCode({
+        code: backupCodes[0] ?? "",
+      })
+      expect(reused.error).toBeTruthy()
+    })
+  })
+
+  describe("passkeys", () => {
+    it("offers registration to a signed-in person only, bound to the app's host", async () => {
+      const { b } = await signedUp()
+      const signedIn = await b.request("/api/auth/passkey/generate-register-options")
+      expect(signedIn.status).toBe(200)
+      const options = (await signedIn.json()) as { challenge?: string; rp?: { id?: string } }
+      expect(options.challenge).toBeTruthy()
+      expect(options.rp?.id).toBe("localhost")
+
+      const anonymous = await open().request("/api/auth/passkey/generate-register-options")
+      expect(anonymous.status).toBe(401)
+    })
+  })
+
+  describe("sign-in with an OAuth authorization pending", () => {
+    /** The query an authorization request carries, as an MCP client sends it (with PKCE). */
+    async function startAuthorization() {
+      const reg = await t.req("/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Agent",
+          redirect_uris: [REDIRECT],
+          token_endpoint_auth_method: "none",
+        }),
+      })
+      const clientId = ((await reg.json()) as { client_id: string }).client_id
+      const verifier = randomBytes(32).toString("base64url")
+      const query = new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        scope: "openid offline_access read",
+        state: "s1",
+        code_challenge: createHash("sha256").update(verifier).digest("base64url"),
+        code_challenge_method: "S256",
+        resource: MCP,
+      })
+      return { clientId, verifier, query }
+    }
+
+    /** The signed query the page's client sends back (what oauthProviderClient builds). */
+    const signedOAuthQuery = (search: string) => {
+      const params = new URLSearchParams(search)
+      const names = new Set(params.getAll("ba_param"))
+      const out = new URLSearchParams()
+      for (const [k, v] of params)
+        if (k === "sig" || k === "ba_param" || names.has(k)) out.append(k, v)
+      return out.toString()
+    }
+
+    /** Authorization goes to the sign-in page first; returns that page's signed query. */
+    async function toSignIn(b: ReturnType<typeof open>, query: URLSearchParams) {
+      const res = await b.request(`/api/auth/oauth2/authorize?${query}`)
+      const login = new URL(res.headers.get("location") ?? "", BASE)
+      expect(login.pathname).toBe("/sign-in")
+      return signedOAuthQuery(login.search)
+    }
+
+    /** Accept consent on the pending authorization, then exchange the code for a token. */
+    async function finish(
+      b: ReturnType<typeof open>,
+      next: URL,
+      a: { clientId: string; verifier: string },
+    ) {
+      const consent = await b.request("/api/auth/oauth2/consent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accept: true, oauth_query: next.search.slice(1) }),
+      })
+      const { url } = (await consent.json()) as { url: string }
+      const code = new URL(url).searchParams.get("code") ?? ""
+      const token = await t.req("/api/auth/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: REDIRECT,
+          client_id: a.clientId,
+          code_verifier: a.verifier,
+          resource: MCP,
+        }),
+      })
+      const body = (await token.json()) as { access_token?: string }
+      expect(body.access_token).toBeTruthy()
+      return body.access_token ?? ""
+    }
+
+    it("resumes the authorization after a magic-link sign-in", async () => {
+      const { email: address } = await signedUp("Mara")
+      const a = await startAuthorization()
+      const b = open()
+      const oauthQuery = await toSignIn(b, a.query)
+
+      const sent = await b.request("/api/auth/sign-in/magic-link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, callbackURL: "/", oauth_query: oauthQuery }),
+      })
+      expect(sent.status).toBe(200)
+      const [mail] = await delivered(address)
+
+      // The emailed link opens in the same browser, which still holds the pending authorization.
+      // The link carries the authorization to the authorize endpoint, which now has a session.
+      const landing = await b.request(mail?.link ?? "")
+      expect(landing.status).toBe(302)
+      const resumed = await b.request(landing.headers.get("location") ?? "")
+      expect(resumed.status).toBe(302)
+      const next = new URL(resumed.headers.get("location") ?? "", BASE)
+      expect(next.pathname).toBe("/consent")
+
+      const accessToken = await finish(b, next, a)
+      const { decodeJwt } = await import("jose")
+      expect(decodeJwt(accessToken).org).toBeTruthy()
+    })
+
+    it("refuses a forged authorization query on a magic-link sign-in", async () => {
+      const { email: address } = await signedUp()
+      const a = await startAuthorization()
+      const forged = (await toSignIn(open(), a.query)).replace(/sig=[^&]+/, "sig=forged")
+      const res = await open().request("/api/auth/sign-in/magic-link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, callbackURL: "/", oauth_query: forged }),
+      })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: "invalid_signature" })
+      expect(inbox(address)).toHaveLength(0)
+    })
+
+    it("sends a failed link back to sign-in, where the person can see why", async () => {
+      const { email: address } = await signedUp()
+      const a = await startAuthorization()
+      const b = open()
+      const oauthQuery = await toSignIn(b, a.query)
+      await b.request("/api/auth/sign-in/magic-link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, callbackURL: "/", oauth_query: oauthQuery }),
+      })
+      const [mail] = await delivered(address)
+      const broken = new URL(mail?.link ?? "")
+      broken.searchParams.set("token", "forged")
+      const landing = await b.request(`${broken.pathname}${broken.search}`)
+      const next = new URL(landing.headers.get("location") ?? "", BASE)
+      expect(next.pathname).toBe("/sign-in")
+      expect(next.searchParams.get("error")).toBe("INVALID_TOKEN")
+    })
+
+    it("an impersonated session gets no code, even for an authorization the user already granted", async () => {
+      const { b: owner, userId: ownerId } = await signedUp("Granted")
+      const a = await startAuthorization()
+      const first = await owner.request(`/api/auth/oauth2/authorize?${a.query}`)
+      await finish(owner, new URL(first.headers.get("location") ?? "", BASE), a)
+
+      const { b: admin, userId: adminId } = await signedUp("Root")
+      await (await t.auth.$context).adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: adminId }],
+        update: { role: "admin" },
+      })
+      expect((await admin.client.admin.impersonateUser({ userId: ownerId })).error).toBeNull()
+
+      const again = await admin.request(`/api/auth/oauth2/authorize?${a.query}`)
+      expect(again.status).toBe(403)
+      expect(await again.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+      expect(again.headers.get("location")).toBeNull()
+    })
+
+    it("resumes the authorization after the second factor", async () => {
+      const { b: owner, email: address } = await signedUp("Tofu")
+      const enrol = await owner.client.twoFactor.enable({ password: PASSWORD })
+      const secret =
+        new URL((enrol.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+          "secret",
+        ) ?? ""
+      await owner.client.twoFactor.verifyTotp({ code: totp(secret) })
+      await owner.client.signOut()
+
+      const a = await startAuthorization()
+      const b = open()
+      const oauthQuery = await toSignIn(b, a.query)
+      const first = await b.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, password: PASSWORD, oauth_query: oauthQuery }),
+      })
+      expect(((await first.json()) as { twoFactorRedirect?: boolean }).twoFactorRedirect).toBe(true)
+
+      const second = await b.request("/api/auth/two-factor/verify-totp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // The two-factor page keeps its query, so the app sends it back with the code.
+        body: JSON.stringify({ code: totp(secret), oauth_query: oauthQuery }),
+      })
+      const text = await second.text()
+      const location = second.headers.get("location") ?? (JSON.parse(text) as { url?: string }).url
+      const next = new URL(location ?? "", BASE)
+      expect(next.pathname).toBe("/consent")
+
+      const accessToken = await finish(b, next, a)
+      const { decodeJwt } = await import("jose")
+      expect(decodeJwt(accessToken).org).toBeTruthy()
+    })
+  })
+
+  describe("GitHub and Google sign-in (provider fetches faked)", () => {
+    let s: Awaited<ReturnType<typeof createTestApp>>
+    let githubEmail = ""
+    /** GitHub's id for the account is per address, as it would be for real people. */
+    const githubAccountId = () =>
+      [...githubEmail].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+    const realFetch = globalThis.fetch
+    const social = () => browser((url, init) => s.app.request(url, init))
+
+    beforeAll(async () => {
+      s = await createTestApp([], { github: { clientId: "gh-client", clientSecret: "gh-secret" } })
+      // GitHub's token and profile endpoints, answered for the address under test.
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        const json = (body: unknown) =>
+          Promise.resolve(
+            new Response(JSON.stringify(body), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
+          )
+        if (url === "https://github.com/login/oauth/access_token")
+          return json({ access_token: "gho_test", token_type: "bearer", scope: "user:email" })
+        if (url === "https://api.github.com/user")
+          return json({
+            id: githubAccountId(),
+            login: "octo",
+            name: "Octo Cat",
+            email: githubEmail,
+            avatar_url: "",
+          })
+        if (url === "https://api.github.com/user/emails")
+          return json([{ email: githubEmail, primary: true, verified: true }])
+        return realFetch(input, init)
+      })
+    })
+    afterAll(async () => {
+      vi.unstubAllGlobals()
+      await s.close()
+    })
+
+    it("offers only the providers that are configured", async () => {
+      const b = social()
+      const google = await b.client.signIn.social({ provider: "google", callbackURL: "/" })
+      expect(google.error).toBeTruthy()
+      const github = await b.client.signIn.social({ provider: "github", callbackURL: "/" })
+      expect(github.error).toBeNull()
+      const authorize = new URL(github.data?.url ?? "")
+      expect(authorize.origin + authorize.pathname).toBe("https://github.com/login/oauth/authorize")
+      expect(authorize.searchParams.get("client_id")).toBe("gh-client")
+    })
+
+    it("signs a new GitHub address up into a personal organization", async () => {
+      const address = `octo-new-${++n}@example.com`
+      githubEmail = address
+      const b = social()
+      const start = await b.client.signIn.social({ provider: "github", callbackURL: "/welcome" })
+      const state = new URL(start.data?.url ?? "").searchParams.get("state") ?? ""
+      const back = await b.request(`/api/auth/callback/github?code=test-code&state=${state}`)
+      expect(back.status).toBe(302)
+      expect(new URL(back.headers.get("location") ?? "", BASE).pathname).toBe("/welcome")
+
+      const { data: session } = await b.client.getSession()
+      expect(session?.user.email).toBe(address)
+      expect(session?.session.activeOrganizationId).toBeTruthy()
+      expect((await whoami(b)).status).toBe(200)
+      expect((session?.user as { lastLoginMethod?: string } | undefined)?.lastLoginMethod).toBe(
+        "github",
+      )
+    })
+
+    it("cannot claim a provisional signup: the same address on GitHub is refused, the key stays on", async () => {
+      // Linking to an account whose address isn't verified yet is refused (better-auth's
+      // requireLocalEmailVerified default), so a social login can't take over a provisional account.
+      const address = `octo-claim-${++n}@example.com`
+      githubEmail = address
+      const made = await s.req("/v1/signup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, name: "Octo" }),
+      })
+      const { apiKey } = (await made.json()) as { apiKey: string }
+
+      const b = social()
+      const start = await b.client.signIn.social({ provider: "github", callbackURL: "/welcome" })
+      const state = new URL(start.data?.url ?? "").searchParams.get("state") ?? ""
+      const back = await b.request(`/api/auth/callback/github?code=test-code&state=${state}`)
+      expect(new URL(back.headers.get("location") ?? "", BASE).searchParams.get("error")).toBe(
+        "account_not_linked",
+      )
+      expect((await whoami(b)).status).toBe(SIGNED_OUT.status)
+
+      expect((await s.req("/v1/whoami", { headers: { "x-api-key": apiKey } })).status).toBe(200)
+    })
+  })
+
+  describe("impersonation", () => {
+    it("an impersonated session is read-only and cannot create keys or consent", async () => {
+      const { b: admin, userId: adminId } = await signedUp("Root")
+      const { userId: victimId } = await signedUp("Victim")
+      const ctx = await t.auth.$context
+      await ctx.adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: adminId }],
+        update: { role: "admin" },
+      })
+      // Impersonation starts from the admin's own session.
+      const start = await admin.client.admin.impersonateUser({ userId: victimId })
+      expect(start.error).toBeNull()
+
+      const session = await admin.client.getSession()
+      expect(session.data?.user.id).toBe(victimId)
+      expect(await whoami(admin)).toMatchObject({ status: 200 })
+
+      const key = await admin.request("/api/auth/api-key/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Sneaky", permissions: { project: ["read"] } }),
+      })
+      expect(key.status).toBe(403)
+      expect(await key.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+
+      const consent = await admin.request("/api/auth/oauth2/consent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accept: true }),
+      })
+      expect(consent.status).toBe(403)
+      expect(await consent.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+
+      const viaApi = await admin.request("/v1/api-keys", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Sneaky", permissions: { project: ["read"] } }),
+      })
+      expect(viaApi.status).toBe(403)
+      expect(await viaApi.json()).toMatchObject({ error: { code: "FORBIDDEN" } })
+    })
+  })
+
+  describe("reserved organization slugs", () => {
+    it("refuses a reserved slug on create and on update", async () => {
+      const { b } = await signedUp("Owner")
+      const explicit = await b.client.organization.create({ name: "Admin area", slug: "admin" })
+      expect(explicit.error).toMatchObject({ status: 400, code: "RESERVED_ORGANIZATION_SLUG" })
+
+      const hyphenated = await b.client.organization.create({
+        name: "Two Factor",
+        slug: "two-factor",
+      })
+      expect(hyphenated.error).toMatchObject({ status: 400, code: "RESERVED_ORGANIZATION_SLUG" })
+
+      const { data: org, error } = await b.client.organization.create({
+        name: "Fine",
+        slug: `fine-${n}`,
+      })
+      expect(error).toBeNull()
+      const renamed = await b.client.organization.update({
+        organizationId: org?.id ?? "",
+        data: { slug: "settings" },
+      })
+      expect(renamed.error).toMatchObject({ status: 400, code: "RESERVED_ORGANIZATION_SLUG" })
+    })
+  })
+
+  describe("password breach check (Have I Been Pwned, faked)", () => {
+    const BAD_PASSWORD = "Breached-Password-2026"
+    const badHash = createHash("sha1").update(BAD_PASSWORD).digest("hex").toUpperCase()
+    const realFetch = globalThis.fetch
+    let checked = 0
+    let t2: Awaited<ReturnType<typeof createTestApp>>
+
+    beforeAll(async () => {
+      t2 = await createTestApp([], { breachCheck: true })
+      // The k-anonymity range API: only the matching suffix comes back. Everything else is clean.
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input)
+        if (!url.startsWith("https://api.pwnedpasswords.com/range/")) return realFetch(input, init)
+        checked++
+        const prefix = url.split("/").pop()
+        const body =
+          prefix === badHash.slice(0, 5)
+            ? `${badHash.slice(5)}:37\r\n0000000000000000000000000000000000000:0\r\n`
+            : "0000000000000000000000000000000000000:0\r\n"
+        return Promise.resolve(new Response(body, { status: 200 }))
+      })
+    })
+    afterAll(async () => {
+      vi.unstubAllGlobals()
+      await t2.close()
+    })
+
+    it("refuses a breached password at sign-up, with the code the app maps", async () => {
+      const b = browser((url, init) => t2.app.request(url, init))
+      const { error } = await b.client.signUp.email({
+        email: `breach-${++n}@example.com`,
+        password: BAD_PASSWORD,
+        name: "Ada",
+      })
+      expect(error).toMatchObject({
+        status: 400,
+        code: "PASSWORD_COMPROMISED",
+        message: "This password has shown up in a known data breach. Choose a different one.",
+      })
+      expect(checked).toBeGreaterThan(0)
+    })
+
+    it("refuses a breached password when changing it, and accepts a clean one", async () => {
+      const b = browser((url, init) => t2.app.request(url, init))
+      await b.client.signUp.email({
+        email: `breach-${++n}@example.com`,
+        password: PASSWORD,
+        name: "Ada",
+      })
+      const bad = await b.client.changePassword({
+        currentPassword: PASSWORD,
+        newPassword: BAD_PASSWORD,
+      })
+      expect(bad.error).toMatchObject({ code: "PASSWORD_COMPROMISED" })
+      const good = await b.client.changePassword({
+        currentPassword: PASSWORD,
+        newPassword: "a-clean-passphrase",
+      })
+      expect(good.error).toBeNull()
     })
   })
 })

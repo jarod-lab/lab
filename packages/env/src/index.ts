@@ -12,6 +12,12 @@ export const env = createEnv({
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),
     WRAPS_API_KEY: z.string().min(1).optional(),
+    /** GitHub OAuth app. The "Continue with GitHub" option appears only when both are set. */
+    GITHUB_CLIENT_ID: z.string().min(1).optional(),
+    GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+    /** Google OAuth client. The "Continue with Google" option appears only when both are set. */
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
     PORT: z.coerce.number().int().positive().optional(),
     /** Set by portless under `pnpm dev`: the app's https://<name>.localhost URL. */
     PORTLESS_URL: z.url().optional(),
@@ -31,6 +37,8 @@ export const env = createEnv({
     WEB_DIST_DIR: z.string().min(1).optional(),
     /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
     API_URL: z.url().optional(),
+    /** e2e only: the model credential the e2e tester (`pnpm e2e`) uses for its agent steps. */
+    AI_GATEWAY_API_KEY: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   // Only an explicit yes: "false" or "0" must not turn validation off.

@@ -35,6 +35,11 @@ export interface TestAppOptions {
   logger?: Logger
   /** Serve GET /status for these vendors (see app.ts). */
   status?: AppOptions["status"]
+  /** Check passwords against Have I Been Pwned. Off here (no network); auth-flows fakes the service. */
+  breachCheck?: boolean
+  /** GitHub and Google sign-in, when a test wants those buttons. */
+  github?: { clientId: string; clientSecret: string }
+  google?: { clientId: string; clientSecret: string }
 }
 
 export async function createTestApp(
@@ -68,6 +73,9 @@ export async function createTestApp(
     onEmailError: (error) => {
       throw error
     },
+    passwordBreachCheck: options.breachCheck ?? false,
+    github: options.github,
+    google: options.google,
   })
   const meter = createMeter({
     db: t.db,

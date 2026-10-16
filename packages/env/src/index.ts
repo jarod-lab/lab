@@ -3,7 +3,7 @@ import { z } from "zod"
 
 /**
  * Single source of truth for environment variables. Keep `.env.example` in sync.
- * Validation runs on first import; set SKIP_ENV_VALIDATION=1 for builds/tests that don't need it.
+ * Validation runs on first import; set SKIP_ENV_VALIDATION=1 (or true) for builds/tests that don't need it.
  */
 export const env = createEnv({
   server: {
@@ -28,6 +28,7 @@ export const env = createEnv({
     API_URL: z.url().optional(),
   },
   runtimeEnv: process.env,
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  // Only an explicit yes: "false" or "0" must not turn validation off.
+  skipValidation: ["1", "true"].includes(String(process.env.SKIP_ENV_VALIDATION).toLowerCase()),
   emptyStringAsUndefined: true,
 })

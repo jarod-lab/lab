@@ -8,6 +8,24 @@ describe("env", () => {
     await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
   })
 
+  it("still validates when SKIP_ENV_VALIDATION is set to false or 0", async () => {
+    for (const value of ["false", "0"]) {
+      vi.resetModules()
+      vi.stubEnv("SKIP_ENV_VALIDATION", value)
+      vi.stubEnv("DATABASE_URL", "")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+    }
+  })
+
+  it("skips validation when SKIP_ENV_VALIDATION is 1 or true", async () => {
+    for (const value of ["1", "true"]) {
+      vi.resetModules()
+      vi.stubEnv("SKIP_ENV_VALIDATION", value)
+      vi.stubEnv("DATABASE_URL", "")
+      await expect(import("./index")).resolves.toHaveProperty("env")
+    }
+  })
+
   it("parses a valid environment", async () => {
     vi.resetModules()
     vi.stubEnv("SKIP_ENV_VALIDATION", "")

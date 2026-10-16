@@ -36,8 +36,8 @@ import {
   INVITE_ROLES,
   INVITE_ROLE_LABEL,
   type InviteRole,
-  ORG_SETTINGS_SECTIONS,
   countOrPlaceholder,
+  settingsTabs,
   slugChangeWarning,
 } from "../lib/org-settings"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
@@ -127,13 +127,10 @@ export function OrgGeneralPage({
     },
   })
 
-  const tabs = ORG_SETTINGS_SECTIONS.map((section) => ({
-    id: section.id,
-    label: section.label,
-    href: `/${organization.slug}/settings/${section.id}`,
-    count:
-      section.id === "members" && counts.members !== undefined ? String(counts.members) : undefined,
-  }))
+  const tabs = settingsTabs(
+    organization.slug,
+    counts.members === undefined ? {} : { members: String(counts.members) },
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

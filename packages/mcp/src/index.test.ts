@@ -130,6 +130,12 @@ describe("createMcpHandler", () => {
     const hidden = await client.callTool({ name: "shout", arguments: { text: "x" } })
     expect(hidden).toMatchObject({ isError: true })
     expect(JSON.stringify(hidden.content)).toContain("FORBIDDEN")
+    // Permission comes first, as over REST: a bad idempotencyKey doesn't change the answer.
+    const badKey = await client.callTool({
+      name: "shout",
+      arguments: { text: "x", idempotencyKey: "" },
+    })
+    expect(JSON.stringify(badKey.content)).toContain("FORBIDDEN")
     // An unknown tool is a protocol error (-32602, invalid params), not a tool result.
     await expect(client.callTool({ name: "nope", arguments: {} })).rejects.toMatchObject({
       code: -32602,

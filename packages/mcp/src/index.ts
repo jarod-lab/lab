@@ -11,6 +11,7 @@ import {
 import {
   allowed,
   type AnyOperation,
+  assertAllowed,
   type Caller,
   inputSchema,
   invoke,
@@ -107,6 +108,8 @@ async function callTool(
   opts: { requestId?: string; invokeOptions?: InvokeOptions } = {},
 ): Promise<CallToolResult> {
   try {
+    // Permission first, as over REST, so a bad idempotencyKey can't mask FORBIDDEN and its hint.
+    assertAllowed(op, caller, opts.invokeOptions)
     const { input, idempotencyKey } = splitIdempotencyKey(op, args)
     const result = await invoke(
       op,

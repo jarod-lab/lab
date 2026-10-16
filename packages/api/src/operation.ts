@@ -146,6 +146,23 @@ export function defineRegistry<const T extends readonly AnyOperation[]>(ops: T):
 }
 
 /**
+ * Throws FORBIDDEN, with the permission hint, unless the caller's grants cover the operation. `invoke`
+ * runs it first; a surface that reads its own arguments (MCP's idempotencyKey) runs it before those.
+ */
+export function assertAllowed(
+  op: AnyOperation,
+  caller: Caller,
+  options: Pick<InvokeOptions, "permissionHint"> = {},
+): void {
+  if (allowed(caller.grants, op.permissions)) return
+  const missing = missingPermissions(caller.grants, op.permissions)
+  throw new AppError("FORBIDDEN", `Missing permission: ${formatPermissions(missing)}`, {
+    context: { operation: op.name, organizationId: caller.organizationId },
+    hint: options.permissionHint?.(missing),
+  })
+}
+
+/**
  * Run an operation for a caller: check permissions, validate input, run `before` hooks, call the handler,
  * validate output, then run `after` hooks. Throws AppError (FORBIDDEN, BAD_REQUEST, or whatever a hook
  * throws); anything else the handler throws propagates unchanged.
@@ -156,13 +173,7 @@ export async function invoke(
   ctx: OperationContext,
   options: InvokeOptions = {},
 ) {
-  if (!allowed(ctx.caller.grants, op.permissions)) {
-    const missing = missingPermissions(ctx.caller.grants, op.permissions)
-    throw new AppError("FORBIDDEN", `Missing permission: ${formatPermissions(missing)}`, {
-      context: { operation: op.name, organizationId: ctx.caller.organizationId },
-      hint: options.permissionHint?.(missing),
-    })
-  }
+  assertAllowed(op, ctx.caller, options)
   const parsed = op.input.safeParse(raw ?? {})
   if (!parsed.success) {
     throw new AppError("BAD_REQUEST", z.prettifyError(parsed.error), {

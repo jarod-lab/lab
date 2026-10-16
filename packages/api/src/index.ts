@@ -10,6 +10,7 @@ export {
   defineOperation,
   defineRegistry,
   formatPermissions,
+  assertAllowed,
   invoke,
   missingPermissions,
   operationsFor,

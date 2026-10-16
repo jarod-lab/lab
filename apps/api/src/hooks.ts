@@ -90,7 +90,8 @@ export function createApiHooks({ db, meter }: { db: Database; meter: Meter }): A
         recordAuditEvent(db, org, proof, {
           actorType: caller.actor.type === "user" ? "user" : "apiKey",
           actorId: caller.actor.type === "user" ? caller.actor.userId : caller.actor.keyId,
-          clientId: caller.clientId,
+          // The principal's clientId is the key id for an API key; audit names OAuth clients only.
+          clientId: caller.via === "oauth" ? caller.clientId : undefined,
           operation: op.name,
           outcome,
           requestId: ctx.requestId,

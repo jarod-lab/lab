@@ -162,6 +162,8 @@ describe("invocation hooks (real Postgres via PGlite)", () => {
         actorType: "apiKey",
         organizationId: t.owner.orgId,
       })
+      // clientId names an OAuth client; an API key is the actor, not a client.
+      expect(rows[0]?.clientId).toBeNull()
     })
 
     it("records a failed call with its error code", async () => {

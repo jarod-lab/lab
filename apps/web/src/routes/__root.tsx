@@ -1,9 +1,20 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router"
-import { type ReactNode, useEffect, useState } from "react"
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router"
+import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
 
 import "../app.css"
 
-export const Route = createRootRoute({
+export interface RouterContext {
+  queryClient: QueryClient
+}
+
+// Devtools are dev only. In the production build `import.meta.env.DEV` is false, so this is null and
+// the dynamic import is dropped: no devtools code reaches dist/. Tests (MODE "test") skip them too:
+// under jsdom the devtools core resolves to its server build, which throws when the tree unmounts.
+const DevtoolsPanel =
+  import.meta.env.DEV && import.meta.env.MODE !== "test" ? lazy(() => import("../devtools")) : null
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -14,8 +25,23 @@ export const Route = createRootRoute({
     scripts: [{ src: "/assets/theme.js" }],
   }),
   shellComponent: RootDocument,
-  component: () => <Outlet />,
+  component: RootOutlet,
 })
+
+/** The query provider wraps the matched page and the devtools; the shell has neither. */
+function RootOutlet() {
+  const { queryClient } = Route.useRouteContext()
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Outlet />
+      {DevtoolsPanel ? (
+        <Suspense fallback={null}>
+          <DevtoolsPanel />
+        </Suspense>
+      ) : null}
+    </QueryClientProvider>
+  )
+}
 
 /** styles.css defines dark tokens under `.dark`, so the class follows the OS setting. */
 function useSystemDarkMode() {

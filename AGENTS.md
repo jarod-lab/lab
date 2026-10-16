@@ -70,8 +70,9 @@ CI runs the same, plus gitleaks over history, commitlint over PR commits, an oas
   Dependabot commits (signed off by `dependabot[bot]`) are exempt, since it writes "Bump x from a to b".
 - **Hooks:** pre-commit runs gitleaks, baseline and a format check; commit-msg runs commitlint. Never use `--no-verify`.
   If gitleaks flags a test fixture, add `// gitleaks:allow` on that line. Don't allowlist whole files.
-- **Logging:** use `@starter/logger`, not `console.log` (baseline flags it). Throw `AppError`; never send an `INTERNAL`
-  message to a client, use `error.toPublic()`. Register Sentry once at startup with `setErrorReporter`.
+- **Logging:** use `@starter/logger`, never `console.*` or pino directly (baseline errors on both). Throw
+  `AppError`; never send an `INTERNAL` message to a client, use `error.toPublic()`. Register Sentry once at
+  startup with `setErrorReporter`.
 - **Observability:** wrap every route handler in `observe` from `@starter/observability` and expose a health route with
   `createHealthHandler`. It reports only 5xx or non-exposed errors; 4xx are logged. Server-error logs include only
   allowlisted request headers (`safeHeaders`), never the full set. No error-tracking SDK is installed yet:
@@ -81,7 +82,8 @@ CI runs the same, plus gitleaks over history, commitlint over PR commits, an oas
   (axe-core; the test file needs `// @vitest-environment jsdom`, and an app needs `jsdom` as its own devDependency). jsdom can't check colour contrast or landmarks, so those
   rules are off. The shadcn demos are not swept: about half have axe violations in shadcn's own demo content.
   Storybook's a11y panel is a dev aid only; nothing fails CI on it.
-- **Env:** add every variable to `packages/env` and `.env.example`. Never read or edit `.env` (denied in settings).
+- **Env:** add every variable to `packages/env` and `.env.example`; read it from there, not `process.env` (baseline
+  `use-starter-env`; its exceptions are listed in `baseline.toml`). Never read or edit `.env` (denied in settings).
 - **Authorization:** declare what an operation needs in its `permissions` (enforced by `invoke`), and guard tenant data
   with gdp-ts proofs (see the gdp-ts and agent-api skills). Don't hand-roll role or ownership checks in handlers.
 - **UI:** semantic tokens and dark-mode variants only, no raw colors like `bg-white` (baseline `shadcn-strict`).
@@ -255,6 +257,10 @@ or `resolvePrincipal`.
 - **Web and CLI builds**: `pnpm --filter @starter/web build` (writes `apps/web/dist`, needed for `WEB_DIST_DIR`) and
   `pnpm --filter @starter/cli build` (writes `dist/bin.js`).
 - **baseline** (`code-baseline`): bans, ratchets and design-system rules in `baseline.toml`. Localhost `http://` warnings are fine.
+  Our own rules (errors): `no-console-log` (every console method), `use-starter-logger` (no pino/winston/...),
+  `use-cn` (no clsx/tailwind-merge/classnames), `use-starter-ui` (no Base UI, Radix or other kits outside `packages/ui`)
+  and `use-starter-env` (no `process.env` outside `packages/env`). Rules are regex/import matches, not type-aware;
+  `skip_strings` ignores string and template literals (including code inside `${}`), but comments still match.
 - **e2e** (tester-army): **not configured yet.** `e2e/example.e2e.ts` is a skipped placeholder outside the workspace and CI.
   Setting it up needs an app to test and a model credential (e.g. `AI_GATEWAY_API_KEY`). Docs ship in `node_modules/e2e/docs`.
 - **Dependabot** runs weekly and groups minor/patch updates; major bumps arrive as separate PRs to evaluate, and

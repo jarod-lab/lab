@@ -123,7 +123,7 @@ describe("provisionalSignup", () => {
     }).catch((e: unknown) => e)
     expect(refused).toBeInstanceOf(AppError)
     expect(refused).toMatchObject({ code: "UNAUTHORIZED" })
-    expect((refused as AppError).hint).toMatch(/claims the account.*device grant/is)
+    expect((refused as AppError).hint).toMatch(/claimed the account.*device grant/is)
   })
 
   it("turns the key off when the address is verified by email instead", async () => {

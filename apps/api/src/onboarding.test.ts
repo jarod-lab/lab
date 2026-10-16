@@ -439,7 +439,7 @@ describe("onboarding journey B: self-signup and claim", () => {
     const ended = await t.req("/v1/whoami", t.as(created.apiKey))
     expect(ended.status).toBe(401)
     const refusal = ((await ended.json()) as { error: { hint?: string } }).error
-    expect(refusal.hint).toMatch(/claims the account/)
+    expect(refusal.hint).toMatch(/claimed the account/)
     expect(refusal.hint).toContain("POST /api/auth/device/code")
 
     // Following the hint: the device grant, approved by the person who now owns the account.

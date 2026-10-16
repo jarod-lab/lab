@@ -52,7 +52,8 @@ const keyset = z.object({
 })
 
 function readCursor(cursor: string | undefined): z.output<typeof keyset> | undefined {
-  if (cursor === undefined) return undefined
+  // `?cursor=` (empty), as forms and URL templates send it, means the first page like no cursor.
+  if (cursor === undefined || cursor === "") return undefined
   const parsed = keyset.safeParse(decodeCursor(cursor))
   if (!parsed.success) {
     throw new AppError("BAD_REQUEST", "Invalid cursor", {

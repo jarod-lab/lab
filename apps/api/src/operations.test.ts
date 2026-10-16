@@ -57,6 +57,12 @@ describe("paginated operations", () => {
       expect((first.body.projects as unknown[]).length).toBe(5)
     })
 
+    it("starts from the first page when cursor is empty, as a form or template sends it", async () => {
+      const empty = await get("/v1/projects?cursor=", t.readKey)
+      expect(empty.status).toBe(200)
+      expect(empty.body).toEqual((await get("/v1/projects", t.readKey)).body)
+    })
+
     it("answers BAD_REQUEST with a hint for a garbage cursor", async () => {
       for (const cursor of [
         "not-a-cursor",

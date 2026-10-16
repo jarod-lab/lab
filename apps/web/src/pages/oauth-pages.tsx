@@ -101,15 +101,14 @@ export function ConsentPage({
   }
 
   const scopes = splitScopes(scope)
-  const { activeOrganizationId } = loaded
 
   async function decide(accept: boolean) {
     setPending(true)
     setError(null)
     try {
-      if (accept && selected !== activeOrganizationId) {
-        await auth.setActiveOrganization(selected)
-      }
+      // Always, not only on a change: another tab may have switched the active org since load,
+      // and consent grants whichever org is active on the server.
+      if (accept) await auth.setActiveOrganization(selected)
       const url = await auth.consent(accept)
       if (url) navigateTo(url)
       else setPending(false)

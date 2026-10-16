@@ -105,9 +105,9 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
     setError(null)
     try {
       if (approve) {
-        if (context && selected !== context.activeOrganizationId) {
-          await auth.setActiveOrganization(selected)
-        }
+        // Always, not only on a change: another tab may have switched the active org since load,
+        // and approval records whichever org is active on the server.
+        if (context) await auth.setActiveOrganization(selected)
         await auth.device.approve(request.userCode)
       } else {
         await auth.device.deny(request.userCode)

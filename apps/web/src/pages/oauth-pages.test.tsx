@@ -53,14 +53,19 @@ describe("ConsentPage", () => {
     expect(setActive).toBeLessThan(accept)
   })
 
-  it("does not switch organization when the active one is kept", async () => {
+  it("sets the shown organization active even when it was active at load", async () => {
+    // Another tab may have switched the session's active org since this page loaded; consent
+    // grants whatever is active on the server, so the page must re-assert what it shows.
     const auth = fakeAuth()
     render(<ConsentPage auth={auth} {...consentProps} />)
     const user = userEvent.setup()
     await user.click(await screen.findByRole("button", { name: "Allow" }))
 
     await waitFor(() => expect(auth.consent).toHaveBeenCalledWith(true))
-    expect(auth.setActiveOrganization).not.toHaveBeenCalled()
+    expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+    const setActive = vi.mocked(auth.setActiveOrganization).mock.invocationCallOrder[0] ?? 0
+    const accept = vi.mocked(auth.consent).mock.invocationCallOrder[0] ?? 0
+    expect(setActive).toBeLessThan(accept)
   })
 
   it("denies without changing the organization", async () => {

@@ -50,6 +50,21 @@ describe("DevicePage", () => {
     expect(setActive).toBeLessThan(approve)
   })
 
+  it("sets the shown organization active even when it was active at load", async () => {
+    // Another tab may have switched the session's active org; approval records the server's.
+    const auth = fakeAuth()
+    render(<DevicePage auth={auth} initialUserCode="ABCD-1234" />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Find request" }))
+    await user.click(await screen.findByRole("button", { name: "Approve" }))
+
+    expect(await screen.findByRole("heading", { name: "Approved" })).toBeTruthy()
+    expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+    const setActive = vi.mocked(auth.setActiveOrganization).mock.invocationCallOrder[0] ?? 0
+    const approve = vi.mocked(auth.device.approve).mock.invocationCallOrder[0] ?? 0
+    expect(setActive).toBeLessThan(approve)
+  })
+
   it("denies the request without changing the organization", async () => {
     const auth = fakeAuth()
     render(<DevicePage auth={auth} initialUserCode="ABCD-1234" />)

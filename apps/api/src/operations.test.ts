@@ -58,7 +58,12 @@ describe("paginated operations", () => {
     })
 
     it("answers BAD_REQUEST with a hint for a garbage cursor", async () => {
-      for (const cursor of ["not-a-cursor", encodeCursor({ at: "yesterday", id: "x" })]) {
+      for (const cursor of [
+        "not-a-cursor",
+        encodeCursor({ at: "yesterday", id: "x" }),
+        // A valid ISO date that Postgres can't store: year 0 is out of its timestamp range.
+        encodeCursor({ at: "0000-01-01T00:00:00Z", id: "x" }),
+      ]) {
         const res = await get(`/v1/projects?cursor=${encodeURIComponent(cursor)}`, t.readKey)
         expect(res.status, cursor).toBe(400)
         expect(res.body.error).toMatchObject({ code: "BAD_REQUEST", message: "Invalid cursor" })

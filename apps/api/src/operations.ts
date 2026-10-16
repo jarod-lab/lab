@@ -45,7 +45,11 @@ const permissionsInput = z.record(z.string(), z.array(z.string()).min(1)).refine
 )
 
 // Keyset cursors: the position after the last row of a page, as the sort key (time and id).
-const keyset = z.object({ at: z.iso.datetime(), id: z.string().min(1) })
+// Year 0 is a valid ISO date but outside Postgres' timestamp range, so it would fail in the query.
+const keyset = z.object({
+  at: z.iso.datetime().refine((at) => new Date(at).getUTCFullYear() >= 1),
+  id: z.string().min(1),
+})
 
 function readCursor(cursor: string | undefined): z.output<typeof keyset> | undefined {
   if (cursor === undefined) return undefined

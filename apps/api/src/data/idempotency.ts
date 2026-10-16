@@ -1,10 +1,66 @@
 // Idempotency-Key records. Reserve before the handler runs and complete after, so two concurrent
 // retries can't both run it. Keys live 24 hours; an expired key is reclaimed by the next reserve.
+//
+// Nothing in a row is readable from the database alone. The client's key is stored as an HMAC under
+// the server secret, and the response (which can hold a new API key) is sealed with AES-256-GCM
+// under a key derived from the server secret, the organization and the client's raw key. Replaying
+// needs the request that carries that key, so a dump of the table yields no secrets.
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from "node:crypto"
 import type { CallerActsFor, Named, OrganizationId } from "@starter/auth-proofs"
 import { type Database, idempotencyKey } from "@starter/db"
 import { and, eq, lt } from "drizzle-orm"
 
 const TTL_MS = 24 * 60 * 60 * 1000
+
+/** The server secret, the organization and the client's key, which together name one record. */
+export interface IdempotencyRef {
+  secret: string
+  key: string
+}
+
+const derive = (secret: string, purpose: string, org: string, key: string) =>
+  Buffer.from(hkdfSync("sha256", secret, "starter-idempotency", `${purpose}\0${org}\0${key}`, 32))
+
+/** The stored form of a client's Idempotency-Key. */
+export function idempotencyLookup(secret: string, org: string, key: string): string {
+  return createHmac("sha256", derive(secret, "lookup", org, ""))
+    .update(key)
+    .digest("base64url")
+}
+
+interface Sealed {
+  v: 1
+  iv: string
+  tag: string
+  data: string
+}
+
+function seal(value: unknown, secret: string, org: string, key: string): Sealed {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv("aes-256-gcm", derive(secret, "seal", org, key), iv)
+  const data = Buffer.concat([cipher.update(JSON.stringify(value) ?? "null"), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return {
+    v: 1,
+    iv: iv.toString("base64url"),
+    tag: tag.toString("base64url"),
+    data: data.toString("base64url"),
+  }
+}
+
+function unseal(sealed: Sealed, secret: string, org: string, key: string): unknown {
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    derive(secret, "seal", org, key),
+    Buffer.from(sealed.iv, "base64url"),
+  )
+  decipher.setAuthTag(Buffer.from(sealed.tag, "base64url"))
+  const text = Buffer.concat([
+    decipher.update(Buffer.from(sealed.data, "base64url")),
+    decipher.final(),
+  ]).toString("utf8")
+  return JSON.parse(text)
+}
 
 export type ReserveResult =
   /** Reserved: run the operation, then complete or release the key. */
@@ -20,9 +76,10 @@ export async function reserveIdempotencyKey<O>(
   db: Database,
   org: Named<O, OrganizationId>,
   _proof: CallerActsFor<O>,
-  input: { key: string; operation: string; requestHash: string },
+  input: IdempotencyRef & { operation: string; requestHash: string },
 ): Promise<ReserveResult> {
   const now = new Date()
+  const lookup = idempotencyLookup(input.secret, org.value, input.key)
   const fresh = {
     operation: input.operation,
     requestHash: input.requestHash,
@@ -34,7 +91,7 @@ export async function reserveIdempotencyKey<O>(
   // One statement claims the key when it is new, or when its record has expired.
   const claimed = await db
     .insert(idempotencyKey)
-    .values({ id: crypto.randomUUID(), organizationId: org.value, key: input.key, ...fresh })
+    .values({ id: crypto.randomUUID(), organizationId: org.value, key: lookup, ...fresh })
     .onConflictDoUpdate({
       target: [idempotencyKey.organizationId, idempotencyKey.key],
       set: fresh,
@@ -46,13 +103,16 @@ export async function reserveIdempotencyKey<O>(
   const [row] = await db
     .select()
     .from(idempotencyKey)
-    .where(and(eq(idempotencyKey.organizationId, org.value), eq(idempotencyKey.key, input.key)))
+    .where(and(eq(idempotencyKey.organizationId, org.value), eq(idempotencyKey.key, lookup)))
     .limit(1)
   if (!row) return { state: "in_progress" }
   if (row.operation !== input.operation || row.requestHash !== input.requestHash) {
     return { state: "mismatch" }
   }
-  if (row.status === "done") return { state: "done", response: row.response }
+  if (row.status === "done") {
+    const response = unseal(row.response as Sealed, input.secret, org.value, input.key)
+    return { state: "done", response }
+  }
   return { state: "in_progress" }
 }
 
@@ -60,12 +120,13 @@ export async function completeIdempotencyKey<O>(
   db: Database,
   org: Named<O, OrganizationId>,
   _proof: CallerActsFor<O>,
-  input: { key: string; response: unknown },
+  input: IdempotencyRef & { response: unknown },
 ): Promise<void> {
+  const lookup = idempotencyLookup(input.secret, org.value, input.key)
   await db
     .update(idempotencyKey)
-    .set({ status: "done", response: input.response })
-    .where(and(eq(idempotencyKey.organizationId, org.value), eq(idempotencyKey.key, input.key)))
+    .set({ status: "done", response: seal(input.response, input.secret, org.value, input.key) })
+    .where(and(eq(idempotencyKey.organizationId, org.value), eq(idempotencyKey.key, lookup)))
 }
 
 /** Drop a reservation whose handler failed, so a retry can run. Completed keys are kept. */
@@ -73,14 +134,14 @@ export async function releaseIdempotencyKey<O>(
   db: Database,
   org: Named<O, OrganizationId>,
   _proof: CallerActsFor<O>,
-  key: string,
+  ref: IdempotencyRef,
 ): Promise<void> {
   await db
     .delete(idempotencyKey)
     .where(
       and(
         eq(idempotencyKey.organizationId, org.value),
-        eq(idempotencyKey.key, key),
+        eq(idempotencyKey.key, idempotencyLookup(ref.secret, org.value, ref.key)),
         eq(idempotencyKey.status, "in_progress"),
       ),
     )

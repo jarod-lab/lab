@@ -10,7 +10,14 @@ import { idempotencyKey, organization } from "@starter/db"
 import { createTestDb } from "@starter/db/testing"
 import { eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { completeIdempotencyKey, releaseIdempotencyKey, reserveIdempotencyKey } from "./idempotency"
+import {
+  completeIdempotencyKey,
+  idempotencyLookup,
+  releaseIdempotencyKey,
+  reserveIdempotencyKey,
+} from "./idempotency"
+
+const secret = "a-test-secret-that-is-long-enough-123456" // gitleaks:allow
 
 const caller = (organizationId: string): Caller => ({
   organizationId,
@@ -47,7 +54,7 @@ describe("idempotency keys", () => {
     org = "org_a",
   ) =>
     acting(org, (o, proof) =>
-      reserveIdempotencyKey(t.db, o, proof, { key, operation, requestHash }),
+      reserveIdempotencyKey(t.db, o, proof, { secret, key, operation, requestHash }),
     )
 
   it("runs once: a retry while in progress waits, and after completion replays the response", async () => {
@@ -56,7 +63,7 @@ describe("idempotency keys", () => {
     expect(await reserve("k1")).toEqual({ state: "in_progress" })
 
     await acting("org_a", (o, proof) =>
-      completeIdempotencyKey(t.db, o, proof, { key: "k1", response: { id: "p1" } }),
+      completeIdempotencyKey(t.db, o, proof, { secret, key: "k1", response: { id: "p1" } }),
     )
     expect(await reserve("k1")).toEqual({ state: "done", response: { id: "p1" } })
   })
@@ -69,16 +76,20 @@ describe("idempotency keys", () => {
 
   it("lets a retry run again after the failed attempt released its key", async () => {
     await reserve("k3")
-    await acting("org_a", (o, proof) => releaseIdempotencyKey(t.db, o, proof, "k3"))
+    await acting("org_a", (o, proof) =>
+      releaseIdempotencyKey(t.db, o, proof, { secret, key: "k3" }),
+    )
     expect(await reserve("k3")).toEqual({ state: "new" })
   })
 
   it("keeps a completed key on release", async () => {
     await reserve("k4")
     await acting("org_a", (o, proof) =>
-      completeIdempotencyKey(t.db, o, proof, { key: "k4", response: { ok: true } }),
+      completeIdempotencyKey(t.db, o, proof, { secret, key: "k4", response: { ok: true } }),
     )
-    await acting("org_a", (o, proof) => releaseIdempotencyKey(t.db, o, proof, "k4"))
+    await acting("org_a", (o, proof) =>
+      releaseIdempotencyKey(t.db, o, proof, { secret, key: "k4" }),
+    )
     expect(await reserve("k4")).toEqual({ state: "done", response: { ok: true } })
   })
 
@@ -87,12 +98,26 @@ describe("idempotency keys", () => {
     await t.db
       .update(idempotencyKey)
       .set({ expiresAt: new Date(Date.now() - 1000) })
-      .where(eq(idempotencyKey.key, "k5"))
+      .where(eq(idempotencyKey.key, idempotencyLookup(secret, "org_a", "k5")))
     expect(await reserve("k5", "create_project", "new")).toEqual({ state: "new" })
   })
 
   it("keeps keys per organization", async () => {
     await reserve("k6", "create_project", "hash-1", "org_a")
     expect(await reserve("k6", "create_project", "hash-1", "org_b")).toEqual({ state: "new" })
+  })
+
+  it("stores the response sealed, under a lookup only the server secret produces", async () => {
+    await reserve("k7")
+    await acting("org_a", (o, proof) =>
+      completeIdempotencyKey(t.db, o, proof, { secret, key: "k7", response: { key: "sk_x" } }),
+    )
+    const [row] = await t.db
+      .select()
+      .from(idempotencyKey)
+      .where(eq(idempotencyKey.key, idempotencyLookup(secret, "org_a", "k7")))
+    // Sealed: the response is ciphertext, and a different secret can't find or open it.
+    expect(JSON.stringify(row?.response)).not.toContain("sk_x")
+    expect(idempotencyLookup("another-secret", "org_a", "k7")).not.toBe(row?.key)
   })
 })

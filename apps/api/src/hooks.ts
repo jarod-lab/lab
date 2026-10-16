@@ -78,7 +78,16 @@ export function permissionHint(missing: PermissionSet): string {
   return `Needs ${needed}. Use ${via}.`
 }
 
-export function createApiHooks({ db, meter }: { db: Database; meter: Meter }): ApiHooks {
+export function createApiHooks({
+  db,
+  meter,
+  secret,
+}: {
+  db: Database
+  meter: Meter
+  /** The server secret (BETTER_AUTH_SECRET): idempotency records are keyed and sealed with it. */
+  secret: string
+}): ApiHooks {
   const readings = new WeakMap<OperationContext, Reading>()
   // Keys this call reserved; completed or released in `after`.
   const reserved = new WeakMap<OperationContext, string>()
@@ -131,6 +140,7 @@ export function createApiHooks({ db, meter }: { db: Database; meter: Meter }): A
       const key = ctx.idempotencyKey
       const state = await inCallerOrg(ctx.caller, (org, proof) =>
         reserveIdempotencyKey(db, org, proof, {
+          secret,
           key,
           operation: op.name,
           requestHash: requestHash(op.name, ctx.caller.actor, input),
@@ -174,8 +184,8 @@ export function createApiHooks({ db, meter }: { db: Database; meter: Meter }): A
         reserved.delete(ctx)
         await inCallerOrg(ctx.caller, (org, proof) =>
           outcome.ok
-            ? completeIdempotencyKey(db, org, proof, { key, response: outcome.result })
-            : releaseIdempotencyKey(db, org, proof, key),
+            ? completeIdempotencyKey(db, org, proof, { secret, key, response: outcome.result })
+            : releaseIdempotencyKey(db, org, proof, { secret, key }),
         )
       }
     } finally {

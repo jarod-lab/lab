@@ -39,7 +39,7 @@ const app = createApp({
   version: "0.0.0",
   description: "The Starter API. Replace this with one sentence about what your product does.",
   logger,
-  hooks: createApiHooks({ db, meter }),
+  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET }),
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
   // The MCP registry entry (/.well-known/mcp/server.json). Rename before publishing: the name is

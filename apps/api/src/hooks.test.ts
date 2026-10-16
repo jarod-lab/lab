@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
 
-import { createTestApp } from "./app.test.helpers"
+import { createTestApp, SECRET } from "./app.test.helpers"
+import { idempotencyLookup } from "./data/idempotency"
 import { permissionHint, requestHash } from "./hooks"
 
 // Fails on its first call only, so a retry after a failure can be checked.
@@ -83,7 +84,7 @@ describe("invocation hooks (real Postgres via PGlite)", () => {
       await t.db.insert(idempotencyKey).values({
         id: crypto.randomUUID(),
         organizationId: t.owner.orgId,
-        key: "busy-1",
+        key: idempotencyLookup(SECRET, t.owner.orgId, "busy-1"),
         operation: "create_project",
         requestHash: requestHash("create_project", actor, { name: "Busy" }),
         status: "in_progress",
@@ -112,12 +113,41 @@ describe("invocation hooks (real Postgres via PGlite)", () => {
       expect(flakyCalls).toBe(2)
     })
 
+    it("stores neither the key nor the response readably, and still replays a new API key", async () => {
+      const create = () =>
+        t.req(
+          "/v1/api-keys",
+          t.as(t.owner.cookie, {
+            method: "POST",
+            body: JSON.stringify({ name: "Sealed", permissions: { project: ["read"] } }),
+            headers: { "idempotency-key": "sealed-key-1" },
+          }),
+        )
+      const first = await json(await create())
+      expect(first.status).toBe(200)
+      expect(first.body.key).toMatch(/^sk_/)
+      expect(await json(await create())).toEqual(first)
+
+      const rows = await t.db
+        .select()
+        .from(idempotencyKey)
+        .where(eq(idempotencyKey.organizationId, t.owner.orgId))
+      const stored = JSON.stringify(rows)
+      // A database dump alone must not yield the secret key, nor the client's idempotency key.
+      expect(stored).not.toContain(first.body.key)
+      expect(stored).not.toContain("sk_")
+      expect(stored).not.toContain("sealed-key-1")
+    })
+
     it("ignores the key on readOnly operations", async () => {
       const a = await json(
         await t.req("/v1/whoami", t.as(t.readKey, { headers: { "idempotency-key": "ro-1" } })),
       )
       expect(a.status).toBe(200)
-      const rows = await t.db.select().from(idempotencyKey).where(eq(idempotencyKey.key, "ro-1"))
+      const rows = await t.db
+        .select()
+        .from(idempotencyKey)
+        .where(eq(idempotencyKey.key, idempotencyLookup(SECRET, t.owner.orgId, "ro-1")))
       expect(rows).toHaveLength(0)
     })
 

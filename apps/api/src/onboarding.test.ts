@@ -15,7 +15,7 @@ import { createTestDb } from "@starter/db/testing"
 import { createLogger } from "@starter/logger"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createApp } from "./app"
-import { BASE, createTestApp, type SentEmail } from "./app.test.helpers"
+import { BASE, createTestApp, SECRET, type SentEmail } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
@@ -527,7 +527,7 @@ describe("onboarding journey C: the CLI against a live server", () => {
     })
     const meter = createMeter({ db: t.db, limits: { claimed: 10_000, unclaimed: 500 } })
     const app = createApp({
-      hooks: createApiHooks({ db: t.db, meter }),
+      hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
       trustProxy: false,
       auth,
       operations: createOperations({ auth, db: t.db, meter }),

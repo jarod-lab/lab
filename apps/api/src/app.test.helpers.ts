@@ -13,6 +13,8 @@ import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
 
 export const BASE = "http://localhost:3000"
+/** The test server secret: better-auth's, and the one idempotency records are sealed with. */
+export const SECRET = "a-test-secret-that-is-long-enough-123456" // gitleaks:allow
 
 /** An auth email the app sent, as the fake SES client received it. */
 export interface SentEmail {
@@ -55,7 +57,7 @@ export async function createTestApp(
   }
   const auth = createAuth({
     db: t.db,
-    secret: "a-test-secret-that-is-long-enough-123456", // gitleaks:allow
+    secret: SECRET,
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, `${BASE}/mcp`],
@@ -71,7 +73,7 @@ export async function createTestApp(
   })
   const operations = [...createOperations({ auth, db: t.db, meter }), ...extra]
   const app = createApp({
-    hooks: createApiHooks({ db: t.db, meter }),
+    hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
     auth,

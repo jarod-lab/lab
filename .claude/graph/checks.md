@@ -41,3 +41,5 @@
 | review | MCP client requesting scopes_supported gets refresh token; survives web sign-out | pass | PRM advertises offline_access; oauth-flow.test.ts new test (sign-out → whoami 200, refresh 200) |
 | review | migration descriptively named; generate is a no-op | pass | `0003_agent_distribution`; drizzle-kit "No schema changes"; auth generate leaves auth-schema.ts unchanged |
 | review | built SPA under real CSP in a browser | fail→N3c | headless Chromium: no CSP violations, assets 200, CSP hashes = inline script hashes; React #418 hydration error on /device, /consent |
+| N3c | built SPA hydrates cleanly under the real CSP | pass | lead's own headless-Chromium sweep vs real server: 9/9 paths 0 Uncaught/React/CSP errors, each renders its own `<main>` + h1; branch 1b5c5d7 (mount gate in __root.tsx) |
+| final | full chain uncached + gitleaks history + commitlint 53a0710..HEAD | pass | TURBO_FORCE: 15/15 test tasks (api-app 176+1 skip, web 92, ui 129, cli 68, auth 53, api 51, sdk 38, ...), build 4/4; "no leaks found"; commitlint 0 |

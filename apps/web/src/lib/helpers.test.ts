@@ -18,6 +18,15 @@ describe("safeNext", () => {
     expect(safeNext(undefined, "/home")).toBe("/home")
     expect(safeNext(42)).toBe("/settings/agents")
   })
+
+  it("falls back when the URL parser would strip a tab or newline into `//host`", () => {
+    // new URL("/\t/evil.example", origin) resolves to https://evil.example/
+    for (const value of ["/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/\t\\evil"]) {
+      expect(safeNext(value)).toBe("/settings/agents")
+    }
+    // A host the URL parser refuses must fall back too, not throw while the page renders.
+    for (const value of ["//[", "/\t/["]) expect(safeNext(value)).toBe("/settings/agents")
+  })
 })
 
 describe("scopes", () => {

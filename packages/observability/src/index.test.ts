@@ -90,6 +90,19 @@ describe("observe", () => {
     expect(reporter).not.toHaveBeenCalled()
   })
 
+  it("reports and logs a 5xx the handler returns, and passes the response through", async () => {
+    const { logger, lines } = capture()
+    const reporter = vi.fn()
+    setErrorReporter(reporter)
+    const handler = observe(() => new Response("upstream down", { status: 502 }), { logger })
+
+    const res = await handler(get("/proxy"))
+    expect(res.status).toBe(502)
+    expect(await res.text()).toBe("upstream down")
+    expect(reporter).toHaveBeenCalledTimes(1)
+    expect(lines.at(-1)).toMatchObject({ level: 50, status: 502, path: "/proxy" })
+  })
+
   it("sends the error's own headers, such as retry-after on a 429", async () => {
     const { logger } = capture()
     const handler = observe(

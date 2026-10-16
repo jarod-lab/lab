@@ -62,8 +62,9 @@ function withRequestId(res: Response, requestId: string): Response {
  * the request (Next's `{ params }`) are forwarded to the handler untouched.
  *
  * Thrown errors become `{ error: { code, message }, requestId }` via `AppError.toPublic()`, with
- * the error's `headers` (e.g. `retry-after`), so an INTERNAL message never reaches the client. Only server-side failures (5xx or non-exposed) go to
- * the registered error reporter; 4xx are expected and are just logged.
+ * the error's `headers` (e.g. `retry-after`), so an INTERNAL message never reaches the client. Only
+ * server-side failures (5xx, thrown or returned, or non-exposed errors) go to the registered error
+ * reporter; 4xx are expected and are just logged.
  *
  * The query string is left out of the logged path because it can carry tokens.
  */
@@ -85,7 +86,21 @@ export function observe<Rest extends unknown[] = []>(
 
     try {
       const res = await handler(req, { requestId, log }, ...rest)
-      log.info(done(res.status), "request")
+      if (res.status >= 500) {
+        // A server failure the handler answered itself: still one we'd want to be paged for.
+        log.error(
+          { ...done(res.status), req: { headers: safeHeaders(req.headers) } },
+          "request failed",
+        )
+        reportError(new Error(`${req.method} ${pathname} returned ${res.status}`), {
+          requestId,
+          method: req.method,
+          path: pathname,
+          status: res.status,
+        })
+      } else {
+        log.info(done(res.status), "request")
+      }
       return withRequestId(res, requestId)
     } catch (e) {
       const error = toAppError(e)

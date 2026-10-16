@@ -124,7 +124,8 @@ so REST and MCP behave the same:
   needs a consent or a live refresh token for the same client, org and user, and no revocation stamped after the
   token's `iat`. For an OAuth client, `revoke_agent_access` deletes the consent and stamps its refresh and access
   tokens revoked, so the tokens stop at once; the client itself is kept. Three point lookups; a composite index is
-  not added yet.
+  not added yet. Removing a member (`afterRemoveMember`) or their leaving (`endGrantsOnLeave`, an after hook on
+  `/organization/leave`, which skips the org hooks) runs `revokeMemberGrants` for that user and org.
 - **Device grant** (`packages/auth/src/device.ts`): `oauthDeviceAuthorization` wired to the OAuth token endpoint, with
   `verificationUri` `/device`. The approving session's active org (it must be one the person belongs to) is kept
   in a `verification` row keyed `device-org:<deviceCodeId>` at approval, and read at token issuance, so the `org`

@@ -7,7 +7,10 @@ export interface Member {
   role: string
 }
 
-export type Adapter = Pick<DBAdapter, "findOne" | "findMany" | "create" | "count" | "updateMany">
+export type Adapter = Pick<
+  DBAdapter,
+  "findOne" | "findMany" | "create" | "count" | "updateMany" | "deleteMany"
+>
 
 /** The member row tying a user to an organization, or null when they don't belong to it. */
 export function findMember(db: Adapter, userId: string, organizationId: string) {

@@ -178,7 +178,9 @@ or `resolvePrincipal`.
 - **CORS** only on bearer surfaces (`/mcp`, `/.well-known/*`, `/openapi.json`, `/llms*.txt`, `/v1/*`), no credentials.
   `/api/auth/*` and the web pages stay same-origin.
 - **Revocation.** Every OAuth request re-checks its grant: a consent or live refresh token for that client, org and user
-  must stand. `revoke_agent_access` ends the grant and the tokens it issued, at once.
+  must stand. `revoke_agent_access` ends the grant and the tokens it issued, at once. A member who is removed or
+  leaves loses every grant they made in that org (`packages/auth/src/member-grants.ts`), so re-adding them later
+  doesn't revive their old agent's tokens. API keys stay: they belong to the org, not the member.
 - **Agents.** `list_connected_agents` lists the org's API keys and the OAuth clients with consent or a live refresh
   token. `revoke_agent_access` needs `apiKey:delete`.
 - **Discovery.** `llms.txt` and `/` carry install snippets (Claude Code, Cursor, VS Code, Codex, device-grant curl).

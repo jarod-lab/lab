@@ -10,6 +10,7 @@ import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
+import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
 import { type Adapter, firstMembership, findMember, personalOrganization } from "./membership"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { endProvisionalKeys, registerSignupDatabase } from "./signup"
@@ -132,7 +133,7 @@ export function createAuth(opts: AuthOptions) {
     // The jwt plugin's session-to-JWT endpoint, and the device plugin's /device/token, which mints a
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
     disabledPaths: ["/token", "/device/token"],
-    hooks: { before: nativeLoopbackRegistration },
+    hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave },
     databaseHooks: {
       // Every account works inside an organization: signing up creates a personal one.
       // A verified address is a claimed account (verify-email, or any other path that sets it).
@@ -161,6 +162,11 @@ export function createAuth(opts: AuthOptions) {
         roles,
         creatorRole: "owner",
         sendInvitationEmail: wrapsPlugin.emails.invitation,
+        // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
+        organizationHooks: {
+          afterRemoveMember: async ({ member, organization }) =>
+            revokeMemberGrants(await adapter(), member.userId, organization.id),
+        },
       }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
       // checks it against the creator). No defaults: a key without permissions can do nothing.

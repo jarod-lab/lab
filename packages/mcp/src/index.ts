@@ -172,10 +172,9 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
  */
 export function createMcpHandler(opts: McpHandlerOptions) {
   return async (request: Request, ctx: { requestId?: string } = {}): Promise<Response> => {
-    const caller = await opts.authenticate(request)
-    if (!caller) {
-      return Response.json(
-        { error: { code: "UNAUTHORIZED", message: "Sign in or send an organization API key" } },
+    const unauthorized = (error: AppError) =>
+      Response.json(
+        { error: error.toPublic() },
         {
           status: 401,
           headers: {
@@ -183,6 +182,17 @@ export function createMcpHandler(opts: McpHandlerOptions) {
           },
         },
       )
+    let caller: Caller | null
+    try {
+      caller = await opts.authenticate(request)
+    } catch (e) {
+      // A credential refused with a reason (a provisional key ended by the claim) still points the
+      // client at OAuth discovery, and keeps the hint saying what to do.
+      if (e instanceof AppError && e.code === "UNAUTHORIZED") return unauthorized(e)
+      throw e
+    }
+    if (!caller) {
+      return unauthorized(new AppError("UNAUTHORIZED", "Sign in or send an organization API key"))
     }
     const server = buildServer(opts, caller, ctx.requestId)
     const transport = new WebStandardStreamableHTTPServerTransport({

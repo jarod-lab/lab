@@ -81,6 +81,30 @@ describe("createMcpHandler", () => {
     )
   })
 
+  it("keeps the OAuth pointer on a refused credential, and passes its hint along", async () => {
+    const handler = createMcpHandler({
+      name: "test",
+      version: "1.0.0",
+      operations: [whoami],
+      authenticate: async () => {
+        throw new AppError("UNAUTHORIZED", "This API key is turned off", {
+          hint: "Use the device grant.",
+        })
+      },
+      resourceMetadataUrl: "http://localhost/.well-known/oauth-protected-resource/mcp",
+    })
+    const res = await handler(new Request(URL_, { method: "POST", body: "{}" }))
+    expect(res.status).toBe(401)
+    expect(res.headers.get("www-authenticate")).toContain("resource_metadata=")
+    expect(await res.json()).toEqual({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "This API key is turned off",
+        hint: "Use the device grant.",
+      },
+    })
+  })
+
   it("lists only the tools the caller has permissions for", async () => {
     const all = await (await connect(full)).listTools()
     expect(all.tools.map((t) => t.name)).toEqual(["whoami", "shout"])

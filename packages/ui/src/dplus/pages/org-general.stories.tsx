@@ -7,15 +7,33 @@ import { Field, FieldDescription, FieldLabel } from "../../components/ui/field"
 import { Input } from "../../components/ui/input"
 import { NativeSelect, NativeSelectOption } from "../../components/ui/native-select"
 import { OrgMark } from "../org-mark"
-import { AppShell, SettingsHeader, withDark } from "./app-shell"
+import { SettingsHeader } from "../shell/settings-header"
+import { DemoShell, withDark } from "./story-kit"
+
+const orgTabs = [
+  { id: "general", label: "General", href: "#settings/general" },
+  { id: "members", label: "Members", href: "#settings/members", count: "12" },
+  { id: "api-keys", label: "API keys", href: "#settings/api-keys" },
+  { id: "billing", label: "Billing", href: "#settings/billing" },
+  { id: "agents", label: "Agents", href: "#settings/agents" },
+  { id: "integrations", label: "Integrations", href: "#settings/integrations", badge: "1 expired" },
+]
 
 // Board "Org settings — General", for an owner and for a viewer (read only).
 
 function OrgGeneral({ viewer }: { viewer: boolean }) {
   return (
-    <AppShell active="settings" crumbs={["Acme Inc", "Settings", "General"]} height={860}>
-      <SettingsHeader active="general" role={viewer ? "Viewer" : "Owner"} />
-      <main className="flex max-w-180 flex-1 flex-col gap-5 px-9 py-6">
+    <DemoShell
+      active="settings"
+      crumbs={[{ label: "Acme Inc" }, { label: "Settings" }, { label: "General" }]}
+    >
+      <SettingsHeader
+        title="Organization settings"
+        context={`Acme Inc · you are ${viewer ? "Viewer" : "Owner"}`}
+        tabs={orgTabs}
+        activeTab="general"
+      />
+      <div className="flex max-w-180 flex-1 flex-col gap-5 px-9 py-6">
         {viewer && (
           <Alert variant="notice">
             <EyeIcon />
@@ -121,8 +139,8 @@ function OrgGeneral({ viewer }: { viewer: boolean }) {
             </Card>
           </>
         )}
-      </main>
-    </AppShell>
+      </div>
+    </DemoShell>
   )
 }
 

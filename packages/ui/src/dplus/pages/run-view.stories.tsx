@@ -6,7 +6,7 @@ import { Input } from "../../components/ui/input"
 import { Progress } from "../../components/ui/progress"
 import { Meter } from "../meter"
 import { Status, type StatusState } from "../status"
-import { AppShell, withDark } from "./app-shell"
+import { DemoShell, withDark } from "./story-kit"
 
 // Board "App shell — run view" from the D+ design canvas, built from the real components.
 
@@ -18,8 +18,11 @@ const steps: { state: StatusState; label: string; meta: string }[] = [
 
 function RunView() {
   return (
-    <AppShell active="release-triage" crumbs={["Agents", "Release triage", "Run 482"]}>
-      <main className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-9 py-7">
+    <DemoShell
+      active="release-triage"
+      crumbs={[{ label: "Agents" }, { label: "Release triage" }, { label: "Run 482" }]}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-5 px-9 py-7">
         <div className="flex items-end gap-6">
           <div className="flex flex-1 flex-col gap-1.5">
             <p className="text-sm text-muted-foreground">
@@ -120,8 +123,8 @@ function RunView() {
             Send now
           </Button>
         </div>
-      </main>
-    </AppShell>
+      </div>
+    </DemoShell>
   )
 }
 

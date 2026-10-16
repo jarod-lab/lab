@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { CircleAlertIcon, EyeIcon, InfoIcon, XIcon } from "lucide-react"
 import { Stack } from "../../dplus/pages/story-kit"
-import { withDark } from "../../dplus/pages/app-shell"
+import { withDark } from "../../dplus/pages/story-kit"
 import AlertExample from "../examples/alert-example"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "./alert"
 import { Badge } from "./badge"

@@ -1,0 +1,72 @@
+import { cn } from "cn"
+import { useId } from "react"
+import { Status, type StatusState } from "../status"
+
+export type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid"
+
+const STATUS: Record<Exclude<SlugStatus, "idle">, { state: StatusState; word: string }> = {
+  checking: { state: "running", word: "Checking" },
+  available: { state: "done", word: "Available" },
+  taken: { state: "failed", word: "Taken" },
+  invalid: { state: "needs-you", word: "Use lowercase letters, numbers and hyphens" },
+}
+
+/** A URL slug: fixed prefix, editable part, and a status line that is shape + word. */
+export function SlugField({
+  label,
+  prefix,
+  value,
+  onChange,
+  status,
+  name,
+  className,
+}: {
+  label: string
+  /** Shown before the input, e.g. "app.example.com/". */
+  prefix: string
+  value: string
+  onChange: (value: string) => void
+  status: SlugStatus
+  name?: string
+  className?: string
+}) {
+  const id = useId()
+  const statusId = `${id}-status`
+  const bad = status === "taken" || status === "invalid"
+  const shown = status === "idle" ? undefined : STATUS[status]
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label}
+      </label>
+      <div
+        className={cn(
+          "flex min-h-11 overflow-hidden rounded-lg border-[1.5px] border-input",
+          bad && "border-2 border-destructive",
+        )}
+      >
+        <span className="flex items-center border-r border-border bg-muted px-3 font-mono text-[13.5px] text-muted-foreground">
+          {prefix}
+        </span>
+        <input
+          id={id}
+          name={name}
+          value={value}
+          onChange={(e) => onChange(e.currentTarget.value)}
+          aria-invalid={bad || undefined}
+          aria-describedby={shown ? statusId : undefined}
+          autoComplete="off"
+          spellCheck={false}
+          className="type-mono min-w-0 flex-1 bg-transparent px-3 text-foreground"
+        />
+      </div>
+      <output id={statusId} className="block">
+        {shown && (
+          <Status state={shown.state} className="text-[13.5px]">
+            {shown.word}
+          </Status>
+        )}
+      </output>
+    </div>
+  )
+}

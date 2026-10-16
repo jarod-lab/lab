@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { VariantRow, VariantTable } from "../../dplus/pages/story-kit"
-import { withDark } from "../../dplus/pages/app-shell"
+import { withDark } from "../../dplus/pages/story-kit"
 import CardExample from "../examples/card-example"
 import { Button } from "./button"
 import {

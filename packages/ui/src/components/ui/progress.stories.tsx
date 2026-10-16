@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Meter } from "../../dplus/meter"
 import { Status } from "../../dplus/status"
 import { VariantRow, VariantTable } from "../../dplus/pages/story-kit"
-import { withDark } from "../../dplus/pages/app-shell"
+import { withDark } from "../../dplus/pages/story-kit"
 import ProgressExample from "../examples/progress-example"
 import { Progress, ProgressLabel, ProgressValue } from "./progress"
 

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ArrowRightIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { VariantRow, VariantTable } from "../../dplus/pages/story-kit"
-import { withDark } from "../../dplus/pages/app-shell"
+import { withDark } from "../../dplus/pages/story-kit"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Spinner } from "../components/ui/spinner"
-import { withDark } from "./pages/app-shell"
+import { withDark } from "./pages/story-kit"
 import { VariantRow, VariantTable } from "./pages/story-kit"
 import { Status, type StatusState, StatusIcon } from "./status"
 

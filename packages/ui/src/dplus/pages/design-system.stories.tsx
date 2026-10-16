@@ -20,7 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "../../components/ui/toggle-group"
 import { Meter } from "../meter"
 import { OrgMark } from "../org-mark"
 import { Status, type StatusState, StatusIcon } from "../status"
-import { withDark } from "./app-shell"
+import { withDark } from "./story-kit"
 
 // Board "D+ design system — foundations, components, navigation", built only from the real tokens,
 // utilities and component variants. If something on the board needs a one-off class here, it is

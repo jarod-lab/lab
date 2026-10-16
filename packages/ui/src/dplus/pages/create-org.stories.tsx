@@ -5,15 +5,15 @@ import { Input } from "../../components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../../components/ui/input-group"
 import { Status } from "../status"
 import { OrgMark } from "../org-mark"
-import { AppShell, withDark } from "./app-shell"
+import { DemoShell, withDark } from "./story-kit"
 
 // Board "Org switcher → Create organization": the picker is open on "Create organization" and the
 // page behind it is the create form.
 
 function CreateOrg() {
   return (
-    <AppShell active="new" menu="org" crumbs={["Organizations", "New"]}>
-      <main className="flex max-w-160 flex-1 flex-col gap-5 px-12 py-9">
+    <DemoShell active="new" menu="org" crumbs={[{ label: "Organizations" }, { label: "New" }]}>
+      <div className="flex max-w-160 flex-1 flex-col gap-5 px-12 py-9">
         <div className="flex flex-col gap-1">
           <h1 className="type-h1 text-[30px]">Create an organization</h1>
           <p className="text-secondary-foreground">
@@ -72,8 +72,8 @@ function CreateOrg() {
             Cancel
           </Button>
         </div>
-      </main>
-    </AppShell>
+      </div>
+    </DemoShell>
   )
 }
 

@@ -1,0 +1,44 @@
+import type { Meta, StoryObj } from "@storybook/react-vite"
+import { SidebarProvider } from "../../components/ui/sidebar"
+import { demoAccount, demoNav, demoOrgs, demoPinned, withDark } from "../pages/story-kit"
+import { AppSidebar, type AppSidebarProps } from "./app-sidebar"
+
+const meta = {
+  title: "D+/Shell/AppSidebar",
+  component: AppSidebar,
+  parameters: { layout: "fullscreen" },
+  args: {
+    org: {
+      orgs: demoOrgs,
+      activeOrgId: "acme",
+      hrefFor: (o) => `#${o.slug}`,
+      settingsHref: "#org-settings",
+      createHref: "#new",
+    },
+    nav: demoNav,
+    activeId: "agents",
+    pinnedAgents: demoPinned,
+    announcement: {
+      id: "pull-requests",
+      badge: "NEW",
+      title: "Agents can open pull requests",
+      href: "#post",
+      linkLabel: "Read the post",
+    },
+    support: { href: "#support" },
+    account: demoAccount,
+  },
+  render: (args) => (
+    <SidebarProvider className="h-190 min-h-0 w-[600px] bg-background text-foreground">
+      <AppSidebar {...args} />
+    </SidebarProvider>
+  ),
+} satisfies Meta<AppSidebarProps>
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {}
+export const NoPinnedAgents: Story = { args: { pinnedAgents: [] } }
+export const NoAnnouncement: Story = { args: { announcement: undefined } }
+export const Dark: Story = { decorators: [withDark] }

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarGroup } from "../components/ui/avatar"
 import { OrgMark } from "./org-mark"
-import { withDark } from "./pages/app-shell"
+import { withDark } from "./pages/story-kit"
 import { VariantRow, VariantTable } from "./pages/story-kit"
 
 // Identity: organizations are square OrgMarks, people are round Avatars.

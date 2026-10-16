@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { CheckIcon } from "lucide-react"
 import { VariantRow, VariantTable } from "../../dplus/pages/story-kit"
-import { withDark } from "../../dplus/pages/app-shell"
+import { withDark } from "../../dplus/pages/story-kit"
 import BadgeExample from "../examples/badge-example"
 import { Badge } from "./badge"
 

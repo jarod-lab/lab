@@ -105,3 +105,22 @@ then the node's report. Failed gate → back to the node with the evidence, thre
 - L5 (N5): never run two vitest processes at once (PGlite hangs); scope `biome format` to your own paths while
   other nodes are mid-edit; theme boot script is inline (`src/theme-boot.js?raw`, CSP hash) — never put
   un-hashed files under `/assets` (immutable cache).
+- L6 (N2): better-auth native transactions (needed by scim) deadlock adapter calls inside hooks on PGlite —
+  use `getCurrentAdapter`. The stripe plugin goes last. Run `biome format` on drizzle meta after `db:generate`.
+  Secret-shaped test literals need `// gitleaks:allow` on each line.
+- L7 (P4): TanStack Form `errors` holds Zod issues; render `.message`. `expectNoA11yViolations` replaces
+  `document.body`, run it last. Secrets live only in React state, never in the query cache.
+- D5 (lead): P5/P6 need auth server work — `changeEmail` (confirm via new address, notify the old one),
+  `deleteUser` (email confirmation; refused while the user owns a non-personal org), `accountLinking`
+  (connect GitHub/Google; can't unlink the last way in), and the sign-in method per session (session field →
+  migration 0007). They run after N3 so migrations and PGlite test runs stay sequential.
+- L8 (A1): better-auth after-hooks also run for refused requests — check `ctx.context.returned instanceof
+  APIError`. Guard queries on plugin models that may not be configured (stripe `subscription`).
+- L9 (P3): e2e role/label matching is exact and case-sensitive unless `{ exact: false }`; on phone the sidebar
+  is a drawer ("Open navigation" first).
+- L10 (S1): browser-safe shared types live in import-free files; client.ts never imports a server plugin file.
+- L11 (P11): the sso plugin refuses private/loopback OIDC issuers, so e2e registers SAML. Never mount sso without domainVerification.
+- L11 (P12): TanStack Virtual renders no rows in jsdom (zero-size scroller), so windowed tables render every row at
+  or below 25 rows and window only longer lists. better-auth `banExpiresIn` is seconds. Admin client paths are
+  `/api/auth/admin/*`. An impersonated session carries the target's role, so /admin says "Not available" until Stop.
+  A `Secret` password from `credentials` can't be a string in config without making every e2e command fail; use a function.

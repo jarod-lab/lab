@@ -5,6 +5,7 @@ export {
   ac,
   type Catalog,
   OWNER_ONLY_RESOURCES,
+  PERSON_ONLY_RESOURCES,
   type RoleName,
   roles,
   statements,

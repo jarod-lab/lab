@@ -1770,6 +1770,58 @@ describe("billing with Stripe test-mode keys set", () => {
     expect(res.status).not.toBe(404)
     expect(res.status).toBeGreaterThanOrEqual(400)
   })
+
+  describe("who may manage an organization's subscription", () => {
+    const open = () => browser((url, init) => t.app.request(url, init))
+    const roles = ["owner", "admin", "member", "viewer"] as const
+    const members: Record<(typeof roles)[number], ReturnType<typeof open>> = {
+      owner: open(),
+      admin: open(),
+      member: open(),
+      viewer: open(),
+    }
+    let org = ""
+
+    beforeAll(async () => {
+      const owner = members.owner
+      const { data, error } = await owner.client.signUp.email({
+        email: "billing-owner@example.com",
+        password: PASSWORD,
+        name: "Billing owner",
+      })
+      if (error || !data) throw new Error(`sign-up failed: ${JSON.stringify(error)}`)
+      const res = await owner.request("/v1/whoami")
+      org = ((await res.json()) as { organizationId?: string }).organizationId ?? ""
+      for (const role of roles.filter((r) => r !== "owner")) {
+        const { data: user, error: signUpError } = await members[role].client.signUp.email({
+          email: `billing-${role}@example.com`,
+          password: PASSWORD,
+          name: `Billing ${role}`,
+        })
+        if (signUpError || !user) throw new Error(`sign-up failed: ${JSON.stringify(signUpError)}`)
+        await t.auth.api.addMember({
+          body: { organizationId: org, userId: user.user.id, role },
+        })
+      }
+    })
+
+    it.each(["owner", "admin"] as const)(
+      "lets %s read and change the subscription",
+      async (role) => {
+        const res = await members[role].request(
+          `/api/auth/subscription/list?customerType=organization&referenceId=${org}`,
+        )
+        expect(res.status).toBe(200)
+      },
+    )
+
+    it.each(["member", "viewer"] as const)("refuses %s with 403", async (role) => {
+      const res = await members[role].request(
+        `/api/auth/subscription/list?customerType=organization&referenceId=${org}`,
+      )
+      expect(res.status).toBe(403)
+    })
+  })
 })
 
 describe("sign-in methods over HTTP", () => {

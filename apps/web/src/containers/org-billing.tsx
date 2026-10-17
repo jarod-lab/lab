@@ -11,8 +11,10 @@ import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
 import { OrgBillingPage } from "../pages/org-billing-page"
 
-/** Changing the subscription (plan, seats, payment, invoices, cancellation) is the owner's alone. */
-const OWNER_ONLY = { subscription: ["update"] }
+/** Seeing the Billing page: owners and admins (members and viewers have no subscription grant). */
+const VIEW_BILLING = { subscription: ["read"] }
+/** Changing the subscription (plan, seats, payment, invoices, cancellation): owners and admins. */
+const CHANGE_BILLING = { subscription: ["update"] }
 
 export interface OrgBillingContainerProps {
   auth: WebAuth
@@ -39,7 +41,8 @@ export function OrgBillingContainer({
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
   const roleText = role.data ?? ""
-  const canChange = role.isSuccess && api.roleAllows(roleText, OWNER_ONLY)
+  const canView = role.isSuccess && api.roleAllows(roleText, VIEW_BILLING)
+  const canChange = role.isSuccess && api.roleAllows(roleText, CHANGE_BILLING)
 
   const modeQuery = useQuery({
     queryKey: billingKeys.mode(),
@@ -55,7 +58,7 @@ export function OrgBillingContainer({
       if (!adapter) throw new Error("Billing is not ready.")
       return adapter.load(organizationId)
     },
-    enabled: role.isSuccess && adapter !== undefined,
+    enabled: canView && adapter !== undefined,
   })
 
   const usage = useQuery({
@@ -64,13 +67,13 @@ export function OrgBillingContainer({
       if (!adapter) throw new Error("Billing is not ready.")
       return adapter.usage(organizationId)
     },
-    enabled: role.isSuccess && adapter !== undefined,
+    enabled: canView && adapter !== undefined,
   })
 
   const members = useQuery({
     queryKey: qk.org(organizationId).members(),
     queryFn: () => api.listMembers(organizationId),
-    enabled: role.isSuccess,
+    enabled: canView,
   })
 
   // Every provider action returns a page to open. The window is opened only after the server has
@@ -89,6 +92,13 @@ export function OrgBillingContainer({
     return (
       <p role="alert" className="p-6 text-destructive">
         Could not load your role in this organization.
+      </p>
+    )
+  }
+  if (role.isSuccess && !canView) {
+    return (
+      <p className="p-6 text-muted-foreground">
+        Billing isn&apos;t available for your role. Ask an owner or admin.
       </p>
     )
   }

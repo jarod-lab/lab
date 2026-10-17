@@ -32,16 +32,15 @@ export function roleLabelOf(role: string): string {
 /**
  * The role matrix: each row is one board label mapped to the catalog actions it needs, and each
  * cell is the plugin's answer for that role. Labels are the board's; the actions are the catalog's.
- * The board's "API keys and billing" row is split: billing (subscription) is owner-only in the
- * catalog, so it can't share a row with API keys without lying for admins.
+ * The board's "API keys and billing" row needs both grants in one set, which a single role must hold
+ * (owners and admins do; members and viewers hold neither).
  */
 export const PERMISSION_MATRIX: { label: string; permission: Permission }[] = [
   { label: "See agents, runs, settings", permission: { agent: ["read"], run: ["read"] } },
   { label: "Start runs, approve actions", permission: { run: ["create", "approve"] } },
   { label: "Create and edit agents", permission: { agent: ["create", "update"] } },
   { label: "Invite and manage members", permission: { member: ["update", "delete"] } },
-  { label: "API keys", permission: { apiKey: ["create"] } },
-  { label: "Billing", permission: { subscription: ["update"] } },
+  { label: "API keys and billing", permission: { apiKey: ["create"], subscription: ["update"] } },
   { label: "Delete or transfer the org", permission: { organization: ["delete"] } },
 ]
 

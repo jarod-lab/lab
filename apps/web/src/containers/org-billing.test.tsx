@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingAdapter, BillingSnapshot, BillingUsage } from "../lib/billing/adapter"
@@ -13,10 +14,10 @@ import { OrgBillingContainer } from "./org-billing"
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
 const USAGE: BillingUsage = { day: "2026-10-16", total: 3, limit: 500 }
 
-// The plugin's rules: only the owner may update the subscription (admin has no subscription grant).
+// The catalog's rules: owners and admins manage the subscription; members and viewers have no grant.
 const ALLOWED: Record<string, string[]> = {
-  owner: ["subscription:update"],
-  admin: [],
+  owner: ["subscription:read", "subscription:update"],
+  admin: ["subscription:read", "subscription:update"],
   member: [],
   viewer: [],
 }
@@ -104,29 +105,28 @@ describe("OrgBillingContainer usage", () => {
 })
 
 describe("OrgBillingContainer as admin", () => {
-  it("is read-only: admins have no subscription grant in the catalog", async () => {
-    setup({ role: "admin", adapter: stripeAdapter() })
-    expect(await screen.findByText("You have view-only access to Acme Inc.")).toBeTruthy()
+  it("sees the page and can manage the subscription, as an owner does", async () => {
+    const adapter = stripeAdapter()
+    setup({ role: "admin", adapter })
+    expect(await screen.findByText("Acme Inc · you are Admin")).toBeTruthy()
     const manage = await screen.findByRole("button", { name: "Manage subscription" })
-    expect((manage as HTMLButtonElement).disabled).toBe(true)
-    expect(
-      document.getElementById(manage.getAttribute("aria-describedby") ?? "")?.textContent,
-    ).toBe("Only the owner can change billing")
+    await waitFor(() => expect((manage as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.queryByText("You have view-only access to Acme Inc.")).toBeNull()
   })
 })
 
-describe("OrgBillingContainer as viewer", () => {
-  it("is read-only with the view-only notice", async () => {
-    setup({ role: "viewer", adapter: stripeAdapter() })
-    expect(await screen.findByText("You have view-only access to Acme Inc.")).toBeTruthy()
+describe("OrgBillingContainer as member or viewer", () => {
+  it.each(["member", "viewer"])("%s sees the plain notice, and no billing data", async (role) => {
+    const adapter = stripeAdapter()
+    setup({ role, adapter })
     expect(
-      screen.getByText("Only the owner can change the plan, seats, payment method or invoices."),
+      await screen.findByText("Billing isn't available for your role. Ask an owner or admin."),
     ).toBeTruthy()
-    const manage = await screen.findByRole("button", { name: "Manage subscription" })
-    expect((manage as HTMLButtonElement).disabled).toBe(true)
-    expect(
-      document.getElementById(manage.getAttribute("aria-describedby") ?? "")?.textContent,
-    ).toBe("Only the owner can change billing")
+    expect(screen.queryByRole("button", { name: "Manage subscription" })).toBeNull()
+    expect(screen.queryByText("You have view-only access to Acme Inc.")).toBeNull()
+    expect(adapter.load).not.toHaveBeenCalled()
+    expect(adapter.usage).not.toHaveBeenCalled()
+    await expectNoA11yViolations(document.body.innerHTML)
   })
 })
 

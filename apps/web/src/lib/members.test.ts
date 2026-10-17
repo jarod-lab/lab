@@ -57,13 +57,16 @@ describe("permissionMatrix", () => {
     })
   })
 
-  it("keeps billing and org deletion owner-only, as the catalog does", () => {
-    expect(row("Billing")?.cells).toEqual({
+  it("gives API keys and billing to owners and admins, as the catalog does", () => {
+    expect(row("API keys and billing")?.cells).toEqual({
       owner: true,
-      admin: false,
+      admin: true,
       member: false,
       viewer: false,
     })
+  })
+
+  it("keeps org deletion owner-only, as the catalog does", () => {
     expect(row("Delete or transfer the org")?.cells.admin).toBe(false)
   })
 })

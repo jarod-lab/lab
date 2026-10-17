@@ -1,6 +1,7 @@
-// Single sign-on, SCIM provisioning and billing belong to an organization's owner. The permission
-// catalog (access.ts) grants them to the owner role only, and the check runs here, before the plugin's
-// own: the sso plugin also lets admins register and edit providers, which the catalog does not allow.
+// Single sign-on and SCIM provisioning belong to an organization's owner. The permission catalog
+// (access.ts) grants them to the owner role only, and the check runs here, before the plugin's own:
+// the sso plugin also lets admins register and edit providers, which the catalog does not allow.
+// Billing (the subscription) is the owner's and the admins': see canManageBilling.
 import { allowed } from "@starter/api"
 import type { BetterAuthPlugin } from "better-auth"
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
@@ -64,8 +65,11 @@ export const ownerOnlyGuard = {
   },
 } satisfies BetterAuthPlugin
 
-/** Billing: only the owner of the organization may manage its subscription (the stripe plugin asks). */
-export async function ownsBilling(
+/**
+ * Billing: an organization's owners and admins may manage its subscription (the stripe plugin asks
+ * through authorizeReference). Members and viewers may not.
+ */
+export async function canManageBilling(
   adapter: Parameters<typeof findMember>[0],
   userId: string,
   organizationId: string,

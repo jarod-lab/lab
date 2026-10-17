@@ -5,10 +5,10 @@ import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/inv
 
 // The Billing page (docs/build-app/boards/project/OrgBilling): with Stripe not configured the page runs on
 // the fixture. The owner sees the sample-data labels and [PRICE], and every provider control is disabled
-// with the reason, so nothing can be charged. A viewer (invited through the Members page) sees the same
-// page read-only. Locators only; desktop and phone run the same journey.
+// with the reason, so nothing can be charged. A viewer (invited through the Members page) has no billing
+// access and sees only a notice. Locators only; desktop and phone run the same journey.
 
-test("owner sees sample billing with nothing to charge; a viewer reads it read-only", async (ctx) => {
+test("owner sees sample billing with nothing to charge; a viewer is told billing isn't theirs", async (ctx) => {
   const { app, screen, browser } = ctx
   const unique = Date.now().toString(36)
   const ownerEmail = `ada.${unique}@example.com`
@@ -37,7 +37,7 @@ test("owner sees sample billing with nothing to charge; a viewer reads it read-o
   await expect(screen.getByRole("button", "Edit")).toBeDisabled()
   await expect(screen.getByRole("columnheader", "Amount")).toBeVisible()
 
-  // A viewer invited by the owner: the same page, read-only, with the notice naming the owner.
+  // A viewer invited by the owner: no billing page, only the notice naming an owner or admin.
   const link = await inviteAs(ctx, { slug, email: viewerEmail, role: "viewer" })
   await signOutUi(ctx)
   await acceptInvitationAs(ctx, {
@@ -47,10 +47,8 @@ test("owner sees sample billing with nothing to charge; a viewer reads it read-o
     organizationName: orgName,
   })
   await app.open(`/${slug}/settings/billing`)
-  await expect(screen.getByText(`You have view-only access to ${orgName}.`)).toBeVisible()
   await expect(
-    screen.getByText("Only the owner can change the plan, seats, payment method or invoices."),
+    screen.getByText("Billing isn't available for your role. Ask an owner or admin."),
   ).toBeVisible()
-  await expect(screen.getByRole("button", "Manage subscription")).toBeDisabled()
-  await expect(screen.getByRole("button", "Cancel plan")).toBeDisabled()
+  await expect(screen.getByRole("button", "Manage subscription")).toBeHidden()
 })

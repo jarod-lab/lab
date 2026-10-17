@@ -41,7 +41,7 @@ export interface OrgBillingPageProps {
   organization: { name: string; slug: string }
   /** The caller's role as the page words it, e.g. "Owner". */
   roleLabel: string
-  /** Owners only. Everyone else sees the page read-only. */
+  /** Owners and admins. Anyone else sees the page read-only (the container hides it from them). */
   canChange: boolean
   mode: BillingMode
   snapshot: BillingSnapshot
@@ -93,7 +93,7 @@ export function OrgBillingPage({
   const [confirmCancel, setConfirmCancel] = useState(false)
   const connected = mode === "stripe"
   const enabled = connected && canChange && !pending
-  const reason = !connected ? NOT_CONNECTED_REASON : "Only the owner can change billing"
+  const reason = !connected ? NOT_CONNECTED_REASON : "Only an owner or admin can change billing"
   const current = snapshot.subscription
   const currentPlan = snapshot.plans.find((plan) => plan.id === current?.planId) ?? null
   const currentIndex = snapshot.plans.findIndex((plan) => plan.id === current?.planId)
@@ -131,7 +131,7 @@ export function OrgBillingPage({
 
         {!canChange ? (
           <ViewOnlyNotice subject={organization.name}>
-            Only the owner can change the plan, seats, payment method or invoices.
+            Only an owner or admin can change the plan, seats, payment method or invoices.
           </ViewOnlyNotice>
         ) : null}
 

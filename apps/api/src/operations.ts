@@ -8,7 +8,7 @@ import {
   paginated,
   paginationInput,
 } from "@starter/api"
-import { type Auth, type Catalog, OWNER_ONLY_RESOURCES, statements } from "@starter/auth"
+import { type Auth, type Catalog, PERSON_ONLY_RESOURCES, statements } from "@starter/auth"
 import {
   AgentId,
   agentInOrg,
@@ -559,16 +559,16 @@ export function createOperations({
       if (caller.actor.type !== "user") {
         throw new AppError("FORBIDDEN", "API keys can't create API keys; sign in as a user")
       }
-      // Owner-only resources, and deciding approvals, are for people: a key never holds them.
+      // Owner-only and billing resources, and deciding approvals, are for people: a key never holds them.
       const restricted = Object.keys(permissions).filter((r) =>
-        (OWNER_ONLY_RESOURCES as readonly string[]).includes(r),
+        (PERSON_ONLY_RESOURCES as readonly string[]).includes(r),
       )
       if (restricted.length > 0 || permissions.run?.includes("approve")) {
         throw new AppError(
           "FORBIDDEN",
           "A key can't hold owner-only permissions or approve actions",
           {
-            hint: "Keys can't have sso, scim, subscription or twoFactor permissions, or run:approve. Those are for an owner or a person signed in to the web app.",
+            hint: "Keys can't have sso, scim, subscription or twoFactor permissions, or run:approve. Those are for a person signed in to the web app (owners, and admins for subscription).",
           },
         )
       }

@@ -20,9 +20,10 @@ export const statements = {
   // requests); `approve` is a person's decision (never granted to a key or an OAuth token);
   // `steer` covers the messages and deferrals a person sends to a run.
   run: ["create", "read", "update", "approve", "steer"],
-  // Owner only (see roles): single sign-on providers, SCIM provisioning tokens and the subscription.
+  // Owner only (see roles): single sign-on providers and SCIM provisioning tokens.
   sso: ["read", "update"],
   scim: ["create"],
+  // Owners and admins (see roles): the organization's subscription and its billing.
   subscription: ["read", "update"],
   // Owner only: turning off another member's two-factor sign-in.
   twoFactor: ["reset"],
@@ -36,7 +37,10 @@ const all = Object.fromEntries(
 ) as { -readonly [R in keyof Catalog]: Catalog[R][number][] }
 
 /** Resources only the owner role holds: the admin role is built without them. */
-export const OWNER_ONLY_RESOURCES = ["sso", "scim", "subscription", "twoFactor"] as const
+export const OWNER_ONLY_RESOURCES = ["sso", "scim", "twoFactor"] as const
+
+/** Resources a person holds but no API key may: the owner-only ones, and billing (owner and admin). */
+export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription"] as const
 
 const adminStatements = Object.fromEntries(
   Object.entries(all).filter(

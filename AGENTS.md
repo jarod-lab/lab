@@ -253,7 +253,7 @@ All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
   (`resume.ts`).
 - **admin:** `adminRoles: ["admin"]`, promoted in the database only (`update "user" set role='admin' …`). Impersonated
   sessions can't consent, approve devices, or create/update API keys (`guards.ts`), and get read-only grants.
-- **sso, scim, stripe:** owner-only resources `sso`, `scim`, `subscription` (OAUTH_EXCLUDED; `owner-only.ts`,
+- **sso, scim, stripe:** owner-only resources `sso` and `scim`, and `subscription` for owners and admins ( OAUTH_EXCLUDED; `owner-only.ts`,
   `scim-token.ts`). SCIM users aren't projected into the org yet; tokens can't be listed or revoked. Stripe is test mode
   only (`sk_test_`), mounted with `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, plans from `STRIPE_PLANS`, plugin last.
   scim needs `drizzleAdapter(..., { transaction: true })`, so hooks use `getCurrentAdapter` (PGlite deadlocks otherwise).

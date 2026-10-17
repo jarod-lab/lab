@@ -35,7 +35,7 @@ import { type LoginContext, signInOf } from "./login-method"
 import { createNotices } from "./notices"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
-import { ownerOnlyGuard, ownsBilling } from "./owner-only"
+import { canManageBilling, ownerOnlyGuard } from "./owner-only"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
 import { twoFactorMagicLink } from "./magic-link-two-factor"
@@ -447,7 +447,7 @@ export function createAuth(opts: AuthOptions) {
   return auth
 }
 
-/** The stripe plugin, in test mode. Organizations are the billing customers; only an owner may change one. */
+/** The stripe plugin, in test mode. Organizations are the billing customers; owners and admins may manage one. */
 function stripeBilling(
   config: NonNullable<AuthOptions["stripe"]>,
   adapter: () => Promise<Adapter>,
@@ -464,8 +464,14 @@ function stripeBilling(
         ? {
             enabled: true,
             plans,
-            authorizeReference: async ({ user, referenceId }) =>
-              ownsBilling(await adapter(), user.id, referenceId),
+            // A refusal is a 403 here: the plugin's own `false` would answer 401 (UNAUTHORIZED).
+            authorizeReference: async ({ user, referenceId }) => {
+              if (await canManageBilling(await adapter(), user.id, referenceId)) return true
+              throw APIError.from("FORBIDDEN", {
+                message: "Only an organization's owners and admins can manage billing",
+                code: "ORGANIZATION_BILLING_FORBIDDEN",
+              })
+            },
           }
         : { enabled: false },
   })

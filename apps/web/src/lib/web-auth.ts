@@ -1,4 +1,6 @@
-import { createClient } from "@starter/auth/client"
+import { TWO_FACTOR_PATH, createClient } from "@starter/auth/client"
+
+import { rawSearch } from "./navigation"
 
 /** An auth call that the server refused, with the message to show the person. */
 export class WebError extends Error {
@@ -111,10 +113,13 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
       }
     },
     async signIn(input) {
-      const data = unwrap<{ url?: string } | null>(
+      const data = unwrap<{ url?: string; twoFactorRedirect?: boolean } | null>(
         await client.signIn.email(input),
         "Could not sign in",
       )
+      // A second factor is still due: the client has already sent the browser to /two-factor, keeping
+      // this page's query. Answer with that same address so the caller doesn't navigate elsewhere.
+      if (data?.twoFactorRedirect) return `${TWO_FACTOR_PATH}${rawSearch()}`
       return data?.url ?? undefined
     },
     async signUp(input) {

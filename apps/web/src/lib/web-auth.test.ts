@@ -35,6 +35,17 @@ function fakeServer(routes: Record<string, { status?: number; body: unknown }>) 
 }
 
 describe("createWebAuth", () => {
+  it("answers a password sign-in that needs a second factor with the two-factor page", async () => {
+    const { fetchImpl } = fakeServer({
+      "POST /api/auth/sign-in/email": {
+        body: { twoFactorRedirect: true, twoFactorMethods: ["totp"] },
+      },
+    })
+    const auth = createWebAuth(BASE, fetchImpl)
+    const url = await auth.signIn({ email: "ada@example.com", password: "pw-123456789" }) // gitleaks:allow
+    expect(url).toBe("/two-factor" + window.location.search)
+  })
+
   it("reads the session and maps the active organization", async () => {
     const { fetchImpl, calls } = fakeServer({
       "GET /api/auth/get-session": {

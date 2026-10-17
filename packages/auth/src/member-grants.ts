@@ -30,12 +30,17 @@ export async function revokeMemberGrants(
 
 /**
  * `/organization/leave` doesn't run the organization plugin's remove-member hooks, so leaving is
- * caught here, once the leave has succeeded.
+ * caught here, once the leave has succeeded. `endScim` ends the person's SCIM tokens for the org
+ * (see scim-token.ts), as a removal does.
  */
-export const endGrantsOnLeave = createAuthMiddleware(async (ctx) => {
-  if (ctx.path !== "/organization/leave" || ctx.context.returned instanceof APIError) return
-  const organizationId = (ctx.body as { organizationId?: unknown } | undefined)?.organizationId
-  const session = await getSessionFromCtx(ctx)
-  if (typeof organizationId !== "string" || !session) return
-  await revokeMemberGrants(ctx.context.adapter, session.user.id, organizationId)
-})
+export const endGrantsOnLeave = (
+  endScim: (userId: string, organizationId: string) => Promise<void>,
+) =>
+  createAuthMiddleware(async (ctx) => {
+    if (ctx.path !== "/organization/leave" || ctx.context.returned instanceof APIError) return
+    const organizationId = (ctx.body as { organizationId?: unknown } | undefined)?.organizationId
+    const session = await getSessionFromCtx(ctx)
+    if (typeof organizationId !== "string" || !session) return
+    await revokeMemberGrants(ctx.context.adapter, session.user.id, organizationId)
+    await endScim(session.user.id, organizationId)
+  })

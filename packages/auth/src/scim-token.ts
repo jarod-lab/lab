@@ -20,6 +20,42 @@ export const SCIM_SCOPES = [
 /** A token lasts a year; the owner mints a new one before it lapses. */
 const TOKEN_DAYS = 365
 
+/** The actor recorded when the product ends access on someone's behalf (a removal or a leave). */
+export const ACCESS_ENDED_ACTOR = "starter:access-ended"
+
+/** The scim plugin's server-only managed-connection calls (see auth index.ts). */
+export interface ScimManagement {
+  list: (provisioningDomainId: string) => Promise<{
+    connections: { connectionId: string; createdBy: string; status: string }[]
+  }>
+  decommission: (input: {
+    connectionId: string
+    provisioningDomainId: string
+    actorId: string
+  }) => Promise<unknown>
+}
+
+/**
+ * Ends the SCIM tokens a person minted for an organization. A token is a managed connection whose
+ * creator is that person, and it works only while the connection is active, so decommissioning
+ * stops it at once. Run when the person is removed or leaves: a token outlives the membership otherwise.
+ */
+export async function endScimTokensOf(
+  scim: ScimManagement,
+  userId: string,
+  organizationId: string,
+): Promise<void> {
+  const { connections } = await scim.list(organizationId)
+  for (const connection of connections) {
+    if (connection.createdBy !== userId || connection.status !== "active") continue
+    await scim.decommission({
+      connectionId: connection.connectionId,
+      provisioningDomainId: organizationId,
+      actorId: ACCESS_ENDED_ACTOR,
+    })
+  }
+}
+
 export interface ScimConnectionInput {
   body: {
     creationRequestId: string

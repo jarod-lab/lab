@@ -44,12 +44,18 @@ import { endProvisionalKeys, registerSignupDatabase } from "./signup"
 import {
   type ScimConnection,
   type ScimConnectionInput,
+  type ScimManagement,
+  endScimTokensOf,
   scimCredentialHashSecret,
   scimTokenPlugin,
 } from "./scim-token"
 
 export { DEVICE_VERIFICATION_PATH } from "./device"
-export { IMPERSONATION_REFUSED_PATHS } from "./guards"
+export {
+  IMPERSONATION_ALLOWED_PATHS,
+  IMPERSONATION_READ_GET_PATHS,
+  IMPERSONATION_REFUSED_GET_PATHS,
+} from "./guards"
 export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
 export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
 export { parseStripePlans, type StripePlanConfig } from "./stripe-plans"
@@ -155,7 +161,15 @@ export function createAuth(opts: AuthOptions) {
     onError: opts.onEmailError,
   })
   // The SCIM plugin's managed-connection endpoint is server-only; it is called on the instance built below.
-  const scimApi: { connect?: (input: ScimConnectionInput) => Promise<ScimConnection> } = {}
+  const scimApi: {
+    connect?: (input: ScimConnectionInput) => Promise<ScimConnection>
+    management?: ScimManagement
+  } = {}
+  // A removed member's or leaver's SCIM tokens end with their access to the organization.
+  const endScim = async (userId: string, organizationId: string) => {
+    if (!scimApi.management) throw new Error("auth is not initialised")
+    await endScimTokensOf(scimApi.management, userId, organizationId)
+  }
 
   // Callbacks below run after construction and need the adapter, so they read it from this ref.
   const ref: { context?: Promise<{ adapter: Adapter }> } = {}
@@ -231,7 +245,7 @@ export function createAuth(opts: AuthOptions) {
     // The jwt plugin's session-to-JWT endpoint, and the device plugin's /device/token, which mints a
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
     disabledPaths: ["/token", "/device/token"],
-    hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave },
+    hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave(endScim) },
     user: {
       // Changing the sign-in email: the new address gets a confirmation link, the old one a notice.
       changeEmail: { enabled: true },
@@ -373,8 +387,10 @@ export function createAuth(opts: AuthOptions) {
             if (typeof organization.slug === "string") refuseReservedSlug(organization.slug)
           },
           // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
-          afterRemoveMember: async ({ member, organization }) =>
-            revokeMemberGrants(await adapter(), member.userId, organization.id),
+          afterRemoveMember: async ({ member, organization }) => {
+            await revokeMemberGrants(await adapter(), member.userId, organization.id)
+            await endScim(member.userId, organization.id)
+          },
         },
       }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
@@ -436,12 +452,21 @@ export function createAuth(opts: AuthOptions) {
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
     ],
   })
-  scimApi.connect = (input) =>
-    (
-      auth.api as unknown as {
-        createSCIMManagedConnection: (i: ScimConnectionInput) => Promise<ScimConnection>
-      }
-    ).createSCIMManagedConnection(input)
+  const scimEndpoints = auth.api as unknown as {
+    createSCIMManagedConnection: (i: ScimConnectionInput) => Promise<ScimConnection>
+    listSCIMManagedConnections: (i: {
+      body: { provisioningDomainId: string }
+    }) => ReturnType<ScimManagement["list"]>
+    decommissionSCIMManagedConnection: (i: {
+      body: Parameters<ScimManagement["decommission"]>[0]
+    }) => Promise<unknown>
+  }
+  scimApi.connect = (input) => scimEndpoints.createSCIMManagedConnection(input)
+  scimApi.management = {
+    list: (provisioningDomainId) =>
+      scimEndpoints.listSCIMManagedConnections({ body: { provisioningDomainId } }),
+    decommission: (input) => scimEndpoints.decommissionSCIMManagedConnection({ body: input }),
+  }
   ref.context = auth.$context
   registerSignupDatabase(auth, opts.db)
   return auth

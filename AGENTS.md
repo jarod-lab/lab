@@ -246,18 +246,20 @@ All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
   OAuth resumes. A magic link for a 2FA user opens the challenge, not a session. Social and SSO sign-ins don't ask
   TOTP (the provider's MFA applies). Owners reset a member's 2FA with `reset_member_two_factor`.
 - **Passwords:** `haveIBeenPwned` (`PASSWORD_COMPROMISED`; tests stub fetch to api.pwnedpasswords.com).
-- **Account:** email change (link to the new address, notice to the old; no native cancel), deletion after an emailed
+- **Account:** email change (link to the new address, notice to the old; no native cancel; the link needs the user's own session, so opened signed out it sends them to sign-in and changes nothing), deletion after an emailed
   confirmation and refused (`OWNS_ORGANIZATION`) while the user owns a shared org, account linking with
   `LAST_SIGN_IN_METHOD` protecting the last way in (`account-plugin.ts`), `GET /api/auth/security/summary`.
 - **OAuth resume:** every step that resumes an authorization carries `oauth_query`; the magic link callbackURL holds it
   (`resume.ts`).
-- **admin:** `adminRoles: ["admin"]`, promoted in the database only (`update "user" set role='admin' …`). Impersonated
-  sessions can't consent, approve devices, or create/update API keys (`guards.ts`), and get read-only grants.
-- **sso, scim, stripe:** owner-only resources `sso` and `scim`, and `subscription` for owners and admins ( OAUTH_EXCLUDED; `owner-only.ts`,
-  `scim-token.ts`). SCIM users aren't projected into the org yet; tokens can't be listed or revoked. Stripe is test mode
+- **admin:** `adminRoles: ["admin"]`, promoted in the database only (`update "user" set role='admin' …`). Impersonation is
+  read-only and fails closed (`guards.ts`): an impersonated session gets 403 `IMPERSONATED_SESSION_NOT_ALLOWED` for every
+  better-auth request except stop-impersonating and sign-out, and a GET passes only if it is listed as a read (each GET the
+  plugins mount is classified in `guards.test.ts`). The product API gives it read-only grants (`IMPERSONATION_GRANTS`).
+- **sso, scim, stripe:** owner-only resources `sso` and `scim`, and `subscription` for owners and admins (all OAUTH_EXCLUDED; `owner-only.ts`,
+  `scim-token.ts`). SCIM users aren't projected into the org yet; tokens can't be listed or revoked. A token ends when its creator is removed or leaves the org (`scim-token.ts`); demoting them or deleting their account doesn't end it yet. Stripe is test mode
   only (`sk_test_`), mounted with `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, plans from `STRIPE_PLANS`, plugin last.
   scim needs `drizzleAdapter(..., { transaction: true })`, so hooks use `getCurrentAdapter` (PGlite deadlocks otherwise).
-- **Dev mail sink:** `DEV_MAIL_SINK=true` (refused in production) keeps auth emails in memory instead of SES;
+- **Dev mail sink:** `DEV_MAIL_SINK=true` (refused unless `NODE_ENV` is development or test) keeps auth emails in memory instead of SES;
   `GET /api/dev/mail?to=` returns them (e2e reads links there).
 - Generated `auth-schema.ts` and drizzle meta come out unformatted: run `pnpm format` after generating.
 

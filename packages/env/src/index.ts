@@ -50,7 +50,7 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),
     /**
      * Dev and e2e only: keep auth emails in memory instead of sending them, readable at
-     * GET /api/dev/mail. Refused when NODE_ENV is production (checked below).
+     * GET /api/dev/mail. Only with NODE_ENV development or test (checked below).
      */
     DEV_MAIL_SINK: z.stringbool().optional(),
     /** Stripe, test mode only: the key must be an sk_test_ key (checked below, with a clear message). */
@@ -69,10 +69,11 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 })
 
-// A mail sink holds real addresses and tokens in memory, so it must never run in production.
-if (env.DEV_MAIL_SINK && env.NODE_ENV === "production") {
+// A mail sink holds real addresses and tokens in memory, so it runs only where NODE_ENV says it is
+// development or test. Anything else (production, or unset) is refused: failing open would leak mail.
+if (env.DEV_MAIL_SINK && env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
   throw new Error(
-    "DEV_MAIL_SINK is for development and e2e only. Unset it when NODE_ENV=production.",
+    "DEV_MAIL_SINK is for development and e2e only. Set NODE_ENV to development or test, or unset DEV_MAIL_SINK.",
   )
 }
 

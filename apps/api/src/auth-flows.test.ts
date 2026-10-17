@@ -1027,6 +1027,28 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         return b.request(`/api/auth/callback/github?code=test-code&state=${state}`)
       }
 
+      it("an impersonated session cannot start linking GitHub to the victim's account", async () => {
+        const victimId =
+          (await (await signedUpHere(`octo-victim-${++n}@example.com`)).client.getSession()).data
+            ?.user.id ?? ""
+        const root = await signedUpHere(`octo-root-${++n}@example.com`)
+        const rootId = (await root.client.getSession()).data?.user.id ?? ""
+        await (await s.auth.$context).adapter.updateMany({
+          model: "user",
+          where: [{ field: "id", value: rootId }],
+          update: { role: "admin" },
+        })
+        expect((await root.client.admin.impersonateUser({ userId: victimId })).error).toBeNull()
+
+        const linked = await root.request("/api/auth/link-social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "github", callbackURL: "/security" }),
+        })
+        expect(linked.status).toBe(403)
+        expect(await linked.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+      })
+
       it("connects GitHub to a signed-in account, lists it, and disconnects it", async () => {
         const address = `octo-link-${++n}@example.com`
         githubEmail = address
@@ -1141,6 +1163,96 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       })
       expect(viaApi.status).toBe(403)
       expect(await viaApi.json()).toMatchObject({ error: { code: "FORBIDDEN" } })
+    })
+  })
+
+  describe("impersonation is read-only", () => {
+    const post = (body: unknown) => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    it("refuses every write and every GET that mints or links, and keeps the reads", async () => {
+      const { b: admin, email: adminEmail, userId: adminId } = await signedUp("Root read-only")
+      const victim = await signedUp("Victim read-only")
+      const org = (await whoami(victim.b)).body.organizationId ?? ""
+      // A second session of the victim: a refused revoke-other-sessions must leave it signed in.
+      const phone = open()
+      await phone.client.signIn.email({ email: victim.email, password: PASSWORD })
+      await (await t.auth.$context).adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: adminId }],
+        update: { role: "admin" },
+      })
+      expect((await admin.client.admin.impersonateUser({ userId: victim.userId })).error).toBeNull()
+
+      const moved = "victim-moved@example.com"
+      const attempts: [string, string, RequestInit?][] = [
+        [
+          "POST",
+          "/organization/invite-member",
+          post({ email: adminEmail, role: "owner", organizationId: org }),
+        ],
+        ["POST", "/organization/create", post({ name: "Sneaky", slug: "sneaky-read-only" })],
+        ["GET", "/passkey/generate-register-options"],
+        ["POST", "/change-email", post({ newEmail: moved })],
+        ["POST", "/update-user", post({ name: "Changed by admin" })],
+        ["POST", "/revoke-other-sessions", post({})],
+        [
+          "POST",
+          "/organization/update-member-role",
+          post({ memberId: "none", role: "owner", organizationId: org }),
+        ],
+        ["POST", "/organization/delete", post({ organizationId: org })],
+        [
+          "POST",
+          "/oauth2/create-client",
+          post({ client_name: "Sneaky", redirect_uris: ["http://127.0.0.1/cb"] }),
+        ],
+        ["POST", "/api-key/delete", post({ keyId: "none" })],
+        ["POST", "/delete-user", post({})],
+      ]
+      for (const [method, path, init] of attempts) {
+        const res = await admin.request(`/api/auth${path}`, method === "GET" ? undefined : init)
+        expect(res.status, `${method} ${path}`).toBe(403)
+        expect(await res.json(), `${method} ${path}`).toMatchObject({
+          code: "IMPERSONATED_SESSION_NOT_ALLOWED",
+        })
+      }
+      // The refused email change sent nothing, and the victim's data and sessions are as they were.
+      expect(inbox(moved)).toHaveLength(0)
+      expect((await phone.client.getSession()).data?.user.id).toBe(victim.userId)
+      const seen = (await admin.client.getSession()).data
+      expect(seen?.user.id).toBe(victim.userId)
+      expect(seen?.user.name).toBe("Victim read-only")
+      expect(seen?.user.email).toBe(victim.email)
+
+      // Reads still work while impersonating.
+      expect((await admin.request("/api/auth/list-sessions")).status).toBe(200)
+      expect((await admin.request("/api/auth/passkey/list-user-passkeys")).status).toBe(200)
+      expect((await admin.request("/api/auth/organization/list")).status).toBe(200)
+      // The product's reads (read-only grants) answer through the same session.
+      for (const path of ["/v1/projects", "/v1/api-keys", "/v1/workspace-agents", "/v1/runs"]) {
+        expect((await admin.request(path)).status, path).toBe(200)
+      }
+
+      // Stopping, and signing out, are the two things the impersonation may still do.
+      expect((await admin.client.admin.stopImpersonating()).error).toBeNull()
+      expect((await admin.client.getSession()).data?.user.id).toBe(adminId)
+    })
+
+    it("a signed-out impersonation ends with sign-out", async () => {
+      const { b: admin, userId: adminId } = await signedUp("Root sign-out")
+      const victim = await signedUp("Victim sign-out")
+      await (await t.auth.$context).adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: adminId }],
+        update: { role: "admin" },
+      })
+      expect((await admin.client.admin.impersonateUser({ userId: victim.userId })).error).toBeNull()
+      expect((await admin.client.signOut()).error).toBeNull()
+      expect((await admin.client.getSession()).data).toBeNull()
     })
   })
 
@@ -1355,6 +1467,56 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("SCIM tokens and membership", () => {
+    const json = (body: unknown) => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    /** An owner who mints a SCIM token, and a second owner to remove or replace them. */
+    async function ownerWithToken(name: string) {
+      const departing = await signedUp(`${name} departing`)
+      const org = (await whoami(departing.b)).body.organizationId ?? ""
+      const heir = await signedUp(`${name} heir`)
+      await t.auth.api.addMember({
+        body: { organizationId: org, userId: heir.userId, role: "owner" },
+      })
+      const minted = await departing.b.request(
+        "/api/auth/scim/generate-token",
+        json({ organizationId: org }),
+      )
+      expect(minted.status).toBe(200)
+      const { token } = (await minted.json()) as { token: string }
+      const scim = (bearer: string) =>
+        departing.b.request("/api/auth/scim/v2/Users", {
+          headers: { authorization: `Bearer ${bearer}` },
+        })
+      expect((await scim(token)).status).toBe(200)
+      return { departing, heir, org, token, scim }
+    }
+
+    it("a removed owner's SCIM token stops working at once", async () => {
+      const { departing, heir, org, token, scim } = await ownerWithToken("Removed")
+      const removed = await heir.b.request(
+        "/api/auth/organization/remove-member",
+        json({ memberIdOrEmail: departing.email, organizationId: org }),
+      )
+      expect(removed.status).toBe(200)
+      expect((await scim(token)).status).toBe(401)
+    })
+
+    it("an owner who leaves the organization takes their SCIM token with them", async () => {
+      const { departing, org, token, scim } = await ownerWithToken("Leaving")
+      const left = await departing.b.request(
+        "/api/auth/organization/leave",
+        json({ organizationId: org }),
+      )
+      expect(left.status).toBe(200)
+      expect((await scim(token)).status).toBe(401)
+    })
+  })
+
   describe("reserved organization slugs", () => {
     it("refuses a reserved slug on create and on update", async () => {
       const { b } = await signedUp("Owner")
@@ -1495,6 +1657,64 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect((await b.client.changeEmail({ newEmail: taken })).error).toBeNull()
       expect(inbox(taken).some((m) => m.subject === CONFIRM)).toBe(false)
       expect((await b.client.getSession()).data?.user.email).toBe(oldAddress)
+    })
+
+    it("a link opened without the user's session changes nothing and signs no one in", async () => {
+      const { b, email: oldAddress } = await signedUp("Ada")
+      const next = fresh()
+      await b.client.changeEmail({ newEmail: next })
+      const confirm = await mailed(next, CONFIRM)
+
+      const stranger = open()
+      const landed = await stranger.request(confirm.link)
+      expect(landed.status).toBe(302)
+      const to = new URL(landed.headers.get("location") ?? "", BASE)
+      expect(to.pathname).toBe("/sign-in")
+      expect(to.searchParams.get("error")).toBe("SIGN_IN_TO_CONFIRM_EMAIL_CHANGE")
+      // The sign-in page resumes the link after the person signs in.
+      expect(new URL(to.searchParams.get("next") ?? "", BASE).pathname).toBe(
+        "/api/auth/verify-email",
+      )
+      expect(landed.headers.getSetCookie()).toEqual([])
+      expect(stranger.jar.size).toBe(0)
+      expect((await stranger.client.getSession()).data).toBeNull()
+
+      // Not verified: the new address can't sign in yet, the old one still can.
+      const early = await open().client.signIn.email({ email: next, password: PASSWORD })
+      expect(early.error).toMatchObject({ status: 401, code: "INVALID_EMAIL_OR_PASSWORD" })
+      expect(
+        (await open().client.signIn.email({ email: oldAddress, password: PASSWORD })).error,
+      ).toBeNull()
+
+      // Signed in as the owner, the same link now completes the change.
+      await stranger.client.signIn.email({ email: oldAddress, password: PASSWORD })
+      // The resumed link is the one mailed, callbackURL and all, so it lands where the mail sent it.
+      const resumed = await stranger.request(to.searchParams.get("next") ?? "")
+      expect(resumed.status).toBe(302)
+      expect(resumed.headers.get("location")).toBe(
+        new URL(confirm.link).searchParams.get("callbackURL"),
+      )
+      expect((await stranger.client.getSession()).data?.user.email).toBe(next)
+    })
+
+    it("refuses the link for another user's session, which stays as it was", async () => {
+      const { b, email: oldAddress } = await signedUp("Ada")
+      const other = await signedUp("Someone else")
+      const next = fresh()
+      await b.client.changeEmail({ newEmail: next })
+      const confirm = await mailed(next, CONFIRM)
+
+      const landed = await other.b.request(confirm.link)
+      expect(landed.status).toBe(302)
+      expect(new URL(landed.headers.get("location") ?? "", BASE).searchParams.get("error")).toBe(
+        "SIGN_IN_TO_CONFIRM_EMAIL_CHANGE",
+      )
+      expect((await other.b.client.getSession()).data?.user.id).toBe(other.userId)
+      expect((await b.client.getSession()).data?.user.email).toBe(oldAddress)
+
+      // A refused link is not used up: the owner's own session can still complete it.
+      await b.request(confirm.link)
+      expect((await b.client.getSession()).data?.user.email).toBe(next)
     })
 
     it("resends by asking again: each request emails a fresh link to the new address", async () => {

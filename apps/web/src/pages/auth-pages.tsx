@@ -40,6 +40,20 @@ async function afterPasskey(auth: WebAuth, next: string): Promise<string> {
   return (await auth.continueOAuth()) ?? next
 }
 
+/**
+ * Messages for the codes the server sends back on the sign-in page. A change-of-email link opened
+ * while signed out is sent here (account-plugin.ts) with the link to resume after sign-in.
+ */
+const LINK_ERRORS: Record<string, string> = {
+  SIGN_IN_TO_CONFIRM_EMAIL_CHANGE:
+    "Sign in to the account this email change is for, then open the confirmation link again.",
+}
+
+function linkErrorFromUrl(): string | null {
+  const code = new URLSearchParams(window.location.search).get("error")
+  return code ? (LINK_ERRORS[code] ?? null) : null
+}
+
 /** Sign in. The methods come from the server (GET /api/auth/sign-in-methods); until they load, email only. */
 export function SignInPage({
   auth,
@@ -55,7 +69,7 @@ export function SignInPage({
   const [lastUsed, setLastUsed] = useState<string | null>(null)
   const [email, setEmail] = useState("")
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(linkErrorFromUrl)
   const [sentTo, setSentTo] = useState<string | null>(null)
   // "Forgot password?": a reset-request card in place of the sign-in card (no new route).
   const [forgot, setForgot] = useState(false)
@@ -321,7 +335,14 @@ export function SignInPage({
             ) : null}
             <ErrorAlert message={error} />
             {methods.password ? (
-              <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+              // One filled button per card: the passkey when it's offered (the board), else this one.
+              <Button
+                type="submit"
+                size="lg"
+                variant={methods.passkey ? "outline" : "default"}
+                className="h-12 w-full"
+                disabled={pending}
+              >
                 {pending ? "Please wait" : "Sign in with email"}
               </Button>
             ) : null}

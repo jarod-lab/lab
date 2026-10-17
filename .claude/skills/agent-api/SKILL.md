@@ -165,9 +165,10 @@ The product's own agents (the org's workers) are the `agent` resource; the conne
   fields; a person sees the decision and `undoableUntil`. `approvalView` is the one place that decides what each sees.
 - **Who can do what** (`statements` in `access.ts`): viewer reads agents and runs; member and admin and owner create, update
   and act on runs (`run:create|update|approve|steer`), and member can't delete agents; admin reads members (`member:read`).
-  Owner only: `twoFactor:reset`, `sso`, `scim`, `subscription` (`OWNER_ONLY_RESOURCES`, not in the admin role).
-- **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along with the owner-only
-  resources. `decide_approval` and `undo_approval` also require a session (`requirePerson`).
+  Owner only: `twoFactor:reset`, `sso`, `scim` (`OWNER_ONLY_RESOURCES`, not in the admin role). Owners and admins manage
+  billing: `subscription` (`read`, `update`) is in the admin role too, and, like the owner-only ones, no API key may hold it.
+- **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along with the person-only
+  resources (`PERSON_ONLY_RESOURCES`: the owner-only ones and `subscription`). `decide_approval` and `undo_approval` also require a session (`requirePerson`).
 - **Header**: `ORGANIZATION_HEADER` (`X-Organization-Id`, `@starter/api`) is checked in `resolvePrincipal`: a request naming
   another organization gets CONFLICT with a reload hint, on REST and MCP alike.
 - **Seeding for e2e**: `scripts/seed-demo-run.mjs` drives a run to needs_you through the API with a key (no bypass).

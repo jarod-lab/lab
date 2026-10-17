@@ -74,6 +74,26 @@ describe("SignInPage", () => {
   })
 })
 
+describe("SignInPage email change link", () => {
+  it("explains the link was opened signed out, and that signing in resumes it", async () => {
+    window.history.replaceState(null, "", "/sign-in?error=SIGN_IN_TO_CONFIRM_EMAIL_CHANGE")
+    try {
+      render(
+        <SignInPage
+          auth={fakeAuth()}
+          next="/api/auth/verify-email?token=t"
+          signUpHref="/sign-up"
+        />,
+      )
+      expect(
+        await screen.findByText(/Sign in to the account this email change is for/),
+      ).toBeTruthy()
+    } finally {
+      window.history.replaceState(null, "", "/")
+    }
+  })
+})
+
 describe("SignUpPage", () => {
   it("has no accessibility violations", async () => {
     const { container } = render(

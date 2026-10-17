@@ -108,6 +108,15 @@ describe("env", () => {
       )
     })
 
+    it("refuses the dev mail sink when NODE_ENV is unset (fails closed)", async () => {
+      base()
+      vi.stubEnv("NODE_ENV", undefined)
+      vi.stubEnv("DEV_MAIL_SINK", "true")
+      await expect(import("./index")).rejects.toThrow(
+        /DEV_MAIL_SINK is for development and e2e only/,
+      )
+    })
+
     it("accepts a Stripe test-mode key", async () => {
       base()
       vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_placeholder") // gitleaks:allow

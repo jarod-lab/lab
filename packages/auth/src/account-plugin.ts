@@ -132,6 +132,33 @@ export function accountPlugin(opts: {
     hooks: {
       before: [
         {
+          // better-auth's change-email branch of /verify-email creates a session for whoever opens the
+          // link. Here it needs the user's own session, so the link alone can't sign anyone in.
+          matcher: (ctx: { path?: string }) => ctx.path === "/verify-email",
+          handler: createAuthMiddleware(async (ctx) => {
+            // The query isn't parsed yet in a before hook, so read every `token` the request carries.
+            const tokens = [
+              ...(typeof (ctx.query as { token?: unknown } | undefined)?.token === "string"
+                ? [(ctx.query as { token: string }).token]
+                : []),
+              ...(ctx.request ? new URL(ctx.request.url).searchParams.getAll("token") : []),
+            ]
+            const change = tokens.map((t) => changeRequestOf(t)).find((c) => c !== null)
+            if (!change) return
+            const session = await getSessionFromCtx(ctx)
+            if (session && session.user.email.toLowerCase() === change.oldEmail.toLowerCase())
+              return
+            // Refused before anything changes; the token stays unused until the right person opens it.
+            // The link as it was opened (its callbackURL included), so the sign-in resumes it unchanged.
+            const link = ctx.request
+              ? `${new URL(ctx.request.url).pathname}${new URL(ctx.request.url).search}`
+              : `/api/auth/verify-email?token=${encodeURIComponent(tokens.find((t) => changeRequestOf(t) !== null) ?? "")}`
+            throw ctx.redirect(
+              `/sign-in?error=SIGN_IN_TO_CONFIRM_EMAIL_CHANGE&next=${encodeURIComponent(link)}`,
+            )
+          }),
+        },
+        {
           matcher: (ctx: { path?: string }) => ctx.path === "/delete-user",
           handler: createAuthMiddleware(async (ctx) => {
             // Refused before the confirmation email goes out, not only when its link is opened.

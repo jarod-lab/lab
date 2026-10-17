@@ -1,37 +1,119 @@
 // Impersonation (better-auth's admin plugin) lets a platform admin act as another user. Such a
-// session is someone else's session on the admin's machine, so it must not grant anything that
-// outlives the impersonation: no OAuth consent, no device approval, no API keys. It is also read-only
-// through the product API (see principal.ts). Refused here, server-side, whatever the client sends.
+// session is someone else's session on the admin's machine, so it is read-only: it must not change
+// anything, mint anything (OAuth consent, device approval, keys, passkeys, sign-in links) or outlive
+// the impersonation. This guard fails closed. For an impersonated session, every better-auth request
+// is refused (403 IMPERSONATED_SESSION_NOT_ALLOWED) except the two that end it, and a GET only
+// passes when it is listed as a read. Refused server-side, whatever the client sends. The product API
+// has its own read-only grants for the same session (IMPERSONATION_GRANTS in permissions.ts).
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
 import type { BetterAuthPlugin } from "better-auth"
 
-/** better-auth endpoints an impersonated session may not call. */
-export const IMPERSONATION_REFUSED_PATHS = [
-  // Authorize and continue issue a code straight away when the user already consented: refused too.
-  "/oauth2/authorize",
-  "/oauth2/continue",
-  "/oauth2/consent",
-  "/device/approve",
-  "/api-key/create",
-  "/api-key/update",
-  // Owner-only SSO and SCIM (owner-only.ts): an impersonating admin can't change who signs in.
-  "/sso/register",
-  "/sso/update-provider",
-  "/sso/delete-provider",
-  "/sso/request-domain-verification",
-  "/sso/verify-domain",
-  "/scim/generate-token",
+/** Endpoints an impersonated session may call with any method: the ones that end the impersonation. */
+export const IMPERSONATION_ALLOWED_PATHS = ["/admin/stop-impersonating", "/sign-out"] as const
+
+/**
+ * GET endpoints the configured plugins mount that only read. An impersonated session may call these.
+ * Every other GET is refused: a GET that changes state would otherwise pass unnoticed after an upgrade.
+ */
+export const IMPERSONATION_READ_GET_PATHS = [
+  "/.well-known/oauth-authorization-server",
+  "/.well-known/openid-configuration",
+  "/account-info",
+  "/admin/get-user",
+  "/admin/list-users",
+  "/admin/oauth2/resources",
+  "/admin/oauth2/resources/:identifier",
+  "/api-key/get",
+  "/api-key/list",
+  "/device",
+  "/error",
+  "/get-session",
+  "/jwks",
+  "/list-accounts",
+  "/list-sessions",
+  "/oauth2/get-client",
+  "/oauth2/get-clients",
+  "/oauth2/get-consent",
+  "/oauth2/get-consents",
+  "/oauth2/public-client",
+  "/oauth2/userinfo",
+  "/ok",
+  "/organization/get-active-member",
+  "/organization/get-active-member-role",
+  "/organization/get-full-organization",
+  "/organization/get-invitation",
+  "/organization/get-organization",
+  "/organization/list",
+  "/organization/list-invitations",
+  "/organization/list-members",
+  "/organization/list-user-invitations",
+  "/passkey/list-user-passkeys",
+  "/reset-password/:token",
+  "/scim/v2/Groups",
+  "/scim/v2/Groups/:groupId",
+  "/scim/v2/ResourceTypes",
+  "/scim/v2/ResourceTypes/:resourceTypeId",
+  "/scim/v2/Schemas",
+  "/scim/v2/Schemas/:schemaId",
+  "/scim/v2/ServiceProviderConfig",
+  "/scim/v2/Users",
+  "/scim/v2/Users/:userId",
+  "/security/summary",
+  "/sign-in-methods",
+  "/sso/get-provider",
+  "/sso/providers",
+  "/sso/saml2/sp/metadata",
+  "/subscription/list",
 ] as const
+
+/**
+ * GET endpoints an impersonated session may not call, decided one by one. Each one mints or links
+ * something, consumes a single-use token, signs someone in, or ends a session.
+ */
+export const IMPERSONATION_REFUSED_GET_PATHS = [
+  // Store a WebAuthn challenge. A registration one would let the admin enrol their own passkey.
+  "/passkey/generate-authenticate-options",
+  "/passkey/generate-register-options",
+  // Issues an authorization code for an existing consent.
+  "/oauth2/authorize",
+  // Ends the session it is called with.
+  "/oauth2/end-session",
+  // Consumes an emailed link: signs in, verifies the address or changes it, or deletes the account.
+  "/magic-link/verify",
+  "/verify-email",
+  "/delete-user/callback",
+  // OAuth, SSO and SAML callbacks: they link an account or sign someone in.
+  "/callback/:id",
+  "/sso/callback",
+  "/sso/callback/:providerId",
+  "/sso/saml2/sp/acs/:providerId",
+  "/sso/saml2/sp/slo/:providerId",
+  // Records a Stripe checkout against the organization.
+  "/subscription/success",
+  // Mints an OAuth token from the token endpoint (disabled in this app; refused anyway).
+  "/token",
+] as const
+
+const readOnly = (path: string) =>
+  (IMPERSONATION_READ_GET_PATHS as readonly string[]).includes(path)
+
+/** Whether an impersonated session may call this path with this method. */
+export const impersonationAllows = (path: string, method: string): boolean => {
+  if ((IMPERSONATION_ALLOWED_PATHS as readonly string[]).includes(path)) return true
+  return method === "GET" && readOnly(path)
+}
 
 export const impersonationGuard = {
   id: "starter-impersonation-guard",
   hooks: {
     before: [
       {
-        matcher: (ctx: { path?: string }) =>
-          IMPERSONATION_REFUSED_PATHS.includes(
-            ctx.path as (typeof IMPERSONATION_REFUSED_PATHS)[number],
-          ),
+        matcher: (ctx: { path?: string; method?: string; request?: { method?: string } }) => {
+          // An in-process call (auth.api.*, as principal.ts makes for a session) has no method. It is
+          // our own code, so it is judged as a read: only the read paths pass, as for a GET.
+          const method = String(ctx.method ?? ctx.request?.method ?? "GET").toUpperCase()
+          return !impersonationAllows(ctx.path ?? "", method)
+        },
         handler: createAuthMiddleware(async (ctx) => {
           const session = await getSessionFromCtx(ctx)
           const impersonatedBy = (
@@ -39,7 +121,7 @@ export const impersonationGuard = {
           )?.impersonatedBy
           if (impersonatedBy) {
             throw APIError.from("FORBIDDEN", {
-              message: "An impersonated session cannot do this. Ask the user to do it themselves.",
+              message: "An impersonated session is read-only. Ask the user to do this themselves.",
               code: "IMPERSONATED_SESSION_NOT_ALLOWED",
             })
           }

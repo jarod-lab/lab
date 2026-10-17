@@ -74,7 +74,8 @@ so REST and MCP behave the same:
 
 - **Before** (`invoke` runs it after the permission and input checks): meters the call against the org's daily
   limit (`meter.ts`, UTC day). Over the limit is `RATE_LIMITED` with `Retry-After` and `RateLimit-*` headers.
-  Session callers (people in the web app) are not metered, so the app's polling can't spend the agents' budget.
+  Read-only session calls (the web app's polling) are not metered, so they can't spend the agents' budget;
+  writes count for every caller.
   For a non-readOnly call with an idempotency key, it reserves the key: a finished key replays its stored
   response, a running or reused-for-another-request key is `CONFLICT`.
 - **After**: completes the reserved key (or releases it on failure, so a retry can run) and audits every

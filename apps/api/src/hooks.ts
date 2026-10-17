@@ -139,9 +139,10 @@ export function createApiHooks({
     const { op, input, ctx } = e
     const mutating = isMutating(op)
     try {
-      // The daily limit is for agents (keys and OAuth tokens). People in the web app aren't metered:
-      // its polling (inbox, running count, live runs) would spend the agents' budget otherwise.
-      if (ctx.caller.via !== "session") await consume(op, ctx)
+      // A person's reads in the web app aren't metered: its polling (inbox, running count, live
+      // runs) would spend the agents' daily budget otherwise. Writes count for every caller, so a
+      // session cookie can't script around the limit.
+      if (ctx.caller.via !== "session" || mutating) await consume(op, ctx)
 
       if (!mutating || ctx.idempotencyKey === undefined) return undefined
       const key = ctx.idempotencyKey

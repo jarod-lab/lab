@@ -316,4 +316,12 @@ describe("metering the web app", () => {
     // And a person still gets an answer once the agents are over the limit.
     expect((await t.req("/v1/inbox", t.as(t.owner.cookie))).status).toBe(200)
   })
+
+  it("still counts a person's writes", async () => {
+    const res = await t.req(
+      "/v1/projects",
+      t.as(t.owner.cookie, { method: "POST", body: JSON.stringify({ name: "Over" }) }),
+    )
+    expect(res.status).toBe(429)
+  })
 })

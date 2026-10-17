@@ -19,7 +19,14 @@ const cspProbe = `
   });
 `
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 900))
+// Waits until the page has rendered its text (a cold dev server takes a few seconds); a page that
+// renders nothing (a missing bundle, a crash) fails here rather than as a blank screenshot. Then lets
+// fonts and transitions settle so the screenshot is stable.
+const rendered = (browser: { evaluate: (fn: () => number) => Promise<number> }) =>
+  expect
+    .poll(() => browser.evaluate(() => document.body.innerText.trim().length), { timeout: 20_000 })
+    .toBeGreaterThan(20)
+const settle = () => new Promise((resolve) => setTimeout(resolve, 400))
 
 async function signUp(base: string, email: string) {
   const response = await fetch(new URL("/api/auth/sign-up/email", base), {
@@ -51,11 +58,8 @@ test("public pages, light and dark", { tags: ["visual"] }, async ({ app, browser
       ["two-factor", "/two-factor"],
     ] as const) {
       await app.open(path)
+      await rendered(browser)
       await browser.evaluate(settle)
-      // A page that rendered nothing (a missing bundle, a crash) must fail, not pass as a blank screenshot.
-      expect(await browser.evaluate(() => document.body.innerText.trim().length)).toBeGreaterThan(
-        20,
-      )
       await app.screenshot(`${theme}-${name}`)
       expect(
         await browser.evaluate(() => (window as unknown as { __csp: string[] }).__csp),
@@ -97,11 +101,8 @@ test("signed-in pages, light and dark", { tags: ["visual"] }, async ({ app, brow
     await browser.addInitScript(cspProbe)
     for (const [name, path] of pages) {
       await app.open(path)
+      await rendered(browser)
       await browser.evaluate(settle)
-      // A page that rendered nothing (a missing bundle, a crash) must fail, not pass as a blank screenshot.
-      expect(await browser.evaluate(() => document.body.innerText.trim().length)).toBeGreaterThan(
-        20,
-      )
       await app.screenshot(`${theme}-${name}`)
       expect(
         await browser.evaluate(() => (window as unknown as { __csp: string[] }).__csp),

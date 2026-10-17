@@ -75,7 +75,20 @@ test("two-factor on, sign in with a code, backup codes, sign out other sessions"
   await expect(screen.getByText("This device")).toBeVisible()
   await screen.getByRole("button", "Sign out everywhere else").tap()
   await screen.getByRole("alertdialog").getByRole("button", "Sign out others").tap()
-  await expect(screen.getByRole("button", /^Sign out /)).toBeHidden()
+  // Only this device is left: no per-session "Sign out <device>" button remains. Counted rather than
+  // located, since several match while the list refreshes.
+  await expect
+    .poll(
+      () =>
+        browser.evaluate(
+          () =>
+            [...document.querySelectorAll("button")].filter((b) =>
+              /^Sign out (?!everywhere)/.test(b.getAttribute("aria-label") ?? b.textContent ?? ""),
+            ).length,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(0)
   await expect(screen.getByText("This device")).toBeVisible()
 
   // Connected accounts: this stack has no GitHub or Google set up. The page offers only the providers the

@@ -96,3 +96,14 @@ skip_strings = true
 pattern = "process.env"
 message = "Read env vars through @starter/env"
 suggest = "Add the variable to packages/env and .env.example, then import env from @starter/env"
+
+# Overrides the security preset's no-env-files, which fails on any `.env` on disk, including the local,
+# gitignored one the setup creates (`cp .env.example .env`); it checks presence, not git, and ignores
+# `exclude`. `.gitignore` (`.env*`) and gitleaks keep env files out of commits; this still refuses
+# deploy env files in the tree.
+[[rule]]
+id = "no-env-files"
+type = "file-presence"
+severity = "error"
+forbidden_files = [".env.production", ".env.staging"]
+message = "Deploy env files don't belong in the repo: keep them in the platform's secret store"

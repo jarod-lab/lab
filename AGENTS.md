@@ -236,7 +236,8 @@ or `resolvePrincipal`.
 - **Devtools:** `src/devtools.tsx` mounts TanStack Devtools (Router, Query, Form, Pacer, Hotkeys), lazy behind
   `import.meta.env.DEV && MODE !== "test"`, so dist has none (form-core's tiny `devtools-event-client` does ship).
 - **Billing:** `lib/billing/` `BillingAdapter`: the fixture (labelled `[SAMPLE DATA]`, prices `[PRICE]`, changes
-  disabled) unless `GET /api/auth/sign-in-methods` reports Stripe with at least one plan. "Requests today" is real.
+  disabled) unless `GET /api/auth/sign-in-methods` reports Stripe with at least one plan. A failed check is an
+  error, asked again on the next visit, not the fixture. "Requests today" is real (agent traffic; sessions aren't metered).
 - **Runs:** approvals take effect 30s after the decision (server `effectiveAt`); the countdown corrects for clock
   skew from the response `Date` header (`lib/server-clock.ts`).
 

@@ -133,9 +133,9 @@ describe("invocation hooks (real Postgres via PGlite)", () => {
         .from(idempotencyKey)
         .where(eq(idempotencyKey.organizationId, t.owner.orgId))
       const stored = JSON.stringify(rows)
-      // A database dump alone must not yield the secret key, nor the client's idempotency key.
+      // A database dump alone must not yield the secret key, nor the client's idempotency key. (Not a
+      // check for "sk_" alone: three characters turn up by chance in the sealed, random bytes.)
       expect(stored).not.toContain(first.body.key)
-      expect(stored).not.toContain("sk_")
       expect(stored).not.toContain("sealed-key-1")
     })
 

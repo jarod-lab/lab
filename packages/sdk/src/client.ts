@@ -58,7 +58,17 @@ export function expandPath(template: string, values: Record<string, string | num
         message: `Missing path parameter "${name}"`,
       })
     }
-    return encodeURIComponent(String(value))
+    const text = String(value)
+    // encodeURIComponent leaves dots alone, and the URL parser would resolve "." or ".." as a
+    // path step, sending the call to another route.
+    if (text === "." || text === "..") {
+      throw new StarterError({
+        status: 0,
+        code: "BAD_REQUEST",
+        message: `Path parameter "${name}" can't be "${text}"`,
+      })
+    }
+    return encodeURIComponent(text)
   })
 }
 

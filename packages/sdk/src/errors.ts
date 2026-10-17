@@ -36,9 +36,11 @@ export class StarterError extends Error {
   }
 
   /** The shape agents read: the same JSON the API sends, plus the HTTP status. */
-  toJSON(): ErrorBody & { status: number } {
+  toJSON(): ErrorBody & { status: number; retryAfter?: number } {
     return {
       status: this.status,
+      // The API's hints say "retry after the Retry-After seconds"; an agent reading this needs them.
+      ...(this.retryAfter !== undefined ? { retryAfter: this.retryAfter } : {}),
       error: {
         code: this.code,
         message: this.message,

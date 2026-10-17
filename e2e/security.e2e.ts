@@ -39,7 +39,10 @@ test("two-factor on, sign in with a code, backup codes, sign out other sessions"
   const start = screen.getByRole("dialog")
   await start.getByLabel("Password").fill(PASSWORD)
   await start.getByRole("button", "Continue").tap()
-  const secret = await screen.getByLabel("Setup key").inputValue()
+  // The dialog swaps to the setup key after the password check: wait for it, then read it.
+  const setupKey = screen.getByLabel("Setup key")
+  await expect(setupKey).toBeVisible()
+  const secret = await setupKey.inputValue()
   await screen.getByLabel("Six-digit code from the app").fill(totpAt(secret))
   await screen.getByRole("dialog").getByRole("button", "Turn on").tap()
 
@@ -75,11 +78,10 @@ test("two-factor on, sign in with a code, backup codes, sign out other sessions"
   await expect(screen.getByRole("button", /^Sign out /)).toBeHidden()
   await expect(screen.getByText("This device")).toBeVisible()
 
-  // Connected accounts: this stack has no GitHub or Google set up, so connecting says so.
-  await screen.getByRole("button", "Connect").first().tap()
-  await expect(
-    screen.getByText("This sign-in method isn't set up on this server yet."),
-  ).toBeVisible()
+  // Connected accounts: this stack has no GitHub or Google set up. The page offers only the providers the
+  // server reports (f51e235), so no connect button is shown.
+  await expect(screen.getByRole("region", "Connected accounts")).toBeVisible()
+  await expect(screen.getByRole("button", "Connect")).toBeHidden()
 
   // Password: the change is refused when the new one is in a known breach. Checked only when the
   // server reaches Have I Been Pwned; when it can't, that assertion is skipped (the server then allows it).

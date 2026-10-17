@@ -23,7 +23,7 @@ test("owner creates, pins, edits and deletes an agent; a viewer sees it read-onl
 
   await app.open("/sign-up")
   await screen.getByLabel("Name").fill("Ada Lovelace")
-  await screen.getByLabel("Email").fill(ownerEmail)
+  await screen.getByLabel("Work email").fill(ownerEmail)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
   await expect(browser).toHaveURL(/\/personal-[a-z0-9-]+\/settings\/agents$/)
@@ -36,7 +36,9 @@ test("owner creates, pins, edits and deletes an agent; a viewer sees it read-onl
   await screen.getByRole("button", "Create organization").tap()
   await expect(browser).toHaveURL(new RegExp(`/${slug}$`))
 
-  // G then A opens the agents page; nothing is configured yet.
+  // G then A opens the agents page; nothing is configured yet. Wait for the org page to render first,
+  // so the shortcut is listening (a chord pressed during the redirect can be lost).
+  await expect(screen.getByRole("heading", new RegExp(orgName))).toBeVisible()
   await browser.keyboard.press("g")
   await browser.keyboard.press("a")
   await expect(browser).toHaveURL(new RegExp(`/${slug}/settings/agents$`))

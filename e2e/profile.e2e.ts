@@ -59,7 +59,10 @@ test("rename, change email through the link, and see deletion blocked by an owne
   await expect(browser).toHaveURL(new RegExp(`/${slug}$`))
 
   await app.open("/account/profile")
-  await expect(screen.getByText("You own Owned Ltd. Transfer or delete it first.")).toBeVisible()
+  // The sentence and its link are separate nodes in the Delete account block.
+  const blocked = screen.getByRole("region", "Delete account")
+  await expect(blocked.getByText("You own Owned Ltd.", { exact: true })).toBeVisible()
+  await expect(blocked.getByRole("link", "Transfer or delete it first")).toBeVisible()
   await expect(screen.getByRole("button", "Delete my account")).toBeDisabled()
 
   // The rest of the page: the sign-out path still works from the account menu.

@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
+import { AccountError } from "../lib/account-api"
 import { AccountSecurityPage, type AccountSecurityPageProps } from "./account-security-page"
 
 const TOTP_URI = "otpauth://totp/Starter:jordan%40acme.dev?secret=JBSWY3DPEHPK3PXP&issuer=Starter"
@@ -199,6 +200,18 @@ describe("AccountSecurityPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Connect" }))
     expect(onConnect).toHaveBeenCalledWith("google")
+  })
+
+  it("says a provider is not set up on this server when connecting it is refused", async () => {
+    const user = userEvent.setup()
+    const onConnect = vi.fn(async () => {
+      throw new AccountError("Provider not found", 404, "PROVIDER_NOT_FOUND")
+    })
+    render(<AccountSecurityPage {...props({ onConnect })} />)
+    await user.click(screen.getByRole("button", { name: "Connect" }))
+    expect(
+      await screen.findByText("This sign-in method isn't set up on this server yet."),
+    ).toBeTruthy()
   })
 
   it("shows the server's refusal when the last way in cannot be disconnected", async () => {

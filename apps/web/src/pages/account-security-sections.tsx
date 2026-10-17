@@ -23,9 +23,13 @@ import { Input } from "@starter/ui/components/ui/input"
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
-import { type PasskeyInfo, type TotpSetup, totpSecretOf } from "../lib/account-api"
+import {
+  type PasskeyInfo,
+  type TotpSetup,
+  accountErrorMessage,
+  totpSecretOf,
+} from "../lib/account-api"
 import { dateLabel, relativeTime } from "../lib/account-format"
-import { messageOf } from "../lib/messages"
 
 // The sections of the Security page (board Security). Each takes its data and callbacks as props.
 // Errors a call throws are shown in the section; the container has already mapped their copy.
@@ -54,7 +58,7 @@ function useAction<T extends unknown[]>(run: (...args: T) => Promise<void>) {
       await run(...args)
       return true
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(accountErrorMessage(caught))
       return false
     } finally {
       setBusy(false)
@@ -823,7 +827,7 @@ export function ConnectedAccountsSection({
             try {
               await onConnect(row.provider)
             } catch (caught) {
-              setError(messageOf(caught))
+              setError(accountErrorMessage(caught))
             }
           }}
           onDisconnect={async () => {
@@ -832,7 +836,7 @@ export function ConnectedAccountsSection({
             try {
               await onDisconnect(row.accountId)
             } catch (caught) {
-              setError(messageOf(caught))
+              setError(accountErrorMessage(caught))
             }
           }}
         />
@@ -999,7 +1003,7 @@ export function SessionsSection({
                 try {
                   await onRevoke(session.token)
                 } catch (caught) {
-                  setError(messageOf(caught))
+                  setError(accountErrorMessage(caught))
                 }
               }}
             >
@@ -1029,7 +1033,7 @@ export function SessionsSection({
                   await onRevokeOthers()
                   setConfirming(false)
                 } catch (caught) {
-                  setError(messageOf(caught))
+                  setError(accountErrorMessage(caught))
                 } finally {
                   setBusy(false)
                 }

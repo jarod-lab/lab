@@ -56,7 +56,7 @@ test("an admin finds a user, bans and unbans them, and impersonates them", async
 
   await app.open("/admin")
   await screen.getByLabel("Search by email").fill(email)
-  await expect(screen.getByRole("row", name)).toBeVisible()
+  await expect(screen.getByRole("row", name, { exact: false })).toBeVisible()
 
   // Ban: the consequence is named, the reason and duration go with it.
   await screen.getByRole("button", `Actions for ${name}`).tap()
@@ -67,13 +67,13 @@ test("an admin finds a user, bans and unbans them, and impersonates them", async
   ).toBeVisible()
   await ban.getByLabel("Reason (optional)").fill("e2e check")
   await ban.getByRole("button", "Ban user").tap()
-  await expect(screen.getByRole("row", name)).toContainText("Banned")
+  await expect(screen.getByRole("row", name, { exact: false })).toContainText("Banned")
 
   // Unban puts them back.
   await screen.getByRole("button", `Actions for ${name}`).tap()
   await screen.getByRole("menuitem", "Unban").tap()
   await screen.getByRole("dialog").getByRole("button", "Unban").tap()
-  await expect(screen.getByRole("row", name)).toContainText("Active")
+  await expect(screen.getByRole("row", name, { exact: false })).toContainText("Active")
 
   // Impersonate: the banner names them, Stop returns to /admin.
   await screen.getByRole("button", `Actions for ${name}`).tap()

@@ -43,7 +43,8 @@ export async function inviteAs(
 ): Promise<string> {
   await app.open(`/${options.slug}/settings/members`)
   await screen.getByLabel("Invite by email").fill(options.email)
-  if (options.role) await screen.getByLabel("Role").selectOption(options.role)
+  // The select's options are labelled "Admin"/"Member"/"Viewer"; a bare string matches the visible label.
+  if (options.role) await screen.getByLabel("Role").selectOption(ROLE_LABEL[options.role])
   await screen.getByRole("button", "Send invites").tap()
   const label = ROLE_LABEL[options.role ?? "member"]
   await expect(screen.getByText(`${options.email} · ${label}`)).toBeVisible()

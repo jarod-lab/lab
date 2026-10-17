@@ -47,7 +47,7 @@ test("owner adds an SSO provider, mints a SCIM token once, deletes the provider;
 
   // Add a SAML provider for the test domain.
   await screen.getByRole("button", "Add a provider").tap()
-  await screen.getByLabel("Protocol").selectOption("saml")
+  await screen.getByLabel("Protocol").selectOption({ value: "saml" })
   await screen.getByLabel("Email domain").fill(domain)
   await screen.getByLabel("Issuer URL").fill(`https://idp.${domain}/`)
   await screen.getByLabel("Single sign-on URL").fill(`https://idp.${domain}/sso/saml`)
@@ -64,6 +64,8 @@ test("owner adds an SSO provider, mints a SCIM token once, deletes the provider;
   // domain, so checking now is refused and says so.
   await row.getByRole("button", "Verify domain").tap()
   const panel = screen.getByRole("region", "Domain verification")
+  // The panel appears once the server has issued the record: wait for it before reading the fields.
+  await expect(panel).toBeVisible()
   const recordName = await panel.getByLabel("Record name").inputValue()
   expect(recordName).toMatch(
     new RegExp(`^_better-auth-token-.+\\.${domain.replace(/\./g, "\\.")}$`),

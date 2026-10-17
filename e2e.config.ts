@@ -13,6 +13,8 @@ import { gateway } from "ai"
 const stackEnv: Record<string, string> = {
   // Unset: each stack picks a free API port (desktop and phone run side by side).
   E2E_API_PORT: process.env.E2E_API_PORT ?? "",
+  // The mail sink runs only under NODE_ENV development or test (packages/env refuses it otherwise).
+  NODE_ENV: "development",
   DEV_MAIL_SINK: "true",
   EMAIL_FROM: process.env.EMAIL_FROM ?? "noreply@example.com",
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",

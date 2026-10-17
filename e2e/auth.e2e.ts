@@ -114,7 +114,10 @@ test("two-factor: the password is not enough, the authenticator code is", async 
   const start = screen.getByRole("dialog")
   await start.getByLabel("Password").fill(PASSWORD)
   await start.getByRole("button", "Continue").tap()
-  const secret = await screen.getByLabel("Setup key").inputValue()
+  // The dialog swaps to the setup key after the password check: wait for it, then read it.
+  const setupKey = screen.getByLabel("Setup key")
+  await expect(setupKey).toBeVisible()
+  const secret = await setupKey.inputValue()
   await screen.getByLabel("Six-digit code from the app").fill(totpAt(secret))
   await screen.getByRole("dialog").getByRole("button", "Turn on").tap()
   await expect(screen.getByRole("heading", "Save your backup codes")).toBeVisible()

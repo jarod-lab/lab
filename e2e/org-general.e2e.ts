@@ -23,7 +23,7 @@ test("owner renames the organization, changes its URL, and deletes it", async ({
 
   await app.open("/sign-up")
   await screen.getByLabel("Name").fill("Grace Hopper")
-  await screen.getByLabel("Email").fill(email)
+  await screen.getByLabel("Work email").fill(email)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
   await expect(browser).toHaveURL(/\/personal-[a-z0-9-]+\/settings\/agents$/)

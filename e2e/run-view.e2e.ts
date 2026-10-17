@@ -48,7 +48,9 @@ test("owner approves with undo, steers and defers a run that needs them", async 
   // Approve again and let the window pass: the decision is final and the undo goes.
   await screen.getByRole("button", "Approve").tap()
   await expect(screen.getByText(/Undo available for \d+ seconds?\./)).toBeVisible()
-  await expect(screen.getByText("The decision is now final.")).toBeVisible({ timeout: 35_000 })
+  // When the window closes the page re-reads the decision: the final copy is "… The decision is final."
+  // (the "now final" line is only the instant before that re-read).
+  await expect(screen.getByText(/The decision is (now )?final\./)).toBeVisible({ timeout: 35_000 })
   await expect(screen.getByRole("button", "Undo")).toBeHidden()
 
   // Steer: the message is sent and listed with the run's messages.
@@ -61,7 +63,8 @@ test("owner approves with undo, steers and defers a run that needs them", async 
   const defer = screen.getByRole("dialog")
   await defer.getByLabel("Start again at").fill(futureLocal())
   await defer.getByRole("button", "Defer run").tap()
-  await expect(screen.getByText(/Queued until/)).toBeVisible()
+  // The time shows in the header and in the run's status: either one is the queued state.
+  await expect(screen.getByText(/Queued until/).first()).toBeVisible()
 
   // G then H goes home, from anywhere in the shell.
   await browser.keyboard.press("g")

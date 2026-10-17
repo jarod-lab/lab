@@ -1,12 +1,23 @@
 // The e2e app: apps/api and the web dev server, started together by the runner (one `app.command`,
-// one URL). The API runs on E2E_API_PORT; vite proxies /api, /v1, /mcp and /.well-known to it
+// one URL). The API runs on E2E_API_PORT, or a free port; vite proxies /api, /v1, /mcp and /.well-known to it
 // (API_URL), so the browser sees one origin and the session cookies apply. Both children stop when
 // this process gets a signal or either one exits.
 import { spawn } from "node:child_process"
+import { createServer } from "node:net"
 
 const webPort = process.argv[2]
 if (!webPort) throw new Error("usage: node scripts/e2e-stack.mjs <web port>")
-const apiPort = process.env.E2E_API_PORT ?? "4310"
+// Each target (desktop, phone) starts its own stack, so the API takes a free port unless one is pinned.
+const freePort = () =>
+  new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address()
+      server.close(() => resolve(String(port)))
+    })
+  })
+const apiPort = process.env.E2E_API_PORT ?? (await freePort())
 const apiUrl = `http://127.0.0.1:${apiPort}`
 
 const children = []

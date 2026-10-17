@@ -19,7 +19,7 @@ test("sign up, create and switch organizations, theme, shortcuts", async ({
 
   await app.open("/sign-up")
   await screen.getByLabel("Name").fill("Ada Lovelace")
-  await screen.getByLabel("Email").fill(email)
+  await screen.getByLabel("Work email").fill(email)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
 

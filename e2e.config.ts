@@ -9,11 +9,10 @@ import { gateway } from "ai"
 // The app is the web dev server (apps/web, Vite) and the API (apps/api), started by scripts/e2e-stack.mjs.
 // The API needs Postgres with the migrations applied (DATABASE_URL, from the runner's environment or
 // .env). The journeys sign up, so they need the dev mail sink (DEV_MAIL_SINK) as well.
-const apiPort = process.env.E2E_API_PORT ?? "4310"
-
 // Only what the stack needs is passed on: the child inherits nothing else from the runner.
 const stackEnv: Record<string, string> = {
-  E2E_API_PORT: apiPort,
+  // Unset: each stack picks a free API port (desktop and phone run side by side).
+  E2E_API_PORT: process.env.E2E_API_PORT ?? "",
   DEV_MAIL_SINK: "true",
   EMAIL_FROM: process.env.EMAIL_FROM ?? "noreply@example.com",
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",

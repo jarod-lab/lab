@@ -31,6 +31,8 @@ export interface RunViewPageProps {
   state: RunViewState
   /** The caller can decide approvals (run:approve). Viewers read them. */
   canApprove: boolean
+  /** The signed-in person's user id (their own decisions read "You approved."). */
+  viewerId?: string
   /** The caller can steer and defer (run:steer). */
   canSteer: boolean
   busy: boolean
@@ -142,6 +144,7 @@ export function RunViewPage(props: RunViewPageProps) {
                 key={approval.id}
                 approval={approval}
                 canApprove={props.canApprove}
+                viewerId={props.viewerId}
                 busy={props.busy}
                 onDecide={props.onDecide}
                 onUndo={props.onUndo}

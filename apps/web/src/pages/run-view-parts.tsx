@@ -125,6 +125,8 @@ export function StepCounter({ index, total }: { index: number; total: number }) 
 export interface ApprovalCardProps {
   approval: Approval
   canApprove: boolean
+  /** The signed-in person's user id, so their own decision reads "You approved." */
+  viewerId?: string
   busy: boolean
   onDecide: (approvalId: string, decision: "approve" | "deny") => void
   onUndo: (approvalId: string) => void
@@ -140,6 +142,7 @@ export interface ApprovalCardProps {
 export function ApprovalCard({
   approval,
   canApprove,
+  viewerId,
   busy,
   onDecide,
   onUndo,
@@ -159,7 +162,7 @@ export function ApprovalCard({
           {approval.action}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {decisionCopy(approval.status, approval.decision)} The decision is final.
+          {decisionCopy(approval.status, approval.decision, viewerId)} The decision is final.
         </p>
       </section>
     )
@@ -172,6 +175,7 @@ export function ApprovalCard({
         headingId={headingId}
         untilIso={undoUntil}
         canApprove={canApprove}
+        viewerId={viewerId}
         busy={busy}
         onUndo={onUndo}
         onWindowPassed={onWindowPassed}
@@ -245,6 +249,7 @@ function UndoWindow({
   headingId,
   untilIso,
   canApprove,
+  viewerId,
   busy,
   onUndo,
   onWindowPassed,
@@ -253,6 +258,7 @@ function UndoWindow({
   headingId: string
   untilIso: string
   canApprove: boolean
+  viewerId?: string
   busy: boolean
   onUndo: (approvalId: string) => void
   onWindowPassed: () => void
@@ -274,7 +280,7 @@ function UndoWindow({
         {approval.action}
       </h2>
       <p className="text-[15px]">
-        {decisionCopy(approval.status, approval.decision)}{" "}
+        {decisionCopy(approval.status, approval.decision, viewerId)}{" "}
         {open ? (
           <output aria-live="off">Undo available for {secondsCopy(seconds)}.</output>
         ) : (

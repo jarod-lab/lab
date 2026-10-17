@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   currentStep,
+  decisionCopy,
   deferSchema,
   footprintCells,
   footprintCopy,
@@ -134,5 +135,25 @@ describe("the org list", () => {
     expect(runFilterOf("needs_you")).toBe("needs_you")
     expect(runFilterOf("nope")).toBe("all")
     expect(runFilterOf(undefined)).toBe("all")
+  })
+})
+
+describe("decisionCopy", () => {
+  const decision = {
+    decidedBy: "user_1",
+    decidedAt: "2026-10-16T10:00:00Z",
+    effectiveAt: "2026-10-16T10:00:30Z",
+    undoableUntil: null,
+  }
+
+  it("says the viewer decided it when they did", () => {
+    expect(decisionCopy("approved", decision, "user_1")).toBe("You approved.")
+    expect(decisionCopy("denied", decision, "user_1")).toBe("You denied.")
+  })
+
+  it("names a teammate's decision, and waits while pending", () => {
+    expect(decisionCopy("approved", decision, "user_2")).toBe("Approved by a teammate.")
+    expect(decisionCopy("denied", decision)).toBe("Denied by a teammate.")
+    expect(decisionCopy("pending", null, "user_1")).toBe("Waiting for a decision.")
   })
 })

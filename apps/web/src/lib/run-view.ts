@@ -47,12 +47,16 @@ export function secondsCopy(seconds: number): string {
   return seconds === 1 ? "1 second" : `${seconds} seconds`
 }
 
-/** The decision's line for a person, in words. */
+/** The decision's line for a person, in words: "You approved." when the viewer decided it. */
 export function decisionCopy(
   status: "pending" | "approved" | "denied",
   decision: ApprovalDecision | null,
+  viewerId?: string,
 ): string {
   if (status === "pending" || !decision) return "Waiting for a decision."
+  if (viewerId && decision.decidedBy === viewerId) {
+    return status === "approved" ? "You approved." : "You denied."
+  }
   const verb = status === "approved" ? "Approved" : "Denied"
   return decision.decidedBy ? `${verb} by a teammate.` : `${verb}.`
 }

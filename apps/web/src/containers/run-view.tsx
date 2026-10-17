@@ -11,7 +11,7 @@ import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { WebError } from "../lib/web-auth"
 import { RunViewPage, type RunViewState } from "../pages/run-view-page"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
-import { memberRoleQuery } from "./shell-data"
+import { memberRoleQuery, useSessionQuery } from "./shell-data"
 
 // The permissions the server checks (the catalog in packages/auth/src/access.ts). The page reads them
 // from the same catalog, so the controls agree with the server; the server still refuses anything else.
@@ -43,6 +43,7 @@ export function RunViewContainer({
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
+  const session = useSessionQuery(auth)
   const roleText = role.data ?? ""
   const allows = (permissions: Record<string, string[]>) =>
     role.isSuccess && settings.roleAllows(roleText, permissions)
@@ -132,6 +133,7 @@ export function RunViewContainer({
       organization={organization}
       state={state}
       canApprove={canApprove}
+      viewerId={session.data?.user.id}
       canSteer={canSteer}
       busy={busy}
       actionError={actionError}

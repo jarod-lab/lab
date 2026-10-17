@@ -83,3 +83,8 @@
 | E1 | visual pass on the shipped build (apps/api + WEB_DIST_DIR, real CSP), every page light+dark, desktop+phone | pass | `e2e run --config e2e.dist.config.ts e2e/visual.e2e.ts`: 4 passed; 56 screenshots reviewed |
 | E1 | CSP: Zod eval probe tripped script-src on every page | pass (fixed) | `src/zod-config.ts` imported first (jitless); a4145dc |
 | E1 | dark-mode approval detail unreadable; phone footprint squeezed; two primary buttons on sign-in | pass (fixed) | a4145dc (+ sign-in emphasis pending S2's auth-pages edit) |
+| S2 | impersonation fails closed (every write + minting GETs refused; guards.test classifies every GET) | pass | auth 89; api-app 372 passed (commit 8bdd55a) |
+| S2 | change-email link needs the user's own session | pass | auth-flows: signed-out link changes nothing; other user's session refused |
+| S2 | SCIM token ends on owner removal/leave | pass | auth-flows: 401 after removal and after leave. Demotion / account deletion: not covered (documented) |
+| S2 | DEV_MAIL_SINK only with NODE_ENV development/test | pass | env 12 passed |
+| lead | hooks.test flaky "sk_" substring on random sealed bytes | pass (fixed) | 3c735e0 |

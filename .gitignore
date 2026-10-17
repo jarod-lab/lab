@@ -10,3 +10,4 @@ storybook-static
 
 # e2e (tester-army) output: reports, artifacts, replay cache, logs
 .e2e/
+.e2e-visual/

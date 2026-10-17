@@ -189,7 +189,7 @@ export function ApprovalCard({
         {approval.action}
       </h2>
       {approval.detail ? (
-        <blockquote className="rounded-lg bg-background p-3 text-[14.5px] leading-relaxed">
+        <blockquote className="rounded-lg bg-solar-foreground/10 p-3 text-[14.5px] leading-relaxed">
           {approval.detail}
         </blockquote>
       ) : null}
@@ -287,7 +287,7 @@ function UndoWindow({
           variant="outline"
           disabled={busy}
           onClick={() => onUndo(approval.id)}
-          className="min-h-11 self-start border-2 border-solar-foreground bg-transparent text-solar-foreground hover:bg-background"
+          className="min-h-11 self-start border-2 border-solar-foreground bg-transparent text-solar-foreground hover:bg-solar-foreground/10"
         >
           Undo
         </Button>
@@ -308,7 +308,7 @@ export function Footprint({
     <div className="flex flex-wrap items-center gap-3.5 rounded-[10px] border border-border px-3.5 py-2.5">
       <span className="text-[13.5px] font-semibold">Run footprint</span>
       <Meter value={cells.value} max={cells.max} label={footprintCopy(footprint, energyBudgetWh)} />
-      <span className="min-w-0 flex-1 text-[13.5px] text-muted-foreground">
+      <span className="min-w-[12rem] flex-1 text-[13.5px] text-muted-foreground">
         {footprintCopy(footprint, energyBudgetWh)}
       </span>
     </div>

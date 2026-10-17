@@ -1,3 +1,5 @@
+// First: Zod must be jitless before any module parses with it (see zod-config.ts).
+import "./zod-config"
 import { QueryClient } from "@tanstack/react-query"
 import { createRouter } from "@tanstack/react-router"
 import type { RouterContext } from "./routes/__root"

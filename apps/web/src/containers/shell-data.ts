@@ -1,3 +1,5 @@
+import type { PinnedAgent } from "@starter/ui/dplus/shell/app-sidebar"
+import { useMemo } from "react"
 import type { OrgRole, OrgSummary } from "@starter/ui/dplus/shell/org-picker"
 import {
   type QueryClient,
@@ -7,7 +9,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import { workspaceAgentKeys } from "../lib/agent-keys"
 import { qk } from "../lib/query-keys"
+import { pinnedAgentsOf } from "../lib/workspace-agents"
+import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth, WebOrganization, WebSession } from "../lib/web-auth"
 
 // Query functions are plain objects so the route guards and the containers share one definition
@@ -120,4 +125,29 @@ export function activeOrganization(
   const id = session?.activeOrganizationId
   if (!id) return undefined
   return organizations?.find((org) => org.id === id)
+}
+
+/**
+ * The sidebar's pinned agents, from the organization's workspace agents. Waits until the session's
+ * active organization is this one: the server answers a call for another org with 409.
+ */
+export function usePinnedAgents({
+  api,
+  organizationId,
+  slug,
+  ready,
+}: {
+  api: WorkspaceAgentsApi | undefined
+  organizationId: string | null
+  slug: string | null
+  ready: boolean
+}): PinnedAgent[] {
+  const query = useQuery({
+    queryKey: organizationId
+      ? workspaceAgentKeys.list(organizationId)
+      : ["workspace-agents", "none"],
+    queryFn: () => api?.list(organizationId ?? "") ?? Promise.resolve([]),
+    enabled: Boolean(api && organizationId && slug && ready),
+  })
+  return useMemo(() => pinnedAgentsOf(query.data ?? [], slug ?? ""), [query.data, slug])
 }

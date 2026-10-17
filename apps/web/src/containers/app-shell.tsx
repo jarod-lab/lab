@@ -7,6 +7,7 @@ import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
 
 import { type ThemeChoice, useThemeChoice } from "../lib/theme"
+import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth } from "../lib/web-auth"
 import { paletteAction, paletteGroups } from "./palette-items"
 import { RouterLink } from "./router-link"
@@ -18,6 +19,7 @@ import {
   useMemberRoles,
   useOrganizationsQuery,
   useSessionQuery,
+  usePinnedAgents,
   useSignOut,
 } from "./shell-data"
 
@@ -27,6 +29,8 @@ export type AppShellContainerProps = {
   slug: string | null
   /** Which sidebar item is active: "home", "agents" or "settings". */
   activeNav?: "home" | "agents" | "settings"
+  /** The workspace agents, for the sidebar's pinned list. Pages that show none leave it out. */
+  agents?: WorkspaceAgentsApi
   crumbs: Crumb[]
   /** Client navigation for app paths (the router's navigate). */
   onNavigate: (href: string) => void
@@ -44,6 +48,7 @@ export function AppShellContainer({
   auth,
   slug,
   activeNav,
+  agents,
   crumbs,
   onNavigate,
   onSignedOut,
@@ -58,6 +63,13 @@ export function AppShellContainer({
     (slug ? orgs.find((org) => org.slug === slug) : undefined) ??
     activeOrganization(session.data, orgs)
   const currentSlug = current?.slug ?? null
+  // The pinned list needs the session on this organization (the server refuses a mismatch).
+  const pinnedAgents = usePinnedAgents({
+    api: agents,
+    organizationId: current?.id ?? null,
+    slug: currentSlug,
+    ready: session.data?.activeOrganizationId === current?.id,
+  })
   const [theme, setTheme] = useThemeChoice()
   const signOut = useSignOut(auth)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -105,6 +117,7 @@ export function AppShellContainer({
         onRetry: () => void organizations.refetch(),
       }}
       nav={navItems}
+      pinnedAgents={pinnedAgents}
       activeId={activeNav}
       support={{ href: "/llms.txt", label: "Agent docs" }}
       account={{

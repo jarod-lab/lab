@@ -16,5 +16,9 @@ export function RouterLink({ href, ...rest }: LinkProps) {
       </a>
     )
   }
-  return <Link {...rest} to={href as "/"} />
+  // A query string (e.g. `?view=budgets`) goes to the router's `search`, not into `to`.
+  const [path = "", query] = href.split("?")
+  if (query === undefined) return <Link {...rest} to={href as "/"} />
+  const search = Object.fromEntries(new URLSearchParams(query))
+  return <Link {...rest} to={path as "/"} search={search} />
 }

@@ -13,6 +13,7 @@ import { RouterLink } from "../containers/router-link"
 import { useOrganizationsQuery } from "../containers/shell-data"
 import { requireSession } from "../lib/guards"
 import { activeNavFor, settingsCrumbs } from "../lib/org-nav"
+import { getWorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import { getWebAuth } from "../lib/web-auth"
 import { OrgNotFoundPage } from "../pages/org-not-found-page"
 
@@ -41,6 +42,7 @@ function OrgLayout() {
       auth={auth}
       slug={slug}
       activeNav={activeNavFor(pathname, slug)}
+      agents={getWorkspaceAgentsApi()}
       crumbs={[{ label: organization?.name ?? slug }, ...settingsCrumbs(pathname, slug)]}
       onNavigate={(href) => void router.navigate({ href })}
       onSignedOut={() => void router.navigate({ href: "/sign-in", replace: true })}

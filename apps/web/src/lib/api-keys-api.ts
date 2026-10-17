@@ -1,15 +1,21 @@
-import { type ConnectedAgent, createAgentsApi } from "./agents-api"
+import { createAgentsApi } from "./agents-api"
 import { organizationHeaders } from "./org-header"
 import { WebError } from "./web-auth"
 
-/** An organization API key as the agents list returns it (key_<id> is the revoke id). */
+/**
+ * An organization API key as GET /v1/api-keys (list_api_keys) returns it. `start` is the first
+ * characters of the key, for telling keys apart; the key itself is never shown again.
+ */
 export interface ApiKey {
   id: string
-  name: string
-  /** `resource:action` strings. */
-  access: string[]
+  name: string | null
+  start: string | null
+  /** `resource: [action, ...]`, as the server stores it. */
+  permissions: Record<string, string[]>
   createdAt: string
+  createdBy: { id: string; name: string } | null
   lastUsedAt: string | null
+  expiresAt: string | null
 }
 
 export interface CreateApiKeyInput {
@@ -43,27 +49,28 @@ const scopedFetch =
       },
     })
 
-function fromAgent(agent: ConnectedAgent): ApiKey {
-  return {
-    id: agent.id,
-    name: agent.name,
-    access: agent.access,
-    createdAt: agent.createdAt,
-    lastUsedAt: agent.lastUsedAt,
-  }
-}
-
 /**
- * The browser implementation. Listing and revoking go through the same agents operations the
- * agents page uses (list_connected_agents, revoke_agent_access); only API keys are kept here.
+ * The browser implementation. Listing goes through list_api_keys (apiKey:read); revoking goes through
+ * revoke_agent_access, which names a key as `key_<id>` (the connected-agents id), not by its raw id.
  */
 export function createApiKeysApi(
   fetchImpl: typeof fetch = (...args) => fetch(...args),
 ): ApiKeysApi {
   return {
     async listKeys(organizationId) {
-      const agents = await createAgentsApi(scopedFetch(fetchImpl, organizationId)).listAgents()
-      return agents.filter((agent) => agent.type === "apiKey").map(fromAgent)
+      const response = await scopedFetch(fetchImpl, organizationId)("/v1/api-keys", {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { accept: "application/json" },
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: { message?: string }
+        } | null
+        throw new WebError(body?.error?.message ?? "Could not load the API keys", response.status)
+      }
+      const body = (await response.json()) as { keys: ApiKey[] }
+      return body.keys
     },
     async createKey(organizationId, input) {
       const response = await scopedFetch(fetchImpl, organizationId)("/v1/api-keys", {
@@ -83,9 +90,14 @@ export function createApiKeysApi(
       return (await response.json()) as CreatedApiKey
     },
     async revokeKey(organizationId, id) {
-      await createAgentsApi(scopedFetch(fetchImpl, organizationId)).revokeAgent(id)
+      await createAgentsApi(scopedFetch(fetchImpl, organizationId)).revokeAgent(revokeIdOf(id))
     },
   }
+}
+
+/** The id revoke_agent_access takes for an API key: the connected-agents form, `key_<id>`. */
+export function revokeIdOf(keyId: string): string {
+  return `key_${keyId}`
 }
 
 let shared: ApiKeysApi | undefined

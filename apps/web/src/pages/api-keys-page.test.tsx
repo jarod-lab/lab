@@ -15,23 +15,32 @@ const keys: ApiKey[] = [
   {
     id: "key_1",
     name: "CI deploy",
-    access: ["project:read", "project:update"],
+    start: "ak_live_",
+    permissions: { project: ["read", "update"] },
     createdAt: new Date(NOW.getTime() - 30 * DAY).toISOString(),
+    createdBy: { id: "user-1", name: "Jordan Lee" },
     lastUsedAt: null,
+    expiresAt: null,
   },
   {
     id: "key_2",
     name: "Support bot",
-    access: ["project:read"],
+    start: "ak_test_",
+    permissions: { project: ["read"] },
     createdAt: new Date(NOW.getTime() - 10 * DAY).toISOString(),
+    createdBy: null,
     lastUsedAt: new Date(NOW.getTime() - 2 * 3_600_000).toISOString(),
+    expiresAt: new Date(NOW.getTime() + 60 * DAY).toISOString(),
   },
   {
     id: "key_3",
     name: "Old staging",
-    access: ["project:read", "project:update"],
+    start: "ak_stg_",
+    permissions: { project: ["read", "update"] },
     createdAt: new Date(NOW.getTime() - 300 * DAY).toISOString(),
+    createdBy: { id: "user-3", name: "Marcus Webb" },
     lastUsedAt: new Date(NOW.getTime() - 120 * DAY).toISOString(),
+    expiresAt: null,
   },
 ]
 
@@ -46,6 +55,7 @@ function props(overrides: Partial<ApiKeysPageProps> = {}): ApiKeysPageProps {
     roleLabel: "Owner",
     canList: true,
     canCreate: true,
+    canRevoke: true,
     keys,
     keysPending: false,
     keysError: null,
@@ -71,7 +81,12 @@ describe("ApiKeysPage as owner", () => {
     const ci = within(rows[1] as HTMLElement)
     expect(ci.getByText("CI deploy")).toBeTruthy()
     expect(ci.getByText("Read & write")).toBeTruthy()
+    expect(ci.getByText("ak_live_••••")).toBeTruthy()
+    expect(ci.getByText("Jordan Lee")).toBeTruthy()
     expect(ci.getByText("Never")).toBeTruthy()
+    expect(ci.getByText("No expiry")).toBeTruthy()
+    const bot = within(rows[2] as HTMLElement)
+    expect(bot.getByText("—")).toBeTruthy()
     const old = within(rows[3] as HTMLElement)
     expect(old.getByText("Unused 90+ days")).toBeTruthy()
     expect(screen.getByRole("button", { name: "Revoke Support bot" })).toBeTruthy()
@@ -196,15 +211,30 @@ describe("ApiKeysPage as viewer or member", () => {
           roleLabel: "Viewer",
           canList: false,
           canCreate: false,
+          canRevoke: false,
           keys: undefined,
         })}
       />,
     )
-    expect(screen.getByText("You have view-only access to Acme Inc.")).toBeTruthy()
+    expect(
+      screen.getByText("Viewers can't see API keys. Ask an owner, admin or member."),
+    ).toBeTruthy()
     expect(screen.queryByRole("table")).toBeNull()
     const create = screen.getByRole("button", { name: "Create API key" }) as HTMLButtonElement
     expect(create.disabled).toBe(true)
     expect(screen.getByText("Only owners and admins can create keys.")).toBeTruthy()
+  })
+
+  it("shows the read-only table to a member, with no revoke action", () => {
+    renderWithClient(
+      <ApiKeysPage {...props({ roleLabel: "Member", canCreate: false, canRevoke: false })} />,
+    )
+    expect(screen.getByRole("table")).toBeTruthy()
+    expect(screen.getByText("CI deploy")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /^Revoke/ })).toBeNull()
+    expect(
+      (screen.getByRole("button", { name: "Create API key" }) as HTMLButtonElement).disabled,
+    ).toBe(true)
   })
 })
 

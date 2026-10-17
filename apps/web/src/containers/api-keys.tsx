@@ -12,9 +12,11 @@ import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { ApiKeysPage } from "../pages/api-keys-page"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
 
-// The permissions the server checks (apiKey:delete for the list and revoke, apiKey:create for a new
-// key). The page derives its controls from the same catalog, so they agree with the server.
-const LIST = { apiKey: ["delete"] }
+// The permissions the server checks: apiKey:read lists keys (list_api_keys), apiKey:delete revokes
+// one (revoke_agent_access), apiKey:create makes a new key. The page derives its controls from the
+// same catalog, so they agree with the server.
+const LIST = { apiKey: ["read"] }
+const REVOKE = { apiKey: ["delete"] }
 const CREATE = { apiKey: ["create"] }
 
 export interface ApiKeysContainerProps {
@@ -27,7 +29,8 @@ export interface ApiKeysContainerProps {
 
 /**
  * Data and mutations for the organization's API keys page. The list is only requested for a role
- * that may see it, so a viewer gets the view-only state and no error.
+ * that may read keys, so a viewer gets the view-only state and no error. Members see the list
+ * read-only; revoking needs apiKey:delete.
  */
 export function ApiKeysContainer({
   auth,
@@ -42,6 +45,7 @@ export function ApiKeysContainer({
   const roleText = role.data ?? ""
   const canList = role.isSuccess && settings.roleAllows(roleText, LIST)
   const canCreate = role.isSuccess && settings.roleAllows(roleText, CREATE)
+  const canRevoke = role.isSuccess && settings.roleAllows(roleText, REVOKE)
 
   const keys = useQuery({
     queryKey: qk.org(organizationId).apiKeys(),
@@ -93,6 +97,7 @@ export function ApiKeysContainer({
       roleLabel={orgRoleLabel(roleText)}
       canList={canList}
       canCreate={canCreate}
+      canRevoke={canRevoke}
       keys={canList ? keys.data : undefined}
       keysPending={canList && keys.isPending}
       keysError={canList && keys.isError ? messageOf(keys.error) : null}

@@ -1,11 +1,13 @@
 import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
+import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/invitations"
+
 // The organization's General settings (docs/build-app/boards/project/OrgGeneral): an owner renames the
 // organization, changes its URL and lands on the new address, then deletes it by typing its name.
 // Locators only. Needs the stack (see e2e.config.ts): the dev mail sink is not needed here.
-// Not covered yet: the viewer's read-only view. A viewer needs an invitation, and the Members page
-// that sends it is not built (P3); it belongs in this file once that lands.
+// The viewer's read-only view is the second test: a viewer is invited from the Members page, accepts
+// in their own session, and sees General without the controls that change it.
 
 const PASSWORD = "correct horse battery staple 42"
 
@@ -69,4 +71,46 @@ test("owner renames the organization, changes its URL, and deletes it", async ({
   // Back on the personal organization, which is still there.
   await expect(browser).toHaveURL(/\/personal-[a-z0-9-]+$/)
   await expect(browser).not.toHaveURL(new RegExp(`/${renamedSlug}`))
+})
+
+test("a viewer sees General read-only: no save, no danger zone", async (ctx) => {
+  const { app, screen, browser } = ctx
+  const unique = Date.now().toString(36)
+  const ownerEmail = `owen.${unique}@example.com`
+  const viewerEmail = `vic.${unique}@example.com`
+  const slug = `viewer-${unique}`
+  const orgName = "Viewer Labs"
+
+  await signUpUi(ctx, "Owen Ortiz", ownerEmail)
+  await app.open("/new")
+  await screen.getByLabel("Organization name").fill(orgName)
+  await screen.getByLabel("URL").fill(slug)
+  await expect(screen.getByText("Available")).toBeVisible()
+  await screen.getByRole("button", "Create organization").tap()
+  await expect(browser).toHaveURL(new RegExp(`/${slug}$`))
+
+  const link = await inviteAs(ctx, { slug, email: viewerEmail, role: "viewer" })
+  await signOutUi(ctx)
+  await acceptInvitationAs(ctx, {
+    link,
+    name: "Vic Viewer",
+    email: viewerEmail,
+    organizationName: orgName,
+  })
+
+  await app.open(`/${slug}/settings/general`)
+  await expect(screen.getByText(`You have view-only access to ${orgName}.`)).toBeVisible()
+  await expect(screen.getByLabel("Organization name")).toBeDisabled()
+  await expect(screen.getByRole("button", "Delete organization")).toBeHidden()
+  // A viewer can always leave.
+  await expect(screen.getByRole("button", "Leave organization")).toBeVisible()
+
+  // The Members page is read-only for a viewer too: the list, but no invite form and no role menus.
+  await app.open(`/${slug}/settings/members`)
+  await expect(
+    screen.getByText("Only owners and admins can invite and manage members."),
+  ).toBeVisible()
+  await expect(screen.getByLabel("Invite by email")).toBeHidden()
+  await expect(screen.getByRole("button", /^Role for /)).toBeHidden()
+  await expect(screen.getByRole("columnheader", "Two-factor")).toBeHidden()
 })

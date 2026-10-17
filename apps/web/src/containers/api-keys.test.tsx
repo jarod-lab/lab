@@ -50,9 +50,12 @@ function fakeKeysApi(overrides: Partial<ApiKeysApi> = {}): ApiKeysApi {
       {
         id: "key_1",
         name: "CI deploy",
-        access: ["project:read"],
+        start: "ak_live_",
+        permissions: { project: ["read"] },
         createdAt: "2026-10-01T00:00:00.000Z",
+        createdBy: { id: "user-1", name: "Ada" },
         lastUsedAt: null,
+        expiresAt: null,
       },
     ]),
     createKey: vi.fn(async (_org, input) => ({
@@ -81,13 +84,20 @@ describe("ApiKeysContainer", () => {
     expect(api.listKeys).toHaveBeenCalledWith("org-a")
   })
 
-  it("never asks a viewer or member for the list", async () => {
-    for (const role of ["viewer", "member"]) {
-      const { api, unmount } = setup({ role })
-      expect(await screen.findByText("You have view-only access to Acme Inc.")).toBeTruthy()
-      expect(api.listKeys).not.toHaveBeenCalled()
-      unmount()
-    }
+  it("never asks a viewer for the list, which needs apiKey:read", async () => {
+    const { api, unmount } = setup({ role: "viewer" })
+    expect(
+      await screen.findByText("Viewers can't see API keys. Ask an owner, admin or member."),
+    ).toBeTruthy()
+    expect(api.listKeys).not.toHaveBeenCalled()
+    unmount()
+  })
+
+  it("lets a member read the list, with no revoke action", async () => {
+    const { api } = setup({ role: "member" })
+    expect(await screen.findByText("CI deploy")).toBeTruthy()
+    expect(api.listKeys).toHaveBeenCalledWith("org-a")
+    expect(screen.queryByRole("button", { name: "Revoke CI deploy" })).toBeNull()
   })
 
   it("creates a key, shows its secret, and forgets the secret on dismiss", async () => {
@@ -136,9 +146,12 @@ describe("ApiKeysContainer", () => {
         {
           id: "key_1",
           name: "CI deploy",
-          access: ["project:read"],
+          start: "ak_live_",
+          permissions: { project: ["read"] },
           createdAt: "2026-10-01T00:00:00.000Z",
+          createdBy: null,
           lastUsedAt: null,
+          expiresAt: null,
         },
       ])
       .mockResolvedValue([])

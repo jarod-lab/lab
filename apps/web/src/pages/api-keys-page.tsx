@@ -43,7 +43,11 @@ import {
   EXPIRY_OPTIONS,
   type PermissionOption,
   accessSummary,
+  createdByLabel,
+  expiryLabel,
   isUnused,
+  maskedKey,
+  permissionList,
   secretNotice,
   toPermissionsRecord,
 } from "../lib/api-keys"
@@ -55,8 +59,10 @@ export interface ApiKeysPageProps {
   organization: { id: string; name: string; slug: string }
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
-  /** apiKey:delete (owner, admin): the list is shown. Other roles get the view-only notice. */
+  /** apiKey:read (owner, admin, member): the list is shown. Viewers get the view-only notice. */
   canList: boolean
+  /** apiKey:delete (owner, admin): the Revoke action is shown. */
+  canRevoke: boolean
   /** apiKey:create (owner, admin): the Create button is enabled. */
   canCreate: boolean
   /** The organization's keys, once loaded. */
@@ -82,7 +88,7 @@ const helper = createColumnHelper<typeof features, ApiKey>()
 const NO_KEYS: ApiKey[] = []
 
 // Columns that drop out on a phone so the table never scrolls sideways.
-const PHONE_HIDDEN = new Set(["access", "createdAt"])
+const PHONE_HIDDEN = new Set(["access", "createdBy", "expiresAt"])
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleDateString(undefined, { dateStyle: "medium" })
@@ -93,6 +99,7 @@ export function ApiKeysPage({
   roleLabel,
   canList,
   canCreate,
+  canRevoke,
   keys,
   keysPending,
   keysError,
@@ -115,17 +122,21 @@ export function ApiKeysPage({
       helper.columns([
         helper.accessor("name", {
           header: "Name",
-          cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
+          cell: (info) => <span className="font-semibold">{info.getValue() ?? "API key"}</span>,
         }),
-        helper.accessor("access", {
+        helper.accessor("start", {
+          header: "Key",
+          cell: (info) => <span className="font-mono text-sm">{maskedKey(info.getValue())}</span>,
+        }),
+        helper.display({
+          id: "access",
           header: "Access",
-          cell: (info) => accessSummary(info.getValue()),
+          cell: (info) => accessSummary(permissionList(info.row.original.permissions)),
         }),
-        helper.accessor("createdAt", {
-          header: "Created",
-          cell: (info) => (
-            <span className="text-muted-foreground">{formatDate(info.getValue())}</span>
-          ),
+        helper.display({
+          id: "createdBy",
+          header: "Created by",
+          cell: (info) => createdByLabel(info.row.original.createdBy),
         }),
         helper.accessor("lastUsedAt", {
           header: "Last used",
@@ -140,25 +151,30 @@ export function ApiKeysPage({
             return value ? formatDate(value) : "Never"
           },
         }),
+        helper.accessor("expiresAt", {
+          header: "Expires",
+          cell: (info) => expiryLabel(info.getValue(), formatDate),
+        }),
         helper.display({
           id: "actions",
           header: () => <span className="sr-only">Actions</span>,
-          cell: (info) => (
-            <Button
-              variant="outline"
-              aria-label={`Revoke ${info.row.original.name}`}
-              className="min-h-11 border-destructive text-destructive hover:text-destructive"
-              onClick={() => {
-                setRevokeError(null)
-                setRevoking(info.row.original)
-              }}
-            >
-              Revoke
-            </Button>
-          ),
+          cell: (info) =>
+            canRevoke ? (
+              <Button
+                variant="outline"
+                aria-label={`Revoke ${info.row.original.name ?? "API key"}`}
+                className="min-h-11 border-destructive text-destructive hover:text-destructive"
+                onClick={() => {
+                  setRevokeError(null)
+                  setRevoking(info.row.original)
+                }}
+              >
+                Revoke
+              </Button>
+            ) : null,
         }),
       ]),
-    [when],
+    [canRevoke, when],
   )
 
   const table = useTable({ features, columns, data: keys ?? NO_KEYS })
@@ -233,7 +249,7 @@ export function ApiKeysPage({
 
         {canList ? null : (
           <ViewOnlyNotice subject={organization.name}>
-            Only owners and admins can see and manage API keys.
+            Viewers can't see API keys. Ask an owner, admin or member.
           </ViewOnlyNotice>
         )}
 
@@ -303,7 +319,7 @@ export function ApiKeysPage({
               <Badge className="rounded-sm bg-solar text-solar-foreground">Unused 90+ days</Badge>
               consider revoking
             </span>
-            <span>Only owners and admins can see this page. Revoking takes effect at once.</span>
+            <span>Revoking takes effect at once.</span>
           </div>
         ) : null}
       </main>
@@ -316,36 +332,38 @@ export function ApiKeysPage({
         onCreate={onCreate}
       />
 
-      <AlertDialog
-        open={revoking !== null}
-        onOpenChange={(open) => {
-          if (!open) setRevoking(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke {revoking?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Agents using this key stop working immediately. This can't be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {revokeError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {revokeError}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              className="border-destructive bg-transparent text-destructive hover:text-destructive"
-              variant="outline"
-              onClick={() => void confirmRevoke()}
-            >
-              Revoke key
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {canRevoke ? (
+        <AlertDialog
+          open={revoking !== null}
+          onOpenChange={(open) => {
+            if (!open) setRevoking(null)
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Revoke {revoking?.name ?? "this key"}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Agents using this key stop working immediately. This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {revokeError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {revokeError}
+              </p>
+            ) : null}
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <Button
+                className="border-destructive bg-transparent text-destructive hover:text-destructive"
+                variant="outline"
+                onClick={() => void confirmRevoke()}
+              >
+                Revoke key
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </div>
   )
 }

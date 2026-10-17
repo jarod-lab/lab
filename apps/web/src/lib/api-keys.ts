@@ -1,10 +1,15 @@
 // Pure helpers for the API keys page. No network, no React.
 
-/** Resources a key may hold. `run:approve` is a person's decision and is never granted to a key (access.ts). */
+/**
+ * Resources a key may hold, as the catalog names them (packages/auth/src/access.ts). Owner-only
+ * resources (sso, scim, subscription, twoFactor), organization and member management, and
+ * `run:approve` (a person's decision) are never offered for a key.
+ */
 export const KEY_RESOURCES = ["project", "agent", "run"] as const
 export type KeyResource = (typeof KEY_RESOURCES)[number]
 
-const KEY_ACTIONS: Record<KeyResource, readonly string[]> = {
+/** The actions offered per resource: the catalog's actions minus `run:approve` and `run:delete`. */
+export const KEY_ACTIONS: Record<KeyResource, readonly string[]> = {
   project: ["create", "read", "update", "delete"],
   agent: ["create", "read", "update", "delete"],
   run: ["create", "read", "update", "steer"],
@@ -62,10 +67,32 @@ export function toPermissionsRecord(selected: readonly string[]): Record<string,
   return record
 }
 
+/** A stored permissions record as the `resource:action` strings the list shows. */
+export function permissionList(permissions: Record<string, string[]>): string[] {
+  return Object.entries(permissions).flatMap(([resource, actions]) =>
+    actions.map((action) => `${resource}:${action}`),
+  )
+}
+
 /** The Access column: "Read only" when every permission is a read, otherwise "Read & write". */
 export function accessSummary(access: readonly string[]): string {
   if (access.length === 0) return "No access"
   return access.every((permission) => permission.endsWith(":read")) ? "Read only" : "Read & write"
+}
+
+/** The masked key as the list shows it: the stored start, then the mask. Never more than the server sends. */
+export function maskedKey(start: string | null): string {
+  return start ? `${start}••••` : "••••"
+}
+
+/** Expiry copy: a date, or "No expiry" when the key never expires. */
+export function expiryLabel(expiresAt: string | null, format: (value: string) => string): string {
+  return expiresAt ? format(expiresAt) : "No expiry"
+}
+
+/** Who made the key, or a dash for keys made before that was recorded. */
+export function createdByLabel(createdBy: { name: string } | null): string {
+  return createdBy?.name || "—"
 }
 
 export const STALE_AFTER_DAYS = 90

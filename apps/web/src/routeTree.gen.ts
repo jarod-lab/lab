@@ -29,6 +29,7 @@ import { Route as OrgSettingsIndexRouteImport } from './routes/$org/settings/ind
 import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
 import { Route as OrgSettingsApiKeysRouteImport } from './routes/$org/settings/api-keys'
 import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
+import { Route as OrgSettingsMembersRouteImport } from './routes/$org/settings/members'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -131,6 +132,11 @@ const OrgSettingsGeneralRoute = OrgSettingsGeneralRouteImport.update({
   path: '/settings/general',
   getParentRoute: () => OrgRoute,
 } as any)
+const OrgSettingsMembersRoute = OrgSettingsMembersRouteImport.update({
+  id: '/settings/members',
+  path: '/settings/members',
+  getParentRoute: () => OrgRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -195,6 +203,7 @@ export interface FileRoutesById {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
+  '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/general'
+    | '/$org/settings/members'
     | '/$org/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/general'
+    | '/$org/settings/members'
     | '/$org/settings'
   id:
     | '__root__'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/general'
+    | '/$org/settings/members'
     | '/$org/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -423,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSettingsGeneralRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/$org/settings/members': {
+      id: '/$org/settings/members'
+      path: '/settings/members'
+      fullPath: '/$org/settings/members'
+      preLoaderRoute: typeof OrgSettingsMembersRouteImport
+      parentRoute: typeof OrgRoute
+    }
   }
 }
 
@@ -431,6 +450,7 @@ interface OrgRouteChildren {
   OrgSettingsAgentsRoute: typeof OrgSettingsAgentsRoute
   OrgSettingsApiKeysRoute: typeof OrgSettingsApiKeysRoute
   OrgSettingsGeneralRoute: typeof OrgSettingsGeneralRoute
+  OrgSettingsMembersRoute: typeof OrgSettingsMembersRoute
   OrgSettingsIndexRoute: typeof OrgSettingsIndexRoute
 }
 
@@ -439,6 +459,7 @@ const OrgRouteChildren: OrgRouteChildren = {
   OrgSettingsAgentsRoute: OrgSettingsAgentsRoute,
   OrgSettingsApiKeysRoute: OrgSettingsApiKeysRoute,
   OrgSettingsGeneralRoute: OrgSettingsGeneralRoute,
+  OrgSettingsMembersRoute: OrgSettingsMembersRoute,
   OrgSettingsIndexRoute: OrgSettingsIndexRoute,
 }
 

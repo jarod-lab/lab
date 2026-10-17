@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest"
 
+// The catalog itself (not a copy): the picker must stay a subset of what the server defines.
+import { roles, statements } from "../../../../packages/auth/src/access"
 import {
+  KEY_ACTIONS,
   accessSummary,
+  createdByLabel,
+  expiryLabel,
   isUnused,
+  maskedKey,
+  permissionList,
   permissionOptions,
   secretNotice,
   toPermissionsRecord,
@@ -68,5 +75,73 @@ describe("isUnused", () => {
 describe("secretNotice", () => {
   it("says the key is shown only once", () => {
     expect(secretNotice("CI deploy")).toBe("Copy “CI deploy” now. You won't see this key again.")
+  })
+})
+
+describe("the picker against the permission catalog", () => {
+  const everything = permissionOptions(() => true)
+
+  it("offers only actions the catalog defines", () => {
+    for (const option of everything) {
+      const actions = (statements as Record<string, readonly string[]>)[option.resource]
+      expect(actions, option.key).toContain(option.action)
+    }
+  })
+
+  it("never offers run:approve, run:delete, or owner-only or org-admin resources", () => {
+    const keys = everything.map((option) => option.key)
+    expect(keys).not.toContain("run:approve")
+    expect(keys).not.toContain("run:delete")
+    for (const resource of [
+      "sso",
+      "scim",
+      "subscription",
+      "twoFactor",
+      "organization",
+      "member",
+      "apiKey",
+    ]) {
+      expect(
+        keys.some((key) => key.startsWith(`${resource}:`)),
+        resource,
+      ).toBe(false)
+    }
+  })
+
+  it("lists the same actions as KEY_ACTIONS", () => {
+    const expected = Object.entries(KEY_ACTIONS).flatMap(([resource, actions]) =>
+      actions.map((action) => `${resource}:${action}`),
+    )
+    expect(everything.map((option) => option.key)).toEqual(expected)
+  })
+
+  it("is built from the four roles the catalog defines", () => {
+    expect(Object.keys(roles).sort()).toEqual(["admin", "member", "owner", "viewer"])
+  })
+})
+
+describe("display helpers", () => {
+  it("flattens a permissions record into resource:action strings", () => {
+    expect(permissionList({ project: ["read", "update"], run: ["steer"] })).toEqual([
+      "project:read",
+      "project:update",
+      "run:steer",
+    ])
+  })
+
+  it("masks the key to the stored start and never adds characters", () => {
+    expect(maskedKey("ak_live_")).toBe("ak_live_••••")
+    expect(maskedKey(null)).toBe("••••")
+  })
+
+  it("says No expiry for a key that never expires, and formats a date otherwise", () => {
+    const format = (value: string) => `on ${value.slice(0, 10)}`
+    expect(expiryLabel(null, format)).toBe("No expiry")
+    expect(expiryLabel("2027-01-14T00:00:00.000Z", format)).toBe("on 2027-01-14")
+  })
+
+  it("names the creator, or a dash when it was not recorded", () => {
+    expect(createdByLabel({ name: "Jordan Lee" })).toBe("Jordan Lee")
+    expect(createdByLabel(null)).toBe("—")
   })
 })

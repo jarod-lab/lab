@@ -20,7 +20,7 @@ docker compose up -d db      # optional local Postgres; tests don't need it
   web app's pages.
   Operations live in `src/operations.ts`; invoke hooks (metering, idempotency, audit) in `src/hooks.ts`; tenant data in
   `src/data/`. `server.ts` only wires env, the DB and the listener (excluded from coverage)
-- `apps/web` — `@starter/web`: TanStack Start in SPA mode (sign-in, consent, device, agents settings). `vite build` writes
+- `apps/web` — `@starter/web`: TanStack Start in SPA mode, the D+ app (see Web app). `vite build` writes
   `apps/web/dist`, which apps/api serves from its origin. Dev: `vite dev` proxies `/api`, `/v1`, `/mcp`, `/.well-known`
   to `API_URL`
 - `packages/api` — operation registry: `defineOperation`, `defineRegistry`, `invoke` (scopes → input → handler →
@@ -30,7 +30,8 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 - `packages/cli` — `@starter/cli`, binary `starter`: `login` (device grant), `logout`, `whoami`, `ops`, `call <operation>`
 - `packages/mcp` — `createMcpHandler({ operations, authenticate, resourceMetadataUrl })`: stateless Streamable HTTP
   MCP server as a Web handler; `protectedResourceMetadata` (RFC 9728)
-- `packages/ui` — shadcn/ui components + Storybook; use `cn` from `cn`, never clsx/tailwind-merge
+- `packages/ui` — shadcn/ui components + Storybook; use `cn` from `cn`, never clsx/tailwind-merge. D+ pieces in
+  `src/dplus` (`Status`, `Meter`, `OrgMark`) and the presentational app shell in `src/dplus/shell` (`@starter/ui/dplus/shell/<name>`)
 - `packages/db` — Drizzle ORM (Postgres), committed migrations in `drizzle/`, test helper `@starter/db/testing`. App tables
   include `audit_event`, `usage_daily`, `idempotency_key` and `signup_attempt` (see Database and auth)
 - `packages/auth` — better-auth: `createAuth({ db, secret, baseURL, emailFrom })`, `createClient()`; Wraps plugin for contact
@@ -38,7 +39,7 @@ docker compose up -d db      # optional local Postgres; tests don't need it
   `access.ts` is the permission catalog (`statements`) and roles; it's imported by the browser client, so it may only
   import better-auth's access modules. `permissions.ts` re-exports it and adds grant math and OAuth scope grants.
   `resolvePrincipal(auth, headers, { audience })` turns an API key, OAuth token or session into a `Principal`.
-  `device.ts` is the device grant, `signup.ts` provisional signup
+  `device.ts` is the device grant, `signup.ts` provisional signup. Plugins and guards: see Auth plugins
 - `skills/starter` — template skill shipped to customers' agents (not one for this repo; those are in `.claude/skills`)
 - `packages/auth-proofs` — gdp-ts proofs: branded ids in `lib/ids.ts`, trusted provers in `proofs/` (`callerActsFor`,
   `projectInOrg`), compile-time misuse cases in `mistakes.types.ts`. Tenant data functions take proofs as arguments
@@ -204,10 +205,68 @@ or `resolvePrincipal`.
 - **Commands.** After changing `openapi.json`: `pnpm --filter @starter/sdk generate`. After changing the registry name or
   description: `UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app test discovery`.
 
+## Web app
+
+- **Routes** (board URLs): `/:org` (org slug; `OrgGate` sets the active org before org content renders),
+  `/:org/runs/:runId`, `/:org/settings/{general,members,api-keys,billing,agents,security}`, `/account/{profile,security}`,
+  `/new`, `/two-factor`, `/admin`, plus the unchanged OAuth/device/claim/reset/`/accept-invitation/:id` pages
+  (`/invite/:id` is an alias; `/settings/agents` redirects). Org slugs can't take a reserved first segment
+  (`RESERVED_ORG_SLUGS`, enforced server-side). apps/api `static.ts` serves every route; `static.test.ts` derives the
+  list from `routeTree.gen.ts`, and turbo hashes that file for api-app tests.
+- **Shape:** thin route file → container in `src/containers` (data, TanStack Query, mutations) → presentational page
+  in `src/pages` (props in, callbacks out) built from `@starter/ui` and `@starter/ui/dplus/*`. The shell components
+  take links through `renderLink`/`ShellLinkProvider` (TanStack Router's `Link` in `containers/router-link.tsx`).
+- **Data layer:** TanStack Query with the client in router context; keys from `lib/query-keys.ts` (`qk.org(orgId)…`)
+  and per-area key files. better-auth org calls always pass `organizationId`; `/v1` calls send `X-Organization-Id`
+  (`ORGANIZATION_HEADER` from `@starter/api`), and resolvePrincipal answers 409 when it disagrees with the
+  caller's org, so two tabs on two orgs can't write to the wrong one. Forms: TanStack Form + Zod (`errors` hold Zod
+  issues: render `.message`). Tables: TanStack Table; long lists: TanStack Virtual; debounce and run polling:
+  TanStack Pacer (pauses in background tabs). Shortcuts: TanStack Hotkeys (Ctrl/⌘K palette, G H/G A/G O, `?`).
+  Run summaries: react-markdown (no raw HTML) with sugar-high tokens rendered as React spans (`.run-code` in app.css).
+  Plugin endpoints the typed client lacks go through `client.$fetch`, with a method/path table test.
+- **Theme:** Light/Dark/System in `lib/theme.ts` (localStorage `starter.theme`); the boot script is inline
+  (`src/theme-boot.js?raw`, allowed by the CSP hash). Never put un-hashed files under `/assets` (served immutable).
+  app.css `@source`s both `packages/ui/src/components/ui` and `packages/ui/src/dplus`.
+- **Devtools:** `src/devtools.tsx` mounts TanStack Devtools (Router, Query, Form, Pacer, Hotkeys), lazy behind
+  `import.meta.env.DEV && MODE !== "test"`, so dist has none (form-core's tiny `devtools-event-client` does ship).
+- **Billing:** `lib/billing/` `BillingAdapter`: the fixture (labelled `[SAMPLE DATA]`, prices `[PRICE]`, changes
+  disabled) unless `GET /api/auth/sign-in-methods` reports Stripe with at least one plan. "Requests today" is real.
+- **Runs:** approvals take effect 30s after the decision (server `effectiveAt`); the countdown corrects for clock
+  skew from the response `Date` header (`lib/server-clock.ts`).
+
+## Auth plugins
+
+All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
+
+- **Sign-in methods:** password, magic link (Wraps SES), passkey (rpID = base URL host), GitHub/Google (only when both
+  env values are set), SSO (`@better-auth/sso`, domain verification required before a provider signs anyone in).
+  `GET /api/auth/sign-in-methods` tells the web which are on. `lastLoginMethod` drives the "Last used" badge;
+  sessions record `loginMethod`/`loginTwoFactor`. No `bearer` plugin: session tokens must not pass as API credentials.
+- **Two-factor:** TOTP, backup codes, trusted devices; the challenge goes to `/two-factor` and keeps the query so
+  OAuth resumes. A magic link for a 2FA user opens the challenge, not a session. Social and SSO sign-ins don't ask
+  TOTP (the provider's MFA applies). Owners reset a member's 2FA with `reset_member_two_factor`.
+- **Passwords:** `haveIBeenPwned` (`PASSWORD_COMPROMISED`; tests stub fetch to api.pwnedpasswords.com).
+- **Account:** email change (link to the new address, notice to the old; no native cancel), deletion after an emailed
+  confirmation and refused (`OWNS_ORGANIZATION`) while the user owns a shared org, account linking with
+  `LAST_SIGN_IN_METHOD` protecting the last way in (`account-plugin.ts`), `GET /api/auth/security/summary`.
+- **OAuth resume:** every step that resumes an authorization carries `oauth_query`; the magic link callbackURL holds it
+  (`resume.ts`).
+- **admin:** `adminRoles: ["admin"]`, promoted in the database only (`update "user" set role='admin' …`). Impersonated
+  sessions can't consent, approve devices, or create/update API keys (`guards.ts`), and get read-only grants.
+- **sso, scim, stripe:** owner-only resources `sso`, `scim`, `subscription` (OAUTH_EXCLUDED; `owner-only.ts`,
+  `scim-token.ts`). SCIM users aren't projected into the org yet; tokens can't be listed or revoked. Stripe is test mode
+  only (`sk_test_`), mounted with `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, plans from `STRIPE_PLANS`, plugin last.
+  scim needs `drizzleAdapter(..., { transaction: true })`, so hooks use `getCurrentAdapter` (PGlite deadlocks otherwise).
+- **Dev mail sink:** `DEV_MAIL_SINK=true` (refused in production) keeps auth emails in memory instead of SES;
+  `GET /api/dev/mail?to=` returns them (e2e reads links there).
+- Generated `auth-schema.ts` and drizzle meta come out unformatted: run `pnpm format` after generating.
+
 ## Not yet
 
 - Custom roles per org (`dynamicAccessControl`: resolve roles from the DB in `rolePermissions`, then rerun the parity test).
-- Stripe billing: metering and limits exist; there are no plans, checkout or webhooks.
+- Live Stripe: the plugin runs in test mode with env plans; the Billing page shows fixture data until it's configured.
+- SCIM provisioning into the org, and listing/revoking SCIM tokens. Admins can still read SSO provider config.
+- Passkey sign-up without an existing session, and e2e for passkeys (the e2e browser has no WebAuthn).
 - Publishing: the MCP registry, the Claude connectors directory, Smithery, and `npx skills add` for `skills/starter`.
   Each needs your namespace and a real URL.
 - Deploy target: the Dockerfile and `scripts/release.mjs` only; no platform config.
@@ -218,7 +277,7 @@ or `resolvePrincipal`.
   `device-org:` rows in `verification`.
 - Audit for FORBIDDEN and BAD_REQUEST attempts.
 - Verifying the Cursor and VS Code install snippets (their shapes are inferred from docs).
-- The e2e job (see Tooling) and `llms.txt` on a marketing domain (no marketing app here).
+- The e2e job in CI (see Tooling) and `llms.txt` on a marketing domain (no marketing app here).
 
 ## Advisor checkpoints
 
@@ -267,6 +326,9 @@ or `resolvePrincipal`.
 - `0003_agent_distribution` (not applied yet; the user runs it) adds `audit_event`, `usage_daily`, `idempotency_key`,
   `signup_attempt` and the device grant's `device_code` table. The first three cascade from `organization`;
   `signup_attempt` is keyed by IP and email domain, not by org.
+- `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs` (agent, run,
+  run_step, approval, steer_message; tenant tables), `0007_session_login_method`, `0008_sso_domain_verification` and `0009_steer_message_org_index`.
+  Not applied until the user runs them.
 
 ## Tooling
 
@@ -281,8 +343,14 @@ or `resolvePrincipal`.
   `use-cn` (no clsx/tailwind-merge/classnames), `use-starter-ui` (no Base UI, Radix or other kits outside `packages/ui`)
   and `use-starter-env` (no `process.env` outside `packages/env`). Rules are regex/import matches, not type-aware;
   `skip_strings` ignores string and template literals (including code inside `${}`), but comments still match.
-- **e2e** (tester-army): **not configured yet.** `e2e/example.e2e.ts` is a skipped placeholder outside the workspace and CI.
-  Setting it up needs an app to test and a model credential (e.g. `AI_GATEWAY_API_KEY`). Docs ship in `node_modules/e2e/docs`.
+- **e2e** (tester-army, `pnpm e2e`; docs in `node_modules/e2e/docs`): `e2e.config.ts`, one `e2e/<page>.e2e.ts` per page
+  following its board's journey, helpers in `e2e/support/`. Targets desktop 1280x720 and phone 390x844.
+  `scripts/e2e-stack.mjs` starts apps/api (with `DEV_MAIL_SINK=true`) and vite; it needs Postgres with every
+  migration applied and `DATABASE_URL`/`BETTER_AUTH_SECRET` in the runner's env. `AI_GATEWAY_API_KEY` is only for
+  agent steps. Install the browser with `pnpm exec e2e-web install chromium`. The browser can't emulate dark mode
+  (override `matchMedia` in an init script) or WebAuthn; tests compute TOTP codes (`e2e/support/totp.ts`); screenshots
+  are withheld after a secret fill. Admin journeys need `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` (see `e2e/README.md`).
+  Not in CI yet.
 - **Dependabot** runs weekly and groups minor/patch updates; major bumps arrive as separate PRs to evaluate, and
   `@types/node` majors are ignored to stay on the pinned Node 24. `better-auth`, `@better-auth/*` and `auth` are
   pinned exactly and get their own `better-auth` group (any update type), so a break shows up as its own red PR;

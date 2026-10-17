@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
 import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The organization's Security page (no board; plain D+): the owner adds a single sign-on provider for a test
 // domain and sees it listed, mints a SCIM token that is shown once, and deletes the provider with its
@@ -24,7 +25,7 @@ fWk+dZfXrsawRY6EGVESXv0A
 
 test("owner adds an SSO provider, mints a SCIM token once, deletes the provider; a viewer sees read-only", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `ada.${unique}@example.com`
   const viewerEmail = `vee.${unique}@example.com`
   const slug = `security-${unique}`

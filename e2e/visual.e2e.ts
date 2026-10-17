@@ -3,6 +3,7 @@ import { expect } from "e2e"
 
 import { PASSWORD } from "./support/invitations"
 import { seedNeedsYouRun } from "./support/runs"
+import { uniqueId } from "./support/unique"
 
 // Visual pass: every page in light and dark, on each target (desktop and phone), saved as screenshots
 // to compare against the boards in docs/build-app/boards. Signing in goes over HTTP and the cookie is set
@@ -71,7 +72,7 @@ test("public pages, light and dark", { tags: ["visual"] }, async ({ app, browser
 test("signed-in pages, light and dark", { tags: ["visual"] }, async ({ app, browser }) => {
   const base = app.baseUrl
   if (!base) throw new Error("the app has no base URL")
-  const email = `visual-${Date.now().toString(36)}@example.test`
+  const email = `visual-${uniqueId()}@example.test`
   const { cookies, slug } = await signUp(base, email)
   const { runId } = await seedNeedsYouRun(app, {
     email,

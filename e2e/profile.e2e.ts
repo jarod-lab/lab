@@ -3,6 +3,7 @@ import { expect } from "e2e"
 
 import { mailLinkTo, pathAndQuery } from "./support/mail"
 import { signOutUi, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The personal account profile (docs/build-app/boards/project/Profile): rename, change the sign-in email
 // through the link sent to the new address, and see that deleting the account is blocked while the
@@ -10,7 +11,7 @@ import { signOutUi, signUpUi } from "./support/invitations"
 
 test("rename, change email through the link, and see deletion blocked by an owned organization", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `ada.${unique}@example.com`
   const newEmail = `ada.new.${unique}@example.com`
 

@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
 import { acceptInvitationAs, inviteAs, signInUi, signOutUi, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The Members page (docs/build-app/boards/project/OrgMembers): the owner invites a second person by email,
 // the invitee accepts the link from the mail sink in their own session and sees the page read-only, then
@@ -10,7 +11,7 @@ import { acceptInvitationAs, inviteAs, signInUi, signOutUi, signUpUi } from "./s
 
 test("owner invites a member, the member accepts and sees a read-only page, the owner changes and removes them", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `ada.${unique}@example.com`
   const inviteeEmail = `lin.${unique}@example.com`
   const slug = `members-${unique}`

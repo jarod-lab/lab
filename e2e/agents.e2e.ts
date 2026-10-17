@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { type Screen, expect } from "e2e"
 
 import { acceptInvitationAs, inviteAs, signOutUi, signInUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The organization's agents (docs/build-app/boards/project/DirLiftSettings): an owner creates a workspace
 // agent, pins it so it shows in the sidebar, changes its permissions, invites a viewer; the viewer sees it
@@ -15,7 +16,7 @@ test("owner creates, pins, edits and deletes an agent; a viewer sees it read-onl
   screen,
   browser,
 }) => {
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `ada.${unique}@example.com`
   const viewerEmail = `grace.${unique}@example.com`
   const slug = `agents-${unique}`

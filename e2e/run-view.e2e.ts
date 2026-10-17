@@ -3,6 +3,7 @@ import { expect } from "e2e"
 
 import { signUpUi } from "./support/invitations"
 import { seedNeedsYouRun } from "./support/runs"
+import { uniqueId } from "./support/unique"
 
 // The run view (docs/build-app/boards/project/DirLift): an owner's agent asks to post a summary. The run
 // shows up under Needs you on the org's home; the owner approves, sees the 30-second undo, undoes, approves
@@ -15,7 +16,7 @@ const ACTION = "Post summary to #releases"
 
 test("owner approves with undo, steers and defers a run that needs them", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `ada.${unique}@example.com`
   const slug = `runs-${unique}`
 

@@ -4,6 +4,7 @@ import { expect } from "e2e"
 import { PASSWORD, acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/invitations"
 import { mailLinkTo, pathAndQuery } from "./support/mail"
 import { totpAt } from "./support/totp"
+import { uniqueId } from "./support/unique"
 
 // The public auth pages (docs/build-app/boards/project/Auth): sign-up with a breached password refused
 // in place, sign-in by emailed link, a sign-in that asks for the authenticator code, and an invitation
@@ -29,7 +30,7 @@ async function breachCheckReachable(): Promise<boolean> {
 
 test("sign-up refuses a breached password in place, then creates the account with a good one", async (ctx) => {
   const { app, screen, browser } = ctx
-  const email = `grace.${Date.now().toString(36)}@example.com`
+  const email = `grace.${uniqueId()}@example.com`
 
   await app.open("/sign-up")
   await screen.getByLabel("Name").fill("Grace Hopper")
@@ -55,7 +56,7 @@ test("sign-up refuses a breached password in place, then creates the account wit
 
 test("sign in by emailed link", async (ctx) => {
   const { app, screen, browser } = ctx
-  const email = `lin.${Date.now().toString(36)}@example.com`
+  const email = `lin.${uniqueId()}@example.com`
 
   await signUpUi(ctx, "Lin Park", email)
   await signOutUi(ctx)
@@ -74,7 +75,7 @@ test("sign in by emailed link", async (ctx) => {
 
 test("forgot password: request a link, set a new password from the email, sign in with it", async (ctx) => {
   const { app, screen, browser } = ctx
-  const email = `reset.${Date.now().toString(36)}@example.com`
+  const email = `reset.${uniqueId()}@example.com`
   const newPassword = "a new passphrase for the reset journey 7"
 
   await signUpUi(ctx, "Reset Person", email)
@@ -104,7 +105,7 @@ test("forgot password: request a link, set a new password from the email, sign i
 
 test("two-factor: the password is not enough, the authenticator code is", async (ctx) => {
   const { app, screen, browser } = ctx
-  const email = `ada.${Date.now().toString(36)}@example.com`
+  const email = `ada.${uniqueId()}@example.com`
 
   await signUpUi(ctx, "Ada Lovelace", email)
 
@@ -137,7 +138,7 @@ test("two-factor: the password is not enough, the authenticator code is", async 
 
 test("a new person accepts an invitation as a viewer", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `ada.${unique}@example.com`
   const inviteeEmail = `kim.${unique}@example.com`
   const slug = `auth-${unique}`

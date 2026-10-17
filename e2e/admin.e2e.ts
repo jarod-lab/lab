@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { credentials, expect } from "e2e"
 
 import { PASSWORD, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The platform admin page (/admin, not on the boards): who may open it, and the admin's actions on a user.
 // Promotion to admin is a database change the suite can't make, so the admin journey needs an account
@@ -24,7 +25,7 @@ test("signed out, /admin asks for sign-in and comes back to /admin", async ({
 
 test("a person who is not an admin sees Not available, not the users", async (ctx) => {
   const { app, screen } = ctx
-  const email = `nora.${Date.now().toString(36)}@example.com`
+  const email = `nora.${uniqueId()}@example.com`
   await signUpUi(ctx, "Nora Member", email)
 
   await app.open("/admin")
@@ -35,7 +36,7 @@ test("an admin finds a user, bans and unbans them, and impersonates them", async
   test.skip(!ADMIN_READY, NEEDS_ADMIN)
   const { app, screen, browser } = ctx
   const admin = credentials.user("admin")
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `target.${unique}@example.com`
   const name = `Target ${unique}`
 

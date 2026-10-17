@@ -1,5 +1,6 @@
 import { test } from "@e2e-dev/web"
 import { type Locator, type Screen, expect } from "e2e"
+import { uniqueId } from "./support/unique"
 
 // The app shell's journey (docs/build-app/boards/project/OrgSwitcher and Sidebar): a new account lands
 // in its personal organization, creates and switches organizations, sets the theme and uses the keys.
@@ -13,7 +14,7 @@ test("sign up, create and switch organizations, theme, shortcuts", async ({
   screen,
   browser,
 }) => {
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `ada.${unique}@example.com`
   const slug = `acme-${unique}`
 

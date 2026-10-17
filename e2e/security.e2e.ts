@@ -3,6 +3,7 @@ import { expect } from "e2e"
 
 import { signOutUi, signUpUi } from "./support/invitations"
 import { totpAt } from "./support/totp"
+import { uniqueId } from "./support/unique"
 
 // The personal security page (docs/build-app/boards/project/Security): two-factor on with the setup key
 // (the code is computed here, as an authenticator app would), a sign-in that asks for the code, new backup
@@ -14,7 +15,7 @@ const PASSWORD = "correct horse battery staple 42"
 
 test("two-factor on, sign in with a code, backup codes, sign out other sessions", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `ada.${unique}@example.com`
 
   await signUpUi(ctx, "Ada Lovelace", email)

@@ -1,4 +1,5 @@
 import type { App } from "e2e"
+import { uniqueId } from "./unique"
 
 // Seeds a run that needs a decision, through the public API with an API key, the way an agent would
 // (scripts/seed-demo-run.mjs does the same calls). The key is made here from the owner's session, with
@@ -74,7 +75,7 @@ export async function seedNeedsYouRun(
       method: "POST",
       headers: { ...origin, cookie, "x-organization-id": organization.id },
       body: JSON.stringify({
-        name: `e2e seed ${Date.now().toString(36)}`,
+        name: `e2e seed ${uniqueId()}`,
         permissions: { agent: ["create"], run: ["create", "update"] },
       }),
     }),

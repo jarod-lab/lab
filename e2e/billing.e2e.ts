@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
 import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The Billing page (docs/build-app/boards/project/OrgBilling): with Stripe not configured the page runs on
 // the fixture. The owner sees the sample-data labels and [PRICE], and every provider control is disabled
@@ -10,7 +11,7 @@ import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/inv
 
 test("owner sees sample billing with nothing to charge; a viewer is told billing isn't theirs", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `ada.${unique}@example.com`
   const viewerEmail = `vic.${unique}@example.com`
   const slug = `billing-${unique}`

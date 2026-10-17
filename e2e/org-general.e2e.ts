@@ -2,6 +2,7 @@ import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
 import { acceptInvitationAs, inviteAs, signOutUi, signUpUi } from "./support/invitations"
+import { uniqueId } from "./support/unique"
 
 // The organization's General settings (docs/build-app/boards/project/OrgGeneral): an owner renames the
 // organization, changes its URL and lands on the new address, then deletes it by typing its name.
@@ -16,7 +17,7 @@ test("owner renames the organization, changes its URL, and deletes it", async ({
   screen,
   browser,
 }) => {
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `grace.${unique}@example.com`
   const slug = `labs-${unique}`
   const renamedSlug = `${slug}-co`
@@ -75,7 +76,7 @@ test("owner renames the organization, changes its URL, and deletes it", async ({
 
 test("a viewer sees General read-only: no save, no danger zone", async (ctx) => {
   const { app, screen, browser } = ctx
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const ownerEmail = `owen.${unique}@example.com`
   const viewerEmail = `vic.${unique}@example.com`
   const slug = `viewer-${unique}`

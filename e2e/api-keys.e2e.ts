@@ -1,5 +1,6 @@
 import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
+import { uniqueId } from "./support/unique"
 
 // The organization's API keys (docs/build-app/boards/project/OrgApiKeys): an owner creates a key, sees
 // its secret once, copies it, and revokes it; the list follows. Locators only, runs on desktop and
@@ -12,7 +13,7 @@ test("owner creates an API key, sees the secret once, and revokes it", async ({
   screen,
   browser,
 }) => {
-  const unique = Date.now().toString(36)
+  const unique = uniqueId()
   const email = `ada.${unique}@example.com`
   const slug = `keys-${unique}`
 

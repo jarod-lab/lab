@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { render } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
@@ -132,6 +132,27 @@ describe("OrgSecurityPage", () => {
     )
   })
 
+  it("adds a provider once when Add provider is clicked twice", async () => {
+    const user = userEvent.setup()
+    let finish!: () => void
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const onRegister = vi.fn(() => pending)
+    render(<OrgSecurityPage {...props({ providers: [], onRegister })} />)
+    await user.click(screen.getByRole("button", { name: "Add a provider" }))
+    await user.type(screen.getByLabelText("Email domain"), "globex.io")
+    await user.type(screen.getByLabelText("Issuer URL"), "https://login.globex.io")
+    await user.type(screen.getByLabelText("Client ID"), "client-123")
+    await user.type(screen.getByLabelText("Client secret"), "s3cret")
+    const submit = screen.getByRole("button", { name: "Add provider" }) as HTMLButtonElement
+    await user.click(submit)
+    await waitFor(() => expect(submit.disabled).toBe(true))
+    fireEvent.click(submit)
+    expect(onRegister).toHaveBeenCalledTimes(1)
+    finish()
+  })
+
   it("shows field errors and does not submit an invalid domain", async () => {
     const user = userEvent.setup()
     const onRegister = vi.fn(async () => undefined)
@@ -201,5 +222,68 @@ describe("OrgSecurityPage", () => {
   it("has no accessibility violations (owner view)", async () => {
     render(<OrgSecurityPage {...props()} />)
     await expectNoA11yViolations(document.body.innerHTML)
+  })
+})
+
+/**
+ * Holds a closing popup mounted. Base UI waits for an element's animations before it unmounts, so one
+ * that has not finished keeps the exit on screen the way a real transition does. Call the result to
+ * let it finish.
+ */
+function holdExitAnimations(): () => void {
+  let finish!: () => void
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [{ finished, playState: "running" }],
+  })
+  return () => {
+    finish()
+    Reflect.deleteProperty(Element.prototype, "getAnimations")
+  }
+}
+
+describe("OrgSecurityPage delete dialog", () => {
+  it("keeps the provider's domain in the title while the dialog animates out after cancel", async () => {
+    const user = userEvent.setup()
+    render(<OrgSecurityPage {...props()} />)
+    await user.click(
+      within(screen.getByRole("listitem", { name: "acme.com" })).getByRole("button", {
+        name: "Delete provider",
+      }),
+    )
+    const dialog = await screen.findByRole("alertdialog")
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+      expect(within(dialog).getByRole("heading").textContent).toBe("Delete the acme.com provider?")
+    } finally {
+      release()
+    }
+  })
+
+  it("keeps the provider's domain in the title while the dialog animates out after a delete", async () => {
+    const user = userEvent.setup()
+    render(<OrgSecurityPage {...props()} />)
+    await user.click(
+      within(screen.getByRole("listitem", { name: "acme.com" })).getByRole("button", {
+        name: "Delete provider",
+      }),
+    )
+    const dialog = await screen.findByRole("alertdialog")
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "Delete provider" }))
+      expect(within(dialog).getByRole("heading").textContent).toBe("Delete the acme.com provider?")
+    } finally {
+      release()
+    }
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    render(<OrgSecurityPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
   })
 })

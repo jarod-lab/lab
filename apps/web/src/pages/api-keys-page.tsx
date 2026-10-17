@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
-import { useId, useMemo, useState } from "react"
+import { useId, useMemo, useRef, useState } from "react"
 import { z } from "zod"
 
 import {
@@ -115,6 +115,13 @@ export function ApiKeysPage({
   const [creating, setCreating] = useState(false)
   const [revoking, setRevoking] = useState<ApiKey | null>(null)
   const [revokeError, setRevokeError] = useState<string | null>(null)
+  // A revoke runs once: the ref catches a second click that lands before the button re-renders.
+  const [revokeBusy, setRevokeBusy] = useState(false)
+  const revokeBusyRef = useRef(false)
+  // The dialog keeps the key it last showed, so its title stays whole while it animates out.
+  const [shownRevoking, setShownRevoking] = useState<ApiKey | null>(null)
+  if (revoking && revoking !== shownRevoking) setShownRevoking(revoking)
+  const dialogRevoking = revoking ?? shownRevoking
   const when = useMemo(() => now ?? new Date(), [now])
 
   const columns = useMemo(
@@ -182,13 +189,18 @@ export function ApiKeysPage({
   const tabs = settingsTabs(organization.slug)
 
   async function confirmRevoke() {
-    if (!revoking) return
+    if (!revoking || revokeBusyRef.current) return
+    revokeBusyRef.current = true
+    setRevokeBusy(true)
     setRevokeError(null)
     try {
       await onRevoke(revoking)
       setRevoking(null)
     } catch (caught) {
       setRevokeError(messageOf(caught))
+    } finally {
+      revokeBusyRef.current = false
+      setRevokeBusy(false)
     }
   }
 
@@ -202,7 +214,7 @@ export function ApiKeysPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[960px] flex-col gap-5 px-4 py-6 md:px-9">
+      <div className="flex max-w-[960px] flex-col gap-5 px-4 py-6 md:px-9">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight">API keys</h2>
@@ -322,7 +334,7 @@ export function ApiKeysPage({
             <span>Revoking takes effect at once.</span>
           </div>
         ) : null}
-      </main>
+      </div>
 
       <CreateKeyDialog
         open={creating}
@@ -341,7 +353,7 @@ export function ApiKeysPage({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Revoke {revoking?.name ?? "this key"}?</AlertDialogTitle>
+              <AlertDialogTitle>Revoke {dialogRevoking?.name ?? "this key"}?</AlertDialogTitle>
               <AlertDialogDescription>
                 Agents using this key stop working immediately. This can't be undone.
               </AlertDialogDescription>
@@ -356,6 +368,7 @@ export function ApiKeysPage({
               <Button
                 className="border-destructive bg-transparent text-destructive hover:text-destructive"
                 variant="outline"
+                disabled={revokeBusy}
                 onClick={() => void confirmRevoke()}
               >
                 Revoke key

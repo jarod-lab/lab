@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form"
 import { cn } from "cn"
-import { useId, useState, type ReactNode } from "react"
+import { useId, useRef, useState, type ReactNode } from "react"
 import { z } from "zod"
 
 import {
@@ -132,13 +132,18 @@ export function WorkspaceAgentsPage({
   const [renaming, setRenaming] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
+  // A delete runs once: the ref catches a second click that lands before the button re-renders.
+  const [removeBusy, setRemoveBusy] = useState(false)
+  const removeBusyRef = useRef(false)
 
   // Level 2 sits in each view's section heading, not in the org header.
   const pills = <ViewPills slug={organization.slug} activeView={view} renderLink={renderLink} />
   const tabs = settingsTabs(organization.slug)
 
   async function confirmRemove() {
-    if (!selected) return
+    if (!selected || removeBusyRef.current) return
+    removeBusyRef.current = true
+    setRemoveBusy(true)
     setRemoveError(null)
     try {
       await onRemove(selected.id)
@@ -146,15 +151,18 @@ export function WorkspaceAgentsPage({
       onSelect(null)
     } catch (caught) {
       setRemoveError(messageOf(caught))
+    } finally {
+      removeBusyRef.current = false
+      setRemoveBusy(false)
     }
   }
 
-  // The connected view brings its own <main>, so it is not wrapped in the page's.
+  // The connected view renders its own sections, so it is not wrapped in the page's container.
   const body =
     view === "connected" ? (
       connected(pills)
     ) : (
-      <main className="flex max-w-[1040px] flex-col gap-5 px-4 py-6 md:px-9">
+      <div className="flex max-w-[1040px] flex-col gap-5 px-4 py-6 md:px-9">
         {view === "guardrails" ? (
           <PlaceholderSection
             heading="Guardrails"
@@ -195,7 +203,7 @@ export function WorkspaceAgentsPage({
             renderLink={renderLink}
           />
         )}
-      </main>
+      </div>
     )
 
   return (
@@ -267,6 +275,7 @@ export function WorkspaceAgentsPage({
               <Button
                 variant="outline"
                 className="border-destructive bg-transparent text-destructive hover:text-destructive"
+                disabled={removeBusy}
                 onClick={() => void confirmRemove()}
               >
                 Delete agent
@@ -408,6 +417,7 @@ function PermissionsView({
   renderLink = anchorLink,
 }: PermissionsViewProps) {
   const headingId = useId()
+  const autonomyHeadingId = useId()
   const createReason = canCreate
     ? null
     : "Viewers can't create agents. Ask an owner, admin or member."
@@ -520,11 +530,11 @@ function PermissionsView({
 
       {canRead && selected ? (
         <section
-          aria-labelledby="autonomy-heading"
+          aria-labelledby={autonomyHeadingId}
           className="flex flex-col gap-4 border-t border-border pt-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-base font-bold">
+            <h3 id={autonomyHeadingId} className="text-base font-bold">
               {selected.name}
               <span className="sr-only"> permissions</span>
             </h3>
@@ -911,7 +921,13 @@ function AgentFormDialog({
           ) : null}
 
           <DialogFooter>
-            <Button type="submit">{submitLabel}</Button>
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Saving…" : submitLabel}
+                </Button>
+              )}
+            </form.Subscribe>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -89,7 +89,7 @@ export function OrgSecurityPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[720px] flex-col gap-8 px-4 py-6 md:px-9">
+      <div className="flex max-w-[720px] flex-col gap-8 px-4 py-6 md:px-9">
         {canRead ? (
           <>
             <SsoSection
@@ -116,7 +116,7 @@ export function OrgSecurityPage({
             change these settings.
           </ViewOnlyNotice>
         )}
-      </main>
+      </div>
     </div>
   )
 }
@@ -156,6 +156,10 @@ function SsoSection({
   } | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  // The delete dialog keeps the provider it last showed, so its text stays whole as it closes.
+  const [shownDelete, setShownDelete] = useState<SsoProvider | null>(null)
+  if (pendingDelete && pendingDelete !== shownDelete) setShownDelete(pendingDelete)
+  const deleteTarget = pendingDelete ?? shownDelete
 
   async function startVerify(providerId: string) {
     setActionError(null)
@@ -302,9 +306,9 @@ function SsoSection({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete the {pendingDelete?.domain} provider?</AlertDialogTitle>
+            <AlertDialogTitle>Delete the {deleteTarget?.domain} provider?</AlertDialogTitle>
             <AlertDialogDescription>
-              People at {pendingDelete?.domain} can no longer sign in with SSO.
+              People at {deleteTarget?.domain} can no longer sign in with SSO.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -570,7 +574,13 @@ function ProviderForm({
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit">Add provider</Button>
+        <form.Subscribe selector={(state) => state.isSubmitting}>
+          {(isSubmitting) => (
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Adding…" : "Add provider"}
+            </Button>
+          )}
+        </form.Subscribe>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>

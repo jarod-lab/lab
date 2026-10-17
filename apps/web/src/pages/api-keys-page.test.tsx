@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
@@ -249,5 +249,64 @@ describe("ApiKeysPage accessibility", () => {
   it("passes axe for the empty and view-only states", async () => {
     renderWithClient(<ApiKeysPage {...props({ keys: [] })} />)
     await expectNoA11yViolations(document.body.innerHTML)
+  })
+})
+
+/**
+ * Holds a closing popup mounted. Base UI waits for an element's animations before it unmounts, so one
+ * that has not finished keeps the exit on screen the way a real transition does. Call the result to
+ * let it finish.
+ */
+function holdExitAnimations(): () => void {
+  let finish!: () => void
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [{ finished, playState: "running" }],
+  })
+  return () => {
+    finish()
+    Reflect.deleteProperty(Element.prototype, "getAnimations")
+  }
+}
+
+describe("ApiKeysPage revoke", () => {
+  it("revokes a key once when its confirm button is clicked twice", async () => {
+    const user = userEvent.setup()
+    let finish!: () => void
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const onRevoke = vi.fn(() => pending)
+    renderWithClient(<ApiKeysPage {...props({ onRevoke })} />)
+    await user.click(screen.getByRole("button", { name: "Revoke Support bot" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Revoke key",
+    })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(onRevoke).toHaveBeenCalledTimes(1)
+    finish()
+  })
+
+  it("keeps the key's name in the dialog while it animates out", async () => {
+    const user = userEvent.setup()
+    renderWithClient(<ApiKeysPage {...props()} />)
+    await user.click(screen.getByRole("button", { name: "Revoke Support bot" }))
+    const dialog = await screen.findByRole("alertdialog")
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+      expect(within(dialog).getByRole("heading").textContent).toBe("Revoke Support bot?")
+    } finally {
+      release()
+    }
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    renderWithClient(<ApiKeysPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
   })
 })

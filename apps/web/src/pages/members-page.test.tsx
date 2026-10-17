@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -342,5 +342,133 @@ describe("MembersPage with a long list", () => {
     const rendered = membersTable().getAllByRole("row").length - 1
     expect(rendered).toBeGreaterThan(0)
     expect(rendered).toBeLessThan(60)
+  })
+})
+
+/**
+ * Holds a closing popup mounted. Base UI waits for an element's animations before it unmounts, so one
+ * that has not finished keeps the exit on screen the way a real transition does. Call the result to
+ * let it finish.
+ */
+function holdExitAnimations(): () => void {
+  let finish!: () => void
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [{ finished, playState: "running" }],
+  })
+  return () => {
+    finish()
+    Reflect.deleteProperty(Element.prototype, "getAnimations")
+  }
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+describe("MembersPage confirmations", () => {
+  it("sends a removal once when its confirm button is clicked twice", async () => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const onRemove = vi.fn(() => pending.promise)
+    renderWithClient(<MembersPage {...props({ onRemove })} />)
+    await user.click(screen.getByRole("button", { name: "More actions for Ana Ruiz" }))
+    await user.click(await screen.findByRole("menuitem", { name: "Remove from organization" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Remove member",
+    })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(onRemove).toHaveBeenCalledTimes(1)
+    pending.resolve()
+  })
+
+  it("sends a two-factor reset once when its confirm button is clicked twice", async () => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const onResetTwoFactor = vi.fn(() => pending.promise)
+    renderWithClient(<MembersPage {...props({ onResetTwoFactor })} />)
+    await user.click(screen.getByRole("button", { name: "More actions for Ana Ruiz" }))
+    await user.click(await screen.findByRole("menuitem", { name: "Reset two-factor" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Reset two-factor",
+    })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(onResetTwoFactor).toHaveBeenCalledTimes(1)
+    pending.resolve()
+  })
+
+  it("sends an invitation revoke once when its confirm button is clicked twice", async () => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const onCancel = vi.fn(() => pending.promise)
+    renderWithClient(<MembersPage {...props({ onCancel })} />)
+    await user.click(screen.getByRole("button", { name: "Revoke" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Revoke invitation",
+    })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    pending.resolve()
+  })
+
+  it("keeps the member's name in the reset dialog while it animates out", async () => {
+    const user = userEvent.setup()
+    renderWithClient(
+      <MembersPage
+        {...props({
+          members: [
+            member({
+              name: "Ana Ruiz",
+              role: "member",
+              roleLabel: "Member",
+              canResetTwoFactor: true,
+              twoFactorEnabled: true,
+              lastActiveAt: null,
+            }),
+          ],
+        })}
+      />,
+    )
+    await user.click(screen.getByRole("button", { name: "More actions for Ana Ruiz" }))
+    await user.click(await screen.findByRole("menuitem", { name: "Reset two-factor" }))
+    const dialog = await screen.findByRole("alertdialog")
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+      expect(within(dialog).getByRole("heading").textContent).toBe("Reset two-factor for Ana Ruiz?")
+    } finally {
+      release()
+    }
+  })
+
+  it("keeps the invitation's address in the revoke dialog while it animates out", async () => {
+    const user = userEvent.setup()
+    renderWithClient(<MembersPage {...props()} />)
+    await user.click(screen.getByRole("button", { name: "Revoke" }))
+    const dialog = await screen.findByRole("alertdialog")
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+      expect(within(dialog).getByRole("heading").textContent).toBe(
+        "Revoke the invitation for lee@acme.dev?",
+      )
+    } finally {
+      release()
+    }
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    renderWithClient(<MembersPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
   })
 })

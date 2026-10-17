@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { screen, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
@@ -202,3 +202,60 @@ function renderBudget(overrides: Partial<WorkspaceAgentsPageProps>) {
   )
   return { ...rendered, onUpdate, user: userEvent.setup() }
 }
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+describe("WorkspaceAgentsPage writes", () => {
+  it("creates an agent once when Create agent is clicked twice", async () => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const onCreate = vi.fn(() => pending.promise)
+    renderWithClient(<WorkspaceAgentsPage {...props({ onCreate })} />)
+    await user.click(screen.getByRole("button", { name: "Create agent" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Name"), "Support triage")
+    const submit = within(dialog).getByRole("button", { name: "Create agent" })
+    await user.click(submit)
+    await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(true))
+    fireEvent.click(submit)
+    expect(onCreate).toHaveBeenCalledTimes(1)
+    pending.resolve()
+  })
+
+  it("deletes an agent once when its confirm button is clicked twice", async () => {
+    const user = userEvent.setup()
+    const pending = deferred()
+    const onRemove = vi.fn(() => pending.promise)
+    renderWithClient(<WorkspaceAgentsPage {...props({ onRemove })} />)
+    await user.click(screen.getByRole("button", { name: "Delete agent" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Delete agent",
+    })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(onRemove).toHaveBeenCalledTimes(1)
+    pending.resolve()
+  })
+
+  it("names an element for every aria-labelledby on the page", () => {
+    renderWithClient(<WorkspaceAgentsPage {...props()} />)
+    const labelled = document.querySelectorAll<HTMLElement>("[aria-labelledby]")
+    expect(labelled.length).toBeGreaterThan(0)
+    for (const element of labelled) {
+      for (const id of element.getAttribute("aria-labelledby")?.split(" ") ?? []) {
+        expect(document.getElementById(id), `aria-labelledby="${id}"`).not.toBeNull()
+      }
+    }
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    renderWithClient(<WorkspaceAgentsPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+})

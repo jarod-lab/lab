@@ -168,6 +168,16 @@ export function MembersPage({
   const [action, setAction] = useState<MemberAction | null>(null)
   const [pendingCancel, setPendingCancel] = useState<InvitationView | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // A confirm runs once: the ref catches a second click that lands before the button re-renders.
+  const [confirming, setConfirming] = useState(false)
+  const confirmingRef = useRef(false)
+  // Each dialog keeps the target it last showed, so its text stays whole while it animates out.
+  const [shownAction, setShownAction] = useState<MemberAction | null>(null)
+  const [shownCancel, setShownCancel] = useState<InvitationView | null>(null)
+  if (action && action !== shownAction) setShownAction(action)
+  if (pendingCancel && pendingCancel !== shownCancel) setShownCancel(pendingCancel)
+  const dialogAction = action ?? shownAction
+  const dialogCancel = pendingCancel ?? shownCancel
   const [inviteFailures, setInviteFailures] = useState<InviteOutcome["failed"]>([])
   const emailsId = useId()
   const roleId = useId()
@@ -369,7 +379,9 @@ export function MembersPage({
     : 0
 
   const confirmAction = async () => {
-    if (!action) return
+    if (!action || confirmingRef.current) return
+    confirmingRef.current = true
+    setConfirming(true)
     setActionError(null)
     try {
       if (action.kind === "remove") await onRemove(action.member)
@@ -377,17 +389,25 @@ export function MembersPage({
       setAction(null)
     } catch (caught) {
       setActionError(messageOf(caught))
+    } finally {
+      confirmingRef.current = false
+      setConfirming(false)
     }
   }
 
   const confirmCancel = async () => {
-    if (!pendingCancel) return
+    if (!pendingCancel || confirmingRef.current) return
+    confirmingRef.current = true
+    setConfirming(true)
     setActionError(null)
     try {
       await onCancel(pendingCancel)
       setPendingCancel(null)
     } catch (caught) {
       setActionError(messageOf(caught))
+    } finally {
+      confirmingRef.current = false
+      setConfirming(false)
     }
   }
 
@@ -401,7 +421,7 @@ export function MembersPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[1040px] flex-col gap-6 px-4 py-6 md:px-9">
+      <div className="flex max-w-[1040px] flex-col gap-6 px-4 py-6 md:px-9">
         {canInvite ? (
           <InviteForm
             emailsId={emailsId}
@@ -584,7 +604,7 @@ export function MembersPage({
             </Table>
           </section>
         </div>
-      </main>
+      </div>
 
       <AlertDialog
         open={action !== null}
@@ -595,15 +615,15 @@ export function MembersPage({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {action?.kind === "remove"
-                ? `Remove ${action.member.name || action.member.email}?`
-                : `Reset two-factor for ${action?.member.name || action?.member.email}?`}
+              {dialogAction?.kind === "remove"
+                ? `Remove ${dialogAction.member.name || dialogAction.member.email}?`
+                : `Reset two-factor for ${dialogAction?.member.name || dialogAction?.member.email}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {action?.kind === "remove"
-                ? removeConsequence(action.member.name || action.member.email)
-                : action
-                  ? resetTwoFactorConsequence(action.member.name || action.member.email)
+              {dialogAction?.kind === "remove"
+                ? removeConsequence(dialogAction.member.name || dialogAction.member.email)
+                : dialogAction
+                  ? resetTwoFactorConsequence(dialogAction.member.name || dialogAction.member.email)
                   : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -617,9 +637,10 @@ export function MembersPage({
             <Button
               variant="outline"
               className="border-destructive bg-transparent text-destructive hover:text-destructive"
+              disabled={confirming}
               onClick={() => void confirmAction()}
             >
-              {action?.kind === "remove" ? "Remove member" : "Reset two-factor"}
+              {dialogAction?.kind === "remove" ? "Remove member" : "Reset two-factor"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -634,8 +655,8 @@ export function MembersPage({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingCancel?.expired ? "Remove" : "Revoke"} the invitation for{" "}
-              {pendingCancel?.email}?
+              {dialogCancel?.expired ? "Remove" : "Revoke"} the invitation for {dialogCancel?.email}
+              ?
             </AlertDialogTitle>
             <AlertDialogDescription>
               The link in their email stops working. Nothing else changes; you can invite them
@@ -647,9 +668,10 @@ export function MembersPage({
             <Button
               variant="outline"
               className="border-destructive bg-transparent text-destructive hover:text-destructive"
+              disabled={confirming}
               onClick={() => void confirmCancel()}
             >
-              {pendingCancel?.expired ? "Remove invitation" : "Revoke invitation"}
+              {dialogCancel?.expired ? "Remove invitation" : "Revoke invitation"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

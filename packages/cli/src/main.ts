@@ -149,7 +149,9 @@ async function dispatch(
 
 /** The origin to talk to: --base-url, then STARTER_URL, then the last login, then the default. */
 export function resolveBaseUrl(flags: Flags, env: Environment["env"], creds: Credentials): string {
-  const raw = flags["base-url"] ?? env.STARTER_URL ?? creds.current ?? DEFAULT_BASE_URL
+  // An empty STARTER_URL counts as unset.
+  const raw =
+    flags["base-url"] ?? (env.STARTER_URL || undefined) ?? creds.current ?? DEFAULT_BASE_URL
   let url: URL
   try {
     url = new URL(raw)
@@ -159,7 +161,23 @@ export function resolveBaseUrl(flags: Flags, env: Environment["env"], creds: Cre
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw usage(`Unsupported URL scheme in ${raw}`, "Use http or https.")
   }
+  // Tokens and refresh tokens travel to this origin, so plain http is for this machine only.
+  if (url.protocol === "http:" && !isLoopback(url.hostname)) {
+    throw usage(
+      `Refusing plain http to ${url.host}`,
+      "Use https. Plain http is only allowed for localhost, 127.0.0.1 and [::1].",
+    )
+  }
   return url.origin
+}
+
+function isLoopback(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "[::1]" ||
+    /^127(\.\d{1,3}){3}$/.test(hostname)
+  )
 }
 
 async function store(context: Environment) {

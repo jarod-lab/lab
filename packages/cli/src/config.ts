@@ -20,8 +20,9 @@ export interface Credentials {
 
 /** Where credentials live: STARTER_CONFIG_DIR, else $XDG_CONFIG_HOME/starter, else ~/.config/starter. */
 export function credentialsPath(env: Record<string, string | undefined>, home = homedir()): string {
+  // An empty value counts as unset, or the token file would land in the working directory.
   const dir =
-    env.STARTER_CONFIG_DIR ?? join(env.XDG_CONFIG_HOME || join(home, ".config"), "starter")
+    env.STARTER_CONFIG_DIR || join(env.XDG_CONFIG_HOME || join(home, ".config"), "starter")
   return join(dir, "credentials.json")
 }
 

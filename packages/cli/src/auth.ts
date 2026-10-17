@@ -198,6 +198,11 @@ export async function pollForTokens(
       throw e
     })
     if (!res || res.status >= 500) continue
+    // A rate limiter's 429 is the server's slow_down by another name, not a refusal.
+    if (res.status === 429) {
+      intervalMs += SLOW_DOWN_STEP_MS
+      continue
+    }
     if (res.ok) return tokenSetFrom(res.body, deps.now())
     switch (str(res.body.error)) {
       case "authorization_pending":

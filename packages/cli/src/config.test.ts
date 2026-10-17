@@ -15,6 +15,12 @@ describe("credentialsPath", () => {
     )
     expect(credentialsPath({}, "/home/u")).toBe("/home/u/.config/starter/credentials.json")
   })
+
+  it("treats an empty STARTER_CONFIG_DIR as unset, not the working directory", () => {
+    expect(credentialsPath({ STARTER_CONFIG_DIR: "" }, "/home/u")).toBe(
+      "/home/u/.config/starter/credentials.json",
+    )
+  })
 })
 
 describe("credentials file", () => {

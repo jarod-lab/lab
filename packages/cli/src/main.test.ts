@@ -149,6 +149,39 @@ describe("login", () => {
     expect((await harness.creds()).profiles[BASE]).toMatchObject({ accessToken: "at_1" })
   })
 
+  it("slows down and keeps polling when the token endpoint answers 429", async () => {
+    const { api, run, waits } = harness
+    api.tokenPolls = [
+      { status: 429, body: { message: "Too many requests" } },
+      { status: 200, body: TOKENS },
+    ]
+    const result = await run(["login"])
+
+    expect(result.code, result.stderr).toBe(0)
+    expect(waits).toEqual([1000, 6000])
+  })
+
+  it("refuses plain http to a remote host, where the tokens would travel in clear", async () => {
+    const result = await harness.run(["login", "--base-url", "http://api.example.com"])
+    expect(result.code).toBe(2)
+    expect(errorOf(result.stderr)).toMatchObject({ error: { code: "USAGE" } })
+    expect(harness.api.calls).toEqual([])
+  })
+
+  it("allows plain http on this machine", async () => {
+    const result = await harness.run(["whoami", "--base-url", "http://127.0.0.1:9"], {
+      STARTER_URL: "",
+    })
+    // Not a usage error: the URL is accepted, then there is no login for it.
+    expect(errorOf(result.stderr)).not.toMatchObject({ error: { code: "USAGE" } })
+  })
+
+  it("treats an empty STARTER_URL as unset", async () => {
+    await storeLogin(harness.dir)
+    const result = await harness.run(["whoami"], { STARTER_URL: "" })
+    expect(result.code, result.stderr).toBe(0)
+  })
+
   it("stores the credentials owner-only (0600)", async () => {
     await harness.run(["login"])
     const mode = (await stat(credentialsPath({ STARTER_CONFIG_DIR: harness.dir }))).mode & 0o777

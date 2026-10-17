@@ -57,6 +57,9 @@ export function SignInPage({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
+  // "Forgot password?": a reset-request card in place of the sign-in card (no new route).
+  const [forgot, setForgot] = useState(false)
+  const [resetSentTo, setResetSentTo] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -117,6 +120,75 @@ export function SignInPage({
     void attempt(async () => {
       navigateTo((await auth.signIn({ email, password })) ?? next)
     })
+  }
+
+  if (forgot) {
+    return (
+      <AuthCard
+        title={resetSentTo ? "Check your email" : "Forgot password?"}
+        description={
+          resetSentTo
+            ? `If an account exists for ${resetSentTo}, we sent a reset link. The link opens the page to choose a new password.`
+            : "Enter your email and we will send a link to choose a new password."
+        }
+        footer={
+          <button
+            type="button"
+            className="underline underline-offset-4"
+            onClick={() => {
+              setForgot(false)
+              setResetSentTo(null)
+              setError(null)
+            }}
+          >
+            Back to sign in
+          </button>
+        }
+      >
+        {resetSentTo ? null : (
+          <form
+            noValidate
+            className="flex flex-col gap-3"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const address = email.trim()
+              if (address === "") {
+                setError("Enter your email address first.")
+                return
+              }
+              void attempt(async () => {
+                await auth.requestPasswordReset?.({
+                  email: address,
+                  redirectTo: `${window.location.origin}/reset-password`,
+                })
+                setPending(false)
+                setResetSentTo(address)
+              })
+            }}
+          >
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor={`${id}-reset-email`}>Email</FieldLabel>
+                <Input
+                  id={`${id}-reset-email`}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.currentTarget.value)}
+                  required
+                  disabled={pending}
+                />
+              </Field>
+              <ErrorAlert message={error} />
+              <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+                {pending ? "Please wait" : "Send reset link"}
+              </Button>
+            </FieldGroup>
+          </form>
+        )}
+      </AuthCard>
+    )
   }
 
   if (sentTo) {
@@ -221,7 +293,22 @@ export function SignInPage({
             </Field>
             {methods.password ? (
               <Field>
-                <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+                <div className="flex items-baseline justify-between gap-2">
+                  <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+                  {auth.requestPasswordReset ? (
+                    <button
+                      type="button"
+                      className="text-sm text-foreground underline underline-offset-4"
+                      disabled={pending}
+                      onClick={() => {
+                        setError(null)
+                        setForgot(true)
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  ) : null}
+                </div>
                 <Input
                   id={`${id}-password`}
                   name="password"

@@ -72,6 +72,36 @@ test("sign in by emailed link", async (ctx) => {
   await expect(browser).toHaveURL(ACCOUNT_HOME)
 })
 
+test("forgot password: request a link, set a new password from the email, sign in with it", async (ctx) => {
+  const { app, screen, browser } = ctx
+  const email = `reset.${Date.now().toString(36)}@example.com`
+  const newPassword = "a new passphrase for the reset journey 7"
+
+  await signUpUi(ctx, "Reset Person", email)
+  await signOutUi(ctx)
+
+  await app.open("/sign-in")
+  await screen.getByLabel("Email").fill(email)
+  await screen.getByRole("button", "Forgot password?").tap()
+  await screen.getByRole("button", "Send reset link").tap()
+  await expect(screen.getByRole("heading", "Check your email")).toBeVisible()
+
+  await expect.poll(() => mailLinkTo(app, email, /\/reset-password\//)).not.toBeNull()
+  const link = await mailLinkTo(app, email, /\/reset-password\//)
+  if (!link) throw new Error(`no reset link reached ${email}`)
+  await app.open(pathAndQuery(link))
+  await screen.getByLabel("New password").fill(newPassword)
+  await screen.getByLabel("Confirm password").fill(newPassword)
+  await screen.getByRole("button", "Set password").tap()
+  await expect(screen.getByText("Your password is set. Sign in with it.")).toBeVisible()
+
+  await app.open("/sign-in")
+  await screen.getByLabel("Email").fill(email)
+  await screen.getByLabel("Password").fill(newPassword)
+  await screen.getByRole("button", "Sign in with email").tap()
+  await expect(browser).toHaveURL(ACCOUNT_HOME)
+})
+
 test("two-factor: the password is not enough, the authenticator code is", async (ctx) => {
   const { app, screen, browser } = ctx
   const email = `ada.${Date.now().toString(36)}@example.com`

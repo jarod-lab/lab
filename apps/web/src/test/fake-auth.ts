@@ -36,6 +36,7 @@ export function fakeAuth(overrides: Partial<WebAuth> = {}): WebAuth {
     })),
     acceptInvitation: vi.fn(async () => undefined),
     resetPassword: vi.fn(async () => undefined),
+    requestPasswordReset: vi.fn(async () => undefined),
     device: {
       lookup: vi.fn(async () => ({ status: "pending", clientId: "client-1", scope: "read write" })),
       approve: vi.fn(async () => undefined),

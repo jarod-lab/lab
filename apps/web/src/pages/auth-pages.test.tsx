@@ -172,3 +172,53 @@ describe("SignUpPage breached password", () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 })
+
+describe("SignInPage forgot password", () => {
+  it("opens the reset request from the sign-in form, with the email carried over", async () => {
+    const auth = fakeAuth()
+    render(<SignInPage auth={auth} next="/settings/agents" signUpHref="/sign-up" />)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText("Email"), "ada@example.com")
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }))
+    expect(await screen.findByRole("heading", { name: "Forgot password?" })).toBeTruthy()
+    expect(screen.getByLabelText("Email")).toHaveProperty("value", "ada@example.com")
+    await user.click(screen.getByRole("button", { name: "Send reset link" }))
+
+    expect(auth.requestPasswordReset).toHaveBeenCalledWith({
+      email: "ada@example.com",
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    expect(
+      await screen.findByText(
+        "If an account exists for ada@example.com, we sent a reset link. The link opens the page to choose a new password.",
+      ),
+    ).toBeTruthy()
+  })
+
+  it("says the same thing whether or not the address has an account, and can go back", async () => {
+    const auth = fakeAuth({
+      requestPasswordReset: vi.fn(async () => {
+        throw new Error("Could not send the reset link")
+      }),
+    })
+    render(<SignInPage auth={auth} next="/settings/agents" signUpHref="/sign-up" />)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText("Email"), "nobody@example.com")
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }))
+    await user.click(screen.getByRole("button", { name: "Send reset link" }))
+    expect(await screen.findByText("Could not send the reset link")).toBeTruthy()
+
+    await user.click(screen.getByRole("button", { name: "Back to sign in" }))
+    expect(await screen.findByRole("button", { name: "Sign in with email" })).toBeTruthy()
+  })
+
+  it("asks for an email before sending a reset", async () => {
+    const auth = fakeAuth()
+    render(<SignInPage auth={auth} next="/settings/agents" signUpHref="/sign-up" />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Forgot password?" }))
+    await user.click(await screen.findByRole("button", { name: "Send reset link" }))
+    expect(await screen.findByText("Enter your email address first.")).toBeTruthy()
+    expect(auth.requestPasswordReset).not.toHaveBeenCalled()
+  })
+})

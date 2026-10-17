@@ -92,6 +92,11 @@ export interface WebAuth {
   /** Email a one-click sign-in link. Opening it signs the person in and lands on `callbackURL`. */
   sendMagicLink?(input: { email: string; callbackURL: string }): Promise<void>
   resetPassword(input: { token: string; newPassword: string }): Promise<void>
+  /**
+   * Email a reset link to the address. `redirectTo` must be this site (better-auth refuses others).
+   * The page never says whether the address has an account, so this resolves the same either way.
+   */
+  requestPasswordReset?(input: { email: string; redirectTo: string }): Promise<void>
   device: {
     lookup(userCode: string): Promise<DeviceLookup>
     approve(userCode: string): Promise<void>
@@ -292,6 +297,12 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
     },
     async resetPassword(input) {
       unwrap(await client.resetPassword(input), "This link is invalid or has expired")
+    },
+    async requestPasswordReset(input) {
+      unwrap(
+        await client.requestPasswordReset({ email: input.email, redirectTo: input.redirectTo }),
+        "Could not send the reset link",
+      )
     },
     device: {
       async lookup(userCode) {

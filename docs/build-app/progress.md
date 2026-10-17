@@ -6,6 +6,10 @@
 - **Decisions:** D1 board URLs; D2 no bearer plugin; N5+P1 merged; dev mail sink; D5 account auth before
   P5/P6; P4 before P3; admins manage billing (boards); impersonation read-only and fail-closed; WEB_ORIGINS for
   split-origin dev.
+- **Packages (prompt step 1):** TanStack has no markdown or code-highlighting package: the run summary uses
+  `react-markdown` (no raw HTML) and `sugar-high` (tokens rendered as React spans). `@tanstack/react-charts` was
+  installed, then removed unused: no board or API has time-series data (the footprint and usage are single
+  values shown with `Meter`/`Progress`). Router, Query, Form, Table, Virtual, Pacer, Hotkeys and Devtools are used.
 - **Open issues (accepted, documented):** passkeys untestable in e2e (no WebAuthn); no passkey-first sign-up;
   no change-email cancel; SCIM users not projected into the org, SCIM tokens not listable/revocable (end on
   owner removal/leave only); admins can read SSO provider config; social/SSO sign-ins skip TOTP; SSO domain

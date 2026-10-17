@@ -80,7 +80,7 @@
 | B1 | admins manage billing (boards), members/viewers "not available" | pass | auth 87, api-app 365, web 542 (commit c97d374) |
 | Z | drift: db:generate and auth generate produce no changes | pass | "No schema changes"; auth-schema.ts unchanged |
 | E1 | Postgres started (user asked), migrations 0000–0009 applied to the local DB | pass | `drizzle.__drizzle_migrations` = 10 rows; SCIM FK names truncated to 63 chars (Postgres notice, harmless) |
-| E1 | visual pass on the shipped build (apps/api + WEB_DIST_DIR, real CSP), every page light+dark, desktop+phone | pass | `e2e run --config e2e.dist.config.ts e2e/visual.e2e.ts`: 4 passed; 56 screenshots reviewed |
+| E1 | visual pass on the shipped build (apps/api + WEB_DIST_DIR, real CSP), every page light+dark, desktop+phone | partial | 4 passed, no CSP violations; only ~11 of 56 screenshots were opened (run, general, members, billing, agents, sign-in, phone run/members). Full review redone after F1 (see below) |
 | E1 | CSP: Zod eval probe tripped script-src on every page | pass (fixed) | `src/zod-config.ts` imported first (jitless); a4145dc |
 | E1 | dark-mode approval detail unreadable; phone footprint squeezed; two primary buttons on sign-in | pass (fixed) | a4145dc (+ sign-in emphasis pending S2's auth-pages edit) |
 | S2 | impersonation fails closed (every write + minting GETs refused; guards.test classifies every GET) | pass | auth 89; api-app 372 passed (commit 8bdd55a) |

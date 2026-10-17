@@ -112,29 +112,36 @@ export function createApiHooks({
     }
   }
 
+  /** Counts the call against the organization's day, refusing it over the limit. */
+  async function consume(op: AnyOperation, ctx: OperationContext): Promise<void> {
+    const now = new Date()
+    const { limit, total, claimed, day } = await meter.consume(ctx.caller, op.name, now)
+    const resetIn = secondsUntilReset(now)
+    readings.set(ctx, { limit, total, claimed, resetIn })
+    if (total > limit) {
+      throw new AppError(
+        "RATE_LIMITED",
+        `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,
+        {
+          hint: claimed
+            ? "The counter resets at 00:00 UTC. Retry after the Retry-After seconds."
+            : `The owner has not verified their email yet, so the limit is ${limit} per day. ` +
+              `Verify it (the claim link from signup) to raise the limit to ${meter.limits.claimed} ` +
+              "per day, or retry after the Retry-After seconds.",
+          headers: { "retry-after": String(resetIn) },
+          context: { limit, day },
+        },
+      )
+    }
+  }
+
   async function before(e: InvokeEvent): Promise<{ result: unknown } | undefined> {
     const { op, input, ctx } = e
     const mutating = isMutating(op)
     try {
-      const now = new Date()
-      const { limit, total, claimed, day } = await meter.consume(ctx.caller, op.name, now)
-      const resetIn = secondsUntilReset(now)
-      readings.set(ctx, { limit, total, claimed, resetIn })
-      if (total > limit) {
-        throw new AppError(
-          "RATE_LIMITED",
-          `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,
-          {
-            hint: claimed
-              ? "The counter resets at 00:00 UTC. Retry after the Retry-After seconds."
-              : `The owner has not verified their email yet, so the limit is ${limit} per day. ` +
-                `Verify it (the claim link from signup) to raise the limit to ${meter.limits.claimed} ` +
-                "per day, or retry after the Retry-After seconds.",
-            headers: { "retry-after": String(resetIn) },
-            context: { limit, day },
-          },
-        )
-      }
+      // The daily limit is for agents (keys and OAuth tokens). People in the web app aren't metered:
+      // its polling (inbox, running count, live runs) would spend the agents' budget otherwise.
+      if (ctx.caller.via !== "session") await consume(op, ctx)
 
       if (!mutating || ctx.idempotencyKey === undefined) return undefined
       const key = ctx.idempotencyKey

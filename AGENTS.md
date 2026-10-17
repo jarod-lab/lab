@@ -193,7 +193,8 @@ or `resolvePrincipal`.
   disables the signup key (`endProvisionalKeys`), since whoever called signup holds it; a call with it then gets
   UNAUTHORIZED with a hint naming the device grant. The response says so (`apiKeyEndsWhenClaimed`).
 - **Invoke hooks.** `apps/api/src/hooks.ts` wires metering, idempotency and audit into `invoke`, identically for REST
-  and MCP. `after` does not see FORBIDDEN or BAD_REQUEST, so those attempts are not audited. Details: agent-api skill.
+  and MCP. `after` does not see FORBIDDEN or BAD_REQUEST, so those attempts are not audited. Session callers (the
+  web app) are not metered: its polling would spend the agents' daily limit. Details: agent-api skill.
 - **Idempotency and pagination.** `Idempotency-Key` header (REST) or `idempotencyKey` argument (MCP, writes only). The
   same key with the same request replays the stored response; a different request under the same key is CONFLICT.
   Lists take `cursor` and `limit` and return `nextCursor` (`packages/api/src/pagination.ts`).

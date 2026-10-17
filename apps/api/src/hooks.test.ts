@@ -297,3 +297,23 @@ describe("metering limits", () => {
     expect(rows.map((r) => r.outcome)).toEqual(["RATE_LIMITED"])
   })
 })
+
+describe("metering the web app", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp([], { limits: { unclaimed: 3 } })
+  })
+  afterAll(() => t.close())
+
+  it("doesn't spend the agents' daily budget on a person's requests", async () => {
+    // The shell polls the inbox and the running count; none of it counts.
+    for (let i = 0; i < 5; i++) {
+      expect((await t.req("/v1/inbox", t.as(t.owner.cookie))).status).toBe(200)
+    }
+    const statuses: number[] = []
+    for (let i = 0; i < 4; i++) statuses.push((await t.req("/v1/whoami", t.as(t.readKey))).status)
+    expect(statuses).toEqual([200, 200, 200, 429])
+    // And a person still gets an answer once the agents are over the limit.
+    expect((await t.req("/v1/inbox", t.as(t.owner.cookie))).status).toBe(200)
+  })
+})

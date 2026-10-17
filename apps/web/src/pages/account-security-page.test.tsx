@@ -71,6 +71,26 @@ function props(overrides: Partial<AccountSecurityPageProps> = {}): AccountSecuri
   }
 }
 
+/**
+ * Holds a closing popup mounted. Base UI waits for an element's animations before it unmounts, so one
+ * that has not finished keeps the exit on screen the way a real transition does. Call the result to
+ * let it finish.
+ */
+function holdExitAnimations(): () => void {
+  let finish!: () => void
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [{ finished, playState: "running" }],
+  })
+  return () => {
+    finish()
+    Reflect.deleteProperty(Element.prototype, "getAnimations")
+  }
+}
+
 describe("AccountSecurityPage", () => {
   it("summarises the sign-in method, passkeys and two-factor", () => {
     render(<AccountSecurityPage {...props()} />)
@@ -250,5 +270,118 @@ describe("AccountSecurityPage", () => {
   it("has no axe violations", async () => {
     const { container } = render(<AccountSecurityPage {...props()} />)
     await expectNoA11yViolations(container.innerHTML)
+  })
+
+  it("asks for the password again after the new codes are saved, with nothing left over", async () => {
+    const user = userEvent.setup()
+    const onNewBackupCodes = vi.fn(async () => ["cccc-3333"])
+    render(<AccountSecurityPage {...props({ onNewBackupCodes })} />)
+    await user.click(screen.getByRole("button", { name: "Make new codes" }))
+    let dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Password"), "pw-123456789")
+    await user.click(within(dialog).getByRole("button", { name: "Make new codes" }))
+    expect(await within(dialog).findByText("cccc-3333")).toBeTruthy()
+    await user.click(within(dialog).getByRole("button", { name: "I've saved them" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    await user.click(screen.getByRole("button", { name: "Make new codes" }))
+    dialog = await screen.findByRole("dialog")
+    expect(within(dialog).queryByText("cccc-3333")).toBeNull()
+    expect((within(dialog).getByLabelText("Password") as HTMLInputElement).value).toBe("")
+  })
+
+  it("keeps the backup codes on screen while the dialog animates out after saving them", async () => {
+    const user = userEvent.setup()
+    render(
+      <AccountSecurityPage {...props({ onNewBackupCodes: vi.fn(async () => ["cccc-3333"]) })} />,
+    )
+    await user.click(screen.getByRole("button", { name: "Make new codes" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Password"), "pw-123456789")
+    await user.click(within(dialog).getByRole("button", { name: "Make new codes" }))
+    expect(await within(dialog).findByText("cccc-3333")).toBeTruthy()
+    const release = holdExitAnimations()
+    try {
+      await user.click(within(dialog).getByRole("button", { name: "I've saved them" }))
+      expect(within(dialog).getByText("cccc-3333")).toBeTruthy()
+      expect(within(dialog).queryByLabelText("Password")).toBeNull()
+    } finally {
+      release()
+    }
+  })
+
+  it("forgets the typed current and new passwords when the change is cancelled", async () => {
+    const user = userEvent.setup()
+    render(<AccountSecurityPage {...props()} />)
+    await user.click(screen.getByRole("button", { name: "Change password" }))
+    let dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Current password"), "old-password-1")
+    await user.type(within(dialog).getByLabelText("New password"), "password123")
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    await user.click(screen.getByRole("button", { name: "Change password" }))
+    dialog = await screen.findByRole("dialog")
+    expect((within(dialog).getByLabelText("Current password") as HTMLInputElement).value).toBe("")
+    expect((within(dialog).getByLabelText("New password") as HTMLInputElement).value).toBe("")
+  })
+
+  it("clears a refused password change when the dialog is closed and reopened", async () => {
+    const user = userEvent.setup()
+    const message = "This password has shown up in a known data breach. Choose a different one."
+    render(
+      <AccountSecurityPage
+        {...props({
+          onChangePassword: vi.fn(async () => {
+            throw new Error(message)
+          }),
+        })}
+      />,
+    )
+    await user.click(screen.getByRole("button", { name: "Change password" }))
+    let dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Current password"), "old-password-1")
+    await user.type(within(dialog).getByLabelText("New password"), "password123")
+    await user.type(within(dialog).getByLabelText("Confirm new password"), "password123")
+    await user.click(within(dialog).getByRole("button", { name: "Change password" }))
+    expect(await within(dialog).findByText(message)).toBeTruthy()
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+
+    await user.click(screen.getByRole("button", { name: "Change password" }))
+    dialog = await screen.findByRole("dialog")
+    expect(within(dialog).queryByText(message)).toBeNull()
+  })
+
+  it("keeps the success note after a password change, and starts a fresh form next time", async () => {
+    const user = userEvent.setup()
+    render(<AccountSecurityPage {...props()} />)
+    await user.click(screen.getByRole("button", { name: "Change password" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.type(within(dialog).getByLabelText("Current password"), "old-password-1")
+    await user.type(within(dialog).getByLabelText("New password"), "password123")
+    await user.type(within(dialog).getByLabelText("Confirm new password"), "password123")
+    await user.click(within(dialog).getByRole("button", { name: "Change password" }))
+    expect(await screen.findByText("Your password is changed.")).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+  })
+
+  it("forgets the password typed into turn-off when the dialog is dismissed", async () => {
+    const user = userEvent.setup()
+    render(<AccountSecurityPage {...props()} />)
+    await user.click(screen.getByRole("button", { name: "Turn off" }))
+    let dialog = await screen.findByRole("alertdialog")
+    await user.type(within(dialog).getByLabelText("Password"), "pw-123456789")
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+
+    await user.click(screen.getByRole("button", { name: "Turn off" }))
+    dialog = await screen.findByRole("alertdialog")
+    expect((within(dialog).getByLabelText("Password") as HTMLInputElement).value).toBe("")
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    render(<AccountSecurityPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
   })
 })

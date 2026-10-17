@@ -591,17 +591,27 @@ function TurnOffDialog({
   const passwordId = useId()
   const action = useAction(async (value: string) => {
     await onDisable(value)
-    onOpenChange(false)
   })
   const form = useForm({
     defaultValues: { password: "" },
     validators: { onSubmit: passwordSchema },
     onSubmit: async ({ value }) => {
-      await action.call(value.password)
+      if (await action.call(value.password)) onOpenChange(false)
     },
   })
+  // Once closed (after the exit animation), the dialog forgets what was typed and any error.
+  const forget = () => {
+    action.setError(null)
+    form.reset()
+  }
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onOpenChangeComplete={(next) => {
+        if (!next) forget()
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Turn off two-factor?</AlertDialogTitle>
@@ -670,12 +680,19 @@ function NewCodesDialog({
       await action.call(value.password)
     },
   })
+  // Once closed (after the exit animation), the codes and what was typed are forgotten: reopening
+  // asks for the password again.
+  const forget = () => {
+    setCodes(null)
+    action.setError(null)
+    form.reset()
+  }
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        if (!next) setCodes(null)
-        onOpenChange(next)
+      onOpenChange={onOpenChange}
+      onOpenChangeComplete={(next) => {
+        if (!next) forget()
       }}
     >
       <DialogContent>
@@ -816,7 +833,8 @@ export function PasswordSection({ hasPassword, changedAt, onChange }: PasswordSe
       <ChangePasswordDialog
         open={open}
         onOpenChange={(next) => {
-          setDone(false)
+          // Opening clears the last note. Closing after a change keeps it on the page.
+          if (next) setDone(false)
           setOpen(next)
         }}
         onChange={async (input) => {
@@ -854,17 +872,29 @@ function ChangePasswordDialog({
   const confirmId = useId()
   const action = useAction(async (input: { currentPassword: string; newPassword: string }) => {
     await onChange(input)
-    onOpenChange(false)
   })
   const form = useForm({
     defaultValues: { current: "", next: "", confirm: "" },
     validators: { onSubmit: changePasswordSchema },
     onSubmit: async ({ value }) => {
-      await action.call({ currentPassword: value.current, newPassword: value.next })
+      if (await action.call({ currentPassword: value.current, newPassword: value.next })) {
+        onOpenChange(false)
+      }
     },
   })
+  // Once closed (after the exit animation), the dialog forgets what was typed and any error.
+  const forget = () => {
+    action.setError(null)
+    form.reset()
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onOpenChangeComplete={(next) => {
+        if (!next) forget()
+      }}
+    >
       <DialogContent>
         <form
           noValidate

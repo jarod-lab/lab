@@ -73,7 +73,7 @@ export function AccountSecurityPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[820px] flex-col gap-6 px-4 py-6 md:px-9">
+      <div className="flex max-w-[820px] flex-col gap-6 px-4 py-6 md:px-9">
         <SummaryRow
           lastSignIn={lastSignIn}
           passkeyCount={passkeys.length}
@@ -114,7 +114,7 @@ export function AccountSecurityPage({
           onRevokeOthers={actions.onRevokeOtherSessions}
           renderLink={renderLink}
         />
-      </main>
+      </div>
     </div>
   )
 }

@@ -22,8 +22,12 @@ describe("signInMethodsOf", () => {
     expect(signInMethodsOf({ github, google: github }).social).toEqual(["github", "google"])
   })
 
-  it("reports stripe when it is configured", () => {
-    expect(signInMethodsOf({ stripe: { secretKey: "sk_test_x" } }).stripe).toBe(true)
+  it("reports stripe only when it is configured with a plan", () => {
+    expect(
+      signInMethodsOf({ stripe: { plans: [{ name: "team", priceId: "price_x" }] } }).stripe,
+    ).toBe(true)
+    expect(signInMethodsOf({ stripe: { plans: [] } }).stripe).toBe(false)
+    expect(signInMethodsOf({ stripe: {} }).stripe).toBe(false)
   })
 })
 

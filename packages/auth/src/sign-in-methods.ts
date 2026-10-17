@@ -10,13 +10,14 @@ export type { SignInMethods, SocialProvider } from "./sign-in-methods-shared"
 export interface SignInMethodOptions {
   github?: { clientId: string; clientSecret: string }
   google?: { clientId: string; clientSecret: string }
-  stripe?: unknown
+  stripe?: { plans?: readonly unknown[] }
 }
 
 /**
  * The methods createAuth mounts, from its options. Password, magic link, passkey and SSO are always
  * mounted (createAuth in index.ts); a social provider is offered only when both of its values were
- * passed, the same test createAuth applies before it registers the provider.
+ * passed, the same test createAuth applies before it registers the provider. Stripe counts only with
+ * at least one plan: without plans createAuth turns subscriptions off, so the web keeps its fixture.
  */
 export function signInMethodsOf(opts: SignInMethodOptions): SignInMethods {
   const social: SocialProvider[] = []
@@ -28,7 +29,7 @@ export function signInMethodsOf(opts: SignInMethodOptions): SignInMethods {
     passkey: true,
     social,
     sso: true,
-    stripe: !!opts.stripe,
+    stripe: (opts.stripe?.plans?.length ?? 0) > 0,
   }
 }
 

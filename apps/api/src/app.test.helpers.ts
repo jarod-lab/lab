@@ -40,6 +40,8 @@ export interface TestAppOptions {
   now?: () => Date
   /** Check passwords against Have I Been Pwned. Off here (no network); auth-flows fakes the service. */
   breachCheck?: boolean
+  /** Web origins other than BASE (the dev and e2e setup, WEB_ORIGINS): trusted for auth callbacks. */
+  webOrigins?: string[]
   /** GitHub and Google sign-in, when a test wants those buttons. */
   github?: { clientId: string; clientSecret: string }
   google?: { clientId: string; clientSecret: string }
@@ -83,6 +85,7 @@ export async function createTestApp(
       throw error
     },
     passwordBreachCheck: options.breachCheck ?? false,
+    webOrigins: options.webOrigins,
     github: options.github,
     google: options.google,
   })

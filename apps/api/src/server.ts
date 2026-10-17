@@ -25,6 +25,8 @@ const auth = createAuth({
   baseURL,
   emailFrom: env.EMAIL_FROM,
   wrapsApiKey: env.WRAPS_API_KEY,
+  // The web app's origins when it is not this one (pnpm dev, e2e). Empty when apps/api serves it.
+  webOrigins: env.WEB_ORIGINS,
   ses: devMail ? { client: devMail.client } : undefined,
   // Stripe runs only in test mode, and only with both keys (createAuth refuses a live key).
   stripe:

@@ -98,6 +98,13 @@ export interface AuthOptions {
   db: Database
   secret: string
   baseURL: string
+  /**
+   * Origins the web app is served from when that is not the API's own origin (`pnpm dev`, where vite
+   * runs on its own portless URL; the e2e stack on another port). Trusted for `callbackURL`/`redirectTo`
+   * and origin checks, and allowed for passkey ceremonies. Empty in production, where apps/api serves
+   * the web app from `baseURL`. Each one is a bare origin (scheme, host, port), see WEB_ORIGINS.
+   */
+  webOrigins?: string[]
   /** "Name <addr@domain>" — sender for auth emails. */
   emailFrom: string
   appName?: string
@@ -148,10 +155,43 @@ const refuseReservedSlug = (slug: string) => {
   }
 }
 
+/**
+ * The passkey RP ID for these origins. One host, or the same host everywhere, is that host, so
+ * production is unchanged. Otherwise it is the longest domain suffix all the hosts share, when that is
+ * a real domain: at least two labels, or `localhost` (`api.localhost` and `web.localhost` give
+ * `localhost`). IP addresses and hosts with only a TLD in common (`api.acme.com` and `web.other.com`)
+ * fall back to the first host, so the API's own passkeys keep working; the other origins then can't use them.
+ */
+export function passkeyRpID(origins: readonly string[]): string {
+  const hosts = origins.map((origin) => new URL(origin).hostname)
+  const first = hosts[0] ?? ""
+  if (hosts.every((host) => host === first)) return first
+  const isIp = (host: string) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":")
+  if (hosts.some(isIp)) return first
+  const labels = hosts.map((host) => host.split(".").reverse())
+  const shared: string[] = []
+  const shortest = Math.min(...labels.map((l) => l.length))
+  for (let i = 0; i < shortest; i++) {
+    const label = labels[0]?.[i]
+    if (label === undefined || !labels.every((l) => l[i] === label)) break
+    shared.push(label)
+  }
+  const suffix = shared.reverse().join(".")
+  const usable = shared.length >= 2 || suffix === "localhost"
+  return usable ? suffix : first
+}
+
 export function createAuth(opts: AuthOptions) {
   if (opts.stripe && !opts.stripe.secretKey.startsWith("sk_test_")) {
     throw new Error("Stripe is test mode only: the secret key must start with sk_test_.")
   }
+  for (const origin of opts.webOrigins ?? []) {
+    const url = new URL(origin)
+    if (url.origin !== origin) throw new Error(`webOrigins: "${origin}" must be a bare origin.`)
+  }
+  // The API's own origin is trusted by better-auth already; these are the extra web origins.
+  const webOrigins = opts.webOrigins ?? []
+  const apiOrigin = new URL(opts.baseURL).origin
   // The account emails wraps doesn't send (change of address, deletion), on the same SES client.
   const billing = !!opts.stripe
   const notices = createNotices({
@@ -200,6 +240,8 @@ export function createAuth(opts: AuthOptions) {
   const auth = betterAuth({
     secret: opts.secret,
     baseURL: opts.baseURL,
+    // Web origins other than the API's (see AuthOptions.webOrigins). Empty: only the base URL is trusted.
+    trustedOrigins: webOrigins,
     basePath: AUTH_BASE_PATH,
     // Native transactions: the scim plugin refuses an adapter without them (SCIM writes are atomic).
     database: drizzleAdapter(opts.db, { provider: "pg", schema, transaction: true }),
@@ -338,11 +380,11 @@ export function createAuth(opts: AuthOptions) {
       }),
       // Recorded on the user row (lastLoginMethod) for the sign-in screens.
       lastLoginMethod({ storeInDatabase: true }),
-      // Passkeys are bound to the app's own origin: the host of the base URL.
+      // Passkeys are bound to the app's origins: the base URL and the web origins (see passkeyRpID).
       passkey({
-        rpID: new URL(opts.baseURL).hostname,
+        rpID: passkeyRpID([apiOrigin, ...webOrigins]),
         rpName: opts.appName ?? "Starter",
-        origin: opts.baseURL,
+        origin: [apiOrigin, ...webOrigins],
       }),
       // TOTP with backup codes and trusted devices. Signing in with a second factor pending answers
       // `twoFactorRedirect`; the web app sends the person to /two-factor (see client.ts).

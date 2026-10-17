@@ -171,7 +171,12 @@ or `resolvePrincipal`.
   `oauth-flow.test.ts` covers the flow.
 - **URLs.** `apps/api` uses `PORTLESS_URL` (set by portless under `pnpm dev`) or else `BETTER_AUTH_URL`; the OAuth
   issuer, audiences and llms.txt links derive from it. The server needs Postgres with every migration applied: the
-  OAuth provider seeds its resources at boot and exits if it can't.
+  OAuth provider seeds its resources at boot and exits if it can't. `WEB_ORIGINS` (comma-separated bare origins) lists
+  the web app's origins when it is not the API's (`pnpm dev` under portless, the e2e stack): auth callbacks
+  (`callbackURL`/`redirectTo`) and passkeys trust them; CORS does not. Unset in production. Under `pnpm dev` the web
+  app is `https://web.<project>.localhost` (portless's `<package>.<project>.localhost`; `<project>` is the workspace
+  scope, `starter` here), so set `WEB_ORIGINS` to that in `.env`. Passkeys use `passkeyRpID`: the shared parent domain
+  of the origins (`localhost` for `*.localhost`).
 - **Request logging:** `apps/api` has its own request-id and access-log middleware.
 - **Device grant.** better-auth's `oauthDeviceAuthorization` (`packages/auth/src/device.ts`). `POST /api/auth/device/code`;
   a person approves at `/device`, and the approving session's active org (which must be one they belong to) is recorded
@@ -238,7 +243,7 @@ or `resolvePrincipal`.
 
 All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
 
-- **Sign-in methods:** password, magic link (Wraps SES), passkey (rpID = base URL host), GitHub/Google (only when both
+- **Sign-in methods:** password, magic link (Wraps SES), passkey (rpID = the base URL host, or the shared parent of it and `WEB_ORIGINS`, see `passkeyRpID`), GitHub/Google (only when both
   env values are set), SSO (`@better-auth/sso`, domain verification required before a provider signs anyone in).
   `GET /api/auth/sign-in-methods` tells the web which are on. `lastLoginMethod` drives the "Last used" badge;
   sessions record `loginMethod`/`loginTwoFactor`. No `bearer` plugin: session tokens must not pass as API credentials.

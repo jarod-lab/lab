@@ -1,6 +1,25 @@
 import { createEnv } from "@t3-oss/env-core"
 import { z } from "zod"
 
+/** One origin in a list: http(s), a host, optional port, and no path, query or credentials. */
+function isBareHttpOrigin(value: string): boolean {
+  const trimmed = value.trim()
+  try {
+    const url = new URL(trimmed)
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username === "" &&
+      url.password === "" &&
+      (url.pathname === "/" || url.pathname === "") &&
+      url.search === "" &&
+      url.hash === "" &&
+      !trimmed.endsWith("/")
+    )
+  } catch {
+    return false
+  }
+}
+
 /**
  * Single source of truth for environment variables. Keep `.env.example` in sync.
  * Validation runs on first import; set SKIP_ENV_VALIDATION=1 (or true) for builds/tests that don't need it.
@@ -43,6 +62,21 @@ export const env = createEnv({
       ),
     /** Directory of the built web app (apps/web/dist). When set, apps/api serves its pages and assets. */
     WEB_DIST_DIR: z.string().min(1).optional(),
+    /**
+     * Origins the web app runs on when it is not apps/api's own origin (`pnpm dev`, or a separate vite
+     * server). Comma-separated bare origins, e.g. `https://web.starter.localhost` under pnpm dev. Trusted for auth callbacks and
+     * passkeys, nothing else. Leave empty in production, where apps/api serves the web app itself.
+     */
+    WEB_ORIGINS: z
+      .string()
+      .min(1)
+      .optional()
+      .refine((value) => value === undefined || value.split(",").every(isBareHttpOrigin), {
+        message: "WEB_ORIGINS must be comma-separated http(s) origins, e.g. http://127.0.0.1:5173",
+      })
+      .transform((value) =>
+        value === undefined ? [] : value.split(",").map((origin) => new URL(origin.trim()).origin),
+      ),
     /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
     API_URL: z.url().optional(),
     /** e2e only: the model credential the e2e tester (`pnpm e2e`) uses for its agent steps. */

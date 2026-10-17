@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { createAuth } from "./index"
+import { createAuth, passkeyRpID } from "./index"
 
 const make = (extra = {}) =>
   createAuth({
@@ -37,5 +37,37 @@ describe("createAuth", () => {
     })
     expect(ids(billed)).toContain("stripe")
     expect(ids(billed)).toEqual(expect.arrayContaining(["sso", "scim", "starter-owner-only"]))
+  })
+})
+
+describe("passkeyRpID", () => {
+  it("is the host of a single origin, so production is unchanged", () => {
+    expect(passkeyRpID(["https://app.example.com"])).toBe("app.example.com")
+    expect(passkeyRpID(["http://127.0.0.1:3000"])).toBe("127.0.0.1")
+  })
+
+  it("is the shared parent of portless and vite origins under *.localhost", () => {
+    expect(passkeyRpID(["https://api-app.localhost", "https://web.localhost"])).toBe("localhost")
+    expect(
+      passkeyRpID(["https://api-app.starter.localhost", "https://web.starter.localhost"]),
+    ).toBe("starter.localhost")
+  })
+
+  it("is the shared domain of sibling hosts", () => {
+    expect(passkeyRpID(["https://api.example.com", "https://app.example.com"])).toBe("example.com")
+  })
+
+  it("falls back to the first host when the origins share nothing", () => {
+    expect(passkeyRpID(["http://127.0.0.1:3000", "http://localhost:5173"])).toBe("127.0.0.1")
+  })
+
+  it("never uses a bare TLD or an IP suffix as the RP ID", () => {
+    expect(passkeyRpID(["https://api.acme.com", "https://web.other.com"])).toBe("api.acme.com")
+    expect(passkeyRpID(["http://10.0.0.1:3000", "http://192.168.0.1:5173"])).toBe("10.0.0.1")
+    expect(passkeyRpID(["http://127.0.0.1:3000", "http://127.0.0.1:5173"])).toBe("127.0.0.1")
+  })
+
+  it("refuses a web origin that is not a bare origin", () => {
+    expect(() => make({ webOrigins: ["http://127.0.0.1:5173/"] })).toThrow(/bare origin/)
   })
 })

@@ -2076,3 +2076,61 @@ describe("sign-in methods over HTTP", () => {
     }
   })
 })
+
+describe("web app on another origin (WEB_ORIGINS)", () => {
+  // The dev and e2e setup: vite serves the web app here, the API is at BASE.
+  const WEB = "http://127.0.0.1:33195"
+  let w: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    w = await createTestApp([], { webOrigins: [WEB] })
+  })
+  afterAll(() => w.close())
+
+  const visitor = () => browser((url, init) => w.app.request(url, init))
+  const mailTo = (address: string) =>
+    vi.waitFor(() => {
+      const mails = w.outbox.filter((m) => m.to === address)
+      if (mails.length === 0) throw new Error(`waiting for an email to ${address}`)
+      return mails
+    })
+
+  it("sends a magic link whose callbackURL is on a configured web origin", async () => {
+    const { email: address } = await w.signUp("Ada")
+    const { error } = await visitor().client.signIn.magicLink({
+      email: address,
+      callbackURL: `${WEB}/settings/agents`,
+    })
+    expect(error).toBeNull()
+    await mailTo(address)
+  })
+
+  it("sends a password reset whose redirectTo is on a configured web origin", async () => {
+    const { email: address } = await w.signUp("Grace")
+    const { error } = await visitor().client.requestPasswordReset({
+      email: address,
+      redirectTo: `${WEB}/reset-password`,
+    })
+    expect(error).toBeNull()
+    await mailTo(address)
+  })
+
+  it("still refuses a callbackURL on an origin that is not configured", async () => {
+    const { email: address } = await w.signUp("Linus")
+    const { error } = await visitor().client.signIn.magicLink({
+      email: address,
+      callbackURL: "http://127.0.0.1:9999/settings/agents",
+    })
+    expect(error).toMatchObject({ status: 403 })
+    expect(w.outbox.filter((m) => m.to === address)).toHaveLength(0)
+  })
+
+  it("still refuses a reset redirectTo on an origin that is not configured", async () => {
+    const { email: address } = await w.signUp("Ken")
+    const { error } = await visitor().client.requestPasswordReset({
+      email: address,
+      redirectTo: "http://127.0.0.1:9999/reset-password",
+    })
+    expect(error).toMatchObject({ status: 403, code: "INVALID_REDIRECT_URL" })
+    expect(w.outbox.filter((m) => m.to === address)).toHaveLength(0)
+  })
+})

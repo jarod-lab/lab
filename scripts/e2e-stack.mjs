@@ -49,6 +49,8 @@ const env = {
   PORT: apiPort,
   BETTER_AUTH_URL: apiUrl,
   API_URL: apiUrl,
+  // The web app is on its own origin here, so auth callbacks from it (magic link, reset) must be trusted.
+  WEB_ORIGINS: `http://127.0.0.1:${webPort}`,
 }
 
 start("api", ["--filter", "@starter/api-app", "exec", "tsx", "src/server.ts"], env)

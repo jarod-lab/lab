@@ -130,4 +130,43 @@ describe("env", () => {
       await expect(import("./index")).rejects.toThrow(/must be a Stripe test-mode key \(sk_test_/)
     })
   })
+
+  describe("WEB_ORIGINS", () => {
+    const base = () => {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+      vi.stubEnv("SKIP_ENV_VALIDATION", "")
+      vi.stubEnv("DATABASE_URL", "postgres://u:p@localhost:5432/db")
+      vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
+      vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
+      vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+    }
+
+    it("defaults to no extra origins", async () => {
+      base()
+      const { env } = await import("./index")
+      expect(env.WEB_ORIGINS).toEqual([])
+    })
+
+    it("parses a comma-separated list of bare origins", async () => {
+      base()
+      vi.stubEnv("WEB_ORIGINS", "https://web.localhost, http://127.0.0.1:33195")
+      const { env } = await import("./index")
+      expect(env.WEB_ORIGINS).toEqual(["https://web.localhost", "http://127.0.0.1:33195"])
+    })
+
+    it("refuses anything that is not a bare http(s) origin", async () => {
+      for (const value of [
+        "web.localhost",
+        "ftp://web.localhost",
+        "https://web.localhost/sign-in",
+        "https://web.localhost/",
+        "https://web.localhost,",
+      ]) {
+        base()
+        vi.stubEnv("WEB_ORIGINS", value)
+        await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+      }
+    })
+  })
 })

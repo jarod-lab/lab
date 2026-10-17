@@ -1249,8 +1249,7 @@ export function createOperations({
     summary: "Wait with a run until a later time",
     description:
       "Defers a run until a time (ISO 8601, after now): it shows as queued with that time, and the agent picks " +
-      "it up after. Use it to run work in a low-carbon window or after hours. Refused once the run has finished, " +
-      "and while an approval waits for a person (decide it first).",
+      "it up after. Use it to run work in a low-carbon window or after hours. Refused once the run has finished.",
     permissions: { run: ["steer"] },
     input: runRef.extend({
       until: z.iso.datetime().describe("When the run may start again, e.g. 2026-10-17T02:00:00Z"),

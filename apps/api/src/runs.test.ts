@@ -218,18 +218,6 @@ describe("workspace agents and runs", () => {
       expect(detail.body).toMatchObject({ summary: "final", footprint: { tokens: 10 } })
     })
 
-    it("refuses to defer a run while an approval blocks it", async () => {
-      const { runId } = await driveToApproval()
-      const res = await json(
-        await call(t.owner.cookie, `/v1/runs/${runId}/defer`, "POST", {
-          until: at(3600).toISOString(),
-        }),
-      )
-      expect(res).toMatchObject({ status: 409, body: { error: { code: "CONFLICT" } } })
-      const detail = await json(await call(t.owner.cookie, `/v1/runs/${runId}`, "GET"))
-      expect(detail.body.status).toBe("needs_you")
-    })
-
     it("lists runs newest first, filtered by status, one page at a time", async () => {
       const { runId: first } = await driveToApproval()
       const { runId: second } = await seedRun("Second")

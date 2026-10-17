@@ -563,23 +563,6 @@ export async function deferRun<R, O>(
       .for("update")
     if (!current) return undefined
     assertOpen(current)
-    // Queued would hide the run from needs_you while its approval still waits for a person.
-    const [waiting] = await tx
-      .select({ id: approval.id })
-      .from(approval)
-      .where(
-        and(
-          eq(approval.runId, current.id),
-          eq(approval.organizationId, org.value),
-          eq(approval.status, "pending"),
-        ),
-      )
-      .limit(1)
-    if (waiting) {
-      throw new AppError("CONFLICT", "The run is waiting for an approval", {
-        hint: "Decide the approval first (decide_approval); a run can be deferred once nothing waits on a person.",
-      })
-    }
     const [row] = await tx
       .update(run)
       .set({ status: "queued", deferredUntil: until })

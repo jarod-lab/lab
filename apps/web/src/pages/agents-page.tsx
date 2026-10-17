@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 
 import {
   AlertDialog,
@@ -39,6 +39,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const revokingRef = useRef(false)
 
   useEffect(() => {
     let live = true
@@ -60,6 +61,9 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
   }, [api])
 
   async function revoke(agent: ConnectedAgent) {
+    // The confirm doesn't close the dialog, so a second click would send a second revoke.
+    if (revokingRef.current) return
+    revokingRef.current = true
     setBusy(true)
     setError(null)
     try {
@@ -68,6 +72,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
     } catch (caught) {
       setError(messageOf(caught))
     } finally {
+      revokingRef.current = false
       setBusy(false)
     }
   }
@@ -144,6 +149,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
                             variant="destructive"
+                            disabled={busy}
                             onClick={() => void revoke(agent)}
                           >
                             Revoke access

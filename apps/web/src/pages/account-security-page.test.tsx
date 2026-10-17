@@ -260,6 +260,25 @@ describe("AccountSecurityPage", () => {
     await waitFor(() => expect(onRevokeOtherSessions).toHaveBeenCalled())
   })
 
+  it("signs a session out once when its button is clicked twice", async () => {
+    const user = userEvent.setup()
+    let finish: () => void = () => {}
+    const onRevokeSession = vi.fn(
+      () =>
+        new Promise<undefined>((resolve) => {
+          finish = () => resolve(undefined)
+        }),
+    )
+    render(<AccountSecurityPage {...props({ onRevokeSession })} />)
+    const button = screen.getByRole("button", { name: "Sign out Safari on iPhone" })
+    await user.click(button)
+    await user.click(button)
+    expect(onRevokeSession).toHaveBeenCalledTimes(1)
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    finish()
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+  })
+
   it("asks for a recent sign-in when the session list is too old to read", () => {
     render(<AccountSecurityPage {...props({ sessions: [], sessionsNeedSignIn: true })} />)
     expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toBe(

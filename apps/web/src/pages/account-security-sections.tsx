@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form"
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { z } from "zod"
 
 import {
@@ -1155,7 +1155,24 @@ export function SessionsSection({
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // The session being signed out: its button waits, so a second click doesn't send a second revoke.
+  const [revoking, setRevoking] = useState<string | null>(null)
+  const revokingRef = useRef<string | null>(null)
   const others = sessions.filter((session) => !session.current)
+  const revoke = async (token: string) => {
+    if (revokingRef.current !== null) return
+    revokingRef.current = token
+    setRevoking(token)
+    setError(null)
+    try {
+      await onRevoke(token)
+    } catch (caught) {
+      setError(accountErrorMessage(caught))
+    } finally {
+      revokingRef.current = null
+      setRevoking(null)
+    }
+  }
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col">
@@ -1199,14 +1216,8 @@ export function SessionsSection({
             <Button
               variant="outline"
               aria-label={`Sign out ${session.device}`}
-              onClick={async () => {
-                setError(null)
-                try {
-                  await onRevoke(session.token)
-                } catch (caught) {
-                  setError(accountErrorMessage(caught))
-                }
-              }}
+              disabled={revoking === session.token}
+              onClick={() => void revoke(session.token)}
             >
               Sign out
             </Button>

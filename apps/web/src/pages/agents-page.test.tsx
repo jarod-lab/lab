@@ -68,6 +68,29 @@ describe("AgentsPage", () => {
     await waitFor(() => expect(screen.getByText("No agents are connected.")).toBeTruthy())
   })
 
+  it("revokes once when the confirm is clicked twice", async () => {
+    let finish: () => void = () => {}
+    const api = fakeApi({
+      revokeAgent: vi.fn(
+        () =>
+          new Promise<undefined>((resolve) => {
+            finish = () => resolve(undefined)
+          }),
+      ),
+    })
+    const user = userEvent.setup()
+    render(<AgentsPage api={api} />)
+    await user.click(await screen.findByRole("button", { name: "Revoke access" }))
+    const confirm = within(await screen.findByRole("alertdialog")).getByRole("button", {
+      name: "Revoke access",
+    })
+    await user.click(confirm)
+    await user.click(confirm)
+    expect(api.revokeAgent).toHaveBeenCalledTimes(1)
+    finish()
+    await waitFor(() => expect(screen.queryByText("Claude Code")).toBeNull())
+  })
+
   it("loads the next page of activity", async () => {
     const api = fakeApi({
       listAuditEvents: vi

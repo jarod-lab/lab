@@ -134,3 +134,27 @@ export const agentFormSchema = z.object({
 })
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>
+
+/** The energy budget field: empty means no budget, otherwise a positive number of watt-hours. */
+export const energyBudgetSchema = z.object({
+  energyBudgetWh: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value === "" || (Number(value) > 0 && Number(value) <= 1_000_000),
+      "Enter watt-hours above 0, or leave it empty for no budget.",
+    ),
+})
+
+export type EnergyBudgetValues = z.infer<typeof energyBudgetSchema>
+
+/** The PATCH value for a budget field: null clears it. */
+export function energyBudgetPatch(value: string): number | null {
+  const trimmed = value.trim()
+  return trimmed === "" ? null : Number(trimmed)
+}
+
+/** "0.6 Wh per run" or "No budget set". */
+export function energyBudgetLabel(wh: number | null): string {
+  return wh === null ? "No budget set" : `${wh} Wh per run`
+}

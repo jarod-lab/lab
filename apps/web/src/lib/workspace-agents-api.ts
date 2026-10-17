@@ -39,6 +39,8 @@ export type AgentPatch = Partial<PermissionSettings> & {
   name?: string
   description?: string | null
   pinned?: boolean
+  /** Watt-hours per run; null clears the budget. */
+  energyBudgetWh?: number | null
 }
 
 export interface WorkspaceAgentsApi {

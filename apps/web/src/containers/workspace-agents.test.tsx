@@ -171,6 +171,19 @@ describe("WorkspaceAgentsContainer", () => {
     expect(screen.getByRole("button", { name: "Create agent" })).toHaveProperty("disabled", false)
   })
 
+  it("saves the energy budget of the selected agent through update_agent", async () => {
+    const user = userEvent.setup()
+    const { api } = renderAgents({ view: "budgets" })
+    await user.type(
+      await screen.findByRole("textbox", { name: "Energy budget per run (Wh)" }),
+      "1.5",
+    )
+    await user.click(screen.getByRole("button", { name: "Save budget" }))
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith("org-a", "agent-1", { energyBudgetWh: 1.5 }),
+    )
+  })
+
   it("shows the connected view without loading the agent list", async () => {
     const { api } = renderAgents({ view: "connected" })
     expect(await screen.findByText("Connected view")).toBeTruthy()

@@ -71,7 +71,8 @@ export function WorkspaceAgentsContainer({
   const agents = useQuery({
     queryKey: workspaceAgentKeys.list(organizationId),
     queryFn: () => api.list(organizationId),
-    enabled: canRead && currentView === "permissions",
+    // The budgets tab edits the selected agent too, so it needs the list.
+    enabled: canRead && (currentView === "permissions" || currentView === "budgets"),
   })
   const agentRows = useMemo(() => agents.data ?? [], [agents.data])
   const selected = agentRows.find((agent) => agent.id === selectedId) ?? agentRows[0] ?? undefined

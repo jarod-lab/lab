@@ -6,9 +6,11 @@ import { CommandPalette } from "@starter/ui/dplus/shell/command-palette"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
 
+import { getRunsApi } from "../lib/runs-api"
 import { type ThemeChoice, useThemeChoice } from "../lib/theme"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth } from "../lib/web-auth"
+import { useInboxCount, useRunningCount } from "./inbox"
 import { paletteAction, paletteGroups } from "./palette-items"
 import { RouterLink } from "./router-link"
 import { ShortcutsDialog } from "./shortcuts-dialog"
@@ -70,6 +72,17 @@ export function AppShellContainer({
     slug: currentSlug,
     ready: session.data?.activeOrganizationId === current?.id,
   })
+  // The "needs you" count: approvals waiting for a person here (the server answers 0 to anyone who can't decide).
+  const inboxCount = useInboxCount({
+    api: getRunsApi(),
+    organizationId: current?.id ?? null,
+    ready: session.data?.activeOrganizationId === current?.id,
+  })
+  const running = useRunningCount({
+    api: getRunsApi(),
+    organizationId: current?.id ?? null,
+    ready: session.data?.activeOrganizationId === current?.id,
+  })
   const [theme, setTheme] = useThemeChoice()
   const signOut = useSignOut(auth)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -77,7 +90,21 @@ export function AppShellContainer({
 
   const navItems: NavItem[] = currentSlug
     ? [
-        { id: "home", label: "Home", href: `/${currentSlug}`, shortcut: ["G", "H"] },
+        {
+          id: "home",
+          label: "Home",
+          href: `/${currentSlug}`,
+          shortcut: ["G", "H"],
+          // "N running" with the running mark, and the "needs you" count (solar) when people are waiting.
+          status:
+            running.running > 0
+              ? {
+                  state: "running",
+                  label: `${running.running}${running.more ? "+" : ""} running`,
+                }
+              : undefined,
+          count: inboxCount > 0 ? { value: inboxCount, label: "waiting" } : undefined,
+        },
         {
           id: "agents",
           label: "Agents",
@@ -132,7 +159,17 @@ export function AppShellContainer({
     />
   )
 
-  const topbar = <Topbar crumbs={crumbs} onOpenSearch={() => setPaletteOpen(true)} showMenuButton />
+  const topbar = (
+    <Topbar
+      crumbs={crumbs}
+      onOpenSearch={() => setPaletteOpen(true)}
+      inbox={{
+        count: inboxCount,
+        onOpen: currentSlug ? () => onNavigate(`/${currentSlug}?status=needs_you`) : undefined,
+      }}
+      showMenuButton
+    />
+  )
 
   return (
     <>

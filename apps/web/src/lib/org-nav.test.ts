@@ -10,8 +10,11 @@ describe("activeNavFor", () => {
     expect(activeNavFor("/acme/settings/general", "acme")).toBe("settings")
   })
 
+  it("keeps a run under Home, and is undefined outside the org", () => {
+    expect(activeNavFor("/acme/runs/1", "acme")).toBe("home")
+  })
+
   it("is undefined for a path outside the org or a page without a nav item", () => {
-    expect(activeNavFor("/acme/runs/1", "acme")).toBeUndefined()
     expect(activeNavFor("/other", "acme")).toBeUndefined()
     expect(activeNavFor("/acme/settingsx", "acme")).toBeUndefined()
   })

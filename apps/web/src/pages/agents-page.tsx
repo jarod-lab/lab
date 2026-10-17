@@ -90,7 +90,7 @@ export function AgentsPage({ api }: { api: AgentsApi }) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
       <header>
-        <h1 className="text-2xl font-semibold">Agents and activity</h1>
+        <h2 className="text-2xl font-semibold">Agents and activity</h2>
         <p className="text-sm text-muted-foreground">
           Applications and API keys that act in your organization, and what they have done.
         </p>

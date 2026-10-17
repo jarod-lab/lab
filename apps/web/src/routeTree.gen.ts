@@ -20,14 +20,19 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SelectOrganizationRouteImport } from './routes/select-organization'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as TwoFactorRouteImport } from './routes/two-factor'
 import { Route as OrgIndexRouteImport } from './routes/$org/index'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation/$invitationId'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
+import { Route as AccountProfileRouteImport } from './routes/account/profile'
+import { Route as AccountSecurityRouteImport } from './routes/account/security'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as SettingsAgentsRouteImport } from './routes/settings/agents'
+import { Route as OrgRunsRunIdRouteImport } from './routes/$org/runs/$runId'
 import { Route as OrgSettingsIndexRouteImport } from './routes/$org/settings/index'
 import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
 import { Route as OrgSettingsApiKeysRouteImport } from './routes/$org/settings/api-keys'
+import { Route as OrgSettingsBillingRouteImport } from './routes/$org/settings/billing'
 import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
 import { Route as OrgSettingsMembersRouteImport } from './routes/$org/settings/members'
 
@@ -86,6 +91,11 @@ const SignUpRoute = SignUpRouteImport.update({
   path: '/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TwoFactorRoute = TwoFactorRouteImport.update({
+  id: '/two-factor',
+  path: '/two-factor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrgIndexRoute = OrgIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -102,6 +112,16 @@ const AccountIndexRoute = AccountIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AccountRoute,
 } as any)
+const AccountProfileRoute = AccountProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountSecurityRoute = AccountSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AccountRoute,
+} as any)
 const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
   id: '/invite/$invitationId',
   path: '/invite/$invitationId',
@@ -111,6 +131,11 @@ const SettingsAgentsRoute = SettingsAgentsRouteImport.update({
   id: '/settings/agents',
   path: '/settings/agents',
   getParentRoute: () => rootRouteImport,
+} as any)
+const OrgRunsRunIdRoute = OrgRunsRunIdRouteImport.update({
+  id: '/runs/$runId',
+  path: '/runs/$runId',
+  getParentRoute: () => OrgRoute,
 } as any)
 const OrgSettingsIndexRoute = OrgSettingsIndexRouteImport.update({
   id: '/settings/',
@@ -125,6 +150,11 @@ const OrgSettingsAgentsRoute = OrgSettingsAgentsRouteImport.update({
 const OrgSettingsApiKeysRoute = OrgSettingsApiKeysRouteImport.update({
   id: '/settings/api-keys',
   path: '/settings/api-keys',
+  getParentRoute: () => OrgRoute,
+} as any)
+const OrgSettingsBillingRoute = OrgSettingsBillingRouteImport.update({
+  id: '/settings/billing',
+  path: '/settings/billing',
   getParentRoute: () => OrgRoute,
 } as any)
 const OrgSettingsGeneralRoute = OrgSettingsGeneralRouteImport.update({
@@ -150,13 +180,18 @@ export interface FileRoutesByFullPath {
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/two-factor': typeof TwoFactorRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
+  '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
+  '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
@@ -171,13 +206,18 @@ export interface FileRoutesByTo {
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/two-factor': typeof TwoFactorRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/$org': typeof OrgIndexRoute
   '/account': typeof AccountIndexRoute
+  '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
+  '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings': typeof OrgSettingsIndexRoute
@@ -195,13 +235,18 @@ export interface FileRoutesById {
   '/select-organization': typeof SelectOrganizationRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/two-factor': typeof TwoFactorRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/account/profile': typeof AccountProfileRoute
+  '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
+  '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
+  '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
@@ -220,13 +265,18 @@ export interface FileRouteTypes {
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
+    | '/two-factor'
     | '/accept-invitation/$invitationId'
+    | '/account/profile'
+    | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/$org/'
     | '/account/'
+    | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
+    | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/'
@@ -241,13 +291,18 @@ export interface FileRouteTypes {
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
+    | '/two-factor'
     | '/accept-invitation/$invitationId'
+    | '/account/profile'
+    | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/$org'
     | '/account'
+    | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
+    | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings'
@@ -264,13 +319,18 @@ export interface FileRouteTypes {
     | '/select-organization'
     | '/sign-in'
     | '/sign-up'
+    | '/two-factor'
     | '/accept-invitation/$invitationId'
+    | '/account/profile'
+    | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/$org/'
     | '/account/'
+    | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
+    | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/'
@@ -288,6 +348,7 @@ export interface RootRouteChildren {
   SelectOrganizationRoute: typeof SelectOrganizationRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  TwoFactorRoute: typeof TwoFactorRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   SettingsAgentsRoute: typeof SettingsAgentsRoute
@@ -372,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/two-factor': {
+      id: '/two-factor'
+      path: '/two-factor'
+      fullPath: '/two-factor'
+      preLoaderRoute: typeof TwoFactorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$org/': {
       id: '/$org/'
       path: '/'
@@ -393,6 +461,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountIndexRouteImport
       parentRoute: typeof AccountRoute
     }
+    '/account/profile': {
+      id: '/account/profile'
+      path: '/profile'
+      fullPath: '/account/profile'
+      preLoaderRoute: typeof AccountProfileRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/security': {
+      id: '/account/security'
+      path: '/security'
+      fullPath: '/account/security'
+      preLoaderRoute: typeof AccountSecurityRouteImport
+      parentRoute: typeof AccountRoute
+    }
     '/invite/$invitationId': {
       id: '/invite/$invitationId'
       path: '/invite/$invitationId'
@@ -406,6 +488,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/agents'
       preLoaderRoute: typeof SettingsAgentsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/$org/runs/$runId': {
+      id: '/$org/runs/$runId'
+      path: '/runs/$runId'
+      fullPath: '/$org/runs/$runId'
+      preLoaderRoute: typeof OrgRunsRunIdRouteImport
+      parentRoute: typeof OrgRoute
     }
     '/$org/settings/': {
       id: '/$org/settings/'
@@ -428,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSettingsApiKeysRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/$org/settings/billing': {
+      id: '/$org/settings/billing'
+      path: '/settings/billing'
+      fullPath: '/$org/settings/billing'
+      preLoaderRoute: typeof OrgSettingsBillingRouteImport
+      parentRoute: typeof OrgRoute
+    }
     '/$org/settings/general': {
       id: '/$org/settings/general'
       path: '/settings/general'
@@ -447,8 +543,10 @@ declare module '@tanstack/react-router' {
 
 interface OrgRouteChildren {
   OrgIndexRoute: typeof OrgIndexRoute
+  OrgRunsRunIdRoute: typeof OrgRunsRunIdRoute
   OrgSettingsAgentsRoute: typeof OrgSettingsAgentsRoute
   OrgSettingsApiKeysRoute: typeof OrgSettingsApiKeysRoute
+  OrgSettingsBillingRoute: typeof OrgSettingsBillingRoute
   OrgSettingsGeneralRoute: typeof OrgSettingsGeneralRoute
   OrgSettingsMembersRoute: typeof OrgSettingsMembersRoute
   OrgSettingsIndexRoute: typeof OrgSettingsIndexRoute
@@ -456,8 +554,10 @@ interface OrgRouteChildren {
 
 const OrgRouteChildren: OrgRouteChildren = {
   OrgIndexRoute: OrgIndexRoute,
+  OrgRunsRunIdRoute: OrgRunsRunIdRoute,
   OrgSettingsAgentsRoute: OrgSettingsAgentsRoute,
   OrgSettingsApiKeysRoute: OrgSettingsApiKeysRoute,
+  OrgSettingsBillingRoute: OrgSettingsBillingRoute,
   OrgSettingsGeneralRoute: OrgSettingsGeneralRoute,
   OrgSettingsMembersRoute: OrgSettingsMembersRoute,
   OrgSettingsIndexRoute: OrgSettingsIndexRoute,
@@ -466,10 +566,14 @@ const OrgRouteChildren: OrgRouteChildren = {
 const OrgRouteWithChildren = OrgRoute._addFileChildren(OrgRouteChildren)
 
 interface AccountRouteChildren {
+  AccountProfileRoute: typeof AccountProfileRoute
+  AccountSecurityRoute: typeof AccountSecurityRoute
   AccountIndexRoute: typeof AccountIndexRoute
 }
 
 const AccountRouteChildren: AccountRouteChildren = {
+  AccountProfileRoute: AccountProfileRoute,
+  AccountSecurityRoute: AccountSecurityRoute,
   AccountIndexRoute: AccountIndexRoute,
 }
 
@@ -488,6 +592,7 @@ const rootRouteChildren: RootRouteChildren = {
   SelectOrganizationRoute: SelectOrganizationRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  TwoFactorRoute: TwoFactorRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,
   SettingsAgentsRoute: SettingsAgentsRoute,

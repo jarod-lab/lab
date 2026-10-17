@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import type { WorkspaceAgent } from "../lib/workspace-agents-api"
@@ -80,9 +81,45 @@ describe("WorkspaceAgentsPage", () => {
     ).toBe("/llms.txt")
   })
 
-  it("marks the unsupported Guardrails and Budgets tabs as placeholders", () => {
+  it("marks the unsupported Guardrails tab as a placeholder", () => {
     renderWithClient(<WorkspaceAgentsPage {...props({ view: "guardrails" })} />)
     expect(screen.getByText(/\[PLACEHOLDER\] The API has no guardrail settings/)).toBeTruthy()
+  })
+
+  it("saves the selected agent's energy budget, and clears it when left empty", async () => {
+    const onUpdate = vi.fn(async () => undefined)
+    const { user } = renderBudget({ onUpdate })
+    const input = screen.getByRole("textbox", { name: "Energy budget per run (Wh)" })
+    await user.type(input, "2.5")
+    await user.click(screen.getByRole("button", { name: "Save budget" }))
+    expect(onUpdate).toHaveBeenCalledWith(agent.id, { energyBudgetWh: 2.5 })
+    await user.clear(input)
+    await user.click(screen.getByRole("button", { name: "Save budget" }))
+    expect(onUpdate).toHaveBeenLastCalledWith(agent.id, { energyBudgetWh: null })
+  })
+
+  it("refuses a budget that is not a positive number, without saving", async () => {
+    const onUpdate = vi.fn(async () => undefined)
+    const { user } = renderBudget({ onUpdate })
+    await user.type(screen.getByRole("textbox", { name: "Energy budget per run (Wh)" }), "-3")
+    await user.click(screen.getByRole("button", { name: "Save budget" }))
+    expect(
+      await screen.findByText("Enter watt-hours above 0, or leave it empty for no budget."),
+    ).toBeTruthy()
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+
+  it("shows a viewer the budget read-only", () => {
+    renderWithClient(<WorkspaceAgentsPage {...props({ view: "budgets", canUpdate: false })} />)
+    expect(screen.queryByRole("button", { name: "Save budget" })).toBeNull()
+    expect(screen.getByText(/Viewers can read the budget/)).toBeTruthy()
+  })
+
+  it("has exactly one h1 on the connected view, the settings header's", () => {
+    renderWithClient(
+      <WorkspaceAgentsPage {...props({ view: "connected", connected: <h2>Connected view</h2> })} />,
+    )
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1)
   })
 
   it("renders the connected view in place of the board", () => {
@@ -126,3 +163,11 @@ describe("WorkspaceAgentsPage", () => {
     await expectNoA11yViolations(document.body.innerHTML)
   })
 })
+
+function renderBudget(overrides: Partial<WorkspaceAgentsPageProps>) {
+  const onUpdate = overrides.onUpdate ?? vi.fn(async () => undefined)
+  const rendered = renderWithClient(
+    <WorkspaceAgentsPage {...props({ view: "budgets", onUpdate, ...overrides })} />,
+  )
+  return { ...rendered, onUpdate, user: userEvent.setup() }
+}

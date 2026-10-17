@@ -28,6 +28,7 @@ import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { messageOf } from "../lib/messages"
+import { BudgetSection } from "./workspace-agents-budget"
 import { settingsTabs } from "../lib/org-settings"
 import {
   ACTIVITY_STATUS,
@@ -156,9 +157,11 @@ export function WorkspaceAgentsPage({
             reason="[PLACEHOLDER] The API has no guardrail settings yet, so nothing on this tab can be changed."
           />
         ) : view === "budgets" ? (
-          <PlaceholderSection
-            heading="Budgets and footprint"
-            reason="[PLACEHOLDER] The API has no organization-wide budgets yet. Each agent's energy budget is set through the API and is not shown here yet."
+          <BudgetSection
+            key={selected?.id ?? "none"}
+            agent={canRead ? selected : undefined}
+            canUpdate={canUpdate}
+            onSave={(id, energyBudgetWh) => onUpdate(id, { energyBudgetWh })}
           />
         ) : (
           <PermissionsView

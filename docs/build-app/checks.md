@@ -88,3 +88,6 @@
 | S2 | SCIM token ends on owner removal/leave | pass | auth-flows: 401 after removal and after leave. Demotion / account deletion: not covered (documented) |
 | S2 | DEV_MAIL_SINK only with NODE_ENV development/test | pass | env 12 passed |
 | lead | hooks.test flaky "sk_" substring on random sealed bytes | pass (fixed) | 3c735e0 |
+| E1 | page e2e on the real stack (vite dev + apps/api + Postgres), desktop + phone | 11/12 files pass | org-general, members, api-keys, profile, security, agents, run-view, billing, org-security, admin (local admin account) all pass both targets (commit 54f26fd) |
+| E1 | auth.e2e: magic link and forgot password | fail → S3 | web sends callbackURL on its own origin; API trusts only baseURL (split origin in pnpm dev and e2e). Production same-origin unaffected |
+| E1 | self-approved run copy "Approved by a teammate" | unresolved (copy) | decidedBy set → teammate wording; check against DirLift |

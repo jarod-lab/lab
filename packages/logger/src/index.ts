@@ -2,25 +2,51 @@ import pino, { type DestinationStream, type Logger } from "pino"
 
 export type { Logger } from "pino"
 
-/** Keys whose values are replaced with [Redacted], at the top level and one level deep. */
+/**
+ * Keys whose values are replaced with [Redacted], at the top level and up to two levels deep. Paths
+ * match exact keys, so the spellings OAuth bodies and headers use are listed too.
+ */
 const SENSITIVE = [
   "password",
+  "Password",
   "newPassword",
+  "currentPassword",
   "token",
+  "Token",
   "accessToken",
+  "access_token",
   "refreshToken",
+  "refresh_token",
+  "idToken",
+  "id_token",
   "secret",
+  "clientSecret",
+  "client_secret",
   "apiKey",
+  "api_key",
   "authorization",
+  "Authorization",
   "cookie",
+  "Cookie",
 ]
 
 /** Credential headers, redacted in any `headers` object up to two levels below the log line. */
-const SENSITIVE_HEADERS = ["authorization", "Authorization", "cookie", "set-cookie", "x-api-key"]
+const SENSITIVE_HEADERS = [
+  "authorization",
+  "Authorization",
+  "cookie",
+  "Cookie",
+  "set-cookie",
+  "Set-Cookie",
+  "x-api-key",
+  "X-API-Key",
+  "X-Api-Key",
+]
 
 export const redactPaths = [
   ...SENSITIVE,
   ...SENSITIVE.map((k) => `*.${k}`),
+  ...SENSITIVE.map((k) => `*.*.${k}`),
   ...["headers", "*.headers", "*.*.headers"].flatMap((at) =>
     SENSITIVE_HEADERS.map((h) => `${at}["${h}"]`),
   ),

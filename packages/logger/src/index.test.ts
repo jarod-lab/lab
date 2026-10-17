@@ -46,6 +46,22 @@ describe("createLogger", () => {
     expect(lines[0]).toMatchObject({ request: { headers: { accept: "*/*" } } })
   })
 
+  it("redacts the OAuth and header spellings of secrets, and two levels down", () => {
+    const { logger, lines } = capture()
+    logger.info({
+      access_token: "at_1",
+      refresh_token: "rt_2",
+      client_secret: "cs_3",
+      Authorization: "Bearer four",
+      ctx: { body: { password: "pw_5", currentPassword: "pw_6" } },
+      headers: { Cookie: "sid=seven", "Set-Cookie": "sid=eight", "X-API-Key": "sk_nine" },
+      kept: { name: "visible" },
+    })
+    const line = JSON.stringify(lines[0])
+    expect(line).not.toMatch(/at_1|rt_2|cs_3|four|pw_5|pw_6|seven|eight|sk_nine/)
+    expect(lines[0]).toMatchObject({ kept: { name: "visible" } })
+  })
+
   it("serialises errors with the cause folded into the message", () => {
     const { logger, lines } = capture()
     logger.error({ err: new Error("outer", { cause: new Error("inner") }) }, "failed")

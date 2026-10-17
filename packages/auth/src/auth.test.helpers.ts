@@ -1,6 +1,6 @@
 // Test-only: an auth instance on in-process Postgres (PGlite), with helpers for users and orgs.
 import { createTestDb } from "@starter/db/testing"
-import { createAuth } from "./index"
+import { type AuthOptions, createAuth } from "./index"
 import { firstMembership } from "./membership"
 
 export const BASE = "http://localhost:3000"
@@ -12,7 +12,7 @@ export interface SentMail {
   link: string
 }
 
-export async function createTestAuth() {
+export async function createTestAuth(options: { stripe?: AuthOptions["stripe"] } = {}) {
   const t = await createTestDb()
   // Stands in for SES: records who each auth email is for and the first link in it.
   const outbox: SentMail[] = []
@@ -32,6 +32,7 @@ export async function createTestAuth() {
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, AUDIENCE],
     ses: { client: ses },
+    stripe: options.stripe,
   })
   let n = 0
 

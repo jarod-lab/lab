@@ -34,6 +34,9 @@ export async function firstMembership(db: Adapter, userId: string): Promise<Memb
   return member ?? null
 }
 
+/** The slug of a user's personal organization. The only way to tell one apart: it is never user-chosen. */
+export const personalSlug = (userId: string) => `personal-${userId.toLowerCase()}`
+
 /**
  * Create the user's personal organization, with them as owner, and make it the active org of their
  * sessions. better-auth runs user after-hooks once the signup transaction commits, so the signup
@@ -45,7 +48,7 @@ export async function personalOrganization(db: Adapter, user: { id: string; name
     model: "organization",
     data: {
       name: user.name ? `${user.name}'s workspace` : "Personal workspace",
-      slug: `personal-${user.id.toLowerCase()}`,
+      slug: personalSlug(user.id),
       createdAt: now,
     },
   })

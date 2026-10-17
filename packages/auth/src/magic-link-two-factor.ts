@@ -10,6 +10,7 @@ import type { BetterAuthPlugin } from "better-auth"
 import { createAuthMiddleware } from "better-auth/api"
 import { deleteSessionCookie } from "better-auth/cookies"
 import { TWO_FACTOR_PATH } from "./constants"
+import { CHALLENGE_METHOD_PREFIX } from "./login-method"
 
 /** How long the code entry stays open, as better-auth's two-factor plugin sets it by default. */
 const CHALLENGE_SECONDS = 600
@@ -41,6 +42,12 @@ export const twoFactorMagicLink = (opts: { baseURL: string }) =>
             await ctx.context.internalAdapter.createVerificationValue({
               value: "0",
               identifier: `2fa-attempts-${identifier}`,
+              expiresAt,
+            })
+            // The code entry that follows is a sign-in by link: record that for the session it creates.
+            await ctx.context.internalAdapter.createVerificationValue({
+              value: "magic-link",
+              identifier: `${CHALLENGE_METHOD_PREFIX}${identifier}`,
               expiresAt,
             })
             const cookie = ctx.context.createAuthCookie("two_factor", { maxAge: CHALLENGE_SECONDS })

@@ -28,6 +28,7 @@ export const user = pgTable("user", {
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   stripeCustomerId: text("stripe_customer_id"),
+  twoFactorEnabledAt: timestamp("two_factor_enabled_at"),
 })
 
 export const session = pgTable(
@@ -47,6 +48,8 @@ export const session = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     impersonatedBy: text("impersonated_by"),
     activeOrganizationId: text("active_organization_id"),
+    loginMethod: text("login_method"),
+    loginTwoFactor: boolean("login_two_factor").default(false),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 )

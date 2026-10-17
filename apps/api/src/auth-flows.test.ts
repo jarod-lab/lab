@@ -4,6 +4,7 @@
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
 import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { passkey as passkeyTable } from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
@@ -677,6 +678,41 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const anonymous = await open().request("/api/auth/passkey/generate-register-options")
       expect(anonymous.status).toBe(401)
     })
+
+    it("lists, renames and deletes a passkey, and only its owner may", async () => {
+      // Registration needs a WebAuthn authenticator, so the row is seeded as registration would store it.
+      const { b, userId } = await signedUp("Keys")
+      const id = `pk-${userId}`
+      await t.db.insert(passkeyTable).values({
+        id,
+        name: "Laptop",
+        publicKey: "cHVibGljLWtleQ",
+        userId,
+        credentialID: `cred-${userId}`,
+        counter: 0,
+        deviceType: "singleDevice",
+        backedUp: false,
+        transports: "internal",
+        createdAt: new Date(),
+        aaguid: "00000000-0000-0000-0000-000000000000",
+      })
+      const listed = await b.client.passkey.listUserPasskeys()
+      expect(listed.data).toEqual([expect.objectContaining({ id, name: "Laptop" })])
+
+      expect((await b.client.passkey.updatePasskey({ id, name: "Work laptop" })).error).toBeNull()
+
+      const stranger = (await signedUp("Stranger")).b
+      const denied = await stranger.client.passkey.updatePasskey({ id, name: "Hacked" })
+      expect(denied.error?.status).toBeGreaterThanOrEqual(400)
+      const removedByStranger = await stranger.client.passkey.deletePasskey({ id })
+      expect(removedByStranger.error).toBeTruthy()
+      expect((await b.client.passkey.listUserPasskeys()).data).toEqual([
+        expect.objectContaining({ id, name: "Work laptop" }),
+      ])
+
+      expect((await b.client.passkey.deletePasskey({ id })).error).toBeNull()
+      expect((await b.client.passkey.listUserPasskeys()).data).toEqual([])
+    })
   })
 
   describe("sign-in with an OAuth authorization pending", () => {
@@ -941,6 +977,9 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect((session?.user as { lastLoginMethod?: string } | undefined)?.lastLoginMethod).toBe(
         "github",
       )
+      expect(
+        (session?.session as unknown as { loginMethod?: string } | undefined)?.loginMethod,
+      ).toBe("github")
     })
 
     it("cannot claim a provisional signup: the same address on GitHub is refused, the key stays on", async () => {
@@ -965,6 +1004,98 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect((await whoami(b)).status).toBe(SIGNED_OUT.status)
 
       expect((await s.req("/v1/whoami", { headers: { "x-api-key": apiKey } })).status).toBe(200)
+    })
+
+    describe("connected accounts", () => {
+      /** A browser on the GitHub app, signed up by email with `address`. */
+      async function signedUpHere(address: string) {
+        const b = social()
+        const { error } = await b.client.signUp.email({
+          email: address,
+          password: PASSWORD,
+          name: "Octo",
+        })
+        if (error) throw new Error(`sign-up failed: ${JSON.stringify(error)}`)
+        return b
+      }
+
+      /** Connect GitHub to the signed-in account, as the Security page does: the provider's callback links it. */
+      async function connectGithub(b: ReturnType<typeof social>, callbackURL: string) {
+        const start = await b.client.linkSocial({ provider: "github", callbackURL })
+        const state = new URL(start.data?.url ?? "").searchParams.get("state") ?? ""
+        return b.request(`/api/auth/callback/github?code=test-code&state=${state}`)
+      }
+
+      it("connects GitHub to a signed-in account, lists it, and disconnects it", async () => {
+        const address = `octo-link-${++n}@example.com`
+        githubEmail = address
+        const b = await signedUpHere(address)
+
+        const back = await connectGithub(b, "/security")
+        expect(back.status).toBe(302)
+        expect(new URL(back.headers.get("location") ?? "", BASE).pathname).toBe("/security")
+
+        const { data: accounts } = await b.client.listAccounts()
+        expect(accounts?.map((a) => a.providerId).sort()).toEqual(["credential", "github"])
+        const github = accounts?.find((a) => a.providerId === "github")
+        expect((await b.client.unlinkAccount({ accountId: github?.id ?? "" })).error).toBeNull()
+        const { data: left } = await b.client.listAccounts()
+        expect(left?.map((a) => a.providerId)).toEqual(["credential"])
+      })
+
+      it("refuses to connect a GitHub account under a different address", async () => {
+        const address = `octo-mismatch-${++n}@example.com`
+        githubEmail = `someone-else-${n}@example.com`
+        const b = await signedUpHere(address)
+
+        const back = await connectGithub(b, "/security")
+        expect(
+          new URL(back.headers.get("location") ?? "", BASE).searchParams.get("error"),
+        ).toBeTruthy()
+        const { data: accounts } = await b.client.listAccounts()
+        expect(accounts?.map((a) => a.providerId)).toEqual(["credential"])
+      })
+
+      it("keeps the last way in: a password with nothing else to sign in with can't be disconnected", async () => {
+        const b = await signedUpHere(`octo-last-${++n}@example.com`)
+        const { data: accounts } = await b.client.listAccounts()
+        const credential = accounts?.find((a) => a.providerId === "credential")
+        const refused = await b.client.unlinkAccount({ accountId: credential?.id ?? "" })
+        expect(refused.error).toMatchObject({ status: 400, code: "LAST_SIGN_IN_METHOD" })
+        expect((await whoami(b)).status).toBe(200)
+      })
+
+      it("a GitHub-only account can drop GitHub once a passkey is its way in", async () => {
+        const address = `octo-only-${++n}@example.com`
+        githubEmail = address
+        const b = social()
+        const start = await b.client.signIn.social({ provider: "github", callbackURL: "/welcome" })
+        const state = new URL(start.data?.url ?? "").searchParams.get("state") ?? ""
+        await b.request(`/api/auth/callback/github?code=test-code&state=${state}`)
+        const { data: session } = await b.client.getSession()
+        const { data: accounts } = await b.client.listAccounts()
+        expect(accounts?.map((a) => a.providerId)).toEqual(["github"])
+        const github = accounts?.[0]?.id ?? ""
+
+        const refused = await b.client.unlinkAccount({ accountId: github })
+        expect(refused.error).toMatchObject({ code: "LAST_SIGN_IN_METHOD" })
+
+        await s.db.insert(passkeyTable).values({
+          id: `pk-octo-${++n}`,
+          name: "Phone",
+          publicKey: "cHVibGljLWtleQ",
+          userId: session?.user.id ?? "",
+          credentialID: `cred-octo-${n}`,
+          counter: 0,
+          deviceType: "multiDevice",
+          backedUp: true,
+          transports: "internal",
+          createdAt: new Date(),
+          aaguid: "00000000-0000-0000-0000-000000000000",
+        })
+        expect((await b.client.unlinkAccount({ accountId: github })).error).toBeNull()
+        expect((await whoami(b)).status).toBe(200)
+      })
     })
   })
 
@@ -1251,6 +1382,311 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         newPassword: "a-clean-passphrase",
       })
       expect(good.error).toBeNull()
+    })
+  })
+  /** The first email with this subject to an address, once it has arrived. */
+  const mailed = (to: string, subject: string) =>
+    vi.waitFor(() => {
+      const mail = inbox(to).find((m) => m.subject === subject)
+      if (!mail) throw new Error(`waiting for "${subject}" to ${to}`)
+      return mail
+    })
+
+  /** Enrol an authenticator on a signed-in browser; returns its secret and the backup codes. */
+  async function enrolTwoFactor(b: ReturnType<typeof open>, password = PASSWORD) {
+    const enrol = await b.client.twoFactor.enable({ password })
+    const secret =
+      new URL((enrol.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+        "secret",
+      ) ?? ""
+    const backupCodes = (enrol.data as { backupCodes?: string[] } | null)?.backupCodes ?? []
+    expect((await b.client.twoFactor.verifyTotp({ code: totp(secret) })).error).toBeNull()
+    return { secret, backupCodes }
+  }
+
+  describe("change email", () => {
+    const fresh = () => `moved-${++n}@example.com`
+    const CONFIRM = "Confirm your new email address for Starter"
+    const REQUESTED = "A new email address was requested for your Starter account"
+
+    it("keeps the old address until the new one confirms, and tells the old one", async () => {
+      const { b, email: oldAddress } = await signedUp("Ada")
+      const next = fresh()
+      expect((await b.client.changeEmail({ newEmail: next })).error).toBeNull()
+
+      const confirm = await mailed(next, CONFIRM)
+      expect(confirm.link).toMatch(/\/api\/auth\/verify-email\?token=/)
+      await mailed(oldAddress, REQUESTED)
+      expect((await b.client.getSession()).data?.user.email).toBe(oldAddress)
+      expect(
+        (await open().client.signIn.email({ email: oldAddress, password: PASSWORD })).error,
+      ).toBeNull()
+
+      const landed = await b.request(confirm.link)
+      expect(landed.status).toBe(302)
+      expect((await b.client.getSession()).data?.user.email).toBe(next)
+      expect(
+        (await open().client.signIn.email({ email: next, password: PASSWORD })).error,
+      ).toBeNull()
+      const gone = await open().client.signIn.email({ email: oldAddress, password: PASSWORD })
+      expect(gone.error).toMatchObject({ status: 401, code: "INVALID_EMAIL_OR_PASSWORD" })
+    })
+
+    it("answers the same for an address that is taken, and sends the new address nothing", async () => {
+      const { b, email: oldAddress } = await signedUp()
+      const { email: taken } = await signedUp()
+      expect((await b.client.changeEmail({ newEmail: taken })).error).toBeNull()
+      expect(inbox(taken).some((m) => m.subject === CONFIRM)).toBe(false)
+      expect((await b.client.getSession()).data?.user.email).toBe(oldAddress)
+    })
+
+    it("resends by asking again: each request emails a fresh link to the new address", async () => {
+      const { b } = await signedUp()
+      const next = fresh()
+      await b.client.changeEmail({ newEmail: next })
+      await b.client.changeEmail({ newEmail: next })
+      await delivered(next, 2)
+      expect(inbox(next).filter((m) => m.subject === CONFIRM)).toHaveLength(2)
+    })
+
+    it("refuses the address the account already has, and tells no one", async () => {
+      const { b, email } = await signedUp()
+      const same = await b.client.changeEmail({ newEmail: email })
+      expect(same.error).toMatchObject({ status: 400 })
+      // The after-hook sees refused requests too; the old address must not be told about one.
+      expect(inbox(email).some((m) => m.subject === REQUESTED)).toBe(false)
+    })
+  })
+
+  describe("delete account", () => {
+    const CONFIRM_DELETE = "Confirm deleting your Starter account"
+
+    it("refuses while the user owns an organization others use, and emails nothing", async () => {
+      const { b, email: address } = await signedUp("Ada")
+      const created = await b.client.organization.create({ name: "Acme Labs", slug: `acme-${++n}` })
+      expect(created.error).toBeNull()
+
+      const res = await b.client.deleteUser({ callbackURL: "/goodbye" })
+      expect(res.error).toMatchObject({ status: 400, code: "OWNS_ORGANIZATION" })
+      expect(res.error?.message).toBe("You own Acme Labs. Transfer or delete it first.")
+      expect(inbox(address).some((m) => m.subject === CONFIRM_DELETE)).toBe(false)
+      expect((await whoami(b)).status).toBe(200)
+    })
+
+    it("refuses while the personal organization has another member", async () => {
+      const { b } = await signedUp("Ada")
+      const other = await signedUp("Ben")
+      const { data: session } = await b.client.getSession()
+      await t.auth.api.addMember({
+        body: {
+          organizationId: session?.session.activeOrganizationId ?? "",
+          userId: other.userId,
+          role: "member",
+        },
+      })
+      const res = await b.client.deleteUser({})
+      expect(res.error).toMatchObject({ code: "OWNS_ORGANIZATION" })
+      expect(res.error?.message).toBe("You own Ada's workspace. Transfer or delete it first.")
+    })
+
+    it("emails a confirmation first; the link removes the account, its sessions, passkeys and personal organization", async () => {
+      const { b, email: address, userId } = await signedUp("Gone")
+      const phone = open()
+      await phone.client.signIn.email({ email: address, password: PASSWORD })
+      const { data: session } = await b.client.getSession()
+      const orgId = session?.session.activeOrganizationId ?? ""
+      await t.db.insert(passkeyTable).values({
+        id: `pk-del-${userId}`,
+        name: "Key",
+        publicKey: "cHVibGljLWtleQ",
+        userId,
+        credentialID: `cred-del-${userId}`,
+        counter: 0,
+        deviceType: "singleDevice",
+        backedUp: false,
+        transports: "usb",
+        createdAt: new Date(),
+        aaguid: "00000000-0000-0000-0000-000000000000",
+      })
+
+      const asked = await b.client.deleteUser({ callbackURL: "/goodbye" })
+      expect(asked.error).toBeNull()
+      expect(asked.data).toMatchObject({ success: true, message: "Verification email sent" })
+      expect((await whoami(b)).status).toBe(200)
+
+      const confirm = await mailed(address, CONFIRM_DELETE)
+      const landed = await b.request(confirm.link)
+      expect(landed.status).toBe(302)
+      expect(new URL(landed.headers.get("location") ?? "", BASE).pathname).toBe("/goodbye")
+
+      expect(await whoami(b)).toMatchObject(SIGNED_OUT)
+      expect(await whoami(phone)).toMatchObject(SIGNED_OUT)
+      const back = await open().client.signIn.email({ email: address, password: PASSWORD })
+      expect(back.error).toMatchObject({ status: 401 })
+
+      const find = async (model: string, field: string, value: string) =>
+        (await t.auth.$context).adapter.findOne({ model, where: [{ field, value }] })
+      expect(await find("user", "id", userId)).toBeNull()
+      expect(await find("account", "userId", userId)).toBeNull()
+      expect(await find("member", "userId", userId)).toBeNull()
+      expect(await find("passkey", "userId", userId)).toBeNull()
+      expect(await find("organization", "id", orgId)).toBeNull()
+      expect(await find("apikey", "referenceId", orgId)).toBeNull()
+    })
+
+    it("removes the personal organization's API keys with it", async () => {
+      const { b, email, userId } = await signedUp("Keyed")
+      const orgId = (await b.client.getSession()).data?.session.activeOrganizationId ?? ""
+      await t.auth.api.createApiKey({
+        body: { organizationId: orgId, userId, permissions: { project: ["read"] } },
+      })
+      const adapter = (await t.auth.$context).adapter
+      const keysLeft = () =>
+        adapter.count({ model: "apikey", where: [{ field: "referenceId", value: orgId }] })
+      expect(await keysLeft()).toBe(1)
+
+      expect((await b.client.deleteUser({})).error).toBeNull()
+      const confirm = await mailed(email, CONFIRM_DELETE)
+      await b.request(confirm.link)
+      expect(await keysLeft()).toBe(0)
+    })
+
+    it("re-checks when the link opens: an organization created since the request still refuses", async () => {
+      const { b, email: address, userId } = await signedUp("Late")
+      expect((await b.client.deleteUser({})).error).toBeNull()
+      const confirm = await mailed(address, CONFIRM_DELETE)
+      expect(
+        (await b.client.organization.create({ name: "Late Co", slug: `late-${++n}` })).error,
+      ).toBeNull()
+
+      const landed = await b.request(confirm.link)
+      expect(landed.status).toBe(400)
+      expect(await landed.json()).toMatchObject({ code: "OWNS_ORGANIZATION" })
+      expect((await whoami(b)).status).toBe(200)
+      const user = await (await t.auth.$context).adapter.findOne({
+        model: "user",
+        where: [{ field: "id", value: userId }],
+      })
+      expect(user).not.toBeNull()
+    })
+  })
+
+  describe("how a session was signed in", () => {
+    it("records the method on the session a password sign-in creates", async () => {
+      const { email: address } = await signedUp()
+      const b = open()
+      await b.client.signIn.email({ email: address, password: PASSWORD })
+      const { data } = await b.client.getSession()
+      expect(data?.session as unknown).toMatchObject({
+        loginMethod: "email",
+        loginTwoFactor: false,
+      })
+    })
+
+    it("records the second factor once its code has been accepted", async () => {
+      const { b, email: address } = await signedUp()
+      const { secret } = await enrolTwoFactor(b)
+      await b.client.signOut()
+
+      const visitor = open()
+      await visitor.client.signIn.email({ email: address, password: PASSWORD })
+      expect((await visitor.client.twoFactor.verifyTotp({ code: totp(secret) })).error).toBeNull()
+      const { data } = await visitor.client.getSession()
+      expect(data?.session as unknown).toMatchObject({ loginMethod: "email", loginTwoFactor: true })
+    })
+
+    it("a link sign-in that needs a code records the link as the method, and the code", async () => {
+      const { b, email: address } = await signedUp()
+      const { secret } = await enrolTwoFactor(b)
+      await b.client.signOut()
+
+      const visitor = open()
+      await visitor.client.signIn.magicLink({ email: address, callbackURL: "/" })
+      const link = (await mailed(address, "Your sign-in link for Starter")).link
+      await visitor.request(link)
+      expect((await visitor.client.twoFactor.verifyTotp({ code: totp(secret) })).error).toBeNull()
+      const { data } = await visitor.client.getSession()
+      expect(data?.session as unknown).toMatchObject({
+        loginMethod: "magic-link",
+        loginTwoFactor: true,
+      })
+    })
+
+    it("lists each session with its method, and revokes one by token", async () => {
+      const { b: laptop, email: address } = await signedUp()
+      const phone = open()
+      await phone.client.signIn.email({ email: address, password: PASSWORD })
+
+      const { data: sessions } = await laptop.client.listSessions()
+      expect(sessions?.map((s) => (s as unknown as { loginMethod: string }).loginMethod)).toEqual([
+        "email",
+        "email",
+      ])
+      const current = (await laptop.client.getSession()).data?.session.token
+      const other = sessions?.find((s) => s.token !== current)
+      expect((await laptop.client.revokeSession({ token: other?.token ?? "" })).error).toBeNull()
+      expect(await whoami(phone)).toMatchObject(SIGNED_OUT)
+      expect((await whoami(laptop)).status).toBe(200)
+    })
+  })
+
+  describe("security summary", () => {
+    it("reports the password change, when two-factor went on, and the backup codes left", async () => {
+      const { b, email: address } = await signedUp()
+      const before = await b.client.securitySummary()
+      expect(before.data).toMatchObject({
+        twoFactorEnabled: false,
+        twoFactorEnabledAt: null,
+        backupCodesRemaining: null,
+      })
+      expect(before.data?.passwordChangedAt).toBeTruthy()
+
+      const { backupCodes } = await enrolTwoFactor(b)
+      const on = await b.client.securitySummary()
+      expect(on.data?.twoFactorEnabled).toBe(true)
+      expect(on.data?.twoFactorEnabledAt).toBeTruthy()
+      expect(on.data?.backupCodesRemaining).toBe(backupCodes.length)
+
+      await b.client.signOut()
+      const visitor = open()
+      await visitor.client.signIn.email({ email: address, password: PASSWORD })
+      const used = backupCodes[0] ?? ""
+      expect((await visitor.client.twoFactor.verifyBackupCode({ code: used })).error).toBeNull()
+      expect((await visitor.client.securitySummary()).data?.backupCodesRemaining).toBe(
+        backupCodes.length - 1,
+      )
+    })
+
+    it("moves the password change time on a change, and clears two-factor's date when it goes off", async () => {
+      const { b } = await signedUp()
+      const first = (await b.client.securitySummary()).data?.passwordChangedAt
+      await new Promise((r) => setTimeout(r, 20))
+      expect(
+        (
+          await b.client.changePassword({
+            currentPassword: PASSWORD,
+            newPassword: "a-newer-passphrase",
+          })
+        ).error,
+      ).toBeNull()
+      const changed = (await b.client.securitySummary()).data?.passwordChangedAt
+      expect(new Date(changed ?? 0).getTime()).toBeGreaterThan(new Date(first ?? 0).getTime())
+
+      await enrolTwoFactor(b, "a-newer-passphrase")
+      expect((await b.client.securitySummary()).data?.twoFactorEnabledAt).toBeTruthy()
+      expect(
+        (await b.client.twoFactor.disable({ password: "a-newer-passphrase" })).error,
+      ).toBeNull()
+      expect((await b.client.securitySummary()).data).toMatchObject({
+        twoFactorEnabled: false,
+        twoFactorEnabledAt: null,
+        backupCodesRemaining: null,
+      })
+    })
+
+    it("answers only a signed-in person", async () => {
+      const res = await open().request("/api/auth/security/summary")
+      expect(res.status).toBe(401)
     })
   })
 })

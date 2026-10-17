@@ -9,3 +9,8 @@ export const PASSWORD_COMPROMISED_MESSAGE =
 
 /** The app page a sign-in sends a person to when a second factor is still needed. */
 export const TWO_FACTOR_PATH = "/two-factor"
+
+/** Refusals of the account lifecycle (account-plugin.ts). The app maps each to its copy. */
+export const OWNS_ORGANIZATION_CODE = "OWNS_ORGANIZATION"
+export const ACTIVE_SUBSCRIPTION_CODE = "ACTIVE_SUBSCRIPTION"
+export const LAST_SIGN_IN_METHOD_CODE = "LAST_SIGN_IN_METHOD"

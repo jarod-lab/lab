@@ -25,6 +25,15 @@ import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { impersonationGuard } from "./guards"
 import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
 import { type Adapter, findMember, firstMembership, personalOrganization } from "./membership"
+import {
+  accountPlugin,
+  assertCanDelete,
+  changeRequestOf,
+  removePersonalOrganization,
+} from "./account-plugin"
+import { type LoginContext, signInOf } from "./login-method"
+import { createNotices } from "./notices"
+import { securitySummaryPlugin } from "./security-summary"
 import { ownerOnlyGuard, ownsBilling } from "./owner-only"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
@@ -135,6 +144,14 @@ export function createAuth(opts: AuthOptions) {
   if (opts.stripe && !opts.stripe.secretKey.startsWith("sk_test_")) {
     throw new Error("Stripe is test mode only: the secret key must start with sk_test_.")
   }
+  // The account emails wraps doesn't send (change of address, deletion), on the same SES client.
+  const billing = !!opts.stripe
+  const notices = createNotices({
+    from: opts.emailFrom,
+    appName: opts.appName ?? "Starter",
+    ses: opts.ses,
+    onError: opts.onEmailError,
+  })
   // The SCIM plugin's managed-connection endpoint is server-only; it is called on the instance built below.
   const scimApi: { connect?: (input: ScimConnectionInput) => Promise<ScimConnection> } = {}
 
@@ -170,6 +187,22 @@ export function createAuth(opts: AuthOptions) {
     basePath: AUTH_BASE_PATH,
     // Native transactions: the scim plugin refuses an adapter without them (SCIM writes are atomic).
     database: drizzleAdapter(opts.db, { provider: "pg", schema, transaction: true }),
+    emailVerification: {
+      // A change of address (see account-plugin.ts) sends its link to the new address, naming the one it
+      // replaces; everything else is wraps' verification email. This app's config wins over the plugin's.
+      sendVerificationEmail: async (data) => {
+        const change = changeRequestOf(data.token)
+        if (change) {
+          return notices.emailChangeConfirmation({
+            to: data.user.email,
+            oldEmail: change.oldEmail,
+            name: data.user.name,
+            url: data.url,
+          })
+        }
+        return wrapsPlugin.emails.verification(data)
+      },
+    },
     // A reset means the password may be compromised: sign out every session, not just future ones.
     emailAndPassword: {
       enabled: true,
@@ -197,6 +230,40 @@ export function createAuth(opts: AuthOptions) {
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
     disabledPaths: ["/token", "/device/token"],
     hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave },
+    user: {
+      // Changing the sign-in email: the new address gets a confirmation link, the old one a notice.
+      changeEmail: { enabled: true },
+      // Deleting an account: a confirmation link first; refused while the user owns organizations
+      // others depend on (account-plugin.ts). The personal organization goes with the account.
+      deleteUser: {
+        enabled: true,
+        sendDeleteAccountVerification: async ({ user, url }) =>
+          notices.deleteAccountConfirmation({ to: user.email, name: user.name, url }),
+        beforeDelete: async (user) => {
+          const db = await adapter()
+          await assertCanDelete(db, user.id, billing)
+          await removePersonalOrganization(db, user.id, billing)
+        },
+      },
+      // Set when two-factor is switched on, cleared when it is switched off (see databaseHooks).
+      additionalFields: {
+        twoFactorEnabledAt: { type: "date", required: false, input: false },
+      },
+    },
+    account: {
+      accountLinking: {
+        enabled: true,
+        // Unlinking the last way in is refused by account-plugin.ts, which also counts passkeys.
+        allowUnlinkingAll: true,
+      },
+    },
+    session: {
+      // How the session was signed in, shown on the security page (login-method.ts).
+      additionalFields: {
+        loginMethod: { type: "string", required: false, input: false },
+        loginTwoFactor: { type: "boolean", required: false, defaultValue: false, input: false },
+      },
+    },
     socialProviders: {
       ...(opts.github && {
         github: { clientId: opts.github.clientId, clientSecret: opts.github.clientSecret },
@@ -212,16 +279,36 @@ export function createAuth(opts: AuthOptions) {
         create: { after: async (user) => personalOrganization(await adapter(), user) },
         update: {
           after: async (user) => {
-            if (user.emailVerified) await endProvisionalKeys(await adapter(), user.id)
+            if (!user) return
+            const db = await adapter()
+            if (user.emailVerified) await endProvisionalKeys(db, user.id)
+            // The date two-factor was switched on: stamped once, cleared when it is switched off.
+            const stamped = (user as { twoFactorEnabledAt?: Date | null }).twoFactorEnabledAt
+            if (user.twoFactorEnabled && !stamped) {
+              await db.updateMany({
+                model: "user",
+                where: [{ field: "id", value: user.id }],
+                update: { twoFactorEnabledAt: new Date() },
+              })
+            } else if (!user.twoFactorEnabled && stamped) {
+              await db.updateMany({
+                model: "user",
+                where: [{ field: "id", value: user.id }],
+                update: { twoFactorEnabledAt: null },
+              })
+            }
           },
         },
       },
       // New sessions start in the user's first organization. Membership is still checked per request.
       session: {
         create: {
-          before: async (session) => {
+          before: async (session, context) => {
             const member = await firstMembership(await adapter(), session.userId)
-            return { data: { ...session, activeOrganizationId: member?.organizationId ?? null } }
+            const login = await signInOf(context as LoginContext | null)
+            return {
+              data: { ...session, activeOrganizationId: member?.organizationId ?? null, ...login },
+            }
           },
         },
       },
@@ -246,6 +333,9 @@ export function createAuth(opts: AuthOptions) {
       twoFactor({ issuer: opts.appName ?? "Starter" }),
       // Sign-in links; the wraps plugin sends them through the same SES path as other auth emails.
       magicLink({ sendMagicLink: wrapsPlugin.emails.magicLink }),
+      // Unlinking, deletion and email-change rules, and the security summary the page reads.
+      accountPlugin({ notices, adapter, billing: !!opts.stripe }),
+      securitySummaryPlugin(),
       // A link proves the mailbox, not the second factor: a user with two-factor on gets the code next.
       twoFactorMagicLink({ baseURL: opts.baseURL }),
       // Platform admins: a user whose `role` is "admin". Impersonation is limited by impersonationGuard.

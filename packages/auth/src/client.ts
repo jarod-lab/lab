@@ -6,7 +6,7 @@ import { passkeyClient } from "@better-auth/passkey/client"
 import { ssoClient } from "@better-auth/sso/client"
 import { stripeClient } from "@better-auth/stripe/client"
 import { wrapsClient } from "@wraps.dev/better-auth/client"
-import type { BetterAuthClientOptions } from "better-auth/client"
+import type { BetterAuthClientOptions, BetterAuthClientPlugin } from "better-auth/client"
 import { createAuthClient } from "better-auth/client"
 import {
   adminClient,
@@ -20,10 +20,28 @@ import { TWO_FACTOR_PATH } from "./constants"
 
 export { RESERVED_ORG_SLUGS, isReservedOrgSlug } from "./reserved-slugs"
 export {
+  ACTIVE_SUBSCRIPTION_CODE,
+  LAST_SIGN_IN_METHOD_CODE,
+  OWNS_ORGANIZATION_CODE,
   PASSWORD_COMPROMISED_CODE,
   PASSWORD_COMPROMISED_MESSAGE,
   TWO_FACTOR_PATH,
 } from "./constants"
+
+/** The security page's summary (security-summary.ts): GET /api/auth/security/summary. */
+const securitySummaryClient = () =>
+  ({
+    id: "starter-security-summary-client",
+    getActions: ($fetch) => ({
+      securitySummary: () =>
+        $fetch<{
+          passwordChangedAt: string | Date | null
+          twoFactorEnabled: boolean
+          twoFactorEnabledAt: string | Date | null
+          backupCodesRemaining: number | null
+        }>("/security/summary", { method: "GET" }),
+    }),
+  }) satisfies BetterAuthClientPlugin
 
 /**
  * The browser client for this server's auth: sessions, passwords, organizations and the OAuth
@@ -51,6 +69,7 @@ export const createClient = (
       ssoClient(),
       // Billing answers only when the server has Stripe configured (test mode); see index.ts.
       stripeClient({ subscription: true }),
+      securitySummaryClient(),
       twoFactorClient({
         // The page keeps its query: a pending OAuth authorization rides on it into the code entry.
         onTwoFactorRedirect() {

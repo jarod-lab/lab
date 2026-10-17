@@ -114,6 +114,11 @@ export async function getRunBundle<R, O>(
 
 const finished = (r: { status: string }) => (FINISHED as readonly string[]).includes(r.status)
 
+/**
+ * Refuses a write to a finished run. Every write reads its run `for update` first, so writes to one
+ * run take turns: two appended steps can't take the same position, and a run can't finish while an
+ * approval is being requested.
+ */
 function assertOpen(r: Run): void {
   if (finished(r)) {
     throw new AppError("CONFLICT", "This run has finished", {
@@ -179,6 +184,7 @@ export async function appendRunStep<R, O>(
       .from(run)
       .where(and(eq(run.id, id.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!owner) return undefined
     assertOpen(owner)
     const [last] = await tx
@@ -235,6 +241,7 @@ export async function updateRunStep<R, O>(
       .from(run)
       .where(and(eq(run.id, runId.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!owner) return undefined
     assertOpen(owner)
     const [step] = await tx
@@ -298,9 +305,10 @@ export async function updateRun<R, O>(
       .from(run)
       .where(and(eq(run.id, id.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!current) return undefined
+    assertOpen(current)
     if (patch.status !== undefined) {
-      assertOpen(current)
       const approvals = await tx
         .select()
         .from(approval)
@@ -355,6 +363,7 @@ export async function requestApproval<R, O>(
       .from(run)
       .where(and(eq(run.id, id.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!owner) return undefined
     assertOpen(owner)
     let stepId: string
@@ -519,6 +528,7 @@ export async function steerRun<R, O>(
       .from(run)
       .where(and(eq(run.id, id.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!owner) return undefined
     assertOpen(owner)
     const [row] = await tx
@@ -550,8 +560,26 @@ export async function deferRun<R, O>(
       .from(run)
       .where(and(eq(run.id, id.value), eq(run.organizationId, org.value)))
       .limit(1)
+      .for("update")
     if (!current) return undefined
     assertOpen(current)
+    // Queued would hide the run from needs_you while its approval still waits for a person.
+    const [waiting] = await tx
+      .select({ id: approval.id })
+      .from(approval)
+      .where(
+        and(
+          eq(approval.runId, current.id),
+          eq(approval.organizationId, org.value),
+          eq(approval.status, "pending"),
+        ),
+      )
+      .limit(1)
+    if (waiting) {
+      throw new AppError("CONFLICT", "The run is waiting for an approval", {
+        hint: "Decide the approval first (decide_approval); a run can be deferred once nothing waits on a person.",
+      })
+    }
     const [row] = await tx
       .update(run)
       .set({ status: "queued", deferredUntil: until })

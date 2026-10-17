@@ -1,5 +1,9 @@
-import { cleanup } from "@testing-library/react"
+import { cleanup, configure } from "@testing-library/react"
 import { afterEach } from "vitest"
+
+// Turbo runs every package's tests at once, and under that load a page's first render can pass
+// Testing Library's 1s default for findBy*/waitFor (seen at 1.4s). 5s keeps real failures failing.
+configure({ asyncUtilTimeout: 5000 })
 
 // Vitest runs without globals, so Testing Library's automatic cleanup is not registered.
 afterEach(() => {

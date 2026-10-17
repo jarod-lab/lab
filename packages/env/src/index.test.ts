@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 
+/** Variables the tests below set themselves, and expect unset otherwise. */
+const OPTIONAL_UNDER_TEST = [
+  "WEB_ORIGINS",
+  "DEV_MAIL_SINK",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PLANS",
+]
+
 describe("env", () => {
   it("fails fast on missing variables", async () => {
     vi.resetModules()
@@ -82,6 +91,8 @@ describe("env", () => {
       vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
       vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
       vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+      // Unset whatever the developer's .env (loaded by mise) sets for these.
+      for (const name of OPTIONAL_UNDER_TEST) vi.stubEnv(name, "")
     }
 
     it("leaves the dev mail sink and billing off when unset", async () => {
@@ -140,6 +151,8 @@ describe("env", () => {
       vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
       vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
       vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+      // Unset whatever the developer's .env (loaded by mise) sets for these.
+      for (const name of OPTIONAL_UNDER_TEST) vi.stubEnv(name, "")
     }
 
     it("defaults to no extra origins", async () => {

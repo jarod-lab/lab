@@ -59,6 +59,8 @@ function fakeApi(overrides: Partial<OrgSettingsApi> = {}): OrgSettingsApi {
   }
 }
 
+const twoAgents = { list: vi.fn(async () => [{ id: "a1" }, { id: "a2" }]) } as never
+
 function setup(options: { role?: string; api?: OrgSettingsApi } = {}) {
   const auth = fakeAuth({ memberRole: vi.fn(async () => options.role ?? "owner") })
   const api = options.api ?? fakeApi()
@@ -72,6 +74,7 @@ function setup(options: { role?: string; api?: OrgSettingsApi } = {}) {
       host="app.example.com"
       onSlugChanged={onSlugChanged}
       onExit={onExit}
+      agentsApi={twoAgents}
     />,
   )
   rendered.queryClient.setQueryData(qk.organizations(), [acme, babbage])
@@ -79,6 +82,11 @@ function setup(options: { role?: string; api?: OrgSettingsApi } = {}) {
 }
 
 describe("OrgGeneralContainer", () => {
+  it("names the real number of agents a deletion removes", async () => {
+    setup()
+    expect(await screen.findByText(/Permanently deletes 2 agents/)).toBeTruthy()
+  })
+
   it("saves a new name and keeps the metadata the server already holds", async () => {
     const user = userEvent.setup()
     const { api, onSlugChanged } = setup()

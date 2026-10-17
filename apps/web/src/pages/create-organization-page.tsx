@@ -159,7 +159,7 @@ export function CreateOrganizationPage({
         <ol className="flex list-decimal flex-col gap-1 pl-5 text-sm text-muted-foreground">
           <li>You'll be the Owner of the organization.</li>
           <li>You can invite teammates later from its Members page.</li>
-          <li>Plan: [PLACEHOLDER] (billing is not built yet).</li>
+          <li>Plans and billing are in the organization's Billing settings.</li>
         </ol>
 
         {submitError ? (
@@ -176,7 +176,7 @@ export function CreateOrganizationPage({
               </Button>
             )}
           </form.Subscribe>
-          <Button type="button" variant="ghost" onClick={onCancel}>
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
         </div>

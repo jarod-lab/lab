@@ -37,9 +37,10 @@ import { fieldMessage } from "../lib/messages"
 // The sections of the Security page (board Security). Each takes its data and callbacks as props.
 // Errors a call throws are shown in the section; the container has already mapped their copy.
 
-const ROW = "flex items-center gap-3 border-t border-border py-2.5"
-const ROW_LAST = "flex items-center gap-3 border-y border-border py-2.5"
-const TEXT = "flex min-w-0 flex-1 flex-col leading-snug"
+// Rows wrap on phones: the text keeps at least 12rem and the actions drop below it.
+const ROW = "flex flex-wrap items-center gap-3 border-t border-border py-2.5"
+const ROW_LAST = "flex flex-wrap items-center gap-3 border-y border-border py-2.5"
+const TEXT = "flex min-w-[12rem] flex-1 flex-col leading-snug"
 const META = "text-[13px] text-muted-foreground"
 
 const passkeyNameSchema = z.object({

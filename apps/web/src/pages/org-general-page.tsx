@@ -58,7 +58,7 @@ export interface OrgGeneralPageProps {
   soleOwner: boolean
   defaultInviteRole: InviteRole
   /** Live counts where known; `undefined` shows [PLACEHOLDER]. */
-  counts: { members?: number; apiKeys?: number }
+  counts: { members?: number; apiKeys?: number; agents?: number }
   /** Admins who can be made owner. */
   admins: { memberId: string; label: string }[]
   checkSlug: (slug: string) => Promise<boolean>
@@ -395,7 +395,7 @@ function OwnerDangerZone({
   onDelete,
 }: {
   organizationName: string
-  counts: { members?: number; apiKeys?: number }
+  counts: { members?: number; apiKeys?: number; agents?: number }
   admins: { memberId: string; label: string }[]
   soleOwner: boolean
   onTransfer: (memberId: string) => Promise<void>
@@ -511,7 +511,7 @@ function DeleteRow({
   onDelete,
 }: {
   organizationName: string
-  counts: { members?: number; apiKeys?: number }
+  counts: { members?: number; apiKeys?: number; agents?: number }
   onDelete: () => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
@@ -519,7 +519,7 @@ function DeleteRow({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inputId = useId()
-  const consequence = `Permanently deletes ${countOrPlaceholder(undefined)} agents, ${countOrPlaceholder(counts.apiKeys)} API keys (they stop working) and all run history, removes ${countOrPlaceholder(counts.members)} members, and cancels the subscription [PLACEHOLDER: billing is not built yet]. You'll type the organization name to confirm.`
+  const consequence = `Permanently deletes ${countOrPlaceholder(counts.agents)} agents, ${countOrPlaceholder(counts.apiKeys)} API keys (they stop working) and all run history, removes ${countOrPlaceholder(counts.members)} members. Cancel any subscription in Billing first. You'll type the organization name to confirm.`
 
   return (
     <>

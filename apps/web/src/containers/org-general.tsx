@@ -6,6 +6,7 @@ import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { type GeneralValues, OrgGeneralPage } from "../pages/org-general-page"
 import { defaultInviteRoleOf, ownerCount, withDefaultInviteRole } from "../lib/org-settings"
 import { type OrgSettingsApi, type OrgSettings } from "../lib/org-settings-api"
+import { getWorkspaceAgentsApi, type WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import { qk } from "../lib/query-keys"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { orgRoleLabel, invalidateSession, memberRoleQuery, useSessionQuery } from "./shell-data"
@@ -25,6 +26,8 @@ export interface OrgGeneralContainerProps {
   /** Left or deleted: go to another organization's page, or null for /new. */
   onExit: (nextSlug: string | null) => void
   renderLink?: RenderLink
+  /** Workspace agents, for the deletion count. Defaults to the app's API. */
+  agentsApi?: Pick<WorkspaceAgentsApi, "list">
 }
 
 /**
@@ -39,6 +42,7 @@ export function OrgGeneralContainer({
   onSlugChanged,
   onExit,
   renderLink,
+  agentsApi = getWorkspaceAgentsApi(),
 }: OrgGeneralContainerProps) {
   const queryClient = useQueryClient()
   const organizationId = organization.id
@@ -57,6 +61,11 @@ export function OrgGeneralContainer({
     queryKey: qk.org(organizationId).members(),
     queryFn: () => api.listMembers(organizationId),
     enabled: role.isSuccess,
+  })
+  const agents = useQuery({
+    queryKey: [...qk.org(organizationId).agents(), "count"],
+    queryFn: async () => (await agentsApi.list(organizationId)).length,
+    enabled: isOwner,
   })
   const apiKeys = useQuery({
     queryKey: qk.org(organizationId).counts(),
@@ -170,6 +179,7 @@ export function OrgGeneralContainer({
       counts={{
         members: members.data?.total,
         apiKeys: apiKeys.data,
+        agents: agents.data,
       }}
       admins={admins}
       checkSlug={checkSlugFor}

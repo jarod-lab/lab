@@ -286,7 +286,10 @@ export function createAuth(opts: AuthOptions) {
     advanced: { disableOriginCheck: false },
     // The jwt plugin's session-to-JWT endpoint, and the device plugin's /device/token, which mints a
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
-    disabledPaths: ["/token", "/device/token"],
+    // delete-consent removes the consent row but leaves the client's refresh tokens, which keep the
+    // grant standing (principal.ts), so it would look like a revocation without being one.
+    // revoke_agent_access ends a grant.
+    disabledPaths: ["/token", "/device/token", "/oauth2/delete-consent"],
     hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave(endScim) },
     user: {
       // Changing the sign-in email: the new address gets a confirmation link, the old one a notice.

@@ -791,6 +791,25 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       return body.access_token ?? ""
     }
 
+    it("keeps delete-consent off: it would leave the agent's refresh token standing", async () => {
+      const { b: owner } = await signedUp("Consenting")
+      const a = await startAuthorization()
+      const first = await owner.request(`/api/auth/oauth2/authorize?${a.query}`)
+      await finish(owner, new URL(first.headers.get("location") ?? "", BASE), a)
+      const db = (await t.auth.$context).adapter
+      const where = [{ field: "clientId", value: a.clientId }]
+      const consent = await db.findOne<{ id: string }>({ model: "oauthConsent", where })
+      expect(consent).not.toBeNull()
+
+      const res = await owner.request("/api/auth/oauth2/delete-consent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: consent?.id }),
+      })
+      expect(res.status).toBe(404)
+      expect(await db.findOne({ model: "oauthConsent", where })).not.toBeNull()
+    })
+
     it("resumes the authorization after a magic-link sign-in", async () => {
       const { email: address } = await signedUp("Mara")
       const a = await startAuthorization()

@@ -21,6 +21,7 @@ export const ALLOWED_REQUEST_HEADERS = [
   "idempotency-key",
   "mcp-protocol-version",
   "x-api-key",
+  "x-organization-id",
 ] as const
 
 /** Response headers a browser may read: the MCP session, request id, retry and rate-limit state. */
@@ -37,7 +38,8 @@ export const EXPOSED_RESPONSE_HEADERS = [
 export function bearerCors(): MiddlewareHandler {
   return cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    // Every method an operation uses (see operations.ts), plus the preflight itself.
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: [...ALLOWED_REQUEST_HEADERS],
     exposeHeaders: [...EXPOSED_RESPONSE_HEADERS],
     maxAge: 600,

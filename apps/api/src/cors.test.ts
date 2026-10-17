@@ -31,6 +31,20 @@ describe("CORS on bearer surfaces", () => {
     expect(res.headers.get("access-control-allow-credentials")).toBeNull()
   })
 
+  it("allows PATCH and the organization header, which the registry and the web app use", async () => {
+    const res = await t.req("/v1/runs/r1", {
+      method: "OPTIONS",
+      headers: {
+        origin: ORIGIN,
+        "access-control-request-method": "PATCH",
+        "access-control-request-headers": "authorization,content-type,x-organization-id",
+      },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get("access-control-allow-methods")).toContain("PATCH")
+    expect(res.headers.get("access-control-allow-headers")).toContain("x-organization-id")
+  })
+
   it("exposes retry, rate-limit, request and MCP session headers on success and errors", async () => {
     const exposed = (res: Response) => res.headers.get("access-control-expose-headers") ?? ""
 

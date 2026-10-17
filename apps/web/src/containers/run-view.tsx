@@ -63,8 +63,9 @@ export function RunViewContainer({
   }, [organizationId, runId, queryClient])
 
   // Live runs refresh through Pacer (see use-run-polling): paused when the tab is hidden, stopped once
-  // the run has finished. Until the first answer, the run counts as live.
-  const polling = run.data === undefined || isLiveStatus(run.data.status)
+  // the run has finished. Until the first answer, the run counts as live; a run that is not found or
+  // failed to load is not polled (every refetch is metered), and Try again refetches it.
+  const polling = run.data ? isLiveStatus(run.data.status) : !run.isError
   const refetchRun = useCallback(() => {
     void run.refetch()
   }, [run])
@@ -136,6 +137,7 @@ export function RunViewContainer({
       viewerId={session.data?.user.id}
       canSteer={canSteer}
       busy={busy}
+      sending={steer.isPending || defer.isPending}
       actionError={actionError}
       onRetry={() => void run.refetch()}
       onDecide={(approvalId, decision) => decide.mutate({ approvalId, decision })}

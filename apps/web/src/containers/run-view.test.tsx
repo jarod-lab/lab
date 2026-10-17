@@ -1,16 +1,35 @@
 // @vitest-environment jsdom
-import { screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { WebError } from "../lib/web-auth"
 import type { RunDetail, RunsApi } from "../lib/runs-api"
+import { useRunPolling } from "../lib/use-run-polling"
 import { fakeAuth } from "../test/fake-auth"
 import { renderWithClient } from "../test/render"
 import { RunViewContainer } from "./run-view"
 
+// The poller is wrapped, not replaced: the tests read the `live` flag the container gives it.
+vi.mock("../lib/use-run-polling", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/use-run-polling")>()
+  return { ...actual, useRunPolling: vi.fn(actual.useRunPolling) }
+})
+
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
+
+/** The `live` flag the container last gave the poller. */
+function lastLive(): boolean | undefined {
+  return vi.mocked(useRunPolling).mock.calls.at(-1)?.[0].live
+}
+
+/** A local time one day ahead, in the datetime-local format the picker takes. */
+function tomorrowLocal(): string {
+  const later = new Date(Date.now() + 86_400_000)
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}T${pad(later.getHours())}:${pad(later.getMinutes())}`
+}
 
 const ALLOWED: Record<string, string[]> = {
   owner: ["run:read", "run:approve", "run:steer"],
@@ -112,6 +131,43 @@ function renderRun(api: RunsApi, { role = "owner" as string } = {}) {
 }
 
 describe("RunViewContainer", () => {
+  beforeEach(() => {
+    vi.mocked(useRunPolling).mockClear()
+  })
+
+  it("keeps polling while the first answer is pending", () => {
+    renderRun(fakeApi({ get: vi.fn(() => new Promise<RunDetail>(() => {})) }))
+    expect(lastLive()).toBe(true)
+  })
+
+  it("stops polling a run that has finished", async () => {
+    renderRun(fakeApi({ get: vi.fn(async () => detail({ status: "done", approvals: [] })) }))
+    await screen.findByRole("heading", { name: "Release triage" })
+    expect(lastLive()).toBe(false)
+  })
+
+  it("stops polling a run that is not found, rather than refetching it every few seconds", async () => {
+    const get = vi.fn(async () => {
+      throw new WebError("Run not found", 404)
+    })
+    renderRun(fakeApi({ get }))
+    await screen.findByRole("heading", { name: "Run not found" })
+    expect(lastLive()).toBe(false)
+  })
+
+  it("stops polling a run that failed to load", async () => {
+    // The container retries a server error twice (about 3 seconds) before it reads as failed.
+    renderRun(
+      fakeApi({
+        get: vi.fn(async () => {
+          throw new WebError("Server is down", 500)
+        }),
+      }),
+    )
+    await screen.findByText("Could not load this run. Server is down", undefined, { timeout: 6000 })
+    expect(lastLive()).toBe(false)
+  }, 10_000)
+
   it("loads the run and approves through the decision route", async () => {
     const api = fakeApi()
     renderRun(api)
@@ -158,6 +214,59 @@ describe("RunViewContainer", () => {
     await user.type(input, "  Skip billing  ")
     await user.click(screen.getByRole("button", { name: "Send" }))
     await waitFor(() => expect(api.steer).toHaveBeenCalledWith("org-a", "r1", "Skip billing"))
+  })
+
+  it("holds Send while a steering message is in flight, so a second click cannot resend it", async () => {
+    const steer = vi.fn(() => new Promise<never>(() => {}))
+    renderRun(fakeApi({ steer }))
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole("textbox", { name: "Steer this run" }), "Skip billing")
+    await user.click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() => expect(steer).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole("button", { name: "Send" })).toHaveProperty("disabled", true)
+    await user.click(screen.getByRole("button", { name: "Send" }))
+    expect(steer).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends a steering message once when the form is submitted twice before the first finishes", async () => {
+    const steer = vi.fn(() => new Promise<never>(() => {}))
+    renderRun(fakeApi({ steer }))
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole("textbox", { name: "Steer this run" }), "Skip billing")
+    const form = screen.getByRole("form", { name: "Steer this run" })
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() => expect(steer).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(steer).toHaveBeenCalledTimes(1)
+  })
+
+  it("holds Defer run while the deferral is in flight, and defers once", async () => {
+    const defer = vi.fn(() => new Promise<never>(() => {}))
+    renderRun(fakeApi({ defer }))
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Defer" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.type(
+      dialog.querySelector('input[type="datetime-local"]') as HTMLElement,
+      tomorrowLocal(),
+    )
+    await user.click(screen.getByRole("button", { name: "Defer run" }))
+    await waitFor(() => expect(defer).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole("button", { name: "Defer run" })).toHaveProperty("disabled", true)
+    fireEvent.submit(dialog.querySelector("form") as HTMLFormElement)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(defer).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not hold the decision controls for a steering message in flight", async () => {
+    const steer = vi.fn(() => new Promise<never>(() => {}))
+    renderRun(fakeApi({ steer }), { role: "owner" })
+    const user = userEvent.setup()
+    await user.type(await screen.findByRole("textbox", { name: "Steer this run" }), "Skip billing")
+    await user.click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() => expect(steer).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole("button", { name: "Approve" })).toHaveProperty("disabled", false)
   })
 
   it("defers the run to a chosen future time", async () => {

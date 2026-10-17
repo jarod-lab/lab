@@ -88,6 +88,7 @@ function page(state: RunViewState, overrides: Partial<RunViewPageProps> = {}) {
     onWindowPassed: vi.fn(),
     onSteer: vi.fn(async () => undefined),
     onDefer: vi.fn(async () => undefined),
+    sending: false,
     ...overrides,
   }
   return { ...render(<RunViewPage {...props} />), props }
@@ -97,7 +98,7 @@ describe("RunViewPage", () => {
   it("shows the run, its step counter and its steps with shape and word", async () => {
     page({ kind: "ready", run: run() })
     expect(screen.getByRole("heading", { name: "Testing the two fixes", level: 1 })).toBeTruthy()
-    expect(screen.getByLabelText("Step 3 of 4")).toBeTruthy()
+    expect(screen.getByText("Step 3 of 4")).toBeTruthy()
     const steps = within(screen.getByRole("list", { name: "Run steps" })).getAllByRole("listitem")
     expect(steps).toHaveLength(4)
     expect(steps[2]?.getAttribute("data-status")).toBe("running")
@@ -109,6 +110,22 @@ describe("RunViewPage", () => {
   it("shows an empty steps state", () => {
     page({ kind: "ready", run: run({ steps: [] }) })
     expect(screen.getByText(/No steps yet/)).toBeTruthy()
+  })
+
+  it("says the step counter as text, with the big digits hidden from assistive tech", () => {
+    page({ kind: "ready", run: run() })
+    // A label on a box with no role is not announced: the words are text, and the visual digits are hidden.
+    expect(screen.queryByLabelText("Step 3 of 4")).toBeNull()
+    expect(screen.getByText("Step 3 of 4").closest('[aria-hidden="true"]')).toBeNull()
+    expect(screen.getByText("/4").closest('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it("renders no main landmark of its own, since the shell's main holds the page", () => {
+    const ready = page({ kind: "ready", run: run() })
+    expect(ready.container.querySelector("main")).toBeNull()
+    ready.unmount()
+    const missing = page({ kind: "not-found" })
+    expect(missing.container.querySelector("main")).toBeNull()
   })
 
   it("asks for a decision with Approve and Deny of equal weight", () => {

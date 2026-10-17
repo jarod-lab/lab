@@ -36,6 +36,8 @@ export interface RunViewPageProps {
   /** The caller can steer and defer (run:steer). */
   canSteer: boolean
   busy: boolean
+  /** A steering message or a deferral is in flight: its controls wait for it. */
+  sending: boolean
   /** The last action the server refused, if any. */
   actionError: string | null
   onRetry: () => void
@@ -56,8 +58,9 @@ export function RunViewPage(props: RunViewPageProps) {
     return <output className="block p-6 text-muted-foreground">Loading run…</output>
   }
   if (state.kind === "not-found") {
+    // The shell's <main> holds the page, so this is a div: a second main would nest a landmark.
     return (
-      <main className="flex max-w-[640px] flex-col gap-3 p-6 md:px-9">
+      <div className="flex max-w-[640px] flex-col gap-3 p-6 md:px-9">
         <h1 className="text-2xl font-bold">Run not found</h1>
         <p className="text-muted-foreground">
           It may not exist, or it belongs to another organization.
@@ -65,7 +68,7 @@ export function RunViewPage(props: RunViewPageProps) {
         <Link href={`/${organization.slug}`} className="underline underline-offset-3">
           Back to {organization.name}
         </Link>
-      </main>
+      </div>
     )
   }
   if (state.kind === "error") {
@@ -98,7 +101,7 @@ export function RunViewPage(props: RunViewPageProps) {
       : "Viewers can read this run, but can't steer it."
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 md:px-9 md:py-7">
+    <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-6 md:px-9 md:py-7">
       <div className="flex items-end gap-6">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
@@ -163,11 +166,12 @@ export function RunViewPage(props: RunViewPageProps) {
         <SteerBar
           disabledReason={steerReason}
           busy={props.busy}
+          sending={props.sending}
           deferredUntil={run.status === "queued" ? run.deferredUntil : null}
           onSteer={props.onSteer}
           onDefer={props.onDefer}
         />
       </div>
-    </main>
+    </div>
   )
 }

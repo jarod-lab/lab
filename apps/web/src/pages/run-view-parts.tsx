@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form"
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 import { Button } from "@starter/ui/components/ui/button"
 import {
@@ -111,13 +111,17 @@ function stepState(status: StepStatus) {
 
 /** The step counter at the top right: "4/6", from the first step that is not done. */
 export function StepCounter({ index, total }: { index: number; total: number }) {
+  // The words are text for screen readers (a label on a box with no role is not announced); the big
+  // digits are the same words, so they are hidden from assistive tech.
   return (
-    <div
-      aria-label={`Step ${index} of ${total}`}
-      className="font-extrabold leading-[.8] tracking-tighter text-[64px]"
-    >
-      {index}
-      <span className="text-4xl text-muted-foreground">/{total}</span>
+    <div className="font-extrabold leading-[.8] tracking-tighter text-[64px]">
+      <span className="sr-only">
+        Step {index} of {total}
+      </span>
+      <span aria-hidden="true">
+        {index}
+        <span className="text-4xl text-muted-foreground">/{total}</span>
+      </span>
     </div>
   )
 }
@@ -346,12 +350,16 @@ export function MessageList({ messages }: { messages: RunMessage[] }) {
 export function SteerBar({
   disabledReason,
   busy,
+  sending,
   deferredUntil,
   onSteer,
   onDefer,
 }: {
   disabledReason: string | null
+  /** A decision or undo is in flight. */
   busy: boolean
+  /** A steering message or a deferral is in flight. */
+  sending: boolean
   deferredUntil: string | null
   onSteer: (body: string) => Promise<void>
   onDefer: (untilIso: string) => Promise<void>
@@ -360,17 +368,24 @@ export function SteerBar({
   const [deferOpen, setDeferOpen] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const disabled = disabledReason !== null
+  const locked = busy || sending
+  // A second submit while the first is in flight is dropped: the first still owns the box.
+  const inFlight = useRef(false)
 
   const form = useForm({
     defaultValues: { body: "" } as SteerValues,
     validators: { onChange: steerSchema },
     onSubmit: async ({ value }) => {
+      if (inFlight.current) return
+      inFlight.current = true
       setServerError(null)
       try {
         await onSteer(value.body.trim())
         form.reset()
       } catch (caught) {
         setServerError(messageOf(caught))
+      } finally {
+        inFlight.current = false
       }
     },
   })
@@ -410,7 +425,7 @@ export function SteerBar({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={disabled || busy}
+                    disabled={disabled || locked}
                     onClick={() => setDeferOpen(true)}
                     className="min-h-12 flex-1 rounded-[10px] border-2 border-foreground md:flex-none"
                   >
@@ -418,7 +433,7 @@ export function SteerBar({
                   </Button>
                   <Button
                     type="submit"
-                    disabled={disabled || busy}
+                    disabled={disabled || locked}
                     className="min-h-12 flex-1 rounded-[10px] border-2 border-foreground md:flex-none"
                   >
                     Send
@@ -442,6 +457,7 @@ export function SteerBar({
       ) : null}
       <DeferDialog
         open={deferOpen}
+        busy={locked}
         onOpenChange={setDeferOpen}
         onSubmit={async (untilIso) => {
           await onDefer(untilIso)
@@ -454,25 +470,33 @@ export function SteerBar({
 
 function DeferDialog({
   open,
+  busy,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean
+  /** A deferral or a steering message is in flight: the submit waits for it. */
+  busy: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (untilIso: string) => Promise<void>
 }) {
   const inputId = useId()
   const [serverError, setServerError] = useState<string | null>(null)
+  const inFlight = useRef(false)
   const form = useForm({
     defaultValues: { until: "" } as DeferValues,
     validators: { onChange: deferSchema },
     onSubmit: async ({ value }) => {
+      if (inFlight.current) return
+      inFlight.current = true
       setServerError(null)
       try {
         await onSubmit(deferIso(value.until))
         form.reset()
       } catch (caught) {
         setServerError(messageOf(caught))
+      } finally {
+        inFlight.current = false
       }
     },
   })
@@ -523,7 +547,7 @@ function DeferDialog({
             </p>
           ) : null}
           <DialogFooter>
-            <Button type="submit" className="min-h-11">
+            <Button type="submit" disabled={busy} className="min-h-11">
               Defer run
             </Button>
           </DialogFooter>

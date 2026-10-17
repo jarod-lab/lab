@@ -127,3 +127,10 @@ describe("OrgHomePage", () => {
     expect(rows.length).toBeLessThan(100)
   })
 })
+
+describe("OrgHomePage landmark", () => {
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    render(<OrgHomePage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+})

@@ -109,7 +109,7 @@ export function OrgBillingPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[1040px] flex-col gap-[18px] px-4 py-6 md:px-9">
+      <div className="flex max-w-[1040px] flex-col gap-[18px] px-4 py-6 md:px-9">
         <p className="text-sm text-muted-foreground">
           Payments are handled by Stripe. Buttons marked <span aria-hidden="true">↗</span>
           <span className="sr-only">with an arrow</span> open Stripe&apos;s secure portal in a new
@@ -309,7 +309,7 @@ export function OrgBillingPage({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </main>
+      </div>
     </div>
   )
 }

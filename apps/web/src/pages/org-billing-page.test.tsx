@@ -116,3 +116,10 @@ describe("OrgBillingPage", () => {
     await expectNoA11yViolations(fixture.container.innerHTML)
   })
 })
+
+describe("OrgBillingPage landmark", () => {
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    renderWithClient(<OrgBillingPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+})

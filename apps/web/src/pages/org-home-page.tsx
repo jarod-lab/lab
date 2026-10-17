@@ -78,7 +78,7 @@ export function OrgHomePage({
   const empty = status === "ready" && runs.length === 0 && !showNeedsYou
 
   return (
-    <main className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 md:px-9">
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 md:px-9">
       <header className="flex flex-col gap-1">
         <p className="text-sm text-muted-foreground">Runs</p>
         <h1 className="text-2xl font-bold">{organization.name}</h1>
@@ -184,7 +184,7 @@ export function OrgHomePage({
           ) : null}
         </section>
       ) : null}
-    </main>
+    </div>
   )
 }
 

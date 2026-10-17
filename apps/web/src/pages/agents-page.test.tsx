@@ -127,3 +127,10 @@ describe("AgentsPage", () => {
     expect(screen.getByText("Access: none")).toBeTruthy()
   })
 })
+
+describe("AgentsPage landmark", () => {
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    render(<AgentsPage api={fakeApi()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+})

@@ -88,7 +88,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
       <header className="flex flex-wrap items-start justify-between gap-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-2xl font-semibold">Agents and activity</h2>
@@ -190,6 +190,6 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
           </Button>
         ) : null}
       </section>
-    </main>
+    </div>
   )
 }

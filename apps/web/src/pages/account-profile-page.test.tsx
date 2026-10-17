@@ -191,3 +191,10 @@ describe("AccountProfilePage", () => {
     await expectNoA11yViolations(container.innerHTML)
   })
 })
+
+describe("AccountProfilePage landmark", () => {
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    render(<AccountProfilePage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+})

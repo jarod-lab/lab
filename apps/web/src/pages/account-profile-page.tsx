@@ -99,7 +99,7 @@ export function AccountProfilePage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[760px] flex-col gap-5 px-4 py-6 md:px-9">
+      <div className="flex max-w-[760px] flex-col gap-5 px-4 py-6 md:px-9">
         <AvatarRow name={profile.name} email={profile.email} />
         <NameForm initialName={profile.name} onSave={onSaveName} />
         <EmailSection
@@ -126,7 +126,7 @@ export function AccountProfilePage({
           requestedTo={deleteRequestedTo}
           onRequestDelete={onRequestDelete}
         />
-      </main>
+      </div>
     </div>
   )
 }

@@ -91,3 +91,7 @@
 | E1 | page e2e on the real stack (vite dev + apps/api + Postgres), desktop + phone | 11/12 files pass | org-general, members, api-keys, profile, security, agents, run-view, billing, org-security, admin (local admin account) all pass both targets (commit 54f26fd) |
 | E1 | auth.e2e: magic link and forgot password | fail → S3 | web sends callbackURL on its own origin; API trusts only baseURL (split origin in pnpm dev and e2e). Production same-origin unaffected |
 | E1 | self-approved run copy "Approved by a teammate" | unresolved (copy) | decidedBy set → teammate wording; check against DirLift |
+| S3 | WEB_ORIGINS: web-origin callbacks and passkeys when the web app runs apart from the API | pass | auth-flows "web app on another origin"; env 15; api-app 376 (commit a941678) |
+| E1 | full e2e suite on the real stack, desktop + phone | pass | `pnpm exec e2e run`: 28/28 files, 42 passed, 2 skipped (admin journey); with E2E_ADMIN_* set, admin 6/6 |
+| E1 | flakes: visual fixed 900ms wait, ambiguous "Sign out" locator, web async-query timeout under turbo load | pass (fixed) | 792667b, setup.ts asyncUtilTimeout 5000 |
+| Z | `pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm baseline && pnpm format:check && pnpm build` | pass | exit 0 (final) |

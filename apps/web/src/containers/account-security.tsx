@@ -10,6 +10,7 @@ import {
   signInMethodLabel,
 } from "../lib/account-format"
 import { accountKeys } from "../lib/account-keys"
+import { getWebAuth } from "../lib/web-auth"
 import { navigateTo } from "../lib/navigation"
 import { AccountSecurityPage } from "../pages/account-security-page"
 
@@ -39,6 +40,12 @@ export function AccountSecurityContainer({
     queryFn: () => api.securitySummary(),
   })
   const accounts = useQuery({ queryKey: accountKeys.accounts(), queryFn: () => api.listAccounts() })
+  // Only the providers the server has set up are offered to connect (a linked one always shows).
+  const methods = useQuery({
+    queryKey: accountKeys.signInMethods(),
+    queryFn: async () => (await getWebAuth().signInMethods?.()) ?? null,
+    retry: false,
+  })
   const passkeys = useQuery({ queryKey: accountKeys.passkeys(), queryFn: () => api.listPasskeys() })
   const sessions = useQuery({
     queryKey: accountKeys.sessions(),
@@ -59,7 +66,11 @@ export function AccountSecurityContainer({
 
   const linked = accounts.data
   const hasPassword = linked.some((account) => account.providerId === "credential")
-  const connected = SOCIAL_PROVIDERS.map((provider) => {
+  const offered = new Set<string>(methods.data?.social ?? [])
+  const connected = SOCIAL_PROVIDERS.filter(
+    (provider) =>
+      offered.has(provider.id) || linked.some((item) => item.providerId === provider.id),
+  ).map((provider) => {
     const account = linked.find((item) => item.providerId === provider.id)
     return {
       accountId: account?.id ?? null,

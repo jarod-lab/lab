@@ -2,10 +2,15 @@
 import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import { fakeAuth } from "../test/fake-auth"
 import { InvitationPage } from "./invitation-page"
+
+// input-otp and the org-settings client need nothing from jsdom beyond this.
+beforeAll(() => {
+  if (!document.elementFromPoint) document.elementFromPoint = () => null
+})
 
 describe("InvitationPage", () => {
   it("offers sign-in or sign-up with the invited address when signed out", async () => {
@@ -19,7 +24,7 @@ describe("InvitationPage", () => {
   it("accepts the invitation once signed in", async () => {
     const auth = fakeAuth()
     const { container } = render(<InvitationPage auth={auth} invitationId="inv-1" />)
-    const accept = await screen.findByRole("button", { name: "Accept invitation" })
+    const accept = await screen.findByRole("button", { name: "Accept" })
     await userEvent.setup().click(accept)
     expect(await screen.findByRole("heading", { name: "You have joined" })).toBeTruthy()
     expect(auth.acceptInvitation).toHaveBeenCalledWith("inv-1")
@@ -49,7 +54,7 @@ describe("InvitationPage", () => {
     await user.type(screen.getByLabelText("Password"), "correct-horse")
     await user.click(screen.getByRole("button", { name: "Sign in" }))
 
-    expect(await screen.findByRole("button", { name: "Accept invitation" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Accept" })).toBeTruthy()
     expect(auth.signIn).toHaveBeenCalledTimes(1)
   })
 
@@ -77,7 +82,7 @@ describe("InvitationPage", () => {
     await user.type(screen.getByLabelText("Password"), "correct-horse")
     await user.click(screen.getByRole("button", { name: "Create account" }))
 
-    expect(await screen.findByRole("button", { name: "Accept invitation" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Accept" })).toBeTruthy()
     expect(auth.signUp).toHaveBeenCalledWith({
       name: "Ada",
       email: "ada@example.com",
@@ -97,10 +102,7 @@ describe("InvitationPage", () => {
     })
     render(<InvitationPage auth={auth} invitationId="inv-1" />)
     expect(await screen.findByText("This invitation is canceled.")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Accept invitation" })).toHaveProperty(
-      "disabled",
-      true,
-    )
+    expect(screen.getByRole("button", { name: "Accept" })).toHaveProperty("disabled", true)
   })
 
   it("shows the server's message when accepting fails", async () => {
@@ -110,7 +112,7 @@ describe("InvitationPage", () => {
       }),
     })
     render(<InvitationPage auth={auth} invitationId="inv-1" />)
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Accept invitation" }))
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Accept" }))
     expect(await screen.findByText("This invitation was sent to someone else")).toBeTruthy()
   })
 
@@ -146,5 +148,30 @@ describe("InvitationPage", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: /sign out/i }))
     expect(await screen.findByRole("group", { name: "Sign in or create an account" })).toBeTruthy()
     expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it("declines the invitation and says so", async () => {
+    const rejectInvitation = vi.fn(async () => undefined)
+    render(<InvitationPage auth={fakeAuth({ rejectInvitation })} invitationId="inv-1" />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Decline" }))
+    expect(await screen.findByRole("heading", { name: "Invitation declined" })).toBeTruthy()
+    expect(rejectInvitation).toHaveBeenCalledWith("inv-1")
+  })
+
+  it("shows what the role can and cannot do, and when the invitation expires", async () => {
+    const auth = fakeAuth({
+      getInvitation: vi.fn(async () => ({
+        id: "inv-1",
+        organizationName: "Babbage Labs",
+        email: "ada@example.com",
+        role: "viewer",
+        status: "pending",
+        expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString(),
+      })),
+    })
+    render(<InvitationPage auth={auth} invitationId="inv-1" />)
+    expect(await screen.findByText("Can't change settings")).toBeTruthy()
+    expect(screen.getByText("See agents, runs and settings")).toBeTruthy()
+    expect(screen.getByText(/expires in 6 days/)).toBeTruthy()
   })
 })

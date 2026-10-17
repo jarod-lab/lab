@@ -2,7 +2,7 @@
 import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import { AccountError } from "../lib/account-api"
 import { TwoFactorPage, sameSiteCallback } from "./two-factor-page"
@@ -18,6 +18,11 @@ function signIn(overrides: Partial<Parameters<typeof TwoFactorPage>[0]["signIn"]
     ...overrides,
   }
 }
+
+// input-otp measures the page with elementFromPoint, which jsdom does not implement.
+beforeAll(() => {
+  if (!document.elementFromPoint) document.elementFromPoint = () => null
+})
 
 describe("sameSiteCallback", () => {
   const origin = "https://app.example.com"
@@ -39,7 +44,7 @@ describe("TwoFactorPage", () => {
       const oauth = resume({ continueOAuth: vi.fn(async () => "https://app.example.com/consent") })
       render(<TwoFactorPage next="/acme" signIn={signIn()} {...oauth} />)
       await user.type(screen.getByLabelText("Code"), "123456")
-      await user.click(screen.getByRole("button", { name: "Continue" }))
+      await user.click(screen.getByRole("button", { name: "Verify" }))
       await waitFor(() => expect(oauth.continueOAuth).toHaveBeenCalled())
     } finally {
       window.history.replaceState(null, "", "/")
@@ -55,8 +60,8 @@ describe("TwoFactorPage", () => {
     })
     render(<TwoFactorPage next="/acme" signIn={api} {...resume()} />)
     await user.type(screen.getByLabelText("Code"), "123456")
-    await user.click(screen.getByRole("button", { name: "Continue" }))
-    await waitFor(() => expect(api.completeSignInWithCode).toHaveBeenCalledWith("123456"))
+    await user.click(screen.getByRole("button", { name: "Verify" }))
+    await waitFor(() => expect(api.completeSignInWithCode).toHaveBeenCalledWith("123456", true))
   })
 
   it("switches to a backup code, and says when the code is wrong", async () => {
@@ -69,7 +74,7 @@ describe("TwoFactorPage", () => {
     render(<TwoFactorPage next="/acme" signIn={api} {...resume()} />)
     await user.click(screen.getByRole("button", { name: "Use a backup code instead" }))
     await user.type(screen.getByLabelText("Backup code"), "aaaa-1111")
-    await user.click(screen.getByRole("button", { name: "Continue" }))
+    await user.click(screen.getByRole("button", { name: "Verify" }))
     expect(
       await screen.findByText("That backup code isn't right, or it has already been used."),
     ).toBeTruthy()
@@ -79,7 +84,7 @@ describe("TwoFactorPage", () => {
     const user = userEvent.setup()
     const api = signIn()
     render(<TwoFactorPage next="/acme" signIn={api} {...resume()} />)
-    await user.click(screen.getByRole("button", { name: "Continue" }))
+    await user.click(screen.getByRole("button", { name: "Verify" }))
     expect(await screen.findByText("Enter the six-digit code from your app.")).toBeTruthy()
     expect(api.completeSignInWithCode).not.toHaveBeenCalled()
   })

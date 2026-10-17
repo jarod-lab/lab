@@ -1,15 +1,19 @@
 import { TWO_FACTOR_PATH, createClient } from "@starter/auth/client"
+import type { SignInMethods, SocialProvider } from "@starter/auth/client"
 
 import { rawSearch } from "./navigation"
 
 /** An auth call that the server refused, with the message to show the person. */
 export class WebError extends Error {
   readonly status: number
+  /** The server's error code, when it has one (e.g. PASSWORD_COMPROMISED). */
+  readonly code: string | undefined
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = "WebError"
     this.status = status
+    this.code = code
   }
 }
 
@@ -33,6 +37,10 @@ export interface WebInvitation {
   email: string
   role: string
   status: string
+  /** ISO time the invitation stops working, when the server says. */
+  expiresAt?: string
+  /** The inviter's email, when the server says (better-auth may not return a name). */
+  inviterEmail?: string
 }
 
 export interface DeviceLookup {
@@ -67,6 +75,22 @@ export interface WebAuth {
   continueOAuth(): Promise<string | undefined>
   getInvitation(invitationId: string): Promise<WebInvitation>
   acceptInvitation(invitationId: string): Promise<void>
+  /** Decline the invitation (`organization/reject-invitation`). */
+  rejectInvitation?(invitationId: string): Promise<void>
+
+  // Sign-in methods. Optional so a page without them (tests, older fakes) stays password-only.
+  /** Which methods this server offers on the sign-in page (GET /api/auth/sign-in-methods). */
+  signInMethods?(): Promise<SignInMethods>
+  /** The method the person last signed in with ("email", "passkey", "github", ...), or null. */
+  lastUsedMethod?(): string | null
+  /** Sign in with a registered passkey (the browser's WebAuthn prompt). */
+  signInWithPasskey?(): Promise<void>
+  /** Start a social sign-in; the browser goes to the provider and returns to `callbackURL`. */
+  signInWithSocial?(provider: SocialProvider, callbackURL: string): Promise<void>
+  /** Start an SSO sign-in for the address's domain; the browser goes to the identity provider. */
+  signInWithSso?(email: string, callbackURL: string): Promise<void>
+  /** Email a one-click sign-in link. Opening it signs the person in and lands on `callbackURL`. */
+  sendMagicLink?(input: { email: string; callbackURL: string }): Promise<void>
   resetPassword(input: { token: string; newPassword: string }): Promise<void>
   device: {
     lookup(userCode: string): Promise<DeviceLookup>
@@ -84,9 +108,17 @@ type Failable = {
 const unwrap = <T>(result: Failable, fallback: string): T => {
   if (result.error) {
     const message = result.error.message || result.error.error_description || fallback
-    throw new WebError(message, result.error.status ?? 0)
+    const code = (result.error as { code?: string }).code
+    throw new WebError(message, result.error.status ?? 0, code)
   }
   return result.data as T
+}
+
+/** better-auth sends dates as Date objects or ISO strings; the pages want an ISO string or nothing. */
+const toIso = (value: unknown): string | undefined => {
+  if (value === undefined || value === null || value === "") return undefined
+  const date = new Date(value as string | number | Date)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
 const urlFrom = (body: { url?: string; redirect_uri?: string } | null | undefined) =>
@@ -212,12 +244,50 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
         email: invitation.email,
         role: invitation.role,
         status: invitation.status,
+        expiresAt: toIso((invitation as { expiresAt?: unknown }).expiresAt),
+        inviterEmail: (invitation as { inviterEmail?: string }).inviterEmail,
       }
     },
     async acceptInvitation(invitationId) {
       unwrap(
         await client.organization.acceptInvitation({ invitationId }),
         "Could not accept the invitation",
+      )
+    },
+    async rejectInvitation(invitationId) {
+      unwrap(
+        await client.organization.rejectInvitation({ invitationId }),
+        "Could not decline the invitation",
+      )
+    },
+    async signInMethods() {
+      return unwrap<SignInMethods>(
+        await client.signInMethods(),
+        "Could not load the sign-in options",
+      )
+    },
+    lastUsedMethod() {
+      return client.getLastUsedLoginMethod() ?? null
+    },
+    async signInWithPasskey() {
+      unwrap(await client.signIn.passkey(), "Could not sign in with your passkey")
+    },
+    async signInWithSocial(provider, callbackURL) {
+      unwrap(
+        await client.signIn.social({ provider, callbackURL }),
+        "Could not start sign-in with that provider",
+      )
+    },
+    async signInWithSso(email, callbackURL) {
+      unwrap(
+        await client.signIn.sso({ email, callbackURL }),
+        "No single sign-on is set up for that address",
+      )
+    },
+    async sendMagicLink(input) {
+      unwrap(
+        await client.signIn.magicLink({ email: input.email, callbackURL: input.callbackURL }),
+        "Could not send the sign-in link",
       )
     },
     async resetPassword(input) {
@@ -249,6 +319,16 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
       },
     },
   }
+}
+
+/** What the sign-in pages offer when the server's list is not loaded: email and password only. */
+export const PASSWORD_ONLY_METHODS: SignInMethods = {
+  password: true,
+  magicLink: false,
+  passkey: false,
+  social: [],
+  sso: false,
+  stripe: false,
 }
 
 let shared: WebAuth | undefined

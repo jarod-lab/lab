@@ -1,8 +1,10 @@
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 
+import type { SignInMethods } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@starter/ui/components/ui/input-otp"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { type AccountApi, accountErrorMessage } from "../lib/account-api"
@@ -16,6 +18,10 @@ export interface TwoFactorPageProps {
   signIn: Pick<AccountApi, "completeSignInWithCode" | "completeSignInWithBackupCode">
   /** Resumes a pending OAuth authorization on this page's signed query (POST /oauth2/continue). */
   continueOAuth: () => Promise<string | undefined>
+  /** The server's sign-in methods, to offer "Use a passkey instead" when passkeys are on. */
+  methods?: () => Promise<SignInMethods | undefined>
+  /** Passkey sign-in (the browser's WebAuthn prompt). Offered only when `methods` says passkeys are on. */
+  signInWithPasskey?: () => Promise<void>
 }
 
 /**
@@ -32,15 +38,42 @@ export function sameSiteCallback(value: string | undefined, origin: string): str
   }
 }
 
+const CODE_LENGTH = 6
+
 /**
  * The second step of a password sign-in (the twoFactor plugin redirects here with the sign-in's
- * query kept). An app code, or a backup code when the app isn't to hand.
+ * query kept). An app code (six slots; pasting the whole code works), or a backup code.
  */
-export function TwoFactorPage({ next, callbackURL, signIn, continueOAuth }: TwoFactorPageProps) {
+export function TwoFactorPage({
+  next,
+  callbackURL,
+  signIn,
+  continueOAuth,
+  methods,
+  signInWithPasskey,
+}: TwoFactorPageProps) {
   const id = useId()
+  const [code, setCode] = useState("")
   const [useBackup, setUseBackup] = useState(false)
+  const [trustDevice, setTrustDevice] = useState(true)
+  const [passkeyOffered, setPasskeyOffered] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      try {
+        const loaded = await methods?.()
+        if (live && loaded?.passkey) setPasskeyOffered(true)
+      } catch {
+        // No list: no passkey link.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [methods])
 
   // Where a passed code goes: the server's continuation, then a magic link's authorization, then an
   // OAuth authorization this page's signed query carries, then the page the sign-in was for.
@@ -55,8 +88,7 @@ export function TwoFactorPage({ next, callbackURL, signIn, continueOAuth }: TwoF
     return next
   }
 
-  async function submit(form: HTMLFormElement) {
-    const value = String(new FormData(form).get("code") ?? "").trim()
+  async function submit(value: string) {
     if (value === "") {
       setError(useBackup ? "Enter a backup code." : "Enter the six-digit code from your app.")
       return
@@ -66,8 +98,24 @@ export function TwoFactorPage({ next, callbackURL, signIn, continueOAuth }: TwoF
     try {
       const url = useBackup
         ? await signIn.completeSignInWithBackupCode(value)
-        : await signIn.completeSignInWithCode(value)
+        : await signIn.completeSignInWithCode(value, trustDevice)
       navigateTo(url ?? (await resumeTarget()))
+    } catch (caught) {
+      setError(accountErrorMessage(caught))
+      setPending(false)
+    }
+  }
+
+  async function passkey() {
+    setPending(true)
+    setError(null)
+    try {
+      await signInWithPasskey?.()
+      navigateTo(
+        new URLSearchParams(window.location.search).has("client_id")
+          ? ((await continueOAuth()) ?? next)
+          : next,
+      )
     } catch (caught) {
       setError(accountErrorMessage(caught))
       setPending(false)
@@ -76,50 +124,113 @@ export function TwoFactorPage({ next, callbackURL, signIn, continueOAuth }: TwoF
 
   return (
     <AuthCard
-      title="Two-factor authentication"
+      title="Two-factor verification"
       description={
         useBackup
           ? "Enter one of the backup codes you saved. Each code works once."
-          : "Enter the six-digit code from your authenticator app."
+          : "Enter the 6-digit code from your authenticator app."
       }
       footer={
-        <button
-          type="button"
-          className="underline underline-offset-4"
-          onClick={() => {
-            setError(null)
-            setUseBackup((value) => !value)
-          }}
-        >
-          {useBackup ? "Use an app code instead" : "Use a backup code instead"}
-        </button>
+        <div className="flex flex-col gap-2 text-sm">
+          <button
+            type="button"
+            className="text-left text-foreground underline underline-offset-4"
+            onClick={() => {
+              setError(null)
+              setCode("")
+              setUseBackup((value) => !value)
+            }}
+          >
+            {useBackup ? "Use an app code instead" : "Use a backup code instead"}
+          </button>
+          {passkeyOffered ? (
+            <button
+              type="button"
+              className="text-left text-foreground underline underline-offset-4"
+              disabled={pending}
+              onClick={() => void passkey()}
+            >
+              Use a passkey instead
+            </button>
+          ) : null}
+          <p className="pt-2 text-[13px]">
+            Lost your authenticator and backup codes? An organization owner can reset two-factor for
+            you.
+          </p>
+        </div>
       }
     >
       <form
         noValidate
+        className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault()
-          void submit(event.currentTarget)
+          void submit(code.trim())
         }}
       >
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor={id}>{useBackup ? "Backup code" : "Code"}</FieldLabel>
-            <Input
-              id={id}
-              name="code"
-              autoComplete="one-time-code"
-              inputMode={useBackup ? "text" : "numeric"}
-              disabled={pending}
-              required
-            />
-            <FieldDescription>
-              {useBackup ? "Codes look like xxxxx-xxxxx." : "The code changes every 30 seconds."}
-            </FieldDescription>
+            {useBackup ? (
+              <>
+                <FieldLabel htmlFor={id}>Backup code</FieldLabel>
+                <Input
+                  id={id}
+                  name="code"
+                  autoComplete="one-time-code"
+                  inputMode="text"
+                  value={code}
+                  onChange={(event) => setCode(event.currentTarget.value)}
+                  disabled={pending}
+                  required
+                />
+                <FieldDescription>Codes look like xxxxx-xxxxx.</FieldDescription>
+              </>
+            ) : (
+              <>
+                <FieldLabel htmlFor={id}>Code</FieldLabel>
+                <InputOTP
+                  id={id}
+                  name="code"
+                  maxLength={CODE_LENGTH}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  value={code}
+                  onChange={setCode}
+                  disabled={pending}
+                  containerClassName="justify-between"
+                  aria-describedby={`${id}-help`}
+                >
+                  <InputOTPGroup className="w-full justify-between gap-2">
+                    {Array.from({ length: CODE_LENGTH }, (_, index) => (
+                      <InputOTPSlot
+                        key={index}
+                        index={index}
+                        className="h-14 w-full rounded-lg border-[1.5px] text-[22px] font-bold"
+                      />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                <FieldDescription id={`${id}-help`}>
+                  Pasting the whole code works too. The code changes every 30 seconds.
+                </FieldDescription>
+              </>
+            )}
           </Field>
+          {useBackup ? null : (
+            <label className="flex min-h-11 items-center gap-2.5 text-[14.5px]">
+              <input
+                type="checkbox"
+                className="size-5 accent-foreground"
+                checked={trustDevice}
+                onChange={(event) => setTrustDevice(event.currentTarget.checked)}
+                disabled={pending}
+              />
+              Trust this device for 30 days
+            </label>
+          )}
           <ErrorAlert message={error} />
-          <Button type="submit" disabled={pending}>
-            {pending ? "Checking…" : "Continue"}
+          <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+            {pending ? "Checking…" : "Verify"}
           </Button>
         </FieldGroup>
       </form>

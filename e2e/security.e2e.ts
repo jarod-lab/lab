@@ -54,10 +54,10 @@ test("two-factor on, sign in with a code, backup codes, sign out other sessions"
   await app.open("/sign-in")
   await screen.getByLabel("Email").fill(email)
   await screen.getByLabel("Password").fill(PASSWORD)
-  await screen.getByRole("button", "Sign in").tap()
+  await screen.getByRole("button", "Sign in with email").tap()
   await expect(browser).toHaveURL(/\/two-factor/)
   await screen.getByLabel("Code").fill(totpAt(secret))
-  await screen.getByRole("button", "Continue").tap()
+  await screen.getByRole("button", "Verify").tap()
   await expect(browser).not.toHaveURL(/\/two-factor/)
 
   // New backup codes replace the old ones; the count follows.

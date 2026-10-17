@@ -25,6 +25,8 @@ function TwoFactorRoute() {
       callbackURL={callbackURL}
       signIn={getAccountApi()}
       continueOAuth={() => getWebAuth().continueOAuth()}
+      methods={() => getWebAuth().signInMethods?.() ?? Promise.resolve(undefined)}
+      signInWithPasskey={() => getWebAuth().signInWithPasskey?.() ?? Promise.resolve()}
     />
   )
 }

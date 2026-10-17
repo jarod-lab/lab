@@ -156,7 +156,8 @@ export interface AccountApi {
     revokeOtherSessions: boolean
   }): Promise<void>
   /** The second step of a sign-in that needs two-factor: an app code. Resolves with the URL to go to. */
-  completeSignInWithCode(code: string): Promise<string | undefined>
+  /** `trustDevice` skips the code on this browser for 30 days (better-auth's trusted-device cookie). */
+  completeSignInWithCode(code: string, trustDevice?: boolean): Promise<string | undefined>
   /** The second step with a backup code, when the app is not to hand. */
   completeSignInWithBackupCode(code: string): Promise<string | undefined>
 }
@@ -305,8 +306,18 @@ export function createAccountApi(baseURL?: string, fetchImpl?: typeof fetch): Ac
     async changePassword(input) {
       unwrap(await c.changePassword(input), "Could not change your password")
     },
-    async completeSignInWithCode(code) {
-      return continuation(unwrap(await c.twoFactor.verifyTotp({ code }), "That code isn't right"))
+    async completeSignInWithCode(code, trustDevice) {
+      // The typed client omits trustDevice for verify-totp; the server schema accepts it (only when set).
+      const body = trustDevice ? { code, trustDevice: true } : { code }
+      return continuation(
+        unwrap(
+          await c.$fetch<{ url?: string; twoFactorRedirect?: boolean }>("/two-factor/verify-totp", {
+            method: "POST",
+            body,
+          }),
+          "That code isn't right",
+        ),
+      )
     },
     async completeSignInWithBackupCode(code) {
       return continuation(

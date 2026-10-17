@@ -77,7 +77,7 @@ export async function signOutUi({ screen }: Ctx) {
 export async function signUpUi({ app, screen, browser }: Ctx, name: string, email: string) {
   await app.open("/sign-up")
   await screen.getByLabel("Name").fill(name)
-  await screen.getByLabel("Email").fill(email)
+  await screen.getByLabel("Work email").fill(email)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
   await expect(browser).toHaveURL(/\/personal-[a-z0-9-]+\/settings\/agents$/)
@@ -88,7 +88,7 @@ export async function signInUi({ app, screen, browser }: Ctx, email: string) {
   await app.open("/sign-in")
   await screen.getByLabel("Email").fill(email)
   await screen.getByLabel("Password").fill(PASSWORD)
-  await screen.getByRole("button", "Sign in").tap()
+  await screen.getByRole("button", "Sign in with email").tap()
   await expect(browser).not.toHaveURL(/\/sign-in/)
 }
 
@@ -107,7 +107,7 @@ export async function acceptInvitationAs(
   await screen.getByLabel("Email").fill(options.email)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
-  await screen.getByRole("button", "Accept invitation").tap()
+  await screen.getByRole("button", "Accept").tap()
   // The accepted state renders in place: the URL stays on the invitation link.
   await expect(screen.getByRole("heading", "You have joined")).toBeVisible()
   await expect(

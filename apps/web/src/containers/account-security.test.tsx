@@ -5,7 +5,19 @@ import { describe, expect, it, vi } from "vitest"
 
 import { AccountError, type AccountApi } from "../lib/account-api"
 import { renderWithClient } from "../test/render"
+import { PASSWORD_ONLY_METHODS } from "../lib/web-auth"
 import { AccountSecurityContainer } from "./account-security"
+
+// The server offers both social providers; the connect row for Google comes from that list.
+vi.mock("../lib/web-auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/web-auth")>()),
+  getWebAuth: () => ({
+    signInMethods: async () => ({
+      ...PASSWORD_ONLY_METHODS,
+      social: ["github", "google"],
+    }),
+  }),
+}))
 
 function fakeAccountApi(overrides: Partial<AccountApi> = {}): AccountApi {
   return {

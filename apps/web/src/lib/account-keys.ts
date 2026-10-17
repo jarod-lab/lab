@@ -6,6 +6,7 @@ export const accountKeys = {
   all: () => ["account"] as const,
   profile: () => ["account", "profile"] as const,
   accounts: () => ["account", "linked-accounts"] as const,
+  signInMethods: () => ["account", "sign-in-methods"] as const,
   passkeys: () => ["account", "passkeys"] as const,
   sessions: () => ["account", "sessions"] as const,
   securitySummary: () => ["account", "security-summary"] as const,

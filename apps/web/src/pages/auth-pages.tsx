@@ -1,15 +1,46 @@
-import { useState } from "react"
+import { type FormEvent, useEffect, useId, useState } from "react"
 
-import { AuthCard } from "../components/auth-card"
-import { type CredentialValues, CredentialsForm } from "../components/credentials-form"
+import {
+  PASSWORD_COMPROMISED_CODE,
+  PASSWORD_COMPROMISED_MESSAGE,
+  type SignInMethods,
+  type SocialProvider,
+} from "@starter/auth/client"
+import { Button } from "@starter/ui/components/ui/button"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
+import { Input } from "@starter/ui/components/ui/input"
+
+import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { messageOf } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
-import type { WebAuth } from "../lib/web-auth"
+import { PASSWORD_ONLY_METHODS, type WebAuth } from "../lib/web-auth"
 
-/**
- * Sign in. When an OAuth flow is pending the server answers with the URL to resume it (consent,
- * organization choice or the authorization itself); otherwise the page goes to `next`.
- */
+const SOCIAL_LABEL: Record<SocialProvider, string> = { github: "GitHub", google: "Google" }
+
+/** The "Last used" badge: the method the person last signed in with. */
+function LastUsed() {
+  return (
+    <span className="absolute right-2 rounded-sm bg-solar px-1.5 text-xs font-extrabold text-solar-foreground">
+      Last used
+    </span>
+  )
+}
+
+/** Where a social, SSO or link sign-in returns. With an OAuth query, that's the page itself (it resumes). */
+function returnTarget(next: string, page: string): string {
+  const { origin, search } = window.location
+  return new URLSearchParams(search).has("client_id")
+    ? `${origin}${page}${search}`
+    : `${origin}${next}`
+}
+
+/** After a passkey sign-in (no server URL comes back): resume a pending OAuth flow, else go to `next`. */
+async function afterPasskey(auth: WebAuth, next: string): Promise<string> {
+  if (!new URLSearchParams(window.location.search).has("client_id")) return next
+  return (await auth.continueOAuth()) ?? next
+}
+
+/** Sign in. The methods come from the server (GET /api/auth/sign-in-methods); until they load, email only. */
 export function SignInPage({
   auth,
   next,
@@ -19,19 +50,98 @@ export function SignInPage({
   next: string
   signUpHref: string
 }) {
+  const id = useId()
+  const [methods, setMethods] = useState<SignInMethods>(PASSWORD_ONLY_METHODS)
+  const [lastUsed, setLastUsed] = useState<string | null>(null)
+  const [email, setEmail] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sentTo, setSentTo] = useState<string | null>(null)
 
-  async function submit(values: CredentialValues) {
+  useEffect(() => {
+    let live = true
+    setLastUsed(auth.lastUsedMethod?.() ?? null)
+    void (async () => {
+      try {
+        const loaded = await auth.signInMethods?.()
+        if (live && loaded) setMethods(loaded)
+      } catch {
+        // Keep email and password: the page still works without the list.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [auth])
+
+  // A social sign-in returns here with the OAuth query still on the URL and a session now: resume it.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("client_id")) return
+    let live = true
+    void (async () => {
+      try {
+        if (!(await auth.getSession())) return
+        const url = await auth.continueOAuth()
+        if (live && url) navigateTo(url)
+      } catch {
+        // Nothing pending: stay on the sign-in page.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [auth])
+
+  async function attempt(work: () => Promise<void>) {
     setPending(true)
     setError(null)
     try {
-      navigateTo((await auth.signIn({ email: values.email, password: values.password })) ?? next)
+      await work()
     } catch (caught) {
       setError(messageOf(caught))
       setPending(false)
     }
   }
+
+  function requireEmail(): string | null {
+    if (email.trim() !== "") return email.trim()
+    setError("Enter your email address first.")
+    return null
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!methods.password) return
+    const data = new FormData(event.currentTarget)
+    const password = String(data.get("password") ?? "")
+    void attempt(async () => {
+      navigateTo((await auth.signIn({ email, password })) ?? next)
+    })
+  }
+
+  if (sentTo) {
+    return (
+      <AuthCard
+        title="Check your email"
+        description={`We sent a sign-in link to ${sentTo}. Open the link in that email to sign in.`}
+        footer={
+          <button
+            type="button"
+            className="underline underline-offset-4"
+            onClick={() => {
+              setSentTo(null)
+              setError(null)
+            }}
+          >
+            Use a different email
+          </button>
+        }
+      />
+    )
+  }
+
+  const hasPasskeyRow = methods.passkey || methods.social.length > 0
+  const hasEmailRow = methods.password || methods.magicLink || methods.sso
 
   return (
     <AuthCard
@@ -40,19 +150,138 @@ export function SignInPage({
       footer={
         <p>
           New here?{" "}
-          <a href={signUpHref} className="underline underline-offset-4">
+          <a
+            href={signUpHref}
+            className="font-semibold text-foreground underline underline-offset-4"
+          >
             Create an account
           </a>
         </p>
       }
     >
-      <CredentialsForm
-        mode="sign-in"
-        pending={pending}
-        error={error}
-        submitLabel="Sign in"
-        onSubmit={submit}
-      />
+      <div className="flex flex-col gap-3">
+        {methods.passkey ? (
+          <Button
+            type="button"
+            size="lg"
+            className="relative h-12 w-full"
+            disabled={pending}
+            onClick={() =>
+              void attempt(async () => {
+                await auth.signInWithPasskey?.()
+                navigateTo(await afterPasskey(auth, next))
+              })
+            }
+          >
+            Sign in with passkey
+            {lastUsed === "passkey" ? <LastUsed /> : null}
+          </Button>
+        ) : null}
+        {methods.social.map((provider) => (
+          <Button
+            key={provider}
+            type="button"
+            variant="outline"
+            size="lg"
+            className="relative h-11 w-full"
+            disabled={pending}
+            onClick={() =>
+              void attempt(
+                () =>
+                  auth.signInWithSocial?.(provider, returnTarget(next, "/sign-in")) ??
+                  Promise.resolve(),
+              )
+            }
+          >
+            Continue with {SOCIAL_LABEL[provider]}
+            {lastUsed === provider ? <LastUsed /> : null}
+          </Button>
+        ))}
+        {hasPasskeyRow && hasEmailRow ? (
+          <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+            or use email
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+          </div>
+        ) : null}
+        <form noValidate className="flex flex-col gap-3" onSubmit={submit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor={`${id}-email`}>Email</FieldLabel>
+              <Input
+                id={`${id}-email`}
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.currentTarget.value)}
+                required
+                disabled={pending}
+              />
+            </Field>
+            {methods.password ? (
+              <Field>
+                <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+                <Input
+                  id={`${id}-password`}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  disabled={pending}
+                />
+              </Field>
+            ) : null}
+            <ErrorAlert message={error} />
+            {methods.password ? (
+              <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+                {pending ? "Please wait" : "Sign in with email"}
+              </Button>
+            ) : null}
+          </FieldGroup>
+        </form>
+        {methods.magicLink ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full"
+            disabled={pending}
+            onClick={() => {
+              const address = requireEmail()
+              if (!address) return
+              void attempt(async () => {
+                await auth.sendMagicLink?.({
+                  email: address,
+                  callbackURL: returnTarget(next, "/sign-in"),
+                })
+                setPending(false)
+                setSentTo(address)
+              })
+            }}
+          >
+            Email me a sign-in link
+          </Button>
+        ) : null}
+        {methods.sso ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full"
+            disabled={pending}
+            onClick={() => {
+              const address = requireEmail()
+              if (!address) return
+              void attempt(
+                () =>
+                  auth.signInWithSso?.(address, returnTarget(next, "/sign-in")) ??
+                  Promise.resolve(),
+              )
+            }}
+          >
+            Sign in with SSO
+          </Button>
+        ) : null}
+      </div>
     </AuthCard>
   )
 }
@@ -67,46 +296,162 @@ export function SignUpPage({
   next: string
   signInHref: string
 }) {
+  const id = useId()
+  const [methods, setMethods] = useState<SignInMethods>(PASSWORD_ONLY_METHODS)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [breached, setBreached] = useState(false)
 
-  async function submit(values: CredentialValues) {
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      try {
+        const loaded = await auth.signInMethods?.()
+        if (live && loaded) setMethods(loaded)
+      } catch {
+        // Email and password only.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [auth])
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
     setPending(true)
     setError(null)
+    setBreached(false)
     try {
       navigateTo(
         (await auth.signUp({
-          name: values.name,
-          email: values.email,
-          password: values.password,
+          name: String(data.get("name") ?? ""),
+          email: String(data.get("email") ?? ""),
+          password: String(data.get("password") ?? ""),
         })) ?? next,
       )
     } catch (caught) {
-      setError(messageOf(caught))
+      // A breached password is a field error, not a general failure: it names the password field.
+      if (isPasswordCompromised(caught)) setBreached(true)
+      else setError(messageOf(caught))
       setPending(false)
     }
   }
 
+  const passwordHelp = `${id}-password-help`
+  const passwordError = `${id}-password-error`
+
   return (
     <AuthCard
-      title="Create an account"
+      title="Create your account"
       description="You get a personal organization. You can invite others later."
       footer={
         <p>
           Already have an account?{" "}
-          <a href={signInHref} className="underline underline-offset-4">
+          <a
+            href={signInHref}
+            className="font-semibold text-foreground underline underline-offset-4"
+          >
             Sign in
           </a>
         </p>
       }
     >
-      <CredentialsForm
-        mode="sign-up"
-        pending={pending}
-        error={error}
-        submitLabel="Create account"
-        onSubmit={submit}
-      />
+      <form noValidate className="flex flex-col gap-3" onSubmit={(event) => void submit(event)}>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
+            <Input id={`${id}-name`} name="name" autoComplete="name" required disabled={pending} />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-email`}>Work email</FieldLabel>
+            <Input
+              id={`${id}-email`}
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              disabled={pending}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+            <Input
+              id={`${id}-password`}
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={pending}
+              aria-invalid={breached || undefined}
+              aria-describedby={breached ? `${passwordHelp} ${passwordError}` : passwordHelp}
+              className={breached ? "border-2 border-destructive" : undefined}
+            />
+            {breached ? (
+              <p
+                id={passwordError}
+                role="alert"
+                className="flex items-start gap-2 text-sm font-semibold text-destructive"
+              >
+                <span aria-hidden="true" className="mt-0.5">
+                  ⊘
+                </span>
+                <span>{PASSWORD_COMPROMISED_MESSAGE}</span>
+              </p>
+            ) : null}
+            <FieldDescription id={passwordHelp}>
+              Use at least 8 characters. Checked privately with Have I Been Pwned. Your password is
+              never sent.
+            </FieldDescription>
+          </Field>
+          <ErrorAlert message={error} />
+          <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
+            {pending ? "Please wait" : "Create account"}
+          </Button>
+        </FieldGroup>
+      </form>
+      {methods.social.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            {methods.social.map((provider) => (
+              <Button
+                key={provider}
+                type="button"
+                variant="outline"
+                className="h-11 flex-1 text-sm"
+                disabled={pending}
+                onClick={() =>
+                  void (
+                    auth.signInWithSocial?.(provider, returnTarget(next, "/sign-in")) ??
+                    Promise.resolve()
+                  )
+                }
+              >
+                {SOCIAL_LABEL[provider]}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <p className="text-[13px] text-muted-foreground">
+        By continuing you agree to the{" "}
+        <a href="[PLACEHOLDER]" className="text-foreground underline underline-offset-4">
+          Terms
+        </a>{" "}
+        and{" "}
+        <a href="[PLACEHOLDER]" className="text-foreground underline underline-offset-4">
+          Privacy Policy
+        </a>
+        .
+      </p>
     </AuthCard>
   )
+}
+
+/** The server refused the password as breached (the haveIBeenPwned plugin's code). */
+export function isPasswordCompromised(caught: unknown): boolean {
+  if ((caught as { code?: string } | null)?.code === PASSWORD_COMPROMISED_CODE) return true
+  return messageOf(caught) === PASSWORD_COMPROMISED_MESSAGE
 }

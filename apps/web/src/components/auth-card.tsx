@@ -1,15 +1,11 @@
 import type { ReactNode } from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@starter/ui/components/ui/alert"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-} from "@starter/ui/components/ui/card"
 
-/** The centred card every page sits in: one heading, the page body, and optional footer links. */
+/**
+ * The centred card every public page sits in (D+ Auth board): a mark, one heading, the page body and
+ * optional footer links. Tokens only, so dark mode follows the theme.
+ */
 export function AuthCard({
   title,
   description,
@@ -22,17 +18,19 @@ export function AuthCard({
   children?: ReactNode
 }) {
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <h1 className="text-xl leading-none font-semibold">{title}</h1>
-          {description ? <CardDescription>{description}</CardDescription> : null}
-        </CardHeader>
-        <CardContent>{children}</CardContent>
-        {footer ? (
-          <CardFooter className="flex-col items-start gap-2 text-sm">{footer}</CardFooter>
-        ) : null}
-      </Card>
+    <main className="flex min-h-svh items-center justify-center bg-background p-4">
+      <section className="flex w-full max-w-[400px] flex-col gap-4 rounded-[14px] border border-border bg-card p-7 text-card-foreground">
+        <span
+          aria-hidden="true"
+          className="grid size-9 place-items-center rounded-lg bg-foreground text-lg font-extrabold text-background"
+        >
+          A
+        </span>
+        <h1 className="text-[26px] leading-tight font-extrabold tracking-[-0.02em]">{title}</h1>
+        {description ? <p className="text-[15px] text-muted-foreground">{description}</p> : null}
+        {children}
+        {footer ? <div className="mt-auto text-sm text-muted-foreground">{footer}</div> : null}
+      </section>
     </main>
   )
 }

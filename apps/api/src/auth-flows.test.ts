@@ -1306,6 +1306,11 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         user_code: string
       }
 
+      // Checking the code claims it for the session's user, so it is refused too.
+      const check = await admin.request(`/api/auth/device?user_code=${user_code}`)
+      expect(check.status).toBe(403)
+      expect(await check.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+
       const approve = await admin.request("/api/auth/device/approve", {
         method: "POST",
         headers: { "content-type": "application/json" },

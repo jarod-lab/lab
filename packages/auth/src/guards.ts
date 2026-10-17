@@ -25,7 +25,6 @@ export const IMPERSONATION_READ_GET_PATHS = [
   "/admin/oauth2/resources/:identifier",
   "/api-key/get",
   "/api-key/list",
-  "/device",
   "/error",
   "/get-session",
   "/jwks",
@@ -76,6 +75,8 @@ export const IMPERSONATION_REFUSED_GET_PATHS = [
   "/passkey/generate-register-options",
   // Issues an authorization code for an existing consent.
   "/oauth2/authorize",
+  // Claims a pending device code for the session's user (the step before approving it).
+  "/device",
   // Ends the session it is called with.
   "/oauth2/end-session",
   // Consumes an emailed link: signs in, verifies the address or changes it, or deletes the account.

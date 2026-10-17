@@ -24,7 +24,13 @@ import { PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { impersonationGuard } from "./guards"
 import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
-import { type Adapter, findMember, firstMembership, personalOrganization } from "./membership"
+import {
+  type Adapter,
+  findMember,
+  firstMembership,
+  PERSONAL_SLUG_PREFIX,
+  personalOrganization,
+} from "./membership"
 import {
   accountPlugin,
   assertCanDelete,
@@ -146,8 +152,14 @@ export interface AuthOptions {
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
 }
 
-const refuseReservedSlug = (slug: string) => {
-  if (isReservedOrgSlug(slug)) {
+/**
+ * Refuses a slug the app's paths use, and a personal organization's (`personal-<user id>`, see
+ * membership.ts): those are only ever made at sign-up, so account deletion can tell the personal
+ * organization apart. `current` is the organization's slug before an update, which may stay.
+ */
+const refuseReservedSlug = (slug: string, current?: string | null) => {
+  const personal = slug.trim().toLowerCase().startsWith(PERSONAL_SLUG_PREFIX) && slug !== current
+  if (isReservedOrgSlug(slug) || personal) {
     throw APIError.from("BAD_REQUEST", {
       message: "That address is reserved. Choose another organization URL.",
       code: "RESERVED_ORGANIZATION_SLUG",
@@ -428,8 +440,13 @@ export function createAuth(opts: AuthOptions) {
           beforeCreateOrganization: async ({ organization }) => {
             refuseReservedSlug(organization.slug ?? slugOf(organization.name ?? ""))
           },
-          beforeUpdateOrganization: async ({ organization }) => {
-            if (typeof organization.slug === "string") refuseReservedSlug(organization.slug)
+          beforeUpdateOrganization: async ({ organization, member }) => {
+            if (typeof organization.slug !== "string") return
+            const current = await (await adapter()).findOne<{ slug: string | null }>({
+              model: "organization",
+              where: [{ field: "id", value: member.organizationId }],
+            })
+            refuseReservedSlug(organization.slug, current?.slug)
           },
           // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
           afterRemoveMember: async ({ member, organization }) => {

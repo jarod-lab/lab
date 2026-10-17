@@ -14,7 +14,7 @@ import {
   LAST_SIGN_IN_METHOD_CODE,
   OWNS_ORGANIZATION_CODE,
 } from "./constants"
-import { type Adapter, type Member, personalSlug } from "./membership"
+import { type Adapter, findMember, type Member, personalSlug } from "./membership"
 import type { Notices } from "./notices"
 
 /** Subscription states that still bill. */
@@ -55,6 +55,20 @@ export async function blockingOrganizations(db: Adapter, userId: string): Promis
   return blockers
 }
 
+/**
+ * The user's personal organization: the one with their personal slug, which they own. The slug alone
+ * isn't enough to delete an organization by, so membership is checked too.
+ */
+async function personalOrganizationOf(db: Adapter, userId: string): Promise<Org | null> {
+  const org = await db.findOne<Org>({
+    model: "organization",
+    where: [{ field: "slug", value: personalSlug(userId) }],
+  })
+  if (!org) return null
+  const member = await findMember(db, userId, org.id)
+  return member?.role.split(",").includes("owner") ? org : null
+}
+
 /** Throws the refusal the app shows, or returns when the account may be deleted. */
 export async function assertCanDelete(
   db: Adapter,
@@ -68,10 +82,7 @@ export async function assertCanDelete(
       code: OWNS_ORGANIZATION_CODE,
     })
   }
-  const org = await db.findOne<Org>({
-    model: "organization",
-    where: [{ field: "slug", value: personalSlug(userId) }],
-  })
+  const org = await personalOrganizationOf(db, userId)
   // Subscriptions exist only when the stripe plugin is mounted; its model is absent otherwise.
   if (!org || !billing) return
   const subs = await db.findMany<{ status: string }>({
@@ -96,10 +107,7 @@ export async function removePersonalOrganization(
   userId: string,
   billing: boolean,
 ): Promise<void> {
-  const org = await db.findOne<Org>({
-    model: "organization",
-    where: [{ field: "slug", value: personalSlug(userId) }],
-  })
+  const org = await personalOrganizationOf(db, userId)
   if (!org) return
   await db.deleteMany({ model: "apikey", where: [{ field: "referenceId", value: org.id }] })
   await db.deleteMany({ model: "ssoProvider", where: [{ field: "organizationId", value: org.id }] })

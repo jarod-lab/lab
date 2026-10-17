@@ -1852,6 +1852,64 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(await keysLeft()).toBe(0)
     })
 
+    it("never lets an organization pass for someone's personal one", async () => {
+      const owner = await signedUp("Olga")
+      const shared = await owner.b.client.organization.create({
+        name: "Shared Co",
+        slug: `shared-${++n}`,
+      })
+      const orgId = shared.data?.id ?? ""
+      const { b: admin, email: address, userId } = await signedUp("Adam")
+      await t.auth.api.addMember({ body: { organizationId: orgId, userId, role: "admin" } })
+      const personalId = (await admin.client.getSession()).data?.session.activeOrganizationId ?? ""
+      const personal = `personal-${userId.toLowerCase()}`
+
+      // A personal slug is never chosen: not on create, and not by renaming (even once freed).
+      expect(
+        (
+          await admin.client.organization.update({
+            organizationId: personalId,
+            data: { name: "Mine" },
+          })
+        ).error,
+      ).toBeNull()
+      const moved = await admin.client.organization.update({
+        organizationId: personalId,
+        data: { slug: `adam-${++n}` },
+      })
+      expect(moved.error).toBeNull()
+      const renamed = await admin.client.organization.update({
+        organizationId: orgId,
+        data: { slug: personal },
+      })
+      expect(renamed.error).toMatchObject({ status: 400, code: "RESERVED_ORGANIZATION_SLUG" })
+      const made = await admin.client.organization.create({
+        name: "Fake",
+        slug: `personal-x${++n}`,
+      })
+      expect(made.error).toMatchObject({ status: 400, code: "RESERVED_ORGANIZATION_SLUG" })
+
+      // Even with the slug set some other way, deleting the account leaves an organization the
+      // user doesn't own alone.
+      expect(
+        (await admin.client.organization.delete({ organizationId: personalId })).error,
+      ).toBeNull()
+      const adapter = (await t.auth.$context).adapter
+      await adapter.updateMany({
+        model: "organization",
+        where: [{ field: "id", value: orgId }],
+        update: { slug: personal },
+      })
+      expect((await admin.client.deleteUser({})).error).toBeNull()
+      await admin.request((await mailed(address, CONFIRM_DELETE)).link)
+      expect(
+        await adapter.findOne({ model: "user", where: [{ field: "id", value: userId }] }),
+      ).toBeNull()
+      expect(
+        await adapter.findOne({ model: "organization", where: [{ field: "id", value: orgId }] }),
+      ).not.toBeNull()
+    })
+
     it("re-checks when the link opens: an organization created since the request still refuses", async () => {
       const { b, email: address, userId } = await signedUp("Late")
       expect((await b.client.deleteUser({})).error).toBeNull()

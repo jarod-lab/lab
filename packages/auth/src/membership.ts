@@ -34,8 +34,11 @@ export async function firstMembership(db: Adapter, userId: string): Promise<Memb
   return member ?? null
 }
 
+/** Personal organizations' slugs start with this; no one can choose such a slug (index.ts). */
+export const PERSONAL_SLUG_PREFIX = "personal-"
+
 /** The slug of a user's personal organization. The only way to tell one apart: it is never user-chosen. */
-export const personalSlug = (userId: string) => `personal-${userId.toLowerCase()}`
+export const personalSlug = (userId: string) => `${PERSONAL_SLUG_PREFIX}${userId.toLowerCase()}`
 
 /**
  * Create the user's personal organization, with them as owner, and make it the active org of their

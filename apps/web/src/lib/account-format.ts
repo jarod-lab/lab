@@ -33,7 +33,8 @@ export function relativeTime(value: string | Date | null | undefined, now = Date
   if (!value) return ""
   const time = new Date(value).getTime()
   if (Number.isNaN(time)) return ""
-  const diff = time - now
+  // Never future: a browser clock behind the server must not say "in 5 minutes" for a past time.
+  const diff = Math.min(time - now, 0)
   if (Math.abs(diff) < 60_000) return "just now"
   for (const [unit, size] of UNITS) {
     if (Math.abs(diff) >= size) return relative.format(Math.round(diff / size), unit)
@@ -52,13 +53,14 @@ export function dateLabel(value: string | Date | null | undefined): string {
 /** The browser and operating system from a User-Agent string, in words: "Chrome on macOS". */
 export function deviceLabel(userAgent: string | null | undefined): string {
   const agent = userAgent ?? ""
-  const browser = /Edg\//.test(agent)
+  // Edge (Android, iOS too), Chrome and Firefox on iOS carry their own token; Safari is the fallback.
+  const browser = /Edg(?:A|iOS)?\//.test(agent)
     ? "Edge"
     : /OPR\/|Opera/.test(agent)
       ? "Opera"
-      : /Firefox\//.test(agent)
+      : /Firefox\/|FxiOS\//.test(agent)
         ? "Firefox"
-        : /Chrome\/|Chromium\//.test(agent)
+        : /Chrome\/|Chromium\/|CriOS\//.test(agent)
           ? "Chrome"
           : /Safari\//.test(agent)
             ? "Safari"

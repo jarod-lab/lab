@@ -165,6 +165,13 @@ describe("display copy", () => {
     )
   })
 
+  it("never says a time is in the future, when the browser clock is behind the server", () => {
+    const future = new Date(now.getTime() + 5 * 60_000).toISOString()
+    expect(sentCopy(future, now)).toBe("Sent just now")
+    // Last active already reads Now for any time not a minute in the past, so it never reads as future.
+    expect(lastActiveCopy(future, now)).toBe("Now")
+  })
+
   it("makes initials from the name, or the email when there is no name", () => {
     expect(initialsOf("Priya Shah", "priya@acme.dev")).toBe("PS")
     expect(initialsOf("", "sam@contractor.io")).toBe("SC")

@@ -98,6 +98,13 @@ describe("footprint", () => {
     expect(formatTokens(18_400)).toBe("18k tokens")
     expect(formatTokens(1_250_000)).toBe("1.3M tokens")
   })
+
+  it("never rounds a thousand thousands into a k: 999,500 and up reads as millions", () => {
+    expect(formatTokens(999_499)).toBe("999k tokens")
+    expect(formatTokens(999_500)).toBe("1M tokens")
+    expect(formatTokens(999_999)).toBe("1M tokens")
+    expect(formatTokens(1_000_000)).toBe("1M tokens")
+  })
 })
 
 describe("forms", () => {

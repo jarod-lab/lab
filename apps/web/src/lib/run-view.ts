@@ -66,10 +66,14 @@ export function formatWh(value: number): string {
   return `${Number(value.toFixed(2))} Wh`
 }
 
-/** "18k tokens", "950 tokens", "1.2M tokens". */
+/**
+ * "18k tokens", "950 tokens", "1.2M tokens". Thousands are rounded first, so 999,500 and up reads as
+ * "1M tokens" rather than "1000k tokens".
+ */
 export function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M tokens`
-  if (value >= 1_000) return `${Math.round(value / 1000)}k tokens`
+  const thousands = Math.round(value / 1000)
+  if (thousands >= 1000) return `${Number((value / 1_000_000).toFixed(1))}M tokens`
+  if (value >= 1_000) return `${thousands}k tokens`
   return `${value} tokens`
 }
 

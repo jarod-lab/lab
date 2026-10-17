@@ -141,7 +141,8 @@ const formatter = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
 
 /** A moment as "just now", "2 hours ago", "yesterday": relative to `now`. */
 export function relativeCopy(at: number, now: Date): string {
-  const seconds = Math.round((at - now.getTime()) / 1000)
+  // Never future: a browser clock behind the server must not say "in 5 minutes" for a past time.
+  const seconds = Math.min(Math.round((at - now.getTime()) / 1000), 0)
   const abs = Math.abs(seconds)
   if (abs < 60) return "just now"
   if (abs < 3600) return formatter.format(Math.round(seconds / 60), "minute")

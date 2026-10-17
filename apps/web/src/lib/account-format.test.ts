@@ -34,6 +34,11 @@ describe("relativeTime", () => {
     expect(relativeTime(new Date(NOW - 5_000).toISOString(), NOW)).toBe("just now")
   })
 
+  it("never reads a past time as future when the browser clock is behind the server", () => {
+    expect(relativeTime(new Date(NOW + 5 * 60_000).toISOString(), NOW)).toBe("just now")
+    expect(relativeTime(new Date(NOW + 30_000).toISOString(), NOW)).toBe("just now")
+  })
+
   it("is empty without a usable date", () => {
     expect(relativeTime(null, NOW)).toBe("")
     expect(relativeTime("not a date", NOW)).toBe("")
@@ -72,6 +77,29 @@ describe("deviceLabel", () => {
     expect(
       deviceLabel("Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0"),
     ).toBe("Firefox on Linux")
+  })
+
+  it("names the browsers that carry their own token on iOS and Android", () => {
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1",
+      ),
+    ).toBe("Chrome on iPhone")
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/127.0 Mobile/15E148 Safari/605.1.15",
+      ),
+    ).toBe("Firefox on iPhone")
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/126.0.2592.61 Mobile/15E148 Safari/605.1.15",
+      ),
+    ).toBe("Edge on iPhone")
+    expect(
+      deviceLabel(
+        "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36 EdgA/126.0.2592.46",
+      ),
+    ).toBe("Edge on Android")
   })
 
   it("says what it can, or that the device is unknown", () => {

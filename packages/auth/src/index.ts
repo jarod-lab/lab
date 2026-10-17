@@ -347,7 +347,8 @@ export function createAuth(opts: AuthOptions) {
       impersonationGuard,
       // Owner-only single sign-on, SCIM provisioning and billing (catalog in access.ts, checks in owner-only.ts).
       ownerOnlyGuard,
-      sso(),
+      // Domain verification (a DNS TXT record) gates sign-in: an unproven domain is never routed to its provider.
+      sso({ domainVerification: { enabled: true } }),
       scim({
         connections: [],
         managedConnections: { credentialHashSecret: scimCredentialHashSecret(opts.secret) },

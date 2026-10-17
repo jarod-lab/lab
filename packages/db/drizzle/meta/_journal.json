@@ -57,6 +57,13 @@
       "when": 1792194409006,
       "tag": "0007_session_login_method",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792198708258,
+      "tag": "0008_sso_domain_verification",
+      "breakpoints": true
     }
   ]
 }

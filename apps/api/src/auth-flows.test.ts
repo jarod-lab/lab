@@ -4,7 +4,8 @@
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
 import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { passkey as passkeyTable } from "@starter/db/schema"
+import { eq } from "drizzle-orm"
+import { passkey as passkeyTable, verification } from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
@@ -1253,6 +1254,62 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         )
         expect(res.status, role).toBe(403)
         expect(await res.json(), role).toMatchObject({ code: "ORGANIZATION_OWNER_REQUIRED" })
+      }
+    })
+
+    it("gives the owner a DNS TXT record to prove the provider's domain", async () => {
+      const res = await owner.b.request(
+        "/api/auth/sso/request-domain-verification",
+        json({ providerId: "acme-owner" }),
+      )
+      expect(res.status).toBe(201)
+      const { domainVerificationToken } = (await res.json()) as { domainVerificationToken: string }
+      expect(domainVerificationToken.length).toBeGreaterThan(16)
+      // The record the owner adds is _better-auth-token-<providerId>.<domain>, valued with the token.
+      // The plugin keeps the pending token under the identifier "_better-auth-token-<providerId>".
+      const [pending] = await t.db
+        .select()
+        .from(verification)
+        .where(eq(verification.identifier, "_better-auth-token-acme-owner"))
+      expect(pending?.value).toBe(domainVerificationToken)
+
+      // Asking again while the token is live returns the same one.
+      const again = await owner.b.request(
+        "/api/auth/sso/request-domain-verification",
+        json({ providerId: "acme-owner" }),
+      )
+      expect(await again.json()).toEqual({ domainVerificationToken })
+    })
+
+    it("refuses an unverified domain: the check fails and sign-in by that domain is refused", async () => {
+      // No TXT record exists for acme.test, so the proof fails (the resolver is the real DNS here).
+      const check = await owner.b.request(
+        "/api/auth/sso/verify-domain",
+        json({ providerId: "acme-owner" }),
+      )
+      expect(check.status).not.toBe(204)
+      expect(check.status).toBeGreaterThanOrEqual(400)
+
+      const sso = await open().request(
+        "/api/auth/sign-in/sso",
+        json({ email: "ada@acme.test", callbackURL: "/" }),
+      )
+      expect(sso.status).toBe(401)
+      expect(await sso.json()).toMatchObject({ message: "Provider domain has not been verified" })
+    })
+
+    it("refuses domain verification to an admin, a member and a viewer", async () => {
+      for (const path of ["request-domain-verification", "verify-domain"] as const) {
+        for (const role of ["admin", "member", "viewer"] as const) {
+          const res = await roleUsers[role].request(
+            `/api/auth/sso/${path}`,
+            json({ providerId: "acme-owner" }),
+          )
+          expect(res.status, `${role} ${path}`).toBe(403)
+          expect(await res.json(), `${role} ${path}`).toMatchObject({
+            code: "ORGANIZATION_OWNER_REQUIRED",
+          })
+        }
       }
     })
 

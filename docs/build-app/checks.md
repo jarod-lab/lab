@@ -74,3 +74,12 @@
 | Z | AGENTS.md: app shell, data layer, devtools, e2e, auth plugins | pass | c9afac3 |
 | Z | advisor review of the full diff | pending | |
 | E1 | every page e2e + visual light/dark desktop/phone | blocked | Postgres not running; migrations 0003–0009 not applied (user) |
+| E1 | smoke + app-shell e2e, desktop + phone, real stack | pass | `pnpm exec e2e run e2e/smoke.e2e.ts e2e/app-shell.e2e.ts`: 4 passed (after per-target API ports and the Work email label) |
+| Z | advisor review | done | advisor: run E1, security review, billing roles, CSP path, visual check |
+| S-review | security review of the server diff | done | HIGH: impersonation guard fails open; HIGH: change-email link skips 2FA; MED: SCIM token survives owner removal → S2 |
+| B1 | admins manage billing (boards), members/viewers "not available" | pass | auth 87, api-app 365, web 542 (commit c97d374) |
+| Z | drift: db:generate and auth generate produce no changes | pass | "No schema changes"; auth-schema.ts unchanged |
+| E1 | Postgres started (user asked), migrations 0000–0009 applied to the local DB | pass | `drizzle.__drizzle_migrations` = 10 rows; SCIM FK names truncated to 63 chars (Postgres notice, harmless) |
+| E1 | visual pass on the shipped build (apps/api + WEB_DIST_DIR, real CSP), every page light+dark, desktop+phone | pass | `e2e run --config e2e.dist.config.ts e2e/visual.e2e.ts`: 4 passed; 56 screenshots reviewed |
+| E1 | CSP: Zod eval probe tripped script-src on every page | pass (fixed) | `src/zod-config.ts` imported first (jitless); a4145dc |
+| E1 | dark-mode approval detail unreadable; phone footprint squeezed; two primary buttons on sign-in | pass (fixed) | a4145dc (+ sign-in emphasis pending S2's auth-pages edit) |

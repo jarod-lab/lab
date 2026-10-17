@@ -1,4 +1,6 @@
+import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
+import { z } from "zod"
 
 import {
   AlertDialog,
@@ -30,6 +32,7 @@ import {
   totpSecretOf,
 } from "../lib/account-api"
 import { dateLabel, relativeTime } from "../lib/account-format"
+import { fieldMessage } from "../lib/messages"
 
 // The sections of the Security page (board Security). Each takes its data and callbacks as props.
 // Errors a call throws are shown in the section; the container has already mapped their copy.
@@ -38,6 +41,23 @@ const ROW = "flex items-center gap-3 border-t border-border py-2.5"
 const ROW_LAST = "flex items-center gap-3 border-y border-border py-2.5"
 const TEXT = "flex min-w-0 flex-1 flex-col leading-snug"
 const META = "text-[13px] text-muted-foreground"
+
+const passkeyNameSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter a name for this passkey.")
+    .max(80, "Use 80 characters or fewer."),
+})
+const passwordSchema = z.object({ password: z.string().min(1, "Enter your password.") })
+const codeSchema = z.object({
+  code: z.string().trim().min(1, "Enter the six-digit code from your app."),
+})
+
+/** The first Zod message for a field, shown under it. Empty when the field is valid. */
+function FieldErrorLine({ errors }: { errors: unknown[] }) {
+  return errors.length > 0 ? <FieldError>{fieldMessage(errors)}</FieldError> : null
+}
 
 function ErrorLine({ message }: { message: string | null }) {
   if (!message) return null
@@ -118,7 +138,6 @@ function PasskeyRow({
 }) {
   const label = passkey.name || "Passkey"
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(label)
   const [confirming, setConfirming] = useState(false)
   const renameAction = useAction(async (name: string) => {
     await onRename(passkey.id, name)
@@ -128,39 +147,18 @@ function PasskeyRow({
     await onRemove(passkey.id)
     setConfirming(false)
   })
-  const inputId = useId()
 
   if (editing) {
     return (
-      <div className={ROW}>
-        <Field className="min-w-0 flex-1">
-          <FieldLabel htmlFor={inputId} className="sr-only">
-            Passkey name
-          </FieldLabel>
-          <Input
-            id={inputId}
-            value={draft}
-            maxLength={80}
-            onChange={(event) => setDraft(event.currentTarget.value)}
-          />
-        </Field>
-        <Button
-          disabled={renameAction.busy || draft.trim() === ""}
-          onClick={() => void renameAction.call(draft.trim())}
-        >
-          Save name
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setDraft(label)
-            setEditing(false)
-          }}
-        >
-          Cancel
-        </Button>
-        <ErrorLine message={renameAction.error} />
-      </div>
+      <RenameForm
+        label={label}
+        busy={renameAction.busy}
+        error={renameAction.error}
+        onSave={async (name) => {
+          await renameAction.call(name)
+        }}
+        onCancel={() => setEditing(false)}
+      />
     )
   }
 
@@ -172,14 +170,7 @@ function PasskeyRow({
           {passkey.createdAt ? `Added ${dateLabel(passkey.createdAt)}` : "Added on this account"}
         </span>
       </div>
-      <Button
-        variant="outline"
-        aria-label={`Rename ${label}`}
-        onClick={() => {
-          setDraft(label)
-          setEditing(true)
-        }}
-      >
+      <Button variant="outline" aria-label={`Rename ${label}`} onClick={() => setEditing(true)}>
         Rename
       </Button>
       <Button
@@ -216,6 +207,67 @@ function PasskeyRow({
   )
 }
 
+/** Inline rename of a passkey. Mounts when editing starts, so it always opens on the current name. */
+function RenameForm({
+  label,
+  busy,
+  error,
+  onSave,
+  onCancel,
+}: {
+  label: string
+  busy: boolean
+  error: string | null
+  onSave: (name: string) => Promise<void>
+  onCancel: () => void
+}) {
+  const inputId = useId()
+  const form = useForm({
+    defaultValues: { name: label },
+    validators: { onSubmit: passkeyNameSchema },
+    onSubmit: async ({ value }) => {
+      await onSave(value.name.trim())
+    },
+  })
+  return (
+    <form
+      noValidate
+      className={ROW}
+      onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        void form.handleSubmit()
+      }}
+    >
+      <form.Field name="name">
+        {(field) => (
+          <Field className="min-w-0 flex-1">
+            <FieldLabel htmlFor={inputId} className="sr-only">
+              Passkey name
+            </FieldLabel>
+            <Input
+              id={inputId}
+              value={field.state.value}
+              maxLength={80}
+              aria-invalid={field.state.meta.errors.length > 0 || undefined}
+              onChange={(event) => field.handleChange(event.currentTarget.value)}
+              onBlur={field.handleBlur}
+            />
+            <FieldErrorLine errors={field.state.meta.errors} />
+          </Field>
+        )}
+      </form.Field>
+      <Button type="submit" disabled={busy}>
+        Save name
+      </Button>
+      <Button type="button" variant="outline" onClick={onCancel}>
+        Cancel
+      </Button>
+      <ErrorLine message={error} />
+    </form>
+  )
+}
+
 function AddPasskeyDialog({
   open,
   onOpenChange,
@@ -226,10 +278,16 @@ function AddPasskeyDialog({
   onAdd: (name: string) => Promise<void>
 }) {
   const inputId = useId()
-  const [name, setName] = useState("This device")
   const action = useAction(async (value: string) => {
     await onAdd(value)
     onOpenChange(false)
+  })
+  const form = useForm({
+    defaultValues: { name: "This device" },
+    validators: { onSubmit: passkeyNameSchema },
+    onSubmit: async ({ value }) => {
+      await action.call(value.name.trim())
+    },
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -240,27 +298,41 @@ function AddPasskeyDialog({
             Your browser will ask you to confirm with this device. The name is only for your list.
           </DialogDescription>
         </DialogHeader>
-        <Field>
-          <FieldLabel htmlFor={inputId}>Passkey name</FieldLabel>
-          <Input
-            id={inputId}
-            value={name}
-            maxLength={80}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-        </Field>
-        <ErrorLine message={action.error} />
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={action.busy || name.trim() === ""}
-            onClick={() => void action.call(name.trim())}
-          >
-            {action.busy ? "Waiting for your device…" : "Continue"}
-          </Button>
-        </DialogFooter>
+        <form
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
+          <form.Field name="name">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={inputId}>Passkey name</FieldLabel>
+                <Input
+                  id={inputId}
+                  value={field.state.value}
+                  maxLength={80}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                />
+                <FieldErrorLine errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <ErrorLine message={action.error} />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={action.busy}>
+              {action.busy ? "Waiting for your device…" : "Continue"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )
@@ -381,6 +453,20 @@ function EnrolDialog({
     await onConfirm(code)
     setStep("codes")
   })
+  const passwordForm = useForm({
+    defaultValues: { password: "" },
+    validators: { onSubmit: passwordSchema },
+    onSubmit: async ({ value }) => {
+      await password.call(value.password)
+    },
+  })
+  const codeForm = useForm({
+    defaultValues: { code: "" },
+    validators: { onSubmit: codeSchema },
+    onSubmit: async ({ value }) => {
+      await confirm.call(value.code.trim())
+    },
+  })
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
@@ -389,27 +475,36 @@ function EnrolDialog({
             noValidate
             onSubmit={(event) => {
               event.preventDefault()
-              const value = String(new FormData(event.currentTarget).get("password") ?? "")
-              void password.call(value)
+              event.stopPropagation()
+              void passwordForm.handleSubmit()
             }}
           >
             <DialogHeader>
               <DialogTitle>Turn on two-factor</DialogTitle>
               <DialogDescription>Confirm your password to start.</DialogDescription>
             </DialogHeader>
-            <Field>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
-              <Input
-                id={passwordId}
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
+            <passwordForm.Field name="password">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                  <Input
+                    id={passwordId}
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={field.handleBlur}
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    required
+                  />
+                  <FieldErrorLine errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </passwordForm.Field>
             <ErrorLine message={password.error} />
             <DialogFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button type="submit" disabled={password.busy}>
@@ -424,8 +519,8 @@ function EnrolDialog({
             noValidate
             onSubmit={(event) => {
               event.preventDefault()
-              const value = String(new FormData(event.currentTarget).get("code") ?? "").trim()
-              void confirm.call(value)
+              event.stopPropagation()
+              void codeForm.handleSubmit()
             }}
           >
             <DialogHeader>
@@ -437,21 +532,30 @@ function EnrolDialog({
             </DialogHeader>
             <CopyField label="Setup key" value={secret} />
             <CopyField label="Setup link" value={setup.totpURI} />
-            <Field>
-              <FieldLabel htmlFor={codeId}>Six-digit code from the app</FieldLabel>
-              <Input
-                id={codeId}
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                required
-              />
-              <FieldDescription>Enter the code the app shows now.</FieldDescription>
-            </Field>
+            <codeForm.Field name="code">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={codeId}>Six-digit code from the app</FieldLabel>
+                  <Input
+                    id={codeId}
+                    name="code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={field.handleBlur}
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    required
+                  />
+                  <FieldDescription>Enter the code the app shows now.</FieldDescription>
+                  <FieldErrorLine errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </codeForm.Field>
             <ErrorLine message={confirm.error} />
             <DialogFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button type="submit" disabled={confirm.busy}>
@@ -488,6 +592,13 @@ function TurnOffDialog({
     await onDisable(value)
     onOpenChange(false)
   })
+  const form = useForm({
+    defaultValues: { password: "" },
+    validators: { onSubmit: passwordSchema },
+    onSubmit: async ({ value }) => {
+      await action.call(value.password)
+    },
+  })
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -501,19 +612,29 @@ function TurnOffDialog({
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
-            void action.call(String(new FormData(event.currentTarget).get("password") ?? ""))
+            event.stopPropagation()
+            void form.handleSubmit()
           }}
         >
-          <Field>
-            <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
-            <Input
-              id={passwordId}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </Field>
+          <form.Field name="password">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                <Input
+                  id={passwordId}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                />
+                <FieldErrorLine errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
           <ErrorLine message={action.error} />
           <AlertDialogFooter className="mt-4">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -541,6 +662,13 @@ function NewCodesDialog({
   const action = useAction(async (value: string) => {
     setCodes(await onNewCodes(value))
   })
+  const form = useForm({
+    defaultValues: { password: "" },
+    validators: { onSubmit: passwordSchema },
+    onSubmit: async ({ value }) => {
+      await action.call(value.password)
+    },
+  })
   return (
     <Dialog
       open={open}
@@ -562,7 +690,8 @@ function NewCodesDialog({
             noValidate
             onSubmit={(event) => {
               event.preventDefault()
-              void action.call(String(new FormData(event.currentTarget).get("password") ?? ""))
+              event.stopPropagation()
+              void form.handleSubmit()
             }}
           >
             <DialogHeader>
@@ -571,19 +700,28 @@ function NewCodesDialog({
                 Confirm your password. The old codes stop working.
               </DialogDescription>
             </DialogHeader>
-            <Field>
-              <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
-              <Input
-                id={passwordId}
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
+            <form.Field name="password">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={passwordId}>Password</FieldLabel>
+                  <Input
+                    id={passwordId}
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={field.handleBlur}
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    required
+                  />
+                  <FieldErrorLine errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </form.Field>
             <ErrorLine message={action.error} />
             <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={action.busy}>
@@ -689,6 +827,18 @@ export function PasswordSection({ hasPassword, changedAt, onChange }: PasswordSe
   )
 }
 
+/** The new password must be 8+ characters and match its confirmation. */
+const changePasswordSchema = z
+  .object({
+    current: z.string().min(1, "Enter your current password."),
+    next: z.string().min(8, "The new password must be at least 8 characters long."),
+    confirm: z.string(),
+  })
+  .refine((value) => value.next === value.confirm, {
+    message: "The two passwords do not match.",
+    path: ["confirm"],
+  })
+
 function ChangePasswordDialog({
   open,
   onOpenChange,
@@ -701,10 +851,16 @@ function ChangePasswordDialog({
   const currentId = useId()
   const newId = useId()
   const confirmId = useId()
-  const [mismatch, setMismatch] = useState<string | null>(null)
   const action = useAction(async (input: { currentPassword: string; newPassword: string }) => {
     await onChange(input)
     onOpenChange(false)
+  })
+  const form = useForm({
+    defaultValues: { current: "", next: "", confirm: "" },
+    validators: { onSubmit: changePasswordSchema },
+    onSubmit: async ({ value }) => {
+      await action.call({ currentPassword: value.current, newPassword: value.next })
+    },
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -713,20 +869,8 @@ function ChangePasswordDialog({
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
-            const data = new FormData(event.currentTarget)
-            const currentPassword = String(data.get("current") ?? "")
-            const newPassword = String(data.get("next") ?? "")
-            const confirm = String(data.get("confirm") ?? "")
-            if (newPassword.length < 8) {
-              setMismatch("The new password must be at least 8 characters long.")
-              return
-            }
-            if (newPassword !== confirm) {
-              setMismatch("The two passwords do not match.")
-              return
-            }
-            setMismatch(null)
-            void action.call({ currentPassword, newPassword })
+            event.stopPropagation()
+            void form.handleSubmit()
           }}
         >
           <DialogHeader>
@@ -735,42 +879,68 @@ function ChangePasswordDialog({
               Checked against Have I Been Pwned. A password found in a known breach is refused.
             </DialogDescription>
           </DialogHeader>
-          <Field>
-            <FieldLabel htmlFor={currentId}>Current password</FieldLabel>
-            <Input
-              id={currentId}
-              name="current"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={newId}>New password</FieldLabel>
-            <Input
-              id={newId}
-              name="next"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-            <FieldDescription>Use at least 8 characters.</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={confirmId}>Confirm new password</FieldLabel>
-            <Input
-              id={confirmId}
-              name="confirm"
-              type="password"
-              autoComplete="new-password"
-              required
-            />
-            {mismatch ? <FieldError>{mismatch}</FieldError> : null}
-          </Field>
+          <form.Field name="current">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={currentId}>Current password</FieldLabel>
+                <Input
+                  id={currentId}
+                  name="current"
+                  type="password"
+                  autoComplete="current-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                />
+                <FieldErrorLine errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="next">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={newId}>New password</FieldLabel>
+                <Input
+                  id={newId}
+                  name="next"
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  minLength={8}
+                  required
+                />
+                <FieldDescription>Use at least 8 characters.</FieldDescription>
+                <FieldErrorLine errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="confirm">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={confirmId}>Confirm new password</FieldLabel>
+                <Input
+                  id={confirmId}
+                  name="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                />
+                <FieldErrorLine errors={field.state.meta.errors} />
+              </Field>
+            )}
+          </form.Field>
           <ErrorLine message={action.error} />
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={action.busy}>

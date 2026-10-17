@@ -36,8 +36,8 @@ export interface WorkspaceAgentsContainerProps {
   /** The agent selected in the URL (`?agent=`). Falls back to the first agent. */
   selectedId: string | undefined
   onSelect: (agentId: string | null) => void
-  /** The connected-agents view, rendered when `view` is "connected". */
-  connected: ReactNode
+  /** The connected-agents view, rendered when `view` is "connected". Gets the level-2 pills. */
+  connected: (pills: ReactNode) => ReactNode
   renderLink?: RenderLink
 }
 

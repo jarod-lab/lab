@@ -27,6 +27,8 @@ export function OrgGate({
   const activeId = session.data?.activeOrganizationId ?? null
   const mismatch = session.isSuccess && session.data !== null && activeId !== organization.id
   const { reset, mutate, status } = setActive
+  // better-auth refuses set-active while impersonating (read-only by design), so never ask.
+  const impersonating = Boolean(session.data?.impersonatedBy)
 
   // Another tab (or the server) changed the active org: a new attempt is allowed.
   useEffect(() => {
@@ -35,8 +37,8 @@ export function OrgGate({
 
   // One attempt per change. A failure stays visible until the person retries (no loop).
   useEffect(() => {
-    if (mismatch && status === "idle") mutate(organization.id)
-  }, [mismatch, status, mutate, organization.id])
+    if (mismatch && !impersonating && status === "idle") mutate(organization.id)
+  }, [mismatch, impersonating, status, mutate, organization.id])
 
   if (session.isSuccess && session.data === null) {
     // The cached session was for someone who has since signed out, or expired in another tab.
@@ -56,6 +58,13 @@ export function OrgGate({
     return <output className="block p-6 text-muted-foreground">Loading…</output>
   }
   if (!mismatch) return <>{children}</>
+  if (impersonating) {
+    return (
+      <output className="block p-6 text-muted-foreground">
+        You can't switch organizations while impersonating. Stop impersonating to continue.
+      </output>
+    )
+  }
   if (status === "error" || status === "success") {
     return <Failed message={`Could not switch to ${organization.name}.`} onRetry={() => reset()} />
   }

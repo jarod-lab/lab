@@ -1,5 +1,7 @@
 import { useForm } from "@tanstack/react-form"
+import { cn } from "cn"
 import { useId, useState, type ReactNode } from "react"
+import { z } from "zod"
 
 import {
   AlertDialog,
@@ -24,7 +26,12 @@ import { Input } from "@starter/ui/components/ui/input"
 import { Textarea } from "@starter/ui/components/ui/textarea"
 import { Status } from "@starter/ui/dplus/status"
 import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
-import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import {
+  type LinkProps,
+  type RenderLink,
+  anchorLink,
+  useRenderLink,
+} from "@starter/ui/dplus/shell/link"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { messageOf } from "../lib/messages"
@@ -65,8 +72,11 @@ export interface WorkspaceAgentsPageProps {
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
   view: AgentView
-  /** The connected-agents view (API keys and OAuth clients), shown for the "Connected" pill. */
-  connected: ReactNode
+  /**
+   * The connected-agents view (API keys and OAuth clients), shown for the "Connected" pill. It gets
+   * the level-2 pills to place beside its own section heading.
+   */
+  connected: (pills: ReactNode) => ReactNode
   /** agent:read: the list is shown. Every role has it; a missing role shows nothing. */
   canRead: boolean
   /** agent:create (owner, admin, member). */
@@ -123,14 +133,8 @@ export function WorkspaceAgentsPage({
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState<string | null>(null)
 
-  const pills = VIEW_PILLS.map((pill) => ({
-    id: pill.id,
-    label: pill.label,
-    href:
-      pill.id === "permissions"
-        ? `/${organization.slug}/settings/agents`
-        : `/${organization.slug}/settings/agents?view=${pill.id}`,
-  }))
+  // Level 2 sits in each view's section heading, not in the org header.
+  const pills = <ViewPills slug={organization.slug} activeView={view} renderLink={renderLink} />
   const tabs = settingsTabs(organization.slug)
 
   async function confirmRemove() {
@@ -148,17 +152,19 @@ export function WorkspaceAgentsPage({
   // The connected view brings its own <main>, so it is not wrapped in the page's.
   const body =
     view === "connected" ? (
-      connected
+      connected(pills)
     ) : (
       <main className="flex max-w-[1040px] flex-col gap-5 px-4 py-6 md:px-9">
         {view === "guardrails" ? (
           <PlaceholderSection
             heading="Guardrails"
+            pills={pills}
             reason="[PLACEHOLDER] The API has no guardrail settings yet, so nothing on this tab can be changed."
           />
         ) : view === "budgets" ? (
           <BudgetSection
             key={selected?.id ?? "none"}
+            pills={pills}
             agent={canRead ? selected : undefined}
             canUpdate={canUpdate}
             onSave={(id, energyBudgetWh) => onUpdate(id, { energyBudgetWh })}
@@ -166,6 +172,7 @@ export function WorkspaceAgentsPage({
         ) : (
           <PermissionsView
             organization={organization}
+            pills={pills}
             canRead={canRead}
             canCreate={canCreate}
             canUpdate={canUpdate}
@@ -198,8 +205,6 @@ export function WorkspaceAgentsPage({
         context={`${organization.name} · you are ${roleLabel}`}
         tabs={tabs}
         activeTab="agents"
-        pills={pills}
-        activePill={view}
         viewOnly={canRead && !canUpdate ? organization.name : undefined}
         renderLink={renderLink}
       />
@@ -274,21 +279,91 @@ export function WorkspaceAgentsPage({
   )
 }
 
-function PlaceholderSection({ heading, reason }: { heading: string; reason: string }) {
+/** The level-2 pills (Permissions, Guardrails, Budgets & footprint, Connected), as links. */
+function ViewPills({
+  slug,
+  activeView,
+  renderLink: renderLinkProp,
+}: {
+  slug: string
+  activeView: AgentView
+  renderLink?: RenderLink
+}) {
+  const renderLink = useRenderLink(renderLinkProp)
+  return (
+    <nav aria-label="Organization settings sub-sections" className="flex flex-wrap gap-1.5">
+      {VIEW_PILLS.map((pill) => {
+        const current = pill.id === activeView
+        const href =
+          pill.id === "permissions"
+            ? `/${slug}/settings/agents`
+            : `/${slug}/settings/agents?view=${pill.id}`
+        return (
+          <span key={pill.id}>
+            {renderLink({
+              href,
+              "aria-current": current ? "page" : undefined,
+              className: cn(
+                "inline-flex h-9 items-center rounded-full border-[1.5px] px-3.5 text-sm font-semibold",
+                current
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-foreground hover:bg-accent",
+              ),
+              children: pill.label,
+            } as LinkProps)}
+          </span>
+        )
+      })}
+    </nav>
+  )
+}
+
+/** A section heading row: the heading on the left, the level-2 pills on the right (wrapping on phones). */
+function SectionTitle({
+  id,
+  children,
+  pills,
+}: {
+  id: string
+  children: ReactNode
+  pills?: ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-5">
+      <h2 id={id} className="text-[18px] font-bold">
+        {children}
+      </h2>
+      {pills}
+    </div>
+  )
+}
+
+function PlaceholderSection({
+  heading,
+  reason,
+  pills,
+}: {
+  heading: string
+  reason: string
+  pills?: ReactNode
+}) {
   return (
     <section
       aria-labelledby="placeholder-heading"
       className="flex max-w-[640px] flex-col gap-2 rounded-lg border-2 border-dashed border-muted-foreground p-5"
     >
-      <h2 id="placeholder-heading" className="text-[18px] font-bold">
+      <SectionTitle id="placeholder-heading" pills={pills}>
         {heading}
-      </h2>
+      </SectionTitle>
       <p className="text-sm text-muted-foreground">{reason}</p>
     </section>
   )
 }
 
-type PermissionsViewProps = Pick<
+type PermissionsViewProps = {
+  /** The level-2 pills, placed beside the "Agent permissions" heading. */
+  pills: ReactNode
+} & Pick<
   WorkspaceAgentsPageProps,
   | "canRead"
   | "canCreate"
@@ -305,14 +380,15 @@ type PermissionsViewProps = Pick<
   | "onUpdate"
   | "renderLink"
 > & {
-  organization: { id: string; name: string; slug: string }
-  onCreateOpen: () => void
-  onRenameOpen: () => void
-  onRemoveOpen: () => void
-}
+    organization: { id: string; name: string; slug: string }
+    onCreateOpen: () => void
+    onRenameOpen: () => void
+    onRemoveOpen: () => void
+  }
 
 function PermissionsView({
   organization,
+  pills,
   canRead,
   canCreate,
   canUpdate,
@@ -341,15 +417,18 @@ function PermissionsView({
   return (
     <>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h2 id={headingId} className="text-[22px] font-extrabold tracking-tight">
-            Agent permissions
-          </h2>
-          <p className="max-w-[620px] text-[14.5px] text-muted-foreground">
-            {selected
-              ? `What ${selected.name} can do on its own, and when it has to ask you first.`
-              : `What agents in ${organization.name} can do on their own, and when they have to ask you first.`}
-          </p>
+        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-5">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h2 id={headingId} className="text-[22px] font-extrabold tracking-tight">
+              Agent permissions
+            </h2>
+            <p className="max-w-[620px] text-[14.5px] text-muted-foreground">
+              {selected
+                ? `What ${selected.name} can do on its own, and when it has to ask you first.`
+                : `What agents in ${organization.name} can do on their own, and when they have to ask you first.`}
+            </p>
+          </div>
+          {pills}
         </div>
         <div className="flex flex-col gap-1.5">
           <Button
@@ -522,6 +601,14 @@ function AgentRow({
   )
 }
 
+/** The panel's values: the autonomy level and each always-ask switch. */
+const permissionsSchema = z.object({
+  autonomy: z.enum(AUTONOMY as [Autonomy, ...Autonomy[]]),
+  alwaysAskExternalPost: z.boolean(),
+  alwaysAskMergeOrDeploy: z.boolean(),
+  alwaysAskOverEnergyBudget: z.boolean(),
+})
+
 function PermissionsPanel({
   agent,
   canUpdate,
@@ -532,72 +619,88 @@ function PermissionsPanel({
   onSave: (patch: Partial<PermissionSettings>) => Promise<void>
 }) {
   const saved = permissionsOf(agent)
-  const [draft, setDraft] = useState<PermissionSettings>(saved)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const autonomyId = useId()
-  const changes = unsavedCopy(saved, draft)
-  const patch = changedPermissions(saved, draft)
 
-  async function save() {
-    setSaving(true)
-    setError(null)
-    try {
-      await onSave(patch)
-    } catch (caught) {
-      setError(messageOf(caught))
-    } finally {
-      setSaving(false)
-    }
-  }
+  const form = useForm({
+    defaultValues: saved,
+    validators: { onSubmit: permissionsSchema },
+    onSubmit: async ({ value }) => {
+      const patch = changedPermissions(saved, value)
+      if (!canUpdate || Object.keys(patch).length === 0) return
+      setSaving(true)
+      setError(null)
+      try {
+        await onSave(patch)
+      } catch (caught) {
+        setError(messageOf(caught))
+      } finally {
+        setSaving(false)
+      }
+    },
+  })
 
   return (
     <form
+      noValidate
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        if (canUpdate && changes) void save()
+        event.stopPropagation()
+        void form.handleSubmit()
       }}
     >
       <section aria-labelledby={autonomyId} className="flex flex-col gap-2">
         <h4 id={autonomyId} className="text-[15px] font-bold">
           Autonomy
         </h4>
-        <fieldset aria-labelledby={autonomyId} className="m-0 min-w-0 border-0 p-0">
-          <div className="flex max-w-[520px] overflow-hidden rounded-[10px] border-2 border-foreground">
-            {AUTONOMY.map((option, index) => {
-              const pressed = draft.autonomy === option
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={pressed}
-                  disabled={!canUpdate}
-                  onClick={() => setDraft({ ...draft, autonomy: option })}
-                  className={`min-h-11 flex-1 px-2 text-[15px] disabled:text-muted-foreground ${
-                    index > 0 ? "border-l-2 border-foreground" : ""
-                  } ${pressed ? "bg-foreground font-bold text-background" : "font-semibold"}`}
-                >
-                  {AUTONOMY_LABEL[option]}
-                </button>
-              )
-            })}
-          </div>
-        </fieldset>
-        <p className="text-[13.5px] text-muted-foreground">{AUTONOMY_HINT[draft.autonomy]}</p>
+        <form.Field name="autonomy">
+          {(field) => (
+            <>
+              <fieldset aria-labelledby={autonomyId} className="m-0 min-w-0 border-0 p-0">
+                <div className="flex max-w-[520px] overflow-hidden rounded-[10px] border-2 border-foreground">
+                  {AUTONOMY.map((option, index) => {
+                    const pressed = field.state.value === option
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={pressed}
+                        disabled={!canUpdate}
+                        onClick={() => field.handleChange(option)}
+                        className={`min-h-11 flex-1 px-2 text-[15px] disabled:text-muted-foreground ${
+                          index > 0 ? "border-l-2 border-foreground" : ""
+                        } ${pressed ? "bg-foreground font-bold text-background" : "font-semibold"}`}
+                      >
+                        {AUTONOMY_LABEL[option]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <p className="text-[13.5px] text-muted-foreground">
+                {AUTONOMY_HINT[field.state.value]}
+              </p>
+            </>
+          )}
+        </form.Field>
       </section>
 
       <section aria-label="Actions that always need approval" className="flex flex-col">
         <h4 className="mb-1 text-[15px] font-bold">Actions that always need approval</h4>
         {ALWAYS_ASK.map((item) => (
-          <AlwaysAskRow
-            key={item.key}
-            label={item.label}
-            detail={item.detail}
-            checked={draft[item.key]}
-            disabled={!canUpdate}
-            onChange={(next) => setDraft({ ...draft, [item.key]: next })}
-          />
+          <form.Field key={item.key} name={item.key}>
+            {(field) => (
+              <AlwaysAskRow
+                label={item.label}
+                detail={item.detail}
+                checked={field.state.value}
+                disabled={!canUpdate}
+                onChange={(next) => field.handleChange(next)}
+              />
+            )}
+          </form.Field>
         ))}
       </section>
 
@@ -607,30 +710,39 @@ function PermissionsPanel({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <output className="flex-1 text-[13.5px] text-muted-foreground">{changes ?? ""}</output>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 border-2 border-foreground px-4.5 font-bold disabled:border-dashed disabled:border-muted-foreground"
-          disabled={!canUpdate || !changes || saving}
-          onClick={() => setDraft(saved)}
-        >
-          Discard
-        </Button>
-        <Button
-          type="submit"
-          className="min-h-11 border-2 border-foreground px-4.5 font-bold disabled:border-dashed disabled:border-muted-foreground"
-          disabled={!canUpdate || !changes || saving}
-        >
-          Save changes
-        </Button>
-        {canUpdate ? null : (
-          <p className="basis-full text-sm text-muted-foreground">
-            Only owners, admins and members can change these.
-          </p>
-        )}
-      </div>
+      <form.Subscribe selector={(state) => state.values}>
+        {(draft) => {
+          const changes = unsavedCopy(saved, draft)
+          return (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <output className="flex-1 text-[13.5px] text-muted-foreground">
+                {changes ?? ""}
+              </output>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 border-2 border-foreground px-4.5 font-bold disabled:border-dashed disabled:border-muted-foreground"
+                disabled={!canUpdate || !changes || saving}
+                onClick={() => form.reset(saved)}
+              >
+                Discard
+              </Button>
+              <Button
+                type="submit"
+                className="min-h-11 border-2 border-foreground px-4.5 font-bold disabled:border-dashed disabled:border-muted-foreground"
+                disabled={!canUpdate || !changes || saving}
+              >
+                Save changes
+              </Button>
+              {canUpdate ? null : (
+                <p className="basis-full text-sm text-muted-foreground">
+                  Only owners, admins and members can change these.
+                </p>
+              )}
+            </div>
+          )
+        }}
+      </form.Subscribe>
     </form>
   )
 }

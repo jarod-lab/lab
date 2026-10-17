@@ -20,6 +20,8 @@ export class WebError extends Error {
 export interface WebSession {
   user: { id: string; email: string; name: string }
   activeOrganizationId: string | null
+  /** The admin's user id while this session is an impersonation; null otherwise. */
+  impersonatedBy?: string | null
 }
 
 export interface WebOrganization {
@@ -147,6 +149,10 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
         user: { id: user.id, email: user.email, name: user.name },
         activeOrganizationId:
           (session as { activeOrganizationId?: string | null }).activeOrganizationId ?? null,
+        impersonatedBy:
+          typeof (session as { impersonatedBy?: unknown }).impersonatedBy === "string"
+            ? (session as { impersonatedBy: string }).impersonatedBy
+            : null,
       }
     },
     async signIn(input) {

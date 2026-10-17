@@ -4,6 +4,7 @@ import { screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
+import type { AgentView } from "../lib/workspace-agents"
 import type { WorkspaceAgent } from "../lib/workspace-agents-api"
 import { renderWithClient } from "../test/render"
 import { type WorkspaceAgentsPageProps, WorkspaceAgentsPage } from "./workspace-agents-page"
@@ -28,7 +29,7 @@ function props(overrides: Partial<WorkspaceAgentsPageProps> = {}): WorkspaceAgen
     organization: { id: "org-a", name: "Acme Inc", slug: "acme" },
     roleLabel: "Owner",
     view: "permissions",
-    connected: <p>Connected view</p>,
+    connected: () => <p>Connected view</p>,
     canRead: true,
     canCreate: true,
     canUpdate: true,
@@ -117,9 +118,39 @@ describe("WorkspaceAgentsPage", () => {
 
   it("has exactly one h1 on the connected view, the settings header's", () => {
     renderWithClient(
-      <WorkspaceAgentsPage {...props({ view: "connected", connected: <h2>Connected view</h2> })} />,
+      <WorkspaceAgentsPage
+        {...props({ view: "connected", connected: () => <h2>Connected view</h2> })}
+      />,
     )
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1)
+  })
+
+  it("puts the level-2 pills in each view's section heading row, marking the current one", () => {
+    const pillLabel: Record<AgentView, string> = {
+      permissions: "Permissions",
+      guardrails: "Guardrails",
+      budgets: "Budgets & footprint",
+      connected: "Connected",
+    }
+    const cases: [AgentView, string][] = [
+      ["permissions", "Agent permissions"],
+      ["guardrails", "Guardrails"],
+      ["budgets", "Budgets and footprint"],
+    ]
+    for (const [view, heading] of cases) {
+      const { unmount } = renderWithClient(
+        <WorkspaceAgentsPage {...props({ view, selected: undefined })} />,
+      )
+      const nav = screen.getByRole("navigation", { name: "Organization settings sub-sections" })
+      const row = screen.getByRole("heading", { name: heading }).parentElement?.parentElement
+      expect(row?.contains(nav)).toBe(true)
+      expect(screen.getByRole("link", { name: "Connected" }).getAttribute("href")).toBe(
+        "/acme/settings/agents?view=connected",
+      )
+      const current = within(nav).getByRole("link", { name: pillLabel[view] })
+      expect(current.getAttribute("aria-current")).toBe("page")
+      unmount()
+    }
   })
 
   it("renders the connected view in place of the board", () => {

@@ -77,7 +77,7 @@ function renderAgents({
       view={view}
       selectedId={selectedId}
       onSelect={onSelect}
-      connected={<p>Connected view</p>}
+      connected={() => <p>Connected view</p>}
     />,
   )
   return { api, onSelect }

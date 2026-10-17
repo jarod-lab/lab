@@ -1,12 +1,30 @@
+import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
+import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
-import { messageOf } from "../lib/messages"
+import { fieldMessage, messageOf } from "../lib/messages"
 import type { WebAuth } from "../lib/web-auth"
+
+const schema = z
+  .object({
+    password: z.string().min(8, "The new password must be at least 8 characters long."),
+    confirm: z.string(),
+  })
+  .refine((value) => value.password === value.confirm, {
+    message: "The two passwords do not match.",
+    path: ["confirm"],
+  })
 
 /**
  * Sets a password from an emailed link. `reset` is a forgotten password; `claim` is the account an
@@ -27,6 +45,23 @@ export function PasswordPage({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+
+  const form = useForm({
+    defaultValues: { password: "", confirm: "" },
+    validators: { onSubmit: schema },
+    onSubmit: async ({ value }) => {
+      setPending(true)
+      setError(null)
+      try {
+        await auth.resetPassword({ token: token ?? "", newPassword: value.password })
+        setDone(true)
+      } catch (caught) {
+        setError(messageOf(caught))
+      } finally {
+        setPending(false)
+      }
+    },
+  })
 
   const copy =
     mode === "claim"
@@ -82,64 +117,64 @@ export function PasswordPage({
     )
   }
 
-  async function submit(form: HTMLFormElement) {
-    const data = new FormData(form)
-    const password = String(data.get("password") ?? "")
-    const confirm = String(data.get("confirm") ?? "")
-    if (password.length < 8) {
-      setError("The new password must be at least 8 characters long.")
-      return
-    }
-    if (password !== confirm) {
-      setError("The two passwords do not match.")
-      return
-    }
-    setPending(true)
-    setError(null)
-    try {
-      await auth.resetPassword({ token: token ?? "", newPassword: password })
-      setDone(true)
-    } catch (caught) {
-      setError(messageOf(caught))
-    } finally {
-      setPending(false)
-    }
-  }
-
   return (
     <AuthCard title={copy.title} description={copy.description}>
       <form
+        noValidate
         onSubmit={(event) => {
           event.preventDefault()
-          void submit(event.currentTarget)
+          event.stopPropagation()
+          void form.handleSubmit()
         }}
       >
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor={`${id}-password`}>New password</FieldLabel>
-            <Input
-              id={`${id}-password`}
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-              disabled={pending}
-              aria-describedby={`${id}-hint`}
-            />
-            <FieldDescription id={`${id}-hint`}>Use at least 8 characters.</FieldDescription>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-confirm`}>Confirm password</FieldLabel>
-            <Input
-              id={`${id}-confirm`}
-              name="confirm"
-              type="password"
-              autoComplete="new-password"
-              required
-              disabled={pending}
-            />
-          </Field>
+          <form.Field name="password">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={`${id}-password`}>New password</FieldLabel>
+                <Input
+                  id={`${id}-password`}
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  minLength={8}
+                  required
+                  disabled={pending}
+                  aria-describedby={`${id}-hint`}
+                />
+                <FieldDescription id={`${id}-hint`}>Use at least 8 characters.</FieldDescription>
+                {field.state.meta.errors.length > 0 ? (
+                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="confirm">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={`${id}-confirm`}>Confirm password</FieldLabel>
+                <Input
+                  id={`${id}-confirm`}
+                  name="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                  disabled={pending}
+                />
+                {field.state.meta.errors.length > 0 ? (
+                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          </form.Field>
           <ErrorAlert message={error} />
           <Button type="submit" disabled={pending}>
             {pending ? "Please wait" : copy.submit}

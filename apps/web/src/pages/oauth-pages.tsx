@@ -1,12 +1,14 @@
+import { useForm } from "@tanstack/react-form"
 import { useEffect, useState } from "react"
+import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { FieldDescription } from "@starter/ui/components/ui/field"
+import { FieldDescription, FieldError } from "@starter/ui/components/ui/field"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { OrganizationSwitcher } from "../components/organization-switcher"
 import { describeScope, splitScopes } from "../lib/scopes"
-import { messageOf } from "../lib/messages"
+import { fieldMessage, messageOf } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 
@@ -37,9 +39,6 @@ export function ConsentPage({
   scope: string | undefined
 }) {
   const [loaded, setLoaded] = useState<Loaded<ConsentData>>({ status: "loading" })
-  const [selected, setSelected] = useState("")
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -59,7 +58,6 @@ export function ConsentPage({
           auth.listOrganizations(),
         ])
         if (!live) return
-        setSelected(session.activeOrganizationId ?? organizations[0]?.id ?? "")
         setLoaded({
           status: "ready",
           clientName: clientName ?? "An application",
@@ -102,22 +100,6 @@ export function ConsentPage({
 
   const scopes = splitScopes(scope)
 
-  async function decide(accept: boolean) {
-    setPending(true)
-    setError(null)
-    try {
-      // Always, not only on a change: another tab may have switched the active org since load,
-      // and consent grants whichever org is active on the server.
-      if (accept) await auth.setActiveOrganization(selected)
-      const url = await auth.consent(accept)
-      if (url) navigateTo(url)
-      else setPending(false)
-    } catch (caught) {
-      setError(messageOf(caught))
-      setPending(false)
-    }
-  }
-
   return (
     <AuthCard title={`Allow ${loaded.clientName} to connect?`}>
       <div className="flex flex-col gap-4">
@@ -135,41 +117,106 @@ export function ConsentPage({
             </ul>
           )}
         </section>
-        {loaded.organizations.length === 0 ? (
-          <ErrorAlert message="You do not belong to an organization, so there is nothing to grant." />
-        ) : (
-          <OrganizationSwitcher
-            organizations={loaded.organizations}
-            value={selected}
-            disabled={pending}
-            onChange={setSelected}
-          />
-        )}
-        <ErrorAlert message={error} />
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            className="flex-1"
-            disabled={pending || loaded.organizations.length === 0}
-            onClick={() => decide(true)}
-          >
-            Allow
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1"
-            disabled={pending}
-            onClick={() => decide(false)}
-          >
-            Deny
-          </Button>
-        </div>
-        <FieldDescription>
-          You can revoke this access later in the agents settings.
-        </FieldDescription>
+        <ConsentForm
+          auth={auth}
+          organizations={loaded.organizations}
+          initialId={loaded.activeOrganizationId ?? loaded.organizations[0]?.id ?? ""}
+        />
       </div>
     </AuthCard>
+  )
+}
+
+const choiceSchema = z.object({
+  organizationId: z.string().min(1, "Choose an organization."),
+})
+
+/**
+ * Allow or deny the grant. Allow sets the picked organization active first; deny does not touch the
+ * active organization. Both then answer the server's consent call, which resumes the OAuth flow.
+ */
+function ConsentForm({
+  auth,
+  organizations,
+  initialId,
+}: {
+  auth: WebAuth
+  organizations: WebOrganization[]
+  initialId: string
+}) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const form = useForm({
+    defaultValues: { organizationId: initialId },
+    validators: { onSubmit: choiceSchema },
+    onSubmit: async ({ value }) => {
+      await decide(true, value.organizationId)
+    },
+  })
+
+  async function decide(accept: boolean, organizationId: string) {
+    setPending(true)
+    setError(null)
+    try {
+      // Always, not only on a change: another tab may have switched the active org since load,
+      // and consent grants whichever org is active on the server.
+      if (accept) await auth.setActiveOrganization(organizationId)
+      const url = await auth.consent(accept)
+      if (url) navigateTo(url)
+      else setPending(false)
+    } catch (caught) {
+      setError(messageOf(caught))
+      setPending(false)
+    }
+  }
+
+  return (
+    <form
+      noValidate
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        void form.handleSubmit()
+      }}
+    >
+      {organizations.length === 0 ? (
+        <ErrorAlert message="You do not belong to an organization, so there is nothing to grant." />
+      ) : (
+        <form.Field name="organizationId">
+          {(field) => (
+            <div className="flex flex-col gap-2">
+              <OrganizationSwitcher
+                organizations={organizations}
+                value={field.state.value}
+                disabled={pending}
+                onChange={(organizationId) => field.handleChange(organizationId)}
+              />
+              {field.state.meta.errors.length > 0 ? (
+                <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+              ) : null}
+            </div>
+          )}
+        </form.Field>
+      )}
+      <ErrorAlert message={error} />
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1" disabled={pending || organizations.length === 0}>
+          Allow
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          disabled={pending}
+          onClick={() => void decide(false, form.getFieldValue("organizationId"))}
+        >
+          Deny
+        </Button>
+      </div>
+      <FieldDescription>You can revoke this access later in the agents settings.</FieldDescription>
+    </form>
   )
 }
 
@@ -184,9 +231,6 @@ interface OrganizationChoice {
  */
 export function SelectOrganizationPage({ auth }: { auth: WebAuth }) {
   const [loaded, setLoaded] = useState<Loaded<OrganizationChoice>>({ status: "loading" })
-  const [selected, setSelected] = useState("")
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -199,7 +243,6 @@ export function SelectOrganizationPage({ auth }: { auth: WebAuth }) {
         }
         const organizations = await auth.listOrganizations()
         if (!live) return
-        setSelected(session.activeOrganizationId ?? organizations[0]?.id ?? "")
         setLoaded({
           status: "ready",
           organizations,
@@ -238,50 +281,87 @@ export function SelectOrganizationPage({ auth }: { auth: WebAuth }) {
     )
   }
 
-  async function continueWith() {
-    setPending(true)
-    setError(null)
-    try {
-      await auth.setActiveOrganization(selected)
-      const url = await auth.continueOAuth()
-      if (url) navigateTo(url)
-      else {
-        setError("The sign-in could not be resumed. Start it again from the application.")
-        setPending(false)
-      }
-    } catch (caught) {
-      setError(messageOf(caught))
-      setPending(false)
-    }
-  }
-
   return (
     <AuthCard
       title="Choose an organization"
       description="The application will act in the organization you pick."
     >
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void continueWith()
-        }}
-      >
-        {loaded.organizations.length === 0 ? (
-          <ErrorAlert message="You do not belong to an organization yet." />
-        ) : (
-          <OrganizationSwitcher
-            organizations={loaded.organizations}
-            value={selected}
-            disabled={pending}
-            onChange={setSelected}
-          />
-        )}
-        <ErrorAlert message={error} />
-        <Button type="submit" disabled={pending || loaded.organizations.length === 0}>
-          {pending ? "Please wait" : "Continue"}
-        </Button>
-      </form>
+      <SelectOrganizationForm
+        auth={auth}
+        organizations={loaded.organizations}
+        initialId={loaded.activeOrganizationId ?? loaded.organizations[0]?.id ?? ""}
+      />
     </AuthCard>
+  )
+}
+
+/** Sets the picked organization active, then resumes the OAuth flow (POST /oauth2/continue). */
+function SelectOrganizationForm({
+  auth,
+  organizations,
+  initialId,
+}: {
+  auth: WebAuth
+  organizations: WebOrganization[]
+  initialId: string
+}) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const form = useForm({
+    defaultValues: { organizationId: initialId },
+    validators: { onSubmit: choiceSchema },
+    onSubmit: async ({ value }) => {
+      setPending(true)
+      setError(null)
+      try {
+        await auth.setActiveOrganization(value.organizationId)
+        const url = await auth.continueOAuth()
+        if (url) navigateTo(url)
+        else {
+          setError("The sign-in could not be resumed. Start it again from the application.")
+          setPending(false)
+        }
+      } catch (caught) {
+        setError(messageOf(caught))
+        setPending(false)
+      }
+    },
+  })
+
+  return (
+    <form
+      noValidate
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        void form.handleSubmit()
+      }}
+    >
+      {organizations.length === 0 ? (
+        <ErrorAlert message="You do not belong to an organization yet." />
+      ) : (
+        <form.Field name="organizationId">
+          {(field) => (
+            <div className="flex flex-col gap-2">
+              <OrganizationSwitcher
+                organizations={organizations}
+                value={field.state.value}
+                disabled={pending}
+                onChange={(organizationId) => field.handleChange(organizationId)}
+              />
+              {field.state.meta.errors.length > 0 ? (
+                <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+              ) : null}
+            </div>
+          )}
+        </form.Field>
+      )}
+      <ErrorAlert message={error} />
+      <Button type="submit" disabled={pending || organizations.length === 0}>
+        {pending ? "Please wait" : "Continue"}
+      </Button>
+    </form>
   )
 }

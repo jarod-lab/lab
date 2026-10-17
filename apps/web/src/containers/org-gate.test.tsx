@@ -92,4 +92,25 @@ describe("OrgGate", () => {
     expect(await screen.findByRole("alert")).toBeTruthy()
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy()
   })
+  it("does not call set-active while impersonating, and shows a notice instead", async () => {
+    const auth = fakeAuth({
+      getSession: vi.fn(async () => ({
+        user: { id: "u", email: "a@example.com", name: "A" },
+        activeOrganizationId: "org-a",
+        impersonatedBy: "admin-1",
+      })),
+    })
+    renderWithClient(
+      <OrgGate auth={auth} organization={babbage}>
+        <p>Org content</p>
+      </OrgGate>,
+    )
+    expect(
+      await screen.findByText(
+        "You can't switch organizations while impersonating. Stop impersonating to continue.",
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText("Org content")).toBeNull()
+    expect(auth.setActiveOrganization).not.toHaveBeenCalled()
+  })
 })

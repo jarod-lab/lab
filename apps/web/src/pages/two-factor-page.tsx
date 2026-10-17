@@ -1,13 +1,22 @@
+import { useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
+import { z } from "zod"
 
 import type { SignInMethods } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@starter/ui/components/ui/input-otp"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { type AccountApi, accountErrorMessage } from "../lib/account-api"
+import { fieldMessage } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 
 export interface TwoFactorPageProps {
@@ -53,12 +62,17 @@ export function TwoFactorPage({
   signInWithPasskey,
 }: TwoFactorPageProps) {
   const id = useId()
-  const [code, setCode] = useState("")
   const [useBackup, setUseBackup] = useState(false)
-  const [trustDevice, setTrustDevice] = useState(true)
   const [passkeyOffered, setPasskeyOffered] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const form = useForm({
+    defaultValues: { code: "", trustDevice: true },
+    onSubmit: async ({ value }) => {
+      await complete(value.code.trim(), value.trustDevice)
+    },
+  })
 
   useEffect(() => {
     let live = true
@@ -88,11 +102,7 @@ export function TwoFactorPage({
     return next
   }
 
-  async function submit(value: string) {
-    if (value === "") {
-      setError(useBackup ? "Enter a backup code." : "Enter the six-digit code from your app.")
-      return
-    }
+  async function complete(value: string, trustDevice: boolean) {
     setPending(true)
     setError(null)
     try {
@@ -137,7 +147,7 @@ export function TwoFactorPage({
             className="text-left text-foreground underline underline-offset-4"
             onClick={() => {
               setError(null)
-              setCode("")
+              form.resetField("code")
               setUseBackup((value) => !value)
             }}
           >
@@ -165,68 +175,99 @@ export function TwoFactorPage({
         className="flex flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault()
-          void submit(code.trim())
+          event.stopPropagation()
+          void form.handleSubmit()
         }}
       >
         <FieldGroup>
-          <Field>
-            {useBackup ? (
-              <>
-                <FieldLabel htmlFor={id}>Backup code</FieldLabel>
-                <Input
-                  id={id}
-                  name="code"
-                  autoComplete="one-time-code"
-                  inputMode="text"
-                  value={code}
-                  onChange={(event) => setCode(event.currentTarget.value)}
-                  disabled={pending}
-                  required
-                />
-                <FieldDescription>Codes look like xxxxx-xxxxx.</FieldDescription>
-              </>
-            ) : (
-              <>
-                <FieldLabel htmlFor={id}>Code</FieldLabel>
-                <InputOTP
-                  id={id}
-                  name="code"
-                  maxLength={CODE_LENGTH}
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  value={code}
-                  onChange={setCode}
-                  disabled={pending}
-                  containerClassName="justify-between"
-                  aria-describedby={`${id}-help`}
-                >
-                  <InputOTPGroup className="w-full justify-between gap-2">
-                    {Array.from({ length: CODE_LENGTH }, (_, index) => (
-                      <InputOTPSlot
-                        key={index}
-                        index={index}
-                        className="h-14 w-full rounded-lg border-[1.5px] text-[22px] font-bold"
+          <form.Field
+            name="code"
+            validators={{
+              onSubmit: z
+                .string()
+                .trim()
+                .min(
+                  1,
+                  useBackup ? "Enter a backup code." : "Enter the six-digit code from your app.",
+                ),
+            }}
+          >
+            {(field) => {
+              const invalid = field.state.meta.errors.length > 0
+              return (
+                <Field>
+                  {useBackup ? (
+                    <>
+                      <FieldLabel htmlFor={id}>Backup code</FieldLabel>
+                      <Input
+                        id={id}
+                        name="code"
+                        autoComplete="one-time-code"
+                        inputMode="text"
+                        value={field.state.value}
+                        onChange={(event) => field.handleChange(event.currentTarget.value)}
+                        onBlur={field.handleBlur}
+                        aria-invalid={invalid || undefined}
+                        disabled={pending}
+                        required
                       />
-                    ))}
-                  </InputOTPGroup>
-                </InputOTP>
-                <FieldDescription id={`${id}-help`}>
-                  Pasting the whole code works too. The code changes every 30 seconds.
-                </FieldDescription>
-              </>
-            )}
-          </Field>
+                      <FieldDescription>Codes look like xxxxx-xxxxx.</FieldDescription>
+                    </>
+                  ) : (
+                    <>
+                      <FieldLabel htmlFor={id}>Code</FieldLabel>
+                      <InputOTP
+                        id={id}
+                        name="code"
+                        maxLength={CODE_LENGTH}
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        value={field.state.value}
+                        onChange={(next) => field.handleChange(next)}
+                        onBlur={field.handleBlur}
+                        disabled={pending}
+                        containerClassName="justify-between"
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={`${id}-help`}
+                      >
+                        <InputOTPGroup className="w-full justify-between gap-2">
+                          {Array.from({ length: CODE_LENGTH }, (_, index) => (
+                            <InputOTPSlot
+                              key={index}
+                              index={index}
+                              className="h-14 w-full rounded-lg border-[1.5px] text-[22px] font-bold"
+                            />
+                          ))}
+                        </InputOTPGroup>
+                      </InputOTP>
+                      <FieldDescription id={`${id}-help`}>
+                        Pasting the whole code works too. The code changes every 30 seconds.
+                      </FieldDescription>
+                    </>
+                  )}
+                  {invalid ? (
+                    <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                  ) : null}
+                </Field>
+              )
+            }}
+          </form.Field>
           {useBackup ? null : (
-            <label className="flex min-h-11 items-center gap-2.5 text-[14.5px]">
-              <input
-                type="checkbox"
-                className="size-5 accent-foreground"
-                checked={trustDevice}
-                onChange={(event) => setTrustDevice(event.currentTarget.checked)}
-                disabled={pending}
-              />
-              Trust this device for 30 days
-            </label>
+            <form.Field name="trustDevice">
+              {(field) => (
+                <label className="flex min-h-11 items-center gap-2.5 text-[14.5px]">
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-foreground"
+                    checked={field.state.value}
+                    onChange={(event) => field.handleChange(event.currentTarget.checked)}
+                    onBlur={field.handleBlur}
+                    disabled={pending}
+                  />
+                  Trust this device for 30 days
+                </label>
+              )}
+            </form.Field>
           )}
           <ErrorAlert message={error} />
           <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>

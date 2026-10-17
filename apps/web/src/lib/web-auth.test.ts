@@ -59,8 +59,23 @@ describe("createWebAuth", () => {
     await expect(auth.getSession()).resolves.toEqual({
       user: { id: "u1", email: "ada@example.com", name: "Ada" },
       activeOrganizationId: "org-b",
+      impersonatedBy: null,
     })
     expect(calls[0]?.path).toBe("/api/auth/get-session")
+  })
+
+  it("reports who is impersonating the session, if anyone", async () => {
+    const { fetchImpl } = fakeServer({
+      "GET /api/auth/get-session": {
+        body: {
+          user: { id: "u1", email: "ada@example.com", name: "Ada", image: null },
+          session: { id: "s1", activeOrganizationId: null, impersonatedBy: "admin-1" },
+        },
+      },
+    })
+    await expect(createWebAuth(BASE, fetchImpl).getSession()).resolves.toMatchObject({
+      impersonatedBy: "admin-1",
+    })
   })
 
   it("returns null when there is no session", async () => {

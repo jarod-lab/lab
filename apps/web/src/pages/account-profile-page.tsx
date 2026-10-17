@@ -27,7 +27,7 @@ import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { initialsOf } from "../lib/account-format"
-import { messageOf } from "../lib/messages"
+import { fieldMessage, messageOf } from "../lib/messages"
 
 export interface AccountOrganization {
   id: string
@@ -208,7 +208,7 @@ function NameForm({
               onBlur={field.handleBlur}
             />
             {field.state.meta.errors.length > 0 ? (
-              <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
+              <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
             ) : null}
           </Field>
         )}
@@ -360,31 +360,32 @@ function ChangeEmailDialog({
   onSubmit: (newEmail: string) => Promise<void>
 }) {
   const id = useId()
-  const [value, setValue] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function submit() {
-    const parsed = emailSchema.safeParse(value)
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Enter an email address.")
-      return
-    }
-    if (parsed.data.toLowerCase() === currentEmail.toLowerCase()) {
-      setError("That is already your email.")
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      await onSubmit(parsed.data.toLowerCase())
-      setValue("")
-    } catch (caught) {
-      setError(messageOf(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const form = useForm({
+    defaultValues: { email: "" },
+    validators: {
+      onSubmit: z.object({
+        email: emailSchema.refine(
+          (value) => value.trim().toLowerCase() !== currentEmail.toLowerCase(),
+          { message: "That is already your email." },
+        ),
+      }),
+    },
+    onSubmit: async ({ value }) => {
+      setBusy(true)
+      setServerError(null)
+      try {
+        await onSubmit(value.email.trim().toLowerCase())
+        form.reset()
+      } catch (caught) {
+        setServerError(messageOf(caught))
+      } finally {
+        setBusy(false)
+      }
+    },
+  })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -396,26 +397,51 @@ function ChangeEmailDialog({
             open it, and we'll tell your current address that a change was requested.
           </DialogDescription>
         </DialogHeader>
-        <Field>
-          <FieldLabel htmlFor={id}>New email</FieldLabel>
-          <Input
-            id={id}
-            type="email"
-            autoComplete="email"
-            value={value}
-            aria-invalid={error ? true : undefined}
-            onChange={(event) => setValue(event.currentTarget.value)}
-          />
-          {error ? <FieldError>{error}</FieldError> : null}
-        </Field>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={busy} onClick={() => void submit()}>
-            {busy ? "Sending…" : "Send confirmation link"}
-          </Button>
-        </DialogFooter>
+        <form
+          noValidate
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
+          <form.Field name="email">
+            {(field) => {
+              const message =
+                field.state.meta.errors.length > 0
+                  ? fieldMessage(field.state.meta.errors)
+                  : serverError
+              return (
+                <Field>
+                  <FieldLabel htmlFor={id}>New email</FieldLabel>
+                  <Input
+                    id={id}
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={field.state.value}
+                    aria-invalid={message ? true : undefined}
+                    onChange={(event) => {
+                      setServerError(null)
+                      field.handleChange(event.currentTarget.value)
+                    }}
+                    onBlur={field.handleBlur}
+                  />
+                  {message ? <FieldError>{message}</FieldError> : null}
+                </Field>
+              )
+            }}
+          </form.Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Sending…" : "Send confirmation link"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

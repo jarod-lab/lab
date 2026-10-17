@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form"
-import { useId, useState } from "react"
+import { type ReactNode, useId, useState } from "react"
 
 import { Button } from "@starter/ui/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
@@ -20,13 +20,15 @@ export interface BudgetSectionProps {
   canUpdate: boolean
   /** Saves the budget through update_agent; the server refuses anything the role may not do. */
   onSave: (agentId: string, energyBudgetWh: number | null) => Promise<void>
+  /** The level-2 pills, placed beside the heading. */
+  pills?: ReactNode
 }
 
 /**
  * The energy budget of the selected agent (one number per run, in watt-hours). Lives in the
  * "Budgets & footprint" tab; the server keeps the budget and checks it on every run.
  */
-export function BudgetSection({ agent, canUpdate, onSave }: BudgetSectionProps) {
+export function BudgetSection({ agent, canUpdate, onSave, pills }: BudgetSectionProps) {
   const inputId = useId()
   const [serverError, setServerError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -52,9 +54,12 @@ export function BudgetSection({ agent, canUpdate, onSave }: BudgetSectionProps) 
   if (!agent) {
     return (
       <section aria-labelledby="budget-heading" className="flex max-w-[640px] flex-col gap-2">
-        <h2 id="budget-heading" className="text-[18px] font-bold">
-          Budgets and footprint
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <h2 id="budget-heading" className="text-[18px] font-bold">
+            Budgets and footprint
+          </h2>
+          {pills}
+        </div>
         <p className="text-sm text-muted-foreground">Create an agent to set its energy budget.</p>
       </section>
     )
@@ -63,9 +68,12 @@ export function BudgetSection({ agent, canUpdate, onSave }: BudgetSectionProps) 
   return (
     <section aria-labelledby="budget-heading" className="flex max-w-[640px] flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 id="budget-heading" className="text-[18px] font-bold">
-          Budgets and footprint
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <h2 id="budget-heading" className="text-[18px] font-bold">
+            Budgets and footprint
+          </h2>
+          {pills}
+        </div>
         <p className="text-sm text-muted-foreground">
           The energy {agent.name} may use in one run, in watt-hours (Wh). Past it, the run pauses
           when “Go over a run’s energy budget” is on.

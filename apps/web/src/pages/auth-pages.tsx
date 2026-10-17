@@ -1,4 +1,6 @@
-import { type FormEvent, useEffect, useId, useState } from "react"
+import { useForm } from "@tanstack/react-form"
+import { useEffect, useId, useState } from "react"
+import { z } from "zod"
 
 import {
   PASSWORD_COMPROMISED_CODE,
@@ -7,11 +9,17 @@ import {
   type SocialProvider,
 } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
-import { messageOf } from "../lib/messages"
+import { fieldMessage, messageOf } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 import { PASSWORD_ONLY_METHODS, type WebAuth } from "../lib/web-auth"
 
@@ -54,6 +62,12 @@ function linkErrorFromUrl(): string | null {
   return code ? (LINK_ERRORS[code] ?? null) : null
 }
 
+const EMAIL_REQUIRED = "Enter your email address first."
+const emailRule = z.string().trim().min(1, EMAIL_REQUIRED)
+const passwordRule = z.string().min(1, "Enter your password.")
+const emailValidators = { onSubmit: emailRule }
+const passwordValidators = { onSubmit: passwordRule }
+
 /** Sign in. The methods come from the server (GET /api/auth/sign-in-methods); until they load, email only. */
 export function SignInPage({
   auth,
@@ -67,13 +81,22 @@ export function SignInPage({
   const id = useId()
   const [methods, setMethods] = useState<SignInMethods>(PASSWORD_ONLY_METHODS)
   const [lastUsed, setLastUsed] = useState<string | null>(null)
-  const [email, setEmail] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(linkErrorFromUrl)
   const [sentTo, setSentTo] = useState<string | null>(null)
   // "Forgot password?": a reset-request card in place of the sign-in card (no new route).
   const [forgot, setForgot] = useState(false)
   const [resetSentTo, setResetSentTo] = useState<string | null>(null)
+
+  const form = useForm({
+    defaultValues: { email: "", password: "" },
+    onSubmit: async ({ value }) => {
+      if (!methods.password) return
+      await attempt(async () => {
+        navigateTo((await auth.signIn({ email: value.email, password: value.password })) ?? next)
+      })
+    },
+  })
 
   useEffect(() => {
     let live = true
@@ -120,20 +143,44 @@ export function SignInPage({
     }
   }
 
-  function requireEmail(): string | null {
-    if (email.trim() !== "") return email.trim()
-    setError("Enter your email address first.")
-    return null
+  /** Validates the email field (its error shows under the field) and returns the trimmed address. */
+  async function checkEmail(): Promise<string | null> {
+    const errors = await form.validateField("email", "submit")
+    return errors.length > 0 ? null : form.getFieldValue("email").trim()
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!methods.password) return
-    const data = new FormData(event.currentTarget)
-    const password = String(data.get("password") ?? "")
+  async function sendReset() {
+    const address = await checkEmail()
+    if (!address) return
     void attempt(async () => {
-      navigateTo((await auth.signIn({ email, password })) ?? next)
+      await auth.requestPasswordReset?.({
+        email: address,
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      setPending(false)
+      setResetSentTo(address)
     })
+  }
+
+  async function sendMagicLink() {
+    const address = await checkEmail()
+    if (!address) return
+    void attempt(async () => {
+      await auth.sendMagicLink?.({
+        email: address,
+        callbackURL: returnTarget(next, "/sign-in"),
+      })
+      setPending(false)
+      setSentTo(address)
+    })
+  }
+
+  async function sendSso() {
+    const address = await checkEmail()
+    if (!address) return
+    void attempt(
+      () => auth.signInWithSso?.(address, returnTarget(next, "/sign-in")) ?? Promise.resolve(),
+    )
   }
 
   if (forgot) {
@@ -165,35 +212,32 @@ export function SignInPage({
             className="flex flex-col gap-3"
             onSubmit={(event) => {
               event.preventDefault()
-              const address = email.trim()
-              if (address === "") {
-                setError("Enter your email address first.")
-                return
-              }
-              void attempt(async () => {
-                await auth.requestPasswordReset?.({
-                  email: address,
-                  redirectTo: `${window.location.origin}/reset-password`,
-                })
-                setPending(false)
-                setResetSentTo(address)
-              })
+              void sendReset()
             }}
           >
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor={`${id}-reset-email`}>Email</FieldLabel>
-                <Input
-                  id={`${id}-reset-email`}
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.currentTarget.value)}
-                  required
-                  disabled={pending}
-                />
-              </Field>
+              <form.Field name="email" validators={emailValidators}>
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={`${id}-reset-email`}>Email</FieldLabel>
+                    <Input
+                      id={`${id}-reset-email`}
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onBlur={field.handleBlur}
+                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      required
+                      disabled={pending}
+                    />
+                    {field.state.meta.errors.length > 0 ? (
+                      <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                    ) : null}
+                  </Field>
+                )}
+              </form.Field>
               <ErrorAlert message={error} />
               <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
                 {pending ? "Please wait" : "Send reset link"}
@@ -290,48 +334,76 @@ export function SignInPage({
             <span className="h-px flex-1 bg-border" aria-hidden="true" />
           </div>
         ) : null}
-        <form noValidate className="flex flex-col gap-3" onSubmit={submit}>
+        <form
+          noValidate
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor={`${id}-email`}>Email</FieldLabel>
-              <Input
-                id={`${id}-email`}
-                name="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.currentTarget.value)}
-                required
-                disabled={pending}
-              />
-            </Field>
-            {methods.password ? (
-              <Field>
-                <div className="flex items-baseline justify-between gap-2">
-                  <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
-                  {auth.requestPasswordReset ? (
-                    <button
-                      type="button"
-                      className="text-sm text-foreground underline underline-offset-4"
-                      disabled={pending}
-                      onClick={() => {
-                        setError(null)
-                        setForgot(true)
-                      }}
-                    >
-                      Forgot password?
-                    </button>
+            <form.Field name="email" validators={emailValidators}>
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={`${id}-email`}>Email</FieldLabel>
+                  <Input
+                    id={`${id}-email`}
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onBlur={field.handleBlur}
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    required
+                    disabled={pending}
+                  />
+                  {field.state.meta.errors.length > 0 ? (
+                    <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
                   ) : null}
-                </div>
-                <Input
-                  id={`${id}-password`}
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  disabled={pending}
-                />
-              </Field>
+                </Field>
+              )}
+            </form.Field>
+            {methods.password ? (
+              <form.Field name="password" validators={passwordValidators}>
+                {(field) => (
+                  <Field>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+                      {auth.requestPasswordReset ? (
+                        <button
+                          type="button"
+                          className="text-sm text-foreground underline underline-offset-4"
+                          disabled={pending}
+                          onClick={() => {
+                            setError(null)
+                            setForgot(true)
+                          }}
+                        >
+                          Forgot password?
+                        </button>
+                      ) : null}
+                    </div>
+                    <Input
+                      id={`${id}-password`}
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={field.state.value}
+                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                      onBlur={field.handleBlur}
+                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      required
+                      disabled={pending}
+                    />
+                    {field.state.meta.errors.length > 0 ? (
+                      <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                    ) : null}
+                  </Field>
+                )}
+              </form.Field>
             ) : null}
             <ErrorAlert message={error} />
             {methods.password ? (
@@ -354,18 +426,7 @@ export function SignInPage({
             variant="outline"
             className="h-11 w-full"
             disabled={pending}
-            onClick={() => {
-              const address = requireEmail()
-              if (!address) return
-              void attempt(async () => {
-                await auth.sendMagicLink?.({
-                  email: address,
-                  callbackURL: returnTarget(next, "/sign-in"),
-                })
-                setPending(false)
-                setSentTo(address)
-              })
-            }}
+            onClick={() => void sendMagicLink()}
           >
             Email me a sign-in link
           </Button>
@@ -376,15 +437,7 @@ export function SignInPage({
             variant="outline"
             className="h-11 w-full"
             disabled={pending}
-            onClick={() => {
-              const address = requireEmail()
-              if (!address) return
-              void attempt(
-                () =>
-                  auth.signInWithSso?.(address, returnTarget(next, "/sign-in")) ??
-                  Promise.resolve(),
-              )
-            }}
+            onClick={() => void sendSso()}
           >
             Sign in with SSO
           </Button>
@@ -393,6 +446,12 @@ export function SignInPage({
     </AuthCard>
   )
 }
+
+const signUpSchema = z.object({
+  name: z.string().trim().min(1, "Enter your name."),
+  email: z.email("Enter a valid email address."),
+  password: z.string().min(8, "Use at least 8 characters."),
+})
 
 /** Create an account. Signing up also signs the new user in and creates their personal organization. */
 export function SignUpPage({
@@ -410,6 +469,30 @@ export function SignUpPage({
   const [error, setError] = useState<string | null>(null)
   const [breached, setBreached] = useState(false)
 
+  const form = useForm({
+    defaultValues: { name: "", email: "", password: "" },
+    validators: { onSubmit: signUpSchema },
+    onSubmit: async ({ value }) => {
+      setPending(true)
+      setError(null)
+      setBreached(false)
+      try {
+        navigateTo(
+          (await auth.signUp({
+            name: value.name,
+            email: value.email,
+            password: value.password,
+          })) ?? next,
+        )
+      } catch (caught) {
+        // A breached password is a field error, not a general failure: it names the password field.
+        if (isPasswordCompromised(caught)) setBreached(true)
+        else setError(messageOf(caught))
+        setPending(false)
+      }
+    },
+  })
+
   useEffect(() => {
     let live = true
     void (async () => {
@@ -424,28 +507,6 @@ export function SignUpPage({
       live = false
     }
   }, [auth])
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const data = new FormData(event.currentTarget)
-    setPending(true)
-    setError(null)
-    setBreached(false)
-    try {
-      navigateTo(
-        (await auth.signUp({
-          name: String(data.get("name") ?? ""),
-          email: String(data.get("email") ?? ""),
-          password: String(data.get("password") ?? ""),
-        })) ?? next,
-      )
-    } catch (caught) {
-      // A breached password is a field error, not a general failure: it names the password field.
-      if (isPasswordCompromised(caught)) setBreached(true)
-      else setError(messageOf(caught))
-      setPending(false)
-    }
-  }
 
   const passwordHelp = `${id}-password-help`
   const passwordError = `${id}-password-error`
@@ -466,54 +527,100 @@ export function SignUpPage({
         </p>
       }
     >
-      <form noValidate className="flex flex-col gap-3" onSubmit={(event) => void submit(event)}>
+      <form
+        noValidate
+        className="flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void form.handleSubmit()
+        }}
+      >
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-            <Input id={`${id}-name`} name="name" autoComplete="name" required disabled={pending} />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-email`}>Work email</FieldLabel>
-            <Input
-              id={`${id}-email`}
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              disabled={pending}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
-            <Input
-              id={`${id}-password`}
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-              disabled={pending}
-              aria-invalid={breached || undefined}
-              aria-describedby={breached ? `${passwordHelp} ${passwordError}` : passwordHelp}
-              className={breached ? "border-2 border-destructive" : undefined}
-            />
-            {breached ? (
-              <p
-                id={passwordError}
-                role="alert"
-                className="flex items-start gap-2 text-sm font-semibold text-destructive"
-              >
-                <span aria-hidden="true" className="mt-0.5">
-                  ⊘
-                </span>
-                <span>{PASSWORD_COMPROMISED_MESSAGE}</span>
-              </p>
-            ) : null}
-            <FieldDescription id={passwordHelp}>
-              Use at least 8 characters. Checked privately with Have I Been Pwned. Your password is
-              never sent.
-            </FieldDescription>
-          </Field>
+          <form.Field name="name">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
+                <Input
+                  id={`${id}-name`}
+                  name="name"
+                  autoComplete="name"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                  disabled={pending}
+                />
+                {field.state.meta.errors.length > 0 ? (
+                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="email">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={`${id}-email`}>Work email</FieldLabel>
+                <Input
+                  id={`${id}-email`}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  required
+                  disabled={pending}
+                />
+                {field.state.meta.errors.length > 0 ? (
+                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="password">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={`${id}-password`}>Password</FieldLabel>
+                <Input
+                  id={`${id}-password`}
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onBlur={field.handleBlur}
+                  minLength={8}
+                  required
+                  disabled={pending}
+                  aria-invalid={breached || field.state.meta.errors.length > 0 || undefined}
+                  aria-describedby={breached ? `${passwordHelp} ${passwordError}` : passwordHelp}
+                  className={breached ? "border-2 border-destructive" : undefined}
+                />
+                {breached ? (
+                  <p
+                    id={passwordError}
+                    role="alert"
+                    className="flex items-start gap-2 text-sm font-semibold text-destructive"
+                  >
+                    <span aria-hidden="true" className="mt-0.5">
+                      ⊘
+                    </span>
+                    <span>{PASSWORD_COMPROMISED_MESSAGE}</span>
+                  </p>
+                ) : null}
+                {field.state.meta.errors.length > 0 && !breached ? (
+                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
+                ) : null}
+                <FieldDescription id={passwordHelp}>
+                  Use at least 8 characters. Checked privately with Have I Been Pwned. Your password
+                  is never sent.
+                </FieldDescription>
+              </Field>
+            )}
+          </form.Field>
           <ErrorAlert message={error} />
           <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
             {pending ? "Please wait" : "Create account"}

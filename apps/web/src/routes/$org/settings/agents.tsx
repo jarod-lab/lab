@@ -48,7 +48,7 @@ function OrgAgentsRoute() {
           replace: true,
         })
       }
-      connected={<AgentsPage api={connectedApi} />}
+      connected={(pills) => <AgentsPage api={connectedApi} pills={pills} />}
       renderLink={RouterLink}
     />
   )

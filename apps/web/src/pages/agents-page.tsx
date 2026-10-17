@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 
 import {
   AlertDialog,
@@ -33,7 +33,7 @@ const AGENT_TYPE_LABEL: Record<ConnectedAgent["type"], string> = {
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : "Never")
 
 /** The agents connected to the active organization, with revoke, and the audit trail. */
-export function AgentsPage({ api }: { api: AgentsApi }) {
+export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }) {
   const [agents, setAgents] = useState<ConnectedAgent[] | null>(null)
   const [events, setEvents] = useState<AuditEvent[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -89,11 +89,14 @@ export function AgentsPage({ api }: { api: AgentsApi }) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 md:p-8">
-      <header>
-        <h2 className="text-2xl font-semibold">Agents and activity</h2>
-        <p className="text-sm text-muted-foreground">
-          Applications and API keys that act in your organization, and what they have done.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-5">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-semibold">Agents and activity</h2>
+          <p className="text-sm text-muted-foreground">
+            Applications and API keys that act in your organization, and what they have done.
+          </p>
+        </div>
+        {pills}
       </header>
       <ErrorAlert message={error} />
 

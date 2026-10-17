@@ -7,7 +7,7 @@ import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
 
 import { getRunsApi } from "../lib/runs-api"
-import { type ThemeChoice, useThemeChoice } from "../lib/theme"
+import { type ThemeChoice, toggledTheme, useThemeChoice } from "../lib/theme"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth } from "../lib/web-auth"
 import { useInboxCount, useRunningCount } from "./inbox"
@@ -126,6 +126,8 @@ export function AppShellContainer({
     settingsHref: currentSlug ? `/${currentSlug}/settings/general` : null,
     onOpenPalette: () => setPaletteOpen(true),
     onOpenShortcuts: () => setShortcutsOpen(true),
+    onToggleTheme: () => setTheme(toggledTheme(theme)),
+    onSystemTheme: () => setTheme("system"),
     onGo: onNavigate,
   })
 

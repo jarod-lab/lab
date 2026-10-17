@@ -36,6 +36,11 @@ function systemPrefersDark(): boolean {
   return window.matchMedia(DARK_QUERY).matches
 }
 
+/** The explicit choice that flips what the page shows now: "system" on a dark OS toggles to light. */
+export function toggledTheme(choice: ThemeChoice): ThemeChoice {
+  return isDark(choice, systemPrefersDark()) ? "light" : "dark"
+}
+
 /** Sets or clears the `.dark` class on <html>, which styles.css keys its dark tokens on. */
 export function applyTheme(choice: ThemeChoice): void {
   document.documentElement.classList.toggle("dark", isDark(choice, systemPrefersDark()))

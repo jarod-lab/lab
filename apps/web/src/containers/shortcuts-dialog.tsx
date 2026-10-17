@@ -14,6 +14,8 @@ export const SHELL_SHORTCUTS: Array<{ label: string; keys: string[] }> = [
   { label: "Go to organization settings", keys: ["G", "O"] },
   { label: "Open the command palette", keys: ["⌘", "K"] },
   { label: "Open the command palette (Windows and Linux)", keys: ["Ctrl", "K"] },
+  { label: "Toggle light and dark theme", keys: ["D"] },
+  { label: "Use the system theme", keys: ["Shift", "D"] },
   { label: "Show this list", keys: ["?"] },
 ]
 

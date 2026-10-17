@@ -4,7 +4,14 @@ import { resolve } from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { THEME_STORAGE_KEY, applyTheme, isDark, readThemeChoice, setThemeChoice } from "./theme"
+import {
+  THEME_STORAGE_KEY,
+  applyTheme,
+  isDark,
+  readThemeChoice,
+  setThemeChoice,
+  toggledTheme,
+} from "./theme"
 
 /** Stubs matchMedia so "system" can be dark or light. */
 function stubSystemDark(dark: boolean) {
@@ -75,6 +82,15 @@ describe("theme choice", () => {
     expect(isDark("system", false)).toBe(false)
     expect(isDark("light", true)).toBe(false)
     expect(isDark("dark", false)).toBe(true)
+  })
+
+  it("toggles to the opposite of what the page shows, resolving system from the OS", () => {
+    expect(toggledTheme("light")).toBe("dark")
+    expect(toggledTheme("dark")).toBe("light")
+    stubSystemDark(true)
+    expect(toggledTheme("system")).toBe("light")
+    stubSystemDark(false)
+    expect(toggledTheme("system")).toBe("dark")
   })
 
   it("applyTheme works without matchMedia (embedded webviews)", () => {

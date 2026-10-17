@@ -5,7 +5,7 @@ import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
-import { THEME_STORAGE_KEY } from "../lib/theme"
+import { THEME_STORAGE_KEY, setThemeChoice } from "../lib/theme"
 import { fakeAuth } from "../test/fake-auth"
 import { renderWithClient } from "../test/render"
 import { AppShellContainer } from "./app-shell"
@@ -92,6 +92,37 @@ describe("AppShellContainer", () => {
     const palette = await screen.findByRole("dialog", { name: "Command palette" })
     await userEvent.click(within(palette).getByText("Switch to Babbage Labs"))
     expect(props.onNavigate).toHaveBeenCalledWith("/babbage")
+  })
+
+  it("D toggles light and dark, but not while typing in a field", async () => {
+    setThemeChoice("light") // the theme store is per page, so earlier tests' choices carry over
+    renderShell()
+    await loaded()
+    await userEvent.keyboard("d")
+    await waitFor(() => expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark"))
+    expect(document.documentElement.classList.contains("dark")).toBe(true)
+    await userEvent.keyboard("d")
+    await waitFor(() => expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light"))
+    expect(document.documentElement.classList.contains("dark")).toBe(false)
+
+    const input = document.createElement("input")
+    document.body.appendChild(input)
+    input.focus()
+    await userEvent.keyboard("d")
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light")
+    input.remove()
+    window.localStorage.clear()
+  })
+
+  it("Shift+D goes back to the system theme", async () => {
+    setThemeChoice("dark")
+    renderShell()
+    await loaded()
+    await userEvent.keyboard("{Shift>}D{/Shift}")
+    await waitFor(() => expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("system"))
+    // The test setup's matchMedia is light, so system shows light.
+    expect(document.documentElement.classList.contains("dark")).toBe(false)
+    window.localStorage.clear()
   })
 
   it("? opens the shortcut list", async () => {

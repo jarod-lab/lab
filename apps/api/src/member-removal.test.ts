@@ -159,3 +159,92 @@ describe("member removal ends their agents' access (real device grant)", () => {
     expect((await refresh(agent)).status).toBe(200)
   }, 30_000)
 })
+
+describe("a ban ends the user's agents' access (real device grant)", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp()
+  })
+  afterAll(() => t.close())
+
+  async function works(access: string): Promise<boolean> {
+    const res = await t.req("/v1/whoami", { headers: { authorization: `Bearer ${access}` } })
+    return res.status === 200
+  }
+
+  async function connectAgent(cookie: string) {
+    const reg = await t.req("/api/auth/oauth2/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        client_name: "Banned user's agent",
+        token_endpoint_auth_method: "none",
+        grant_types: [DEVICE_GRANT, "refresh_token"],
+      }),
+    })
+    const { client_id: clientId } = (await reg.json()) as { client_id: string }
+    const code = await t.req("/api/auth/device/code", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, scope: "read offline_access", resource: MCP }),
+    })
+    const device = (await code.json()) as {
+      device_code: string
+      user_code: string
+      interval: number
+    }
+    await t.req(`/api/auth/device?user_code=${encodeURIComponent(device.user_code)}`, t.as(cookie))
+    await t.req(
+      "/api/auth/device/approve",
+      t.as(cookie, { method: "POST", body: JSON.stringify({ userCode: device.user_code }) }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, device.interval * 1000 + 100))
+    const res = await t.req("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: DEVICE_GRANT,
+        device_code: device.device_code,
+        client_id: clientId,
+      }),
+    })
+    return ((await res.json()) as { access_token: string }).access_token
+  }
+
+  async function ban(userId: string, banExpiresIn?: number) {
+    const root = await t.signUp("Root")
+    await (await t.auth.$context).adapter.updateMany({
+      model: "user",
+      where: [{ field: "id", value: root.userId }],
+      update: { role: "admin" },
+    })
+    const res = await t.req(
+      "/api/auth/admin/ban-user",
+      t.as(root.cookie, { method: "POST", body: JSON.stringify({ userId, banExpiresIn }) }),
+    )
+    expect(res.status).toBe(200)
+  }
+
+  it("refuses the agent's token once the user is banned", async () => {
+    const u = await t.signUp("Banned")
+    const access = await connectAgent(u.cookie)
+    expect(await works(access)).toBe(true)
+
+    await ban(u.userId)
+    expect(await works(access)).toBe(false)
+  }, 30_000)
+
+  it("lets the agent back in once a timed ban has run out", async () => {
+    const u = await t.signUp("Timed")
+    const access = await connectAgent(u.cookie)
+    await ban(u.userId, 60)
+    expect(await works(access)).toBe(false)
+
+    await (await t.auth.$context).adapter.updateMany({
+      model: "user",
+      where: [{ field: "id", value: u.userId }],
+      update: { banExpires: new Date(Date.now() - 1000) },
+    })
+    expect(await works(access)).toBe(true)
+  }, 30_000)
+})

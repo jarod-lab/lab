@@ -3,7 +3,7 @@ import { AppError } from "@starter/errors"
 import { createLocalJWKSet, type JSONWebKeySet, jwtVerify } from "jose"
 
 import { API_KEY_PREFIX, AUTH_BASE_PATH, type Auth } from "./index"
-import { findMember } from "./membership"
+import { type Adapter, findMember } from "./membership"
 import { IMPERSONATION_GRANTS, narrow, rolePermissions, scopePermissions } from "./permissions"
 import { isImpersonated } from "./guards"
 
@@ -178,6 +178,17 @@ async function grantStands(auth: Auth, grant: Grant, now: Date): Promise<boolean
   return live !== null
 }
 
+/** Whether the user is banned now (admin plugin): `banned` set, with no end or one still ahead. */
+async function isBanned(db: Adapter, userId: string, now: Date): Promise<boolean> {
+  const user = await db.findOne<{ banned?: boolean | null; banExpires?: Date | string | null }>({
+    model: "user",
+    where: [{ field: "id", value: userId }],
+  })
+  if (!user) return true
+  if (!user.banned) return false
+  return !user.banExpires || new Date(user.banExpires).getTime() > now.getTime()
+}
+
 async function fromAccessToken(
   auth: Auth,
   token: string,
@@ -197,8 +208,14 @@ async function fromAccessToken(
   // OAuth access tokens always name the client and the organization they were granted for.
   const clientId = payload.azp ?? payload.client_id
   if (!payload.sub || typeof clientId !== "string" || typeof payload.org !== "string") return null
-  const member = await findMember((await auth.$context).adapter, payload.sub, payload.org)
+  const db = (await auth.$context).adapter
+  const [member, banned] = await Promise.all([
+    findMember(db, payload.sub, payload.org),
+    isBanned(db, payload.sub, new Date()),
+  ])
   if (!member) return null
+  // A ban deletes the user's sessions but not their OAuth grants, so their agents stop here.
+  if (banned) return null
   // A JWT has no row to revoke, so its grant is checked on every request (see grantStands).
   if (typeof payload.iat !== "number") return null
   const grant = {

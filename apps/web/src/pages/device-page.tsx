@@ -23,6 +23,12 @@ interface Request {
   scope: string | undefined
 }
 
+/** The organization to start on: the active one when the person belongs to it, else the first. */
+function initialOrganizationId(organizations: WebOrganization[], activeId: string | null): string {
+  if (activeId && organizations.some((org) => org.id === activeId)) return activeId
+  return organizations[0]?.id ?? ""
+}
+
 /**
  * Approves or denies a device (headless) sign-in: the agent shows a code, the person enters it here.
  * Like consent, the chosen organization is set active before the approval, because the token's `org`
@@ -50,7 +56,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
         }
         const organizations = await auth.listOrganizations()
         if (!live) return
-        setSelected(session.activeOrganizationId ?? organizations[0]?.id ?? "")
+        setSelected(initialOrganizationId(organizations, session.activeOrganizationId))
         setContext({ organizations, activeOrganizationId: session.activeOrganizationId })
       } catch (caught) {
         if (live) setError(messageOf(caught))
@@ -61,6 +67,9 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
       live = false
     }
   }, [auth, reloads])
+
+  // Approval records the active organization, so it needs one the person belongs to.
+  const canApprove = context?.organizations.some((org) => org.id === selected) ?? false
 
   if (context === undefined && !error) return <AuthCard title="Loading" />
 
@@ -189,7 +198,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
               <Button
                 type="button"
                 className="flex-1"
-                disabled={pending}
+                disabled={pending || !canApprove}
                 onClick={() => void decide(true)}
               >
                 Approve

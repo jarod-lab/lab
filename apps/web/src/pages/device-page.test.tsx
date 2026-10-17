@@ -157,3 +157,31 @@ describe("DevicePage", () => {
     expect(auth.signOut).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("DevicePage approval without an organization", () => {
+  it("does not offer Approve when the person belongs to no organization", async () => {
+    const auth = fakeAuth({ listOrganizations: vi.fn(async () => []) })
+    render(<DevicePage auth={auth} initialUserCode="WXYZ-9999" />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Find request" }))
+
+    const approve = (await screen.findByRole("button", { name: "Approve" })) as HTMLButtonElement
+    expect(approve.disabled).toBe(true)
+    expect(auth.setActiveOrganization).not.toHaveBeenCalled()
+  })
+
+  it("approves the first organization when the active one is not in the list", async () => {
+    const auth = fakeAuth({
+      getSession: vi.fn(async () => ({
+        user: { id: "user-1", email: "ada@example.com", name: "Ada" },
+        activeOrganizationId: "org-gone",
+      })),
+    })
+    render(<DevicePage auth={auth} initialUserCode="ABCD-1234" />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Find request" }))
+    await user.click(await screen.findByRole("button", { name: "Approve" }))
+
+    expect(await screen.findByRole("heading", { name: "Approved" })).toBeTruthy()
+    expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+  })
+})

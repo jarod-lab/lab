@@ -208,3 +208,28 @@ describe("SelectOrganizationPage", () => {
     expect(await screen.findByText("Network down")).toBeTruthy()
   })
 })
+
+describe("organization choice when the active organization is not listed", () => {
+  const staleSession = vi.fn(async () => ({
+    user: { id: "user-1", email: "ada@example.com", name: "Ada" },
+    activeOrganizationId: "org-gone",
+  }))
+
+  it("grants the first listed organization, not the stale active one", async () => {
+    const auth = fakeAuth({ getSession: staleSession })
+    render(<ConsentPage auth={auth} {...consentProps} />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Allow" }))
+
+    await waitFor(() => expect(auth.consent).toHaveBeenCalledWith(true))
+    expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+  })
+
+  it("continues with the first listed organization, not the stale active one", async () => {
+    const auth = fakeAuth({ getSession: staleSession })
+    render(<SelectOrganizationPage auth={auth} />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Continue" }))
+
+    await waitFor(() => expect(auth.continueOAuth).toHaveBeenCalled())
+    expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+  })
+})

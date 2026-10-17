@@ -469,6 +469,18 @@ export function SignUpPage({
   const [error, setError] = useState<string | null>(null)
   const [breached, setBreached] = useState(false)
 
+  /** As the sign-in page's social buttons: pending during the redirect, and any error shown. */
+  async function socialSignUp(provider: SocialProvider) {
+    setPending(true)
+    setError(null)
+    try {
+      await (auth.signInWithSocial?.(provider, returnTarget(next, "/sign-in")) ?? Promise.resolve())
+    } catch (caught) {
+      setError(messageOf(caught))
+      setPending(false)
+    }
+  }
+
   const form = useForm({
     defaultValues: { name: "", email: "", password: "" },
     validators: { onSubmit: signUpSchema },
@@ -637,12 +649,7 @@ export function SignUpPage({
                 variant="outline"
                 className="h-11 flex-1 text-sm"
                 disabled={pending}
-                onClick={() =>
-                  void (
-                    auth.signInWithSocial?.(provider, returnTarget(next, "/sign-in")) ??
-                    Promise.resolve()
-                  )
-                }
+                onClick={() => void socialSignUp(provider)}
               >
                 {SOCIAL_LABEL[provider]}
               </Button>

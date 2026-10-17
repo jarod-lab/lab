@@ -242,3 +242,47 @@ describe("SignInPage forgot password", () => {
     expect(auth.requestPasswordReset).not.toHaveBeenCalled()
   })
 })
+
+describe("SignUpPage social sign-up", () => {
+  const methods = {
+    password: true,
+    magicLink: false,
+    passkey: false,
+    social: ["github" as const],
+    sso: false,
+    stripe: false,
+  }
+
+  it("shows a failed social sign-up and lets the person try again", async () => {
+    const auth = fakeAuth({
+      signInMethods: vi.fn(async () => methods),
+      signInWithSocial: vi.fn(async () => {
+        throw new Error("GitHub sign-in is not set up on this server")
+      }),
+    })
+    render(<SignUpPage auth={auth} next="/consent" signInHref="/sign-in" />)
+    const github = await screen.findByRole("button", { name: "GitHub" })
+    await userEvent.setup().click(github)
+
+    expect(await screen.findByText("GitHub sign-in is not set up on this server")).toBeTruthy()
+    expect((screen.getByRole("button", { name: "GitHub" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    )
+  })
+
+  it("stays pending while the social sign-up redirects away", async () => {
+    const auth = fakeAuth({
+      signInMethods: vi.fn(async () => methods),
+      signInWithSocial: vi.fn(() => new Promise<void>(() => undefined)),
+    })
+    render(<SignUpPage auth={auth} next="/consent" signInHref="/sign-in" />)
+    await userEvent.setup().click(await screen.findByRole("button", { name: "GitHub" }))
+
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "GitHub" }) as HTMLButtonElement).disabled).toBe(
+        true,
+      ),
+    )
+    expect(auth.signInWithSocial).toHaveBeenCalledWith("github", expect.any(String))
+  })
+})

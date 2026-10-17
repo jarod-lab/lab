@@ -120,11 +120,17 @@ export function ConsentPage({
         <ConsentForm
           auth={auth}
           organizations={loaded.organizations}
-          initialId={loaded.activeOrganizationId ?? loaded.organizations[0]?.id ?? ""}
+          initialId={initialOrganizationId(loaded.organizations, loaded.activeOrganizationId)}
         />
       </div>
     </AuthCard>
   )
+}
+
+/** The organization to start on: the active one when the person belongs to it, else the first. */
+function initialOrganizationId(organizations: WebOrganization[], activeId: string | null): string {
+  if (activeId && organizations.some((org) => org.id === activeId)) return activeId
+  return organizations[0]?.id ?? ""
 }
 
 const choiceSchema = z.object({
@@ -289,7 +295,7 @@ export function SelectOrganizationPage({ auth }: { auth: WebAuth }) {
       <SelectOrganizationForm
         auth={auth}
         organizations={loaded.organizations}
-        initialId={loaded.activeOrganizationId ?? loaded.organizations[0]?.id ?? ""}
+        initialId={initialOrganizationId(loaded.organizations, loaded.activeOrganizationId)}
       />
     </AuthCard>
   )

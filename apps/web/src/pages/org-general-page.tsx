@@ -36,7 +36,6 @@ import {
   INVITE_ROLES,
   INVITE_ROLE_LABEL,
   type InviteRole,
-  countOrPlaceholder,
   settingsTabs,
   slugChangeWarning,
 } from "../lib/org-settings"
@@ -81,10 +80,16 @@ const schema = z.object({
   defaultInviteRole: z.enum(INVITE_ROLES),
 })
 
-const PROBLEM_TEXT: Record<Exclude<SlugProblem, null>, string> = {
+// A reserved address has no hint: the field's status line already says it.
+const PROBLEM_TEXT: Record<Exclude<SlugProblem, null | "reserved">, string> = {
   empty: "Enter a URL for the organization.",
   shape: "Use lowercase letters, numbers and hyphens, up to 48 characters.",
-  reserved: "That address is reserved. Choose another.",
+}
+
+/** "1 member", "12 members", or the placeholder for a count that is not known yet. */
+function countNoun(count: number | undefined, one: string, many: string): string {
+  if (count === undefined) return `[PLACEHOLDER] ${many}`
+  return `${count} ${count === 1 ? one : many}`
 }
 
 /** The organization settings "General" page (board OrgGeneral). Props in, callbacks out. */
@@ -142,7 +147,7 @@ export function OrgGeneralPage({
         renderLink={renderLink}
       />
 
-      <main className="flex max-w-[720px] flex-col gap-5 px-4 py-6 md:px-9">
+      <div className="flex max-w-[720px] flex-col gap-5 px-4 py-6 md:px-9">
         {!canEdit ? (
           <ViewOnlyNotice subject={organization.name}>
             Ask an owner or admin to change these settings.
@@ -300,7 +305,7 @@ export function OrgGeneralPage({
             <LeaveRow organizationName={organization.name} onLeave={onLeave} />
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }
@@ -337,7 +342,9 @@ function SlugEditor({
         disabled={disabled}
         onChange={onChange}
       />
-      {!disabled && problem ? <FieldDescription>{PROBLEM_TEXT[problem]}</FieldDescription> : null}
+      {!disabled && problem && problem !== "reserved" ? (
+        <FieldDescription>{PROBLEM_TEXT[problem]}</FieldDescription>
+      ) : null}
       {!disabled && errors.length > 0 && !problem ? (
         <FieldError>{messageOf(errors)}</FieldError>
       ) : null}
@@ -378,6 +385,7 @@ function useSlugAvailability(
   }, [checkable, settled, checkSlug])
 
   if (value.length === 0 || value === currentSlug) return "idle"
+  if (slugProblem(value) === "reserved") return "reserved"
   if (slugProblem(value) !== null) return "invalid"
   if (value !== settled) return "checking"
   if (!checkable || result === null || result.slug !== settled) return "checking"
@@ -519,7 +527,7 @@ function DeleteRow({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const inputId = useId()
-  const consequence = `Permanently deletes ${countOrPlaceholder(counts.agents)} agents, ${countOrPlaceholder(counts.apiKeys)} API keys (they stop working) and all run history, removes ${countOrPlaceholder(counts.members)} members. Cancel any subscription in Billing first. You'll type the organization name to confirm.`
+  const consequence = `Permanently deletes ${countNoun(counts.agents, "agent", "agents")}, ${countNoun(counts.apiKeys, "API key", "API keys")} (they stop working) and all run history, removes ${countNoun(counts.members, "member", "members")}. Cancel any subscription in Billing first. You'll type the organization name to confirm.`
 
   return (
     <>

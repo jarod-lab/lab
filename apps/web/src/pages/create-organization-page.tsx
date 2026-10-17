@@ -15,10 +15,10 @@ import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { useSetActiveOrganization } from "../containers/shell-data"
 import { WebError } from "../lib/web-auth"
 
-const PROBLEM_TEXT: Record<Exclude<SlugProblem, null>, string> = {
+// A reserved address has no hint: the field's status line already says it.
+const PROBLEM_TEXT: Record<Exclude<SlugProblem, null | "reserved">, string> = {
   empty: "Enter a URL for the organization.",
   shape: "Use lowercase letters, numbers and hyphens, up to 48 characters.",
-  reserved: "That address is reserved. Choose another.",
 }
 
 const schema = z.object({
@@ -219,14 +219,14 @@ function SlugBlock({
   let status: SlugStatus = "idle"
   if (value.length > 0) {
     if (problem === "shape") status = "invalid"
-    else if (problem === "reserved") status = "invalid"
+    else if (problem === "reserved") status = "reserved"
     else if (problem === null) {
       if (settled !== value || check.isPending || check.isFetching) status = "checking"
       else if (check.data === true) status = "available"
       else if (check.data === false) status = "taken"
     }
   }
-  const problemText = problem ? PROBLEM_TEXT[problem] : null
+  const problemText = problem && problem !== "reserved" ? PROBLEM_TEXT[problem] : null
   const errorText = errors.length > 0 ? messageOf(errors) : null
 
   return (
@@ -245,7 +245,7 @@ function SlugBlock({
           Could not check this address. Try again in a moment.
         </p>
       ) : null}
-      {errorText && !problemText ? <p className="text-sm text-destructive">{errorText}</p> : null}
+      {errorText && !problem ? <p className="text-sm text-destructive">{errorText}</p> : null}
     </div>
   )
 }

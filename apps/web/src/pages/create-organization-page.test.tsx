@@ -54,6 +54,21 @@ describe("CreateOrganizationPage", () => {
     expect(auth.checkSlug).not.toHaveBeenCalledWith("admin")
   })
 
+  it("names the reserved address in the status its field points at", async () => {
+    renderPage()
+    await userEvent.type(nameInput(), "Admin")
+    await userEvent.clear(urlInput())
+    await userEvent.type(urlInput(), "admin")
+    await screen.findByText("That address is reserved. Choose another.")
+    const describedBy = urlInput().getAttribute("aria-describedby")
+    expect(describedBy).toBeTruthy()
+    expect(document.getElementById(describedBy ?? "")?.textContent).toBe(
+      "That address is reserved. Choose another.",
+    )
+    expect(screen.queryByText(/Use lowercase letters/)).toBeNull()
+    expect(screen.queryByText("Choose a valid organization URL.")).toBeNull()
+  })
+
   it("does not say Available when the check fails", async () => {
     renderPage(fakeAuth({ checkSlug: vi.fn(async () => Promise.reject(new Error("down"))) }))
     await userEvent.type(nameInput(), "Acme")

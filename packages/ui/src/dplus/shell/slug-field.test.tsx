@@ -11,6 +11,7 @@ const words: [SlugStatus, string | null][] = [
   ["available", "Available"],
   ["taken", "Taken"],
   ["invalid", "Use lowercase letters"],
+  ["reserved", "That address is reserved"],
 ]
 
 describe("SlugField", () => {
@@ -34,10 +35,15 @@ describe("SlugField", () => {
     await expectNoA11yViolations(html)
   })
 
-  it("marks taken and invalid values as invalid", () => {
+  it("marks taken, invalid and reserved values as invalid", () => {
     expect(
       renderToStaticMarkup(
         <SlugField label="URL" prefix="x/" value="a" onChange={() => {}} status="taken" />,
+      ),
+    ).toContain('aria-invalid="true"')
+    expect(
+      renderToStaticMarkup(
+        <SlugField label="URL" prefix="x/" value="admin" onChange={() => {}} status="reserved" />,
       ),
     ).toContain('aria-invalid="true"')
     expect(

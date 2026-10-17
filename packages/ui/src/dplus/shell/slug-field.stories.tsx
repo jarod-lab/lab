@@ -29,6 +29,7 @@ export const Available: Story = {}
 export const Checking: Story = { args: { status: "checking" } }
 export const Taken: Story = { args: { value: "acme", status: "taken" } }
 export const Invalid: Story = { args: { value: "Acme Labs!", status: "invalid" } }
+export const Reserved: Story = { args: { value: "admin", status: "reserved" } }
 export const Idle: Story = { args: { status: "idle" } }
 export const Dark: Story = {
   args: { status: "taken", value: "acme" },

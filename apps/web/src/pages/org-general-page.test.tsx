@@ -47,6 +47,33 @@ describe("OrgGeneralPage as owner", () => {
     await expectNoA11yViolations(document.body.innerHTML)
   })
 
+  it("uses the singular for one agent, one API key and one member", () => {
+    renderWithClient(
+      <OrgGeneralPage {...props({ counts: { agents: 1, apiKeys: 1, members: 1 } })} />,
+    )
+    expect(
+      screen.getByText(
+        "Permanently deletes 1 agent, 1 API key (they stop working) and all run history, removes 1 member. Cancel any subscription in Billing first. You'll type the organization name to confirm.",
+      ),
+    ).toBeTruthy()
+  })
+
+  it("names a reserved address as reserved, not as a malformed one", async () => {
+    const user = userEvent.setup()
+    renderWithClient(<OrgGeneralPage {...props()} />)
+    const url = screen.getByLabelText("URL")
+    await user.clear(url)
+    await user.type(url, "admin")
+    expect(screen.getByText("That address is reserved. Choose another.")).toBeTruthy()
+    expect(screen.queryByText(/Use lowercase letters/)).toBeNull()
+    expect(url.getAttribute("aria-invalid")).toBe("true")
+  })
+
+  it("leaves the landmark to the app shell rather than nesting a main", () => {
+    renderWithClient(<OrgGeneralPage {...props()} />)
+    expect(document.querySelector("main")).toBeNull()
+  })
+
   it("keeps Save and Discard off until something changes", async () => {
     const user = userEvent.setup()
     renderWithClient(<OrgGeneralPage {...props()} />)

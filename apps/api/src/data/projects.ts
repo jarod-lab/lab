@@ -54,7 +54,14 @@ export async function createProject<O>(
 ): Promise<Project> {
   const [row] = await db
     .insert(project)
-    .values({ id: crypto.randomUUID(), organizationId: org.value, name: input.name })
+    // Stamped here, not by the column default: created_at has no time zone, so now() would store
+    // the database session's local time when that isn't UTC.
+    .values({
+      id: crypto.randomUUID(),
+      organizationId: org.value,
+      name: input.name,
+      createdAt: new Date(),
+    })
     .returning()
   if (!row) throw new Error("insert returned no row")
   return row

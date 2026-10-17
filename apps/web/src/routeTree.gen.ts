@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrgRouteImport } from './routes/$org'
 import { Route as AccountRouteImport } from './routes/account'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as DeviceRouteImport } from './routes/device'
@@ -35,6 +36,7 @@ import { Route as OrgSettingsApiKeysRouteImport } from './routes/$org/settings/a
 import { Route as OrgSettingsBillingRouteImport } from './routes/$org/settings/billing'
 import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
 import { Route as OrgSettingsMembersRouteImport } from './routes/$org/settings/members'
+import { Route as OrgSettingsSecurityRouteImport } from './routes/$org/settings/security'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -49,6 +51,11 @@ const OrgRoute = OrgRouteImport.update({
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -167,11 +174,17 @@ const OrgSettingsMembersRoute = OrgSettingsMembersRouteImport.update({
   path: '/settings/members',
   getParentRoute: () => OrgRoute,
 } as any)
+const OrgSettingsSecurityRoute = OrgSettingsSecurityRouteImport.update({
+  id: '/settings/security',
+  path: '/settings/security',
+  getParentRoute: () => OrgRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$org': typeof OrgRouteWithChildren
   '/account': typeof AccountRouteWithChildren
+  '/admin': typeof AdminRoute
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -194,10 +207,12 @@ export interface FileRoutesByFullPath {
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
+  '/$org/settings/security': typeof OrgSettingsSecurityRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -220,6 +235,7 @@ export interface FileRoutesByTo {
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
+  '/$org/settings/security': typeof OrgSettingsSecurityRoute
   '/$org/settings': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -227,6 +243,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$org': typeof OrgRouteWithChildren
   '/account': typeof AccountRouteWithChildren
+  '/admin': typeof AdminRoute
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -249,6 +266,7 @@ export interface FileRoutesById {
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
+  '/$org/settings/security': typeof OrgSettingsSecurityRoute
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -257,6 +275,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$org'
     | '/account'
+    | '/admin'
     | '/claim'
     | '/consent'
     | '/device'
@@ -279,10 +298,12 @@ export interface FileRouteTypes {
     | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
+    | '/$org/settings/security'
     | '/$org/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
     | '/claim'
     | '/consent'
     | '/device'
@@ -305,12 +326,14 @@ export interface FileRouteTypes {
     | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
+    | '/$org/settings/security'
     | '/$org/settings'
   id:
     | '__root__'
     | '/'
     | '/$org'
     | '/account'
+    | '/admin'
     | '/claim'
     | '/consent'
     | '/device'
@@ -333,6 +356,7 @@ export interface FileRouteTypes {
     | '/$org/settings/billing'
     | '/$org/settings/general'
     | '/$org/settings/members'
+    | '/$org/settings/security'
     | '/$org/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -340,6 +364,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   OrgRoute: typeof OrgRouteWithChildren
   AccountRoute: typeof AccountRouteWithChildren
+  AdminRoute: typeof AdminRoute
   ClaimRoute: typeof ClaimRoute
   ConsentRoute: typeof ConsentRoute
   DeviceRoute: typeof DeviceRoute
@@ -375,6 +400,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -538,6 +570,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSettingsMembersRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/$org/settings/security': {
+      id: '/$org/settings/security'
+      path: '/settings/security'
+      fullPath: '/$org/settings/security'
+      preLoaderRoute: typeof OrgSettingsSecurityRouteImport
+      parentRoute: typeof OrgRoute
+    }
   }
 }
 
@@ -549,6 +588,7 @@ interface OrgRouteChildren {
   OrgSettingsBillingRoute: typeof OrgSettingsBillingRoute
   OrgSettingsGeneralRoute: typeof OrgSettingsGeneralRoute
   OrgSettingsMembersRoute: typeof OrgSettingsMembersRoute
+  OrgSettingsSecurityRoute: typeof OrgSettingsSecurityRoute
   OrgSettingsIndexRoute: typeof OrgSettingsIndexRoute
 }
 
@@ -560,6 +600,7 @@ const OrgRouteChildren: OrgRouteChildren = {
   OrgSettingsBillingRoute: OrgSettingsBillingRoute,
   OrgSettingsGeneralRoute: OrgSettingsGeneralRoute,
   OrgSettingsMembersRoute: OrgSettingsMembersRoute,
+  OrgSettingsSecurityRoute: OrgSettingsSecurityRoute,
   OrgSettingsIndexRoute: OrgSettingsIndexRoute,
 }
 
@@ -584,6 +625,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   OrgRoute: OrgRouteWithChildren,
   AccountRoute: AccountRouteWithChildren,
+  AdminRoute: AdminRoute,
   ClaimRoute: ClaimRoute,
   ConsentRoute: ConsentRoute,
   DeviceRoute: DeviceRoute,

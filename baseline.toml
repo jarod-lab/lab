@@ -73,7 +73,8 @@ packages = [
 message = "Use components from @starter/ui instead of a UI library directly"
 suggest = "Import from @starter/ui, or add the component there with npx shadcn@latest add <name>"
 
-# Env vars are read and validated in packages/env. Exceptions: tests, build-tool configs, the
+# Env vars are read and validated in packages/env. Exceptions: tests (e2e tests run in the e2e
+# runner, not with the app's env), build-tool configs, the
 # logger (LOG_LEVEL, read before anything else loads), createDb's default URL and the CLI, which
 # runs on a customer's machine rather than with the server's env.
 [[rule]]
@@ -85,6 +86,7 @@ exclude_glob = [
   "packages/env/**",
   "**/scripts/**",
   "**/*.test.{ts,tsx}",
+  "**/*.e2e.ts",
   "**/*.config.{ts,mts,js,mjs}",
   "packages/logger/src/index.ts",
   "packages/db/src/index.ts",

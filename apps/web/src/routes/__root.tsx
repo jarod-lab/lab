@@ -2,6 +2,8 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router"
 import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
 
+import { ImpersonationBanner } from "../containers/impersonation-banner"
+import { getAdminApi } from "../lib/admin-api"
 import { useThemeSync } from "../lib/theme"
 import themeBootScript from "../theme-boot.js?raw"
 
@@ -36,6 +38,8 @@ function RootOutlet() {
   const { queryClient } = Route.useRouteContext()
   return (
     <QueryClientProvider client={queryClient}>
+      {/* While an admin acts as someone else, every page shows the strip with Stop. */}
+      <ImpersonationBanner api={getAdminApi()} />
       <Outlet />
       {DevtoolsPanel ? (
         <Suspense fallback={null}>

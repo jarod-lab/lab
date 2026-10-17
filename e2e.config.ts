@@ -32,7 +32,18 @@ const app = {
   },
 }
 
+// The admin journey (e2e/admin.e2e.ts) signs in as a platform admin. Promotion is DB-only, so the account
+// is made outside the suite (see e2e/README.md). The password is a function: a string from an unset
+// variable would fail every command here, `e2e list` included. Override per run with E2E_USER_ADMIN_*.
+const credentials = {
+  admin: {
+    username: process.env.E2E_ADMIN_EMAIL || "admin@example.test",
+    password: () => process.env.E2E_ADMIN_PASSWORD ?? "",
+  },
+}
+
 export default {
+  credentials,
   tests: "e2e/**/*.e2e.ts",
   targets: [
     { name: "desktop", engine: web(), app },

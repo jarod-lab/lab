@@ -26,3 +26,28 @@ The app under test gets only `PATH`, `HOME` and the temp-dir variables from the 
 - Deterministic first: locators and `expect`. Add an `agent.act` step only when the flow needs judgement.
 - Import `test` from `@e2e-dev/web` (it provides `app`, `screen`, `browser`); import `expect` from `e2e`.
 - No `sleep`. Use matchers, which retry.
+
+## Admin account
+
+The `/admin` journey (`e2e/admin.e2e.ts`) signs in as a platform admin. Admin is a database role, and the suite
+can't change the database, so:
+
+1. Sign up a normal account (any way: `/sign-up`, or the API).
+2. Promote it once, in the database the e2e stack uses (`DATABASE_URL`):
+
+   ```sql
+   update "user" set role = 'admin' where email = 'admin@example.com';
+   ```
+
+3. Leave two-factor off on that account, or sign-in stops at `/two-factor` and the journey can't continue.
+4. Pass its credentials to the run:
+
+   ```bash
+   E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD=... pnpm exec e2e run e2e/admin.e2e.ts
+   ```
+
+   The password is read through a function in `e2e.config.ts` and is never a string in the environment the
+   model sees. Without both variables the admin journey is skipped with a message; the other two `/admin`
+   checks (signed out, and a non-admin gets "Not available") always run.
+
+The runner also accepts `E2E_USER_ADMIN_USERNAME` and `E2E_USER_ADMIN_PASSWORD` (the credential name, uppercased).

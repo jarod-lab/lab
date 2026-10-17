@@ -6,6 +6,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router"
 import { isReservedOrgSlug } from "@starter/auth/client"
+import { Button } from "@starter/ui/components/ui/button"
 
 import { AppShellContainer } from "../containers/app-shell"
 import { OrgGate } from "../containers/org-gate"
@@ -57,6 +58,14 @@ function OrgLayout() {
         >
           <Outlet />
         </OrgGate>
+      ) : organizations.isError ? (
+        // A failed list is not an answer: say so, rather than that the organization is missing.
+        <div role="alert" className="flex flex-col items-start gap-3 p-6">
+          <p>Could not load your organizations.</p>
+          <Button type="button" variant="outline" onClick={() => void organizations.refetch()}>
+            Try again
+          </Button>
+        </div>
       ) : (
         <OrgNotFoundPage slug={slug} renderLink={RouterLink} />
       )}

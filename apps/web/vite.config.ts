@@ -8,9 +8,13 @@ import { type ProxyOptions, defineConfig } from "vite"
 
 // Dev only: the API (auth, REST, MCP, OAuth discovery) lives on its own origin, so the dev server
 // forwards those paths to it and the session cookies and OAuth issuer match what the browser sees.
-// API_URL is read here because this file runs in Node, not in the app. It defaults to the port
-// apps/api uses when no URL is set.
-const apiTarget = process.env.API_URL ?? "http://localhost:3000"
+// API_URL is read here because this file runs in Node, not in the app (empty counts as unset, as
+// .env.example leaves it). Under `pnpm dev`, portless serves this app as `app.<project>` and the API as
+// `api.<project>` (portless.json), and gives both its CA. Otherwise it defaults to the port apps/api
+// uses when no URL is set.
+const portlessUrl = process.env.PORTLESS_URL
+const portlessApi = portlessUrl?.replace("://app.", "://api.")
+const apiTarget = process.env.API_URL || portlessApi || "http://localhost:3000"
 
 const apiProxy: ProxyOptions = {
   target: apiTarget,
@@ -26,6 +30,10 @@ const apiProxy: ProxyOptions = {
 
 export default defineConfig({
   server: {
+    // portless routes to the PORT it assigns. Only under portless: a PORT from .env is the API's.
+    ...(portlessUrl && process.env.PORT
+      ? { port: Number(process.env.PORT), strictPort: true, host: process.env.HOST }
+      : {}),
     proxy: Object.fromEntries(
       ["/api", "/v1", "/mcp", "/.well-known"].map((path) => [path, apiProxy]),
     ),

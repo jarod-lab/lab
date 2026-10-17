@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Usage: pnpm init-project <name> [github-owner] [--domain <domain>]
-//   (e.g. acme -> @acme/ui, portless name "acme")
+//   (e.g. acme -> @acme/ui; portless names app.acme and api.acme)
 // The MCP registry only accepts a namespace you can prove. With --domain acme.com the registry name is
 // com.acme/<name> (proved with a DNS record); otherwise io.github.<owner>/<name> (proved by signing in
 // to GitHub), with the owner defaulting to the GitHub owner of the `origin` remote.
@@ -89,6 +89,7 @@ for (const file of walk(".")) {
   let next = text
     .replaceAll("@starter/", `@${name}/`)
     .replace(/("name": ")starter(")/g, `$1${name}$2`)
+    .replace(/("name": "(?:api|app)\.)starter(")/g, `$1${name}$2`)
     .replace(/^# starter$/m, `# ${name}`)
     .replace(/(name = ")starter(")/g, `$1${name}$2`)
     .replaceAll("localhost:5432/starter", `localhost:5432/${name}`)

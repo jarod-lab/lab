@@ -1,1 +1,7 @@
-{ "name": "starter" }
+{
+  "turbo": false,
+  "apps": {
+    "apps/api": { "name": "api.starter" },
+    "apps/web": { "name": "app.starter" }
+  }
+}

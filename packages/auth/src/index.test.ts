@@ -48,9 +48,9 @@ describe("passkeyRpID", () => {
 
   it("is the shared parent of portless and vite origins under *.localhost", () => {
     expect(passkeyRpID(["https://api-app.localhost", "https://web.localhost"])).toBe("localhost")
-    expect(
-      passkeyRpID(["https://api-app.starter.localhost", "https://web.starter.localhost"]),
-    ).toBe("starter.localhost")
+    expect(passkeyRpID(["https://api.starter.localhost", "https://app.starter.localhost"])).toBe(
+      "starter.localhost",
+    )
   })
 
   it("is the shared domain of sibling hosts", () => {

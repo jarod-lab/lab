@@ -18,6 +18,7 @@
   invitation shows inviter email not name; billing is fixture data until Stripe test keys + plans are set.
 - **Local state:** Postgres container `starter-db-1` running with migrations 0000–0009; local admin
   `admin@example.test` exists in it (throwaway).
-- **Not exercised:** `pnpm dev` itself (portless). It needs `WEB_ORIGINS=https://web.starter.localhost` in `.env`;
-  the derived passkey rpID `starter.localhost` is untested.
+- **`pnpm dev`** (portless): fixed after the run (both apps claimed one name; portless's turbo mode re-ran
+  the root `portless`; vite ignored portless's PORT). Now `app.starter.localhost` and `api.starter.localhost`;
+  it needs `WEB_ORIGINS=https://app.starter.localhost` in `.env`. The passkey rpID `starter.localhost` is untested.
 - **Next action:** none in the graph. Optional: CI job for e2e; push/PR (not done: the user didn't ask).

@@ -174,9 +174,9 @@ or `resolvePrincipal`.
   OAuth provider seeds its resources at boot and exits if it can't. `WEB_ORIGINS` (comma-separated bare origins) lists
   the web app's origins when it is not the API's (`pnpm dev` under portless, the e2e stack): auth callbacks
   (`callbackURL`/`redirectTo`) and passkeys trust them; CORS does not. Unset in production. Under `pnpm dev` the web
-  app is `https://web.<project>.localhost` (portless's `<package>.<project>.localhost`; `<project>` is the workspace
-  scope, `starter` here), so set `WEB_ORIGINS` to that in `.env`. Passkeys use `passkeyRpID`: the shared parent domain
-  of the origins (`localhost` for `*.localhost`).
+  app is `https://app.starter.localhost` and the API `https://api.starter.localhost` (names in `portless.json`), so
+  set `WEB_ORIGINS=https://app.starter.localhost` in `.env`; vite proxies to the API's portless URL. Passkeys use
+  `passkeyRpID`: the shared parent domain of the origins (`localhost` for `*.localhost`).
 - **Request logging:** `apps/api` has its own request-id and access-log middleware.
 - **Device grant.** better-auth's `oauthDeviceAuthorization` (`packages/auth/src/device.ts`). `POST /api/auth/device/code`;
   a person approves at `/device`, and the approving session's active org (which must be one they belong to) is recorded
@@ -342,7 +342,8 @@ All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
 - **Storybook** (`pnpm storybook`, http://localhost:6006) exposes an MCP server at `/mcp`, registered in `.mcp.json`.
   It only responds while Storybook is running. Use its docs tools (`docs-list`, `docs-show`) for component props
   instead of reading source. `pnpm build` runs `storybook build`.
-- **portless**: `pnpm dev` runs workspace dev scripts on stable `*.localhost` URLs.
+- **portless**: `pnpm dev` runs the apps' dev scripts on stable `*.localhost` URLs (`app.starter`, `api.starter`;
+  `portless.json`). `"turbo": false` because portless's turbo mode runs the root `dev` script, which is portless.
 - **Web and CLI builds**: `pnpm --filter @starter/web build` (writes `apps/web/dist`, needed for `WEB_DIST_DIR`) and
   `pnpm --filter @starter/cli build` (writes `dist/bin.js`).
 - **baseline** (`code-baseline`): bans, ratchets and design-system rules in `baseline.toml`. Localhost `http://` warnings are fine.

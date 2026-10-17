@@ -34,6 +34,7 @@ import {
 import { type LoginContext, signInOf } from "./login-method"
 import { createNotices } from "./notices"
 import { securitySummaryPlugin } from "./security-summary"
+import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
 import { ownerOnlyGuard, ownsBilling } from "./owner-only"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
@@ -52,6 +53,7 @@ export { IMPERSONATION_REFUSED_PATHS } from "./guards"
 export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
 export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
 export { parseStripePlans, type StripePlanConfig } from "./stripe-plans"
+export { type SignInMethods, type SocialProvider } from "./sign-in-methods"
 
 /** Where better-auth's routes are mounted; the OAuth issuer is `${baseURL}${AUTH_BASE_PATH}`. */
 export const AUTH_BASE_PATH = "/api/auth"
@@ -336,6 +338,8 @@ export function createAuth(opts: AuthOptions) {
       // Unlinking, deletion and email-change rules, and the security summary the page reads.
       accountPlugin({ notices, adapter, billing: !!opts.stripe }),
       securitySummaryPlugin(),
+      // Which sign-in methods the sign-in page offers (sign-in-methods.ts).
+      signInMethodsPlugin(signInMethodsOf(opts)),
       // A link proves the mailbox, not the second factor: a user with two-factor on gets the code next.
       twoFactorMagicLink({ baseURL: opts.baseURL }),
       // Platform admins: a user whose `role` is "admin". Impersonation is limited by impersonationGuard.

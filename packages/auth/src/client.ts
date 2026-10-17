@@ -16,9 +16,12 @@ import {
   twoFactorClient,
 } from "better-auth/client/plugins"
 import { ac, roles } from "./access"
+import type { SignInMethods } from "./sign-in-methods-shared"
 import { TWO_FACTOR_PATH } from "./constants"
 
 export { RESERVED_ORG_SLUGS, isReservedOrgSlug } from "./reserved-slugs"
+export { personalSlug } from "./membership"
+export type { SignInMethods, SocialProvider } from "./sign-in-methods-shared"
 export {
   ACTIVE_SUBSCRIPTION_CODE,
   LAST_SIGN_IN_METHOD_CODE,
@@ -40,6 +43,15 @@ const securitySummaryClient = () =>
           twoFactorEnabledAt: string | Date | null
           backupCodesRemaining: number | null
         }>("/security/summary", { method: "GET" }),
+    }),
+  }) satisfies BetterAuthClientPlugin
+
+/** The sign-in page's methods (sign-in-methods.ts): GET /api/auth/sign-in-methods, no session needed. */
+const signInMethodsClient = () =>
+  ({
+    id: "starter-sign-in-methods-client",
+    getActions: ($fetch) => ({
+      signInMethods: () => $fetch<SignInMethods>("/sign-in-methods", { method: "GET" }),
     }),
   }) satisfies BetterAuthClientPlugin
 
@@ -70,6 +82,7 @@ export const createClient = (
       // Billing answers only when the server has Stripe configured (test mode); see index.ts.
       stripeClient({ subscription: true }),
       securitySummaryClient(),
+      signInMethodsClient(),
       twoFactorClient({
         // The page keeps its query: a pending OAuth authorization rides on it into the code entry.
         onTwoFactorRedirect() {

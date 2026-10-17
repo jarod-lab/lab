@@ -1714,3 +1714,36 @@ describe("billing with Stripe test-mode keys set", () => {
     expect(res.status).toBeGreaterThanOrEqual(400)
   })
 })
+
+describe("sign-in methods over HTTP", () => {
+  it("lists the methods a server with no optional sign-in config offers, without a session", async () => {
+    const t = await createTestApp()
+    try {
+      const res = await t.req("/api/auth/sign-in-methods")
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        password: true,
+        magicLink: true,
+        passkey: true,
+        social: [],
+        sso: true,
+        stripe: false,
+      })
+    } finally {
+      await t.close()
+    }
+  })
+
+  it("lists GitHub once its client id and secret are configured", async () => {
+    const t = await createTestApp([], {
+      github: { clientId: "gh-client", clientSecret: "gh-secret" }, // gitleaks:allow
+    })
+    try {
+      const res = await t.req("/api/auth/sign-in-methods")
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ social: ["github"], password: true })
+    } finally {
+      await t.close()
+    }
+  })
+})

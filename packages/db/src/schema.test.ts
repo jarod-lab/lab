@@ -2,11 +2,16 @@ import { getTableName } from "drizzle-orm"
 import { getTableConfig } from "drizzle-orm/pg-core"
 import { describe, expect, it } from "vitest"
 import {
+  agent,
+  approval,
   auditEvent,
   createDb,
   idempotencyKey,
   organization,
   project,
+  run,
+  runStep,
+  steerMessage,
   user,
   usageDaily,
 } from "./index"
@@ -23,6 +28,11 @@ describe("db", () => {
     ["audit_event", auditEvent],
     ["usage_daily", usageDaily],
     ["idempotency_key", idempotencyKey],
+    ["agent", agent],
+    ["run", run],
+    ["run_step", runStep],
+    ["approval", approval],
+    ["steer_message", steerMessage],
   ])("%s belongs to an organization and cascades when it is deleted", (name, table) => {
     const config = getTableConfig(table)
     expect(config.name).toBe(name)

@@ -236,5 +236,8 @@ export const steerMessage = pgTable(
     authorId: text("author_id").notNull(),
     createdAt: timestamp("created_at", { precision: 3 }).defaultNow().notNull(),
   },
-  (t) => [index("steer_message_run_created_idx").on(t.runId, t.createdAt)],
+  (t) => [
+    index("steer_message_organizationId_idx").on(t.organizationId),
+    index("steer_message_run_created_idx").on(t.runId, t.createdAt),
+  ],
 )

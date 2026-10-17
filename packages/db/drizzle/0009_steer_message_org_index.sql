@@ -1,0 +1,1 @@
+CREATE INDEX "steer_message_organizationId_idx" ON "steer_message" USING btree ("organization_id");

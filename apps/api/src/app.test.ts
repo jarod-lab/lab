@@ -70,6 +70,13 @@ describe("api app (real Postgres via PGlite)", () => {
         body: { error: { code: "NOT_FOUND", message: "Not found" } },
       })
     })
+
+    it("mints a request id in place of an empty, long or unsafe one", async () => {
+      for (const id of ["", "a b", "x".repeat(65), "<script>"]) {
+        const res = await t.req("/health", { headers: { "x-request-id": id } })
+        expect(res.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/)
+      }
+    })
   })
 
   describe("OAuth discovery", () => {
@@ -313,6 +320,42 @@ describe("api app (real Postgres via PGlite)", () => {
         status: 400,
         body: { error: { code: "BAD_REQUEST", message: "Body must be JSON" } },
       })
+    })
+
+    it("refuses a JSON body that isn't an object", async () => {
+      for (const body of ["[]", '["Site"]', '"Site"', "42", "null"]) {
+        const res = await t.req("/v1/projects", t.as(t.fullKey, { method: "POST", body }))
+        expect(await json(res)).toMatchObject({
+          status: 400,
+          body: { error: { code: "BAD_REQUEST", message: "Body must be a JSON object" } },
+        })
+      }
+    })
+
+    it("takes a signed-in write only from a trusted origin", async () => {
+      const send = (origin: string | null, contentType = "application/json") => {
+        const headers = new Headers({ cookie: t.owner.cookie, "content-type": contentType })
+        if (origin !== null) headers.set("origin", origin)
+        return t.req("/v1/projects", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ name: "Forged" }),
+        })
+      }
+      // A same-site page posting a text/plain form: no preflight, and the cookie rides along.
+      expect(await json(await send("https://evil.localhost:3000", "text/plain"))).toMatchObject({
+        status: 403,
+        body: { error: { code: "FORBIDDEN" } },
+      })
+      expect((await send(null)).status).toBe(403)
+      expect((await send("null")).status).toBe(403)
+      const listed = await json(await t.req("/v1/projects", t.as(t.readKey)))
+      expect(listed.body.projects.map((p: { name: string }) => p.name)).not.toContain("Forged")
+
+      expect((await send(BASE)).status).toBe(200)
+      // Reads need no origin, and keys and tokens never do.
+      expect((await t.req("/v1/whoami", { headers: { cookie: t.owner.cookie } })).status).toBe(200)
+      expect((await post(t.fullKey, "/v1/projects", { name: "By key" })).status).toBe(200)
     })
 
     it("reports only unexpected errors, not agents' bad requests", async () => {

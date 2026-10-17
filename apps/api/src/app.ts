@@ -28,6 +28,7 @@ import { type Logger } from "@starter/logger"
 import { createMcpHandler, protectedResourceMetadata } from "@starter/mcp"
 import {
   createStatusHandler,
+  requestIdFrom,
   type StatusOptions,
   type StatusProvider,
 } from "@starter/observability"
@@ -198,7 +199,8 @@ export function createApp(opts: AppOptions) {
   const app = new Hono<{ Variables: { requestId: string } }>()
 
   app.use(async (c, next) => {
-    const requestId = c.req.header("x-request-id") ?? crypto.randomUUID()
+    // An incoming id goes into every log line and back out in a header: short, plain ones only.
+    const requestId = requestIdFrom(c.req.raw.headers)
     c.set("requestId", requestId)
     const start = performance.now()
     await next()
@@ -296,11 +298,25 @@ export function createApp(opts: AppOptions) {
     })
   })
 
+  /**
+   * The browser sends the session cookie with any request to this origin, including a form another
+   * same-site page posts as text/plain. So a write the cookie authenticates must come from a trusted
+   * origin, as better-auth requires on /api/auth/*. Browsers send Origin on every non-GET request.
+   */
+  async function assertTrustedOrigin(req: Request) {
+    const origin = req.headers.get("origin")
+    if (origin && origin !== "null" && (await auth.$context).isTrustedOrigin(origin)) return
+    throw new AppError("FORBIDDEN", "A signed-in write must come from the web app", {
+      hint: "Agents and scripts authenticate with an API key or OAuth access token, not a session cookie.",
+    })
+  }
+
   // REST: one route per operation.
   for (const op of operations) {
     app.on(op.method, op.path, async (c) => {
       const caller = await authenticate(c.req.raw)
       if (!caller) throw new AppError("UNAUTHORIZED", "Send an API key or OAuth access token")
+      if (caller.via === "session" && op.method !== "GET") await assertTrustedOrigin(c.req.raw)
       let body: unknown = {}
       if (op.method !== "GET" && op.method !== "DELETE") {
         // No body is an empty input: an operation whose input is all path parameters has none.
@@ -309,6 +325,12 @@ export function createApp(opts: AppOptions) {
           body = text.trim() === "" ? {} : JSON.parse(text)
         } catch {
           throw new AppError("BAD_REQUEST", "Body must be JSON")
+        }
+        // Spreading an array or a string would turn it into numbered fields.
+        if (!isRecord(body) || Array.isArray(body)) {
+          throw new AppError("BAD_REQUEST", "Body must be a JSON object", {
+            hint: 'Send the input fields as one object, e.g. {"name": "..."}.',
+          })
         }
       }
       const input = { ...c.req.query(), ...(body as object), ...c.req.param() }

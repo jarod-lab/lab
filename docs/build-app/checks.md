@@ -95,3 +95,9 @@
 | E1 | full e2e suite on the real stack, desktop + phone | pass | `pnpm exec e2e run`: 28/28 files, 42 passed, 2 skipped (admin journey); with E2E_ADMIN_* set, admin 6/6 |
 | E1 | flakes: visual fixed 900ms wait, ambiguous "Sign out" locator, web async-query timeout under turbo load | pass (fixed) | 792667b, setup.ts asyncUtilTimeout 5000 |
 | Z | `pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm baseline && pnpm format:check && pnpm build` | pass | exit 0 (final) |
+| F1 | every form on TanStack Form + Zod (FieldError); agents pills beside the section heading; impersonation org-switch notice | pass | web 549 passed; sweep leaves only sign-in-or-up.tsx (no <form>, wraps CredentialsForm); commit 212677f |
+| E1 | full visual review redone after F1: all 56 screenshots (14 pages × light/dark × desktop/phone) opened and compared to the boards | pass | fixes: /new copy + outlined Cancel, security rows wrap on phone, real agent count in delete copy (ee90599) |
+| E1 | shipped build (apps/api + WEB_DIST_DIR, real CSP): visual, auth, run-view, api-keys, members, security, admin | pass | 28/28 on desktop + phone |
+| E1 | final full e2e suite (dev stack), admin credentials set | pass | 28 files, 44 passed, 0 skipped |
+| Z | final full check command | pass | exit 0 |
+| Z | review scope | stated | server diff: probe-based security review + fixes; web diff: targeted greps (raw HTML, secrets, forms) and the visual review, not a line-by-line review |

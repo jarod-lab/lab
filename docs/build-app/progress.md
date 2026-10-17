@@ -1,7 +1,8 @@
 # Progress
 
 - **Graph:** every node done. N0, E0, N4, N1, N5+P1, N2, P2, P4, N3, A1, P3+P4b, P7, P5+P6, S1, P8+P8b+P7b, P9,
-  P10+P10b, P11+P11b, P12, Z, security review → S2, B1 (billing roles), E1 (all e2e + visual), S3 (web origins).
+  P10+P10b, P11+P11b, P12, Z, security review → S2, B1 (billing roles), E1 (all e2e + visual), S3 (web origins),
+  F1 (forms on TanStack Form), final visual review of all 56 screenshots.
 - **Outputs:** see checks.md (every requirement with evidence); notes folded into AGENTS.md.
 - **Decisions:** D1 board URLs; D2 no bearer plugin; N5+P1 merged; dev mail sink; D5 account auth before
   P5/P6; P4 before P3; admins manage billing (boards); impersonation read-only and fail-closed; WEB_ORIGINS for
@@ -17,4 +18,6 @@
   invitation shows inviter email not name; billing is fixture data until Stripe test keys + plans are set.
 - **Local state:** Postgres container `starter-db-1` running with migrations 0000–0009; local admin
   `admin@example.test` exists in it (throwaway).
+- **Not exercised:** `pnpm dev` itself (portless). It needs `WEB_ORIGINS=https://web.starter.localhost` in `.env`;
+  the derived passkey rpID `starter.localhost` is untested.
 - **Next action:** none in the graph. Optional: CI job for e2e; push/PR (not done: the user didn't ask).

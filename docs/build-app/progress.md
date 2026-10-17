@@ -5,11 +5,12 @@
   P7 (72d20ca).
   P5+P6 (62e03f0), S1 (9beea74), P8+P8b+P7b (ccb67ac), P9 (fb804fa).
   P10 (f51e235), P10b (c94124f), P11b server (54953ce), P11 (893abd0), P12 (24c44bc).
-  Running: Z (full check command).
-  Blocked: E1 waits for the user (migrations 0003–0008, Postgres, AI_GATEWAY_API_KEY).
+  Z checks (6358b34, c9afac3): full check command passes.
+  Running: advisor review.
+  Blocked: E1 — needs Postgres up, migrations 0003–0009 applied, DATABASE_URL/BETTER_AUTH_SECRET in .env (user).
 - **Outputs:** checks.md; AGENTS.md notes in agents-notes.md; page spec in page-node.md.
 - **Decisions:** D1 board URLs; N5+P1 merged; dev mail sink (N2); D5 account auth (A1) before P5/P6; P4 before P3;
   P5+P6 merged and run beside P7.
 - **Open issues:** another session commits in this tree (AGENTS.md, .env.example, packages/env,
   packages/observability) — never stage those.
-- **Next action:** Z checks + AGENTS.md; E1 when the user has Postgres up and migrations 0003–0008 applied.
+- **Next action:** advisor review; then E1 once the user has the stack ready: `pnpm e2e` (all pages, desktop+phone) and the visual check per board.

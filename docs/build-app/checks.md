@@ -68,3 +68,9 @@
 | P12 | lint, baseline, format, tsc, build | pass | oxlint clean; baseline 0 errors; tsc clean; build ok; devtools panel names absent from dist (event-client string only, as N0 refined) |
 | P12 | `e2e list` (admin desktop + phone) | pass | runs without E2E_ADMIN_* set; signed-out + non-admin cases always run, admin journey skips with a message |
 | P12 | e2e admin (run against the stack) | unresolved | needs stack (E1) and an admin account (README "Admin account") |
+| Z | `pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm baseline && pnpm format:check && pnpm build` | pass | exit 0 after fixing db coverage (6358b34); log in session scratchpad full-check.log |
+| Z | tenant-table invariant covers agent/run/run_step/approval/steer_message | pass (fixed) | steer_message lacked an org index → migration 0009 |
+| Z | existing auth, OAuth, onboarding tests | pass | inside test:coverage (api-app) |
+| Z | AGENTS.md: app shell, data layer, devtools, e2e, auth plugins | pass | c9afac3 |
+| Z | advisor review of the full diff | pending | |
+| E1 | every page e2e + visual light/dark desktop/phone | blocked | Postgres not running; migrations 0003–0009 not applied (user) |

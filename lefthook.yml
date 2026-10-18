@@ -6,7 +6,9 @@ pre-commit:
     baseline:
       run: pnpm baseline
     format:
-      glob: "*.{ts,tsx,json,css}"
+      # Biome formats JS, TS, JSON and CSS. It does not format Markdown in this version (2.5 reports
+      # the formatter disabled for .md), so .md is left out.
+      glob: "*.{ts,tsx,js,mjs,json,css}"
       run: pnpm biome format --no-errors-on-unmatched {staged_files}
 
 commit-msg:

@@ -50,6 +50,5 @@
       "Edit(./.env.local)",
       "Edit(./.env.*.local)"
     ]
-  },
-  "enableAllProjectMcpServers": true
+  }
 }

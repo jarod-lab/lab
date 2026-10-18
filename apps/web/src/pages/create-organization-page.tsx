@@ -1,7 +1,5 @@
-import { useForm } from "@tanstack/react-form"
-import { useDebouncedValue } from "@tanstack/react-pacer"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { useId, useState } from "react"
+import { useForm, useStore } from "@tanstack/react-form"
+import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
@@ -9,11 +7,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/com
 import { Input } from "@starter/ui/components/ui/input"
 import { SlugField, type SlugStatus } from "@starter/ui/dplus/shell/slug-field"
 
-import { qk } from "../lib/query-keys"
 import { type SlugProblem, slugify, slugProblem } from "../lib/org-slug"
-import type { WebAuth, WebOrganization } from "../lib/web-auth"
-import { useSetActiveOrganization } from "../containers/shell-data"
-import { WebError } from "../lib/web-auth"
 
 // A reserved address has no hint: the field's status line already says it.
 const PROBLEM_TEXT: Record<Exclude<SlugProblem, null | "reserved">, string> = {
@@ -33,28 +27,35 @@ const schema = z.object({
 })
 
 export interface CreateOrganizationPageProps {
-  auth: WebAuth
   /** Shown before the slug, e.g. "app.example.com/". */
   host: string
-  /** After the organization exists and is the active one. */
-  onCreated: (organization: WebOrganization) => void
+  /**
+   * Availability of the slug as the container checked it: "checking" while it settles, undefined
+   * when there is nothing to check (empty or a bad shape).
+   */
+  slugAvailable: boolean | "checking" | undefined
+  slugCheckFailed: boolean
+  /** Told each time the slug changes, so the container can check it. */
+  onSlugChange: (slug: string) => void
+  /** Creates the organization. Rejects with a message the page shows. */
+  onSubmit: (input: { name: string; slug: string }) => Promise<void>
   onCancel: () => void
 }
 
 /**
  * Create an organization (the board's "Create an organization"). The slug follows the name until
- * the person edits it, and its availability is checked after a short pause. Both client and server
- * refuse reserved slugs; the server is the one that counts.
+ * the person edits it. Both client and server refuse reserved slugs; the server is the one that
+ * counts.
  */
 export function CreateOrganizationPage({
-  auth,
   host,
-  onCreated,
+  slugAvailable,
+  slugCheckFailed,
+  onSlugChange,
+  onSubmit,
   onCancel,
 }: CreateOrganizationPageProps) {
   const nameId = useId()
-  const queryClient = useQueryClient()
-  const setActive = useSetActiveOrganization(auth)
   const [slugTouched, setSlugTouched] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -64,22 +65,19 @@ export function CreateOrganizationPage({
     onSubmit: async ({ value }) => {
       setSubmitError(null)
       try {
-        const organization = await auth.createOrganization({
-          name: value.name.trim(),
-          slug: value.slug,
-        })
-        await queryClient.invalidateQueries({ queryKey: qk.organizations() })
-        await setActive.mutateAsync(organization.id)
-        onCreated(organization)
+        await onSubmit({ name: value.name.trim(), slug: value.slug })
       } catch (error) {
         setSubmitError(
-          error instanceof WebError || error instanceof Error
-            ? error.message
-            : "Could not create the organization.",
+          error instanceof Error ? error.message : "Could not create the organization.",
         )
       }
     },
   })
+
+  const slugValue = useStore(form.store, (state) => state.values.slug)
+  useEffect(() => {
+    onSlugChange(slugValue)
+  }, [slugValue, onSlugChange])
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-6">
@@ -126,9 +124,10 @@ export function CreateOrganizationPage({
         <form.Field name="slug">
           {(field) => (
             <SlugBlock
-              auth={auth}
               host={host}
               value={field.state.value}
+              availability={slugAvailable}
+              checkFailed={slugCheckFailed}
               onChange={(slug) => {
                 setSlugTouched(true)
                 field.handleChange(slug)
@@ -171,7 +170,7 @@ export function CreateOrganizationPage({
         <div className="flex flex-wrap gap-3">
           <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
             {([canSubmit, isSubmitting]) => (
-              <Button type="submit" disabled={!canSubmit || isSubmitting || setActive.isPending}>
+              <Button type="submit" disabled={!canSubmit || isSubmitting}>
                 {isSubmitting ? "Creating…" : "Create organization"}
               </Button>
             )}
@@ -194,37 +193,29 @@ function messageOf(errors: unknown[]): string {
 
 /** The slug field with its availability: checked after the value settles, never for a bad shape. */
 function SlugBlock({
-  auth,
   host,
   value,
+  availability,
+  checkFailed,
   onChange,
   errors,
 }: {
-  auth: WebAuth
   host: string
   value: string
+  availability: boolean | "checking" | undefined
+  checkFailed: boolean
   onChange: (slug: string) => void
   errors: unknown[]
 }) {
-  const [settled] = useDebouncedValue(value, { wait: 300 })
   const problem = slugProblem(value)
-  const check = useQuery({
-    queryKey: ["organization-slug-available", settled],
-    queryFn: () => auth.checkSlug(settled),
-    enabled: settled.length > 0 && slugProblem(settled) === null,
-    retry: false,
-    staleTime: 0,
-  })
 
   let status: SlugStatus = "idle"
   if (value.length > 0) {
     if (problem === "shape") status = "invalid"
     else if (problem === "reserved") status = "reserved"
-    else if (problem === null) {
-      if (settled !== value || check.isPending || check.isFetching) status = "checking"
-      else if (check.data === true) status = "available"
-      else if (check.data === false) status = "taken"
-    }
+    else if (availability === "checking") status = "checking"
+    else if (availability === true) status = "available"
+    else if (availability === false) status = "taken"
   }
   const problemText = problem && problem !== "reserved" ? PROBLEM_TEXT[problem] : null
   const errorText = errors.length > 0 ? messageOf(errors) : null
@@ -240,7 +231,7 @@ function SlugBlock({
         onChange={onChange}
       />
       {problemText ? <FieldDescription>{problemText}</FieldDescription> : null}
-      {check.isError ? (
+      {checkFailed ? (
         <p role="alert" className="text-sm text-destructive">
           Could not check this address. Try again in a moment.
         </p>

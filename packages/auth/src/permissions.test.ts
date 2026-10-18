@@ -5,6 +5,9 @@ import {
   narrow,
   OAUTH_EXCLUDED,
   OAUTH_SCOPE_GRANTS,
+  OWNER_ONLY_RESOURCES,
+  PERSON_ONLY_ACTIONS,
+  PERSON_ONLY_RESOURCES,
   rolePermissions,
   roles,
   scopePermissions,
@@ -75,6 +78,27 @@ describe("OAuth scopes", () => {
     for (const need of everyAction) {
       const excluded = covers(OAUTH_EXCLUDED as PermissionSet, need)
       expect(covers(reachable, need), JSON.stringify(need)).toBe(!excluded)
+    }
+  })
+
+  it("exclude every action of the person-only resources and actions", () => {
+    for (const resource of PERSON_ONLY_RESOURCES) {
+      for (const action of statements[resource]) {
+        expect(covers(OAUTH_EXCLUDED as PermissionSet, { [resource]: [action] })).toBe(true)
+      }
+    }
+    for (const [resource, actions] of Object.entries(PERSON_ONLY_ACTIONS)) {
+      for (const action of actions) {
+        expect(covers(OAUTH_EXCLUDED as PermissionSet, { [resource]: [action] })).toBe(true)
+      }
+    }
+  })
+
+  it("keep the owner-only resources out of the admin role", () => {
+    for (const resource of OWNER_ONLY_RESOURCES) {
+      const need = { [resource]: [statements[resource][0]] } as PermissionSet
+      expect(allowed(rolePermissions("owner"), need)).toBe(true)
+      expect(allowed(rolePermissions("admin"), need)).toBe(false)
     }
   })
 

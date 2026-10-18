@@ -31,3 +31,14 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # The Dockerfile pins its base image by digest; this keeps that pin from going stale.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+    groups:
+      docker:
+        patterns: ["*"]

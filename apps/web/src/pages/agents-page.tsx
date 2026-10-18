@@ -1,16 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Badge } from "@starter/ui/components/ui/badge"
 import { Button } from "@starter/ui/components/ui/button"
 import {
@@ -21,6 +10,7 @@ import {
   CardTitle,
 } from "@starter/ui/components/ui/card"
 
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { ErrorAlert } from "../components/auth-card"
 import type { AgentsApi, AuditEvent, ConnectedAgent } from "../lib/agents-api"
 import { messageOf } from "../lib/messages"
@@ -132,31 +122,19 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
                     <p className="text-sm">
                       Access: {agent.access.length > 0 ? agent.access.join(", ") : "none"}
                     </p>
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={<Button variant="destructive" size="sm" disabled={busy} />}
-                      >
-                        Revoke access
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Revoke access for {agent.name}?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            It stops working straight away. You can connect it again later.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            variant="destructive"
-                            disabled={busy}
-                            onClick={() => void revoke(agent)}
-                          >
-                            Revoke access
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="destructive" size="sm" disabled={busy}>
+                          Revoke access
+                        </Button>
+                      }
+                      title={`Revoke access for ${agent.name}?`}
+                      description="It stops working straight away. You can connect it again later."
+                      confirmLabel="Revoke access"
+                      destructive
+                      pending={busy}
+                      onConfirm={() => void revoke(agent)}
+                    />
                   </CardContent>
                 </Card>
               </li>

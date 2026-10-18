@@ -1,16 +1,8 @@
+import { FormError } from "../components/form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useId, useMemo, useState } from "react"
 import { cn } from "cn"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Table,
@@ -36,6 +28,7 @@ import {
   NOT_CONNECTED_REASON,
   SAMPLE_LABEL,
 } from "../lib/billing/adapter"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { settingsTabs } from "../lib/org-settings"
 
 export interface OrgBillingPageProps {
@@ -140,11 +133,7 @@ export function OrgBillingPage({
           {reason}
         </span>
 
-        {actionError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        ) : null}
+        <FormError message={actionError} />
 
         <section
           aria-labelledby="plan-h"
@@ -286,30 +275,23 @@ export function OrgBillingPage({
           reasonId={reasonId}
         />
 
-        <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Cancel the {currentPlan?.name ?? "current"} plan?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The plan stays on until the end of the current period
-                {current?.renewsOn ? ` (${current.renewsOn})` : ""}. Stripe asks you to confirm the
-                cancellation on its page, which opens in a new tab.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep plan</AlertDialogCancel>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  setConfirmCancel(false)
-                  onCancel()
-                }}
-              >
-                Cancel plan <span aria-hidden="true">↗</span>
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open={confirmCancel}
+          onOpenChange={setConfirmCancel}
+          title={`Cancel the ${currentPlan?.name ?? "current"} plan?`}
+          description={`The plan stays on until the end of the current period${current?.renewsOn ? ` (${current.renewsOn})` : ""}. Stripe asks you to confirm the cancellation on its page, which opens in a new tab.`}
+          cancelLabel="Keep plan"
+          confirmLabel={
+            <>
+              Cancel plan <span aria-hidden="true">↗</span>
+            </>
+          }
+          destructive
+          onConfirm={() => {
+            setConfirmCancel(false)
+            onCancel()
+          }}
+        />
       </div>
     </div>
   )

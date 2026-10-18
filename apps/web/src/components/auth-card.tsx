@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-import { Alert, AlertDescription, AlertTitle } from "@starter/ui/components/ui/alert"
+import { FormError } from "./form"
 
 /**
  * The centred card every public page sits in (D+ Auth board): a mark, one heading, the page body and
@@ -37,11 +37,5 @@ export function AuthCard({
 
 /** A failure the person can act on. Renders nothing without a message. */
 export function ErrorAlert({ message }: { message: string | null }) {
-  if (!message) return null
-  return (
-    <Alert variant="destructive">
-      <AlertTitle>Something went wrong</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
-    </Alert>
-  )
+  return <FormError title="Something went wrong" message={message} />
 }

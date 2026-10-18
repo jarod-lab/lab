@@ -1,14 +1,15 @@
+import { FieldIssues } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useEffect, useState } from "react"
 import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { FieldDescription, FieldError } from "@starter/ui/components/ui/field"
+import { FieldDescription } from "@starter/ui/components/ui/field"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { OrganizationSwitcher } from "../components/organization-switcher"
 import { describeScope, splitScopes } from "../lib/scopes"
-import { fieldMessage, messageOf } from "../lib/messages"
+import { messageOf } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 
@@ -199,9 +200,7 @@ function ConsentForm({
                 disabled={pending}
                 onChange={(organizationId) => field.handleChange(organizationId)}
               />
-              {field.state.meta.errors.length > 0 ? (
-                <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-              ) : null}
+              <FieldIssues field={field} />
             </div>
           )}
         </form.Field>
@@ -357,9 +356,7 @@ function SelectOrganizationForm({
                 disabled={pending}
                 onChange={(organizationId) => field.handleChange(organizationId)}
               />
-              {field.state.meta.errors.length > 0 ? (
-                <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-              ) : null}
+              <FieldIssues field={field} />
             </div>
           )}
         </form.Field>

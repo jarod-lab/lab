@@ -1,3 +1,4 @@
+import { FormError } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -264,11 +265,7 @@ export function AdminPage({
           </Field>
         </div>
 
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+        <FormError message={error} />
 
         <div
           ref={scrollRef}
@@ -429,11 +426,7 @@ function ActionDialog({ dialog, onClose, onAction }: ActionDialogProps) {
           />
         ) : (
           <>
-            {error ? (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            ) : null}
+            <FormError message={error} />
             <DialogFooter>
               <Button variant="outline" onClick={onClose} disabled={pending}>
                 Cancel
@@ -526,11 +519,7 @@ function BanForm({
           </Field>
         )}
       </form.Field>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={pending}>
           Cancel
@@ -578,11 +567,7 @@ function RoleForm({
           <NativeSelectOption value="admin">Admin</NativeSelectOption>
         </NativeSelect>
       </Field>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={pending}>
           Cancel

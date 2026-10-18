@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Create an agent account without signing in
-         * @description Creates a personal organization, an API key with project permissions, and sends one email to the address to claim the account. Send it with no credentials: this is the only operation that needs none. Use the returned apiKey straight away, as x-api-key or a Bearer token. The key is temporary: it stops working when the person claims the account by opening the emailed link, since whoever called signup holds it. Tell them that. After the claim, calls with it get UNAUTHORIZED; sign in with the device grant (POST /api/auth/device/code, which the person approves at /device). Until the claim the organization has a lower daily request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.
+         * @description Creates a personal organization, an API key with project permissions, and sends one email to the address to claim the account. No credentials are needed; any that are sent are ignored. Use the returned apiKey straight away, as x-api-key or a Bearer token. The key is temporary: it stops working when the person claims the account by opening the emailed link, since whoever called signup holds it. Tell them that. After the claim, calls with it get UNAUTHORIZED; sign in with the device grant (POST /api/auth/device/code, which the person approves at /device). Until the claim the organization has a lower daily request limit (see limits). Limits: 5 signups per client IP per hour and 20 per email domain per day.
          */
         post: operations["signup"];
         delete?: never;
@@ -476,7 +476,7 @@ export interface paths {
         put?: never;
         /**
          * Turn off a member's two-factor sign-in (owners only)
-         * @description Removes a member's authenticator and backup codes and turns their two-factor sign-in off, so they sign in without the second factor. Only an owner can do it, and not for themselves (they use their own security settings). Audited. Returns NOT_FOUND for users who are not members of this organization. Confirm with the user before calling.
+         * @description Removes a member's authenticator and backup codes and turns their two-factor sign-in off, so they sign in without the second factor. Only an owner can do it, and not for themselves (they use their own security settings). Audited. Returns NOT_FOUND for users who are not members of this organization. Two-factor belongs to the account, so it is refused with CONFLICT while the member belongs to any other organization; the person then turns it off in their own security settings. Confirm with the user before calling.
          */
         post: operations["reset_member_two_factor"];
         delete?: never;

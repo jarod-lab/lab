@@ -8,7 +8,7 @@ OAuth 2.1 for agents.
 ## Use it
 
 ```bash
-gh repo create my-app --template stewartjarod/starter --private --clone && cd my-app
+gh repo create my-app --template <owner>/<repo> --private --clone && cd my-app
 mise trust && mise install        # Node 24, pnpm 11, gitleaks
 pnpm install
 pnpm init-project my-app [owner] [--domain acme.com]  # renames the scope, DB name, display name and MCP registry name

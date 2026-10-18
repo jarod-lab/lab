@@ -37,8 +37,8 @@ export function CopyField({
   }
 
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <label htmlFor={id} className="text-sm font-semibold">
+    <div className={cn("flex flex-col", className)}>
+      <label htmlFor={id} className="mb-1 text-sm leading-normal font-semibold">
         {label}
       </label>
       <div className="flex min-h-11 items-stretch overflow-hidden rounded-lg border-[1.5px] border-input">
@@ -57,7 +57,7 @@ export function CopyField({
           {state === "copied" ? "Copied" : "Copy"}
         </Button>
       </div>
-      <output className="text-sm text-muted-foreground">
+      <output className="text-sm text-muted-foreground not-empty:mt-1">
         {state === "copied" && "Copied to clipboard."}
         {state === "failed" && "Could not copy. Select the value and copy it yourself."}
       </output>

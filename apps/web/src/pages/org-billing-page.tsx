@@ -1,5 +1,6 @@
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useId, useMemo, useState } from "react"
+import { cn } from "cn"
 
 import {
   AlertDialog,
@@ -349,8 +350,8 @@ function PlanCard({
     <div
       className={
         isCurrent
-          ? "flex flex-col gap-1.5 rounded-xl border-2 border-foreground p-3.5"
-          : "flex flex-col gap-1.5 rounded-xl border border-border p-3.5"
+          ? "flex flex-col gap-1.5 rounded-xl border-2 border-foreground px-4 py-3.5"
+          : "flex flex-col gap-1.5 rounded-xl border border-border px-4 py-3.5"
       }
     >
       <div className="flex items-baseline gap-2">
@@ -364,13 +365,15 @@ function PlanCard({
           {line}
         </span>
       ))}
-      <div className="mt-auto pt-2">
+      <div className="mt-auto">
         {isCurrent ? (
           <span className="text-sm font-bold">Current plan</span>
         ) : (
+          // A link on the board; the negative margin keeps its 44px target without
+          // making the card taller than a line of text.
           <Button
-            variant="ghost"
-            className="min-h-11 px-0"
+            variant="link"
+            className={cn("-my-3 px-0", direction === "upgrade" ? "font-semibold" : "font-normal")}
             disabled={!enabled}
             aria-describedby={enabled ? undefined : reasonId}
             onClick={onChange}

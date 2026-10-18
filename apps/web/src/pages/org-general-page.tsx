@@ -444,6 +444,7 @@ function TransferRow({
     <>
       <DangerAction
         label="Transfer…"
+        title="Transfer ownership"
         consequence="Make another admin the owner. You become an admin."
         disabled={admins.length === 0}
         disabledReason="Make another member an admin first, then transfer ownership to them."
@@ -533,6 +534,7 @@ function DeleteRow({
     <>
       <DangerAction
         label="Delete organization"
+        title={`Delete ${organizationName}`}
         consequence={consequence}
         onAction={() => {
           setTyped("")
@@ -607,6 +609,7 @@ function LeaveRow({
     <>
       <DangerAction
         label="Leave organization"
+        title={`Leave ${organizationName}`}
         consequence={consequence}
         disabled={disabled}
         disabledReason={disabledReason}

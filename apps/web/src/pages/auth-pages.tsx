@@ -408,11 +408,12 @@ export function SignInPage({
             <ErrorAlert message={error} />
             {methods.password ? (
               // One filled button per card: the passkey when it's offered (the board), else this one.
+              // An outline one is the 44px size of the other ways to sign in below it.
               <Button
                 type="submit"
-                size="lg"
+                size={methods.passkey ? "default" : "lg"}
                 variant={methods.passkey ? "outline" : "default"}
-                className="h-12 w-full"
+                className="w-full"
                 disabled={pending}
               >
                 {pending ? "Please wait" : "Sign in with email"}

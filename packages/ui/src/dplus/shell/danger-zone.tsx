@@ -17,9 +17,13 @@ export function DangerZone({
   return (
     <section
       aria-labelledby={id}
-      className={cn("flex flex-col gap-4 rounded-lg border-2 border-destructive p-5", className)}
+      className={cn(
+        "flex flex-col gap-3.5 rounded-xl border-2 border-destructive px-4.5 py-4",
+        "[&>[data-slot=danger-action]~[data-slot=danger-action]]:border-t [&>[data-slot=danger-action]~[data-slot=danger-action]]:pt-3.5",
+        className,
+      )}
     >
-      <h2 id={id} className="text-lg font-bold text-destructive">
+      <h2 id={id} className="text-base font-extrabold text-destructive">
         {title}
       </h2>
       {children}
@@ -33,6 +37,7 @@ export function DangerZone({
  */
 export function DangerAction({
   label,
+  title,
   consequence,
   onAction,
   disabled = false,
@@ -40,6 +45,8 @@ export function DangerAction({
   className,
 }: {
   label: string
+  /** A short name for the action ("Transfer ownership"), set in bold above the consequence. */
+  title?: string
   /** What is deleted or lost, in full: "Deletes Acme Inc and its 3 agents. This cannot be undone." */
   consequence: string
   onAction: () => void
@@ -50,17 +57,21 @@ export function DangerAction({
   const id = useId()
   return (
     <div
+      data-slot="danger-action"
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6",
+        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4",
         className,
       )}
     >
-      <p id={id} className="max-w-prose text-sm">
-        {consequence}
-        {disabled && disabledReason && (
-          <span className="mt-1 block text-muted-foreground">{disabledReason}</span>
-        )}
-      </p>
+      <div className="flex max-w-prose flex-col">
+        {title && <strong className="font-bold">{title}</strong>}
+        <p id={id} className="text-sm">
+          {consequence}
+          {disabled && disabledReason && (
+            <span className="mt-1 block text-muted-foreground">{disabledReason}</span>
+          )}
+        </p>
+      </div>
       <Button
         variant="destructive"
         aria-describedby={id}

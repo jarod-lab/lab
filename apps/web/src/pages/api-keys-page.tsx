@@ -326,7 +326,7 @@ export function ApiKeysPage({
         ) : null}
 
         {canList ? (
-          <div className="flex flex-col gap-2 text-[13.5px] text-muted-foreground sm:flex-row sm:gap-6">
+          <div className="flex flex-col gap-2 text-[13.5px] text-muted-foreground sm:flex-row sm:items-center sm:gap-6">
             <span className="flex items-center gap-2">
               <Badge className="rounded-sm bg-solar text-solar-foreground">Unused 90+ days</Badge>
               consider revoking

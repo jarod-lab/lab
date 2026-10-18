@@ -22,6 +22,18 @@ describe("DangerZone and DangerAction", () => {
     await expectNoA11yViolations(html)
   })
 
+  it("names each action in bold above its consequence, as on the board", () => {
+    const html = renderToStaticMarkup(
+      <DangerAction
+        label="Transfer…"
+        title="Transfer ownership"
+        consequence="Make another admin the owner."
+        onAction={() => {}}
+      />,
+    )
+    expect(html).toMatch(/<strong[^>]*>Transfer ownership<\/strong><p[^>]*>Make another admin/)
+  })
+
   it("shows the reason and disables the button for a viewer", () => {
     const html = renderToStaticMarkup(
       <DangerAction

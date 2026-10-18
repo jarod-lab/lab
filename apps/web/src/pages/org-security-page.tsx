@@ -452,7 +452,6 @@ function ProviderForm({
         {(field) => (
           <Field>
             <FieldLabel htmlFor={ids.issuer}>Issuer URL</FieldLabel>
-            <FieldDescription>From your identity provider's settings.</FieldDescription>
             <Input
               id={ids.issuer}
               name="issuer"
@@ -464,6 +463,7 @@ function ProviderForm({
               onChange={(event) => field.handleChange(event.currentTarget.value)}
               onBlur={field.handleBlur}
             />
+            <FieldDescription>From your identity provider's settings.</FieldDescription>
             {field.state.meta.errors.length > 0 ? (
               <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
             ) : null}
@@ -498,7 +498,6 @@ function ProviderForm({
                 {(field) => (
                   <Field>
                     <FieldLabel htmlFor={ids.clientSecret}>Client secret</FieldLabel>
-                    <FieldDescription>Saved on the server and never shown again.</FieldDescription>
                     <Input
                       id={ids.clientSecret}
                       name="clientSecret"
@@ -509,6 +508,7 @@ function ProviderForm({
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
+                    <FieldDescription>Saved on the server and never shown again.</FieldDescription>
                     {field.state.meta.errors.length > 0 ? (
                       <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
                     ) : null}
@@ -543,9 +543,6 @@ function ProviderForm({
                 {(field) => (
                   <Field>
                     <FieldLabel htmlFor={ids.certificate}>Signing certificate</FieldLabel>
-                    <FieldDescription>
-                      The PEM certificate from your identity provider.
-                    </FieldDescription>
                     <Textarea
                       id={ids.certificate}
                       name="certificate"
@@ -556,6 +553,9 @@ function ProviderForm({
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
+                    <FieldDescription>
+                      The PEM certificate from your identity provider.
+                    </FieldDescription>
                     {field.state.meta.errors.length > 0 ? (
                       <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
                     ) : null}

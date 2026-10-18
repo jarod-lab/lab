@@ -39,8 +39,8 @@ export function SlugField({
   const bad = status === "taken" || status === "invalid" || status === "reserved"
   const shown = status === "idle" ? undefined : STATUS[status]
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      <label htmlFor={id} className="text-sm font-semibold">
+    <div className={cn("flex flex-col", className)}>
+      <label htmlFor={id} className="mb-1 text-sm leading-normal font-semibold">
         {label}
       </label>
       <div
@@ -66,7 +66,7 @@ export function SlugField({
           className="type-mono min-w-0 flex-1 bg-transparent px-3 text-foreground disabled:text-muted-foreground"
         />
       </div>
-      <output id={statusId} className="block">
+      <output id={statusId} className="block not-empty:mt-1">
         {shown && (
           <Status state={shown.state} className="text-[13.5px]">
             {shown.word}

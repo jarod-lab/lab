@@ -588,7 +588,7 @@ function AgentRow({
         type="button"
         aria-pressed={selected}
         onClick={onSelect}
-        className="flex min-h-11 min-w-0 flex-1 flex-col items-start rounded-md px-1 text-left hover:bg-accent"
+        className="-ml-1 flex min-h-11 min-w-0 flex-1 flex-col items-start rounded-md px-1 text-left hover:bg-accent"
       >
         <span className="font-semibold">{agent.name}</span>
         {agent.description ? (

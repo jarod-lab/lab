@@ -474,6 +474,7 @@ function EnrolDialog({
         {step === "password" ? (
           <form
             noValidate
+            className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -518,6 +519,7 @@ function EnrolDialog({
         {step === "scan" && setup ? (
           <form
             noValidate
+            className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -706,6 +708,7 @@ function NewCodesDialog({
         ) : (
           <form
             noValidate
+            className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -898,6 +901,7 @@ function ChangePasswordDialog({
       <DialogContent>
         <form
           noValidate
+          className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault()
             event.stopPropagation()

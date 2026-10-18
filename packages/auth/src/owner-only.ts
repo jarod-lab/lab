@@ -5,8 +5,7 @@
 import { allowed } from "@starter/api"
 import type { BetterAuthPlugin } from "better-auth"
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
-import { findMember } from "./membership"
-import { rolePermissions } from "./permissions"
+import { memberGrants } from "./membership"
 
 /** The sso plugin's endpoints that change a provider (reads stay with the plugin's own rules). */
 export const SSO_WRITE_PATHS = [
@@ -55,8 +54,8 @@ export const ownerOnlyGuard = {
           const organizationId = await organizationOf(ctx)
           // Single sign-on is set up per organization: a provider with no organization is refused too.
           if (!organizationId) throw refuse("Single sign-on is set up for an organization's owner")
-          const member = await findMember(ctx.context.adapter, session.user.id, organizationId)
-          if (!member || !allowed(rolePermissions(member.role), { sso: ["update"] })) {
+          const grants = await memberGrants(ctx.context.adapter, session.user.id, organizationId)
+          if (!grants || !allowed(grants, { sso: ["update"] })) {
             throw refuse("Only an organization owner can set up single sign-on")
           }
         }),
@@ -70,10 +69,10 @@ export const ownerOnlyGuard = {
  * through authorizeReference). Members and viewers may not.
  */
 export async function canManageBilling(
-  adapter: Parameters<typeof findMember>[0],
+  adapter: Parameters<typeof memberGrants>[0],
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  const member = await findMember(adapter, userId, organizationId)
-  return !!member && allowed(rolePermissions(member.role), { subscription: ["update"] })
+  const grants = await memberGrants(adapter, userId, organizationId)
+  return !!grants && allowed(grants, { subscription: ["update"] })
 }

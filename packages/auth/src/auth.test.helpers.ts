@@ -58,5 +58,5 @@ export async function createTestAuth(options: { stripe?: AuthOptions["stripe"] }
   const setActive = (cookie: string, organizationId: string) =>
     auth.api.setActiveOrganization({ headers: new Headers({ cookie }), body: { organizationId } })
 
-  return { auth, signUp, addMember, setActive, outbox, close: t.close }
+  return { auth, db: t.db, signUp, addMember, setActive, outbox, close: t.close }
 }

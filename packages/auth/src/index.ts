@@ -571,4 +571,4 @@ export {
 export * from "./permissions"
 export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
 export { type GrantScope, revokeGrants } from "./member-grants"
-export { memberGrants } from "./membership"
+export { memberGrants, personalSlug } from "./membership"

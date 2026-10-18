@@ -3,7 +3,6 @@ import { useDebouncedValue } from "@tanstack/react-pacer"
 import { useState } from "react"
 
 import { CreateOrganizationPage } from "../pages/create-organization-page"
-import { createOrganizationKeys } from "../lib/create-organization-keys"
 import { qk } from "../lib/query-keys"
 import { slugProblem } from "../lib/org-slug"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
@@ -33,7 +32,7 @@ export function CreateOrganizationContainer({
   const [slug, setSlug] = useState("")
   const [settled] = useDebouncedValue(slug, { wait: 300 })
   const check = useQuery({
-    queryKey: createOrganizationKeys.slugAvailable(settled),
+    queryKey: qk.organizationSlugAvailable(settled),
     queryFn: () => auth.checkSlug(settled),
     enabled: settled.length > 0 && slugProblem(settled) === null,
     retry: false,

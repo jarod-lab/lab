@@ -36,6 +36,8 @@ const org = (orgId: string) => {
 export const qk = {
   session: () => ["session"] as const,
   organizations: () => ["organizations"] as const,
+  /** Whether a slug is free, while someone types it on the create-organization page. */
+  organizationSlugAvailable: (slug: string) => ["organization-slug-available", slug] as const,
   account: {
     all: () => ["account"] as const,
     sessions: () => ["account", "sessions"] as const,

@@ -7,6 +7,7 @@ import type {
   OrganizationId,
   UserId,
 } from "@starter/auth-proofs"
+import { personalSlug } from "@starter/auth"
 import { type Database, member, organization, session, twoFactor, user } from "@starter/db"
 import { AppError } from "@starter/errors"
 import { and, eq, inArray, max, ne } from "drizzle-orm"
@@ -60,9 +61,6 @@ export async function listMemberSecurity<O>(
   }))
 }
 
-// A personal organization's slug, as packages/auth/src/membership.ts makes it (not exported there).
-const personalSlugOf = (userId: string) => `personal-${userId.toLowerCase()}`
-
 /**
  * Turns off a member's two-factor sign-in: their authenticator and backup codes are removed, and the
  * account stops asking for a second factor. Only an owner may call it (the `twoFactor:reset` action).
@@ -93,7 +91,7 @@ export async function resetMemberTwoFactor<U, O>(
         and(
           eq(member.userId, userId.value),
           ne(member.organizationId, org.value),
-          ne(organization.slug, personalSlugOf(userId.value)),
+          ne(organization.slug, personalSlug(userId.value)),
         ),
       )
       .limit(1)

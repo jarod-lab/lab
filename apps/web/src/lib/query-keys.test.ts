@@ -6,6 +6,7 @@ describe("account-level keys", () => {
   it("are not scoped to an organization", () => {
     expect(qk.session()).toEqual(["session"])
     expect(qk.organizations()).toEqual(["organizations"])
+    expect(qk.organizationSlugAvailable("acme")).toEqual(["organization-slug-available", "acme"])
     expect(qk.account.sessions()).toEqual(["account", "sessions"])
     expect(qk.account.passkeys()).toEqual(["account", "passkeys"])
   })

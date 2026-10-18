@@ -60,7 +60,7 @@ const principles: [string, string][] = [
   ],
   [
     "Accessible as standard",
-    "7:1 text, status = shape + word, 44px targets, real elements, visible shortcuts, motion off when asked.",
+    "7:1 text, status = shape + word, 44px targets, real elements, visible shortcuts, only fades when less motion is asked for.",
   ],
 ]
 
@@ -148,7 +148,7 @@ const budget: [string, string, React.ReactNode][] = [
   ],
   [
     "Motion",
-    "running icon only · off with reduced motion",
+    "running icon only · fades only with reduced motion",
     <span key="m" className="flex h-7 items-center text-[13px] font-bold">
       transform only
     </span>,

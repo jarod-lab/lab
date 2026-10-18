@@ -4,8 +4,32 @@ import { cn } from "cn"
 
 import { Button } from "@starter/ui/components/ui/button"
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+// True for the exit after Escape: a key you pressed takes effect at once, with no exit animation.
+const AlertDialogInstantContext = React.createContext(false)
+
+function AlertDialog({
+  onOpenChange,
+  onOpenChangeComplete,
+  ...props
+}: AlertDialogPrimitive.Root.Props) {
+  const [escaped, setEscaped] = React.useState(false)
+  return (
+    <AlertDialogInstantContext.Provider value={escaped}>
+      <AlertDialogPrimitive.Root
+        data-slot="alert-dialog"
+        onOpenChange={(open, details) => {
+          setEscaped(!open && details.reason === "escape-key")
+          onOpenChange?.(open, details)
+        }}
+        onOpenChangeComplete={(open) => {
+          // Once closed, forget the key: the next open, however it happens, animates again.
+          if (!open) setEscaped(false)
+          onOpenChangeComplete?.(open)
+        }}
+        {...props}
+      />
+    </AlertDialogInstantContext.Provider>
+  )
 }
 
 function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
@@ -17,11 +41,13 @@ function AlertDialogPortal({ ...props }: AlertDialogPrimitive.Portal.Props) {
 }
 
 function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdrop.Props) {
+  const instant = React.useContext(AlertDialogInstantContext)
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
+      data-instant={instant || undefined}
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 data-instant:animate-none",
         className,
       )}
       {...props}
@@ -36,14 +62,16 @@ function AlertDialogContent({
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
 }) {
+  const instant = React.useContext(AlertDialogInstantContext)
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         data-size={size}
+        data-instant={instant || undefined}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl border border-border bg-popover p-6 text-popover-foreground duration-100 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl border border-border bg-popover p-6 text-popover-foreground duration-100 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-instant:animate-none",
           className,
         )}
         {...props}

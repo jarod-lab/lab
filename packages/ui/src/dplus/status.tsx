@@ -35,7 +35,7 @@ function StatusIcon({
       className={cn(
         "size-4 shrink-0",
         COLOUR[state],
-        state === "running" && "motion-safe:animate-[spin_2.4s_linear_infinite]",
+        state === "running" && "motion-safe:animate-[spin_1.2s_linear_infinite]",
         className,
       )}
       {...props}

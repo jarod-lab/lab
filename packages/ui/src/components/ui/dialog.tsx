@@ -5,8 +5,38 @@ import { cn } from "cn"
 import { Button } from "@starter/ui/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+// True while the dialog should show without an enter or exit animation: always for dialogs that
+// open from the keyboard (`instant`), and for the exit after Escape, since a key you pressed should
+// take effect at once.
+const DialogInstantContext = React.createContext(false)
+
+function Dialog({
+  instant = false,
+  onOpenChange,
+  onOpenChangeComplete,
+  ...props
+}: DialogPrimitive.Root.Props & {
+  /** Open and close with no animation (for a dialog opened from the keyboard). */
+  instant?: boolean
+}) {
+  const [escaped, setEscaped] = React.useState(false)
+  return (
+    <DialogInstantContext.Provider value={instant || escaped}>
+      <DialogPrimitive.Root
+        data-slot="dialog"
+        onOpenChange={(open, details) => {
+          setEscaped(!open && details.reason === "escape-key")
+          onOpenChange?.(open, details)
+        }}
+        onOpenChangeComplete={(open) => {
+          // Once closed, forget the key: the next open, however it happens, animates again.
+          if (!open) setEscaped(false)
+          onOpenChangeComplete?.(open)
+        }}
+        {...props}
+      />
+    </DialogInstantContext.Provider>
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -22,11 +52,13 @@ function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
 }
 
 function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+  const instant = React.useContext(DialogInstantContext)
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
+      data-instant={instant || undefined}
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 data-instant:animate-none",
         className,
       )}
       {...props}
@@ -42,13 +74,15 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const instant = React.useContext(DialogInstantContext)
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-instant={instant || undefined}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl border border-border bg-popover p-6 text-sm text-popover-foreground duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-xl border border-border bg-popover p-6 text-sm text-popover-foreground duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-instant:animate-none",
           className,
         )}
         {...props}

@@ -125,12 +125,20 @@ describe("AppShellContainer", () => {
     window.localStorage.clear()
   })
 
-  it("? opens the shortcut list", async () => {
+  it("? opens the shortcut list, which shows this platform's modifier for the palette", async () => {
     renderShell()
     await loaded()
+    // jsdom is not an Apple platform, so the keycaps say Ctrl, not ⌘, and there is one palette row.
+    const trigger = screen.getByRole("button", { name: "Search or ask an agent" })
+    expect(within(trigger).getByText("Ctrl")).toBeTruthy()
+    expect(within(trigger).queryByText("⌘")).toBeNull()
+
     await userEvent.keyboard("?")
     const dialog = await screen.findByRole("dialog", { name: "Keyboard shortcuts" })
     expect(within(dialog).getByText("Go to agents")).toBeTruthy()
+    expect(within(dialog).getAllByText("Open the command palette")).toHaveLength(1)
+    expect(within(dialog).getByText("Ctrl")).toBeTruthy()
+    expect(within(dialog).queryByText("⌘")).toBeNull()
   })
 
   it("signs out and reports it", async () => {

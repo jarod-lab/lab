@@ -42,7 +42,7 @@ describe("TwoFactorSection", () => {
   it("turns it off only after the password is confirmed", async () => {
     const props = renderSection()
     await userEvent.click(screen.getByRole("button", { name: "Turn off" }))
-    const dialog = await screen.findByRole("dialog")
+    const dialog = await screen.findByRole("alertdialog")
     await userEvent.type(within(dialog).getByLabelText("Password"), "pw-123456789")
     await userEvent.click(within(dialog).getByRole("button", { name: "Turn off two-factor" }))
     await waitFor(() => expect(props.onDisable).toHaveBeenCalledWith("pw-123456789"))
@@ -51,7 +51,7 @@ describe("TwoFactorSection", () => {
   it("asks for a password before turning it off and does not call disable without one", async () => {
     const props = renderSection()
     await userEvent.click(screen.getByRole("button", { name: "Turn off" }))
-    const dialog = await screen.findByRole("dialog")
+    const dialog = await screen.findByRole("alertdialog")
     await userEvent.click(within(dialog).getByRole("button", { name: "Turn off two-factor" }))
     expect(await within(dialog).findByText("Enter your password.")).toBeTruthy()
     expect(props.onDisable).not.toHaveBeenCalled()

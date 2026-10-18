@@ -12,9 +12,6 @@ import {
 } from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 
-// A destructive confirm is an outlined red button (D+ "red outline for destructive").
-const DESTRUCTIVE = "border-destructive bg-transparent text-destructive hover:text-destructive"
-
 export interface ConfirmDialogProps {
   /** Controlled open state. Omit both this and `onOpenChange` to let a `trigger` own it. */
   open?: boolean
@@ -27,6 +24,7 @@ export interface ConfirmDialogProps {
   /** Shown on the confirm button while `pending`. Defaults to `confirmLabel`. */
   pendingLabel?: ReactNode
   cancelLabel?: ReactNode
+  /** A destructive action: the confirm button is the destructive variant (a red outline). */
   destructive?: boolean
   /** The action is in flight: the confirm button is disabled and shows `pendingLabel`. */
   pending?: boolean
@@ -80,8 +78,7 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           <Button
-            variant={destructive ? "outline" : "default"}
-            className={destructive ? DESTRUCTIVE : undefined}
+            variant={destructive ? "destructive" : "default"}
             disabled={pending || confirmDisabled}
             onClick={onConfirm}
           >

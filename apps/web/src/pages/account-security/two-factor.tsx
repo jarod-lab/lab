@@ -280,6 +280,7 @@ function TurnOffDialog({
         if (!next) forget()
       }}
       title="Turn off two-factor?"
+      alert
       description="Signing in with a password will need only the password. Your backup codes stop working."
       onSubmit={() => void form.handleSubmit()}
       submitLabel="Turn off two-factor"

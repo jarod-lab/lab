@@ -539,6 +539,7 @@ function DeleteRow({
         title={`Delete ${organizationName}?`}
         description={consequence}
         confirmLabel="Delete organization"
+        pendingLabel="Deleting…"
         destructive
         pending={busy}
         confirmDisabled={typed !== organizationName}

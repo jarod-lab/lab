@@ -79,7 +79,7 @@ describe("FormDialog", () => {
   function renderDialog(props: Partial<Parameters<typeof FormDialog>[0]> = {}) {
     const onSubmit = vi.fn()
     const onOpenChange = vi.fn()
-    render(
+    const view = render(
       <FormDialog
         open
         onOpenChange={onOpenChange}
@@ -95,7 +95,7 @@ describe("FormDialog", () => {
         <input id="pw" name="password" type="password" />
       </FormDialog>,
     )
-    return { onSubmit, onOpenChange }
+    return { onSubmit, onOpenChange, unmount: view.unmount }
   }
 
   it("renders the title, the body and the footer actions", () => {
@@ -120,6 +120,21 @@ describe("FormDialog", () => {
   it("shows an error from the submit", () => {
     renderDialog({ error: "That password is wrong." })
     expect(screen.getByRole("alert").textContent).toBe("That password is wrong.")
+  })
+
+  it("is an alert dialog when it confirms a security change", () => {
+    renderDialog({ alert: true })
+    expect(screen.getByRole("alertdialog", { name: "Turn off two-factor?" })).toBeTruthy()
+  })
+
+  it("has no accessibility violations, as a dialog or an alert dialog", async () => {
+    // The dialog is portaled into document.body, so snapshot the body before unmounting.
+    for (const alert of [false, true]) {
+      const view = renderDialog({ alert, error: "That password is wrong." })
+      const html = document.body.innerHTML
+      view.unmount()
+      await expectNoA11yViolations(html)
+    }
   })
 
   it("asks to close when Cancel is pressed", async () => {

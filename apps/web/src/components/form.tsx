@@ -1,6 +1,16 @@
 import { createFormHook, createFormHookContexts } from "@tanstack/react-form"
 import { type ComponentProps, type ReactNode, useId } from "react"
 
+import { Alert, AlertDescription, AlertTitle } from "@starter/ui/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Dialog,
@@ -136,9 +146,26 @@ function SubmitButton({
   )
 }
 
-/** A failure the person can act on, under a form or dialog. Renders nothing without a message. */
-export function FormError({ message }: { message: string | null | undefined }) {
+/**
+ * A failure the person can act on, under a form or dialog. Renders nothing without a message.
+ * With a `title` it is the card-level alert ("Something went wrong"); without one, a line of text.
+ */
+export function FormError({
+  message,
+  title,
+}: {
+  message: string | null | undefined
+  title?: string
+}) {
   if (!message) return null
+  if (title) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>{message}</AlertDescription>
+      </Alert>
+    )
+  }
   return (
     <p role="alert" className="text-sm text-destructive">
       {message}
@@ -165,7 +192,13 @@ export interface FormDialogProps {
   submitLabel: ReactNode
   pendingLabel?: ReactNode
   cancelLabel?: ReactNode
+  /** A destructive action: the submit is the red outline button. */
   destructive?: boolean
+  /**
+   * An alert dialog (role alertdialog) for a confirmation a person must answer, such as turning
+   * off a security setting. Otherwise a plain dialog.
+   */
+  alert?: boolean
   /** The submit is in flight (a call outside the form's own submit). */
   pending?: boolean
   error?: string | null
@@ -187,10 +220,59 @@ export function FormDialog({
   pendingLabel,
   cancelLabel = "Cancel",
   destructive = false,
+  alert = false,
   pending = false,
   error,
   children,
 }: FormDialogProps) {
+  const submitButton = (
+    <Button type="submit" variant={destructive ? "destructive" : "default"} disabled={pending}>
+      {pending && pendingLabel !== undefined ? pendingLabel : submitLabel}
+    </Button>
+  )
+  const form = (
+    <form
+      noValidate
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onSubmit()
+      }}
+    >
+      {children}
+      <FormError message={error} />
+      {alert ? (
+        <AlertDialogFooter>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          {submitButton}
+        </AlertDialogFooter>
+      ) : (
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>{cancelLabel}</DialogClose>
+          {submitButton}
+        </DialogFooter>
+      )}
+    </form>
+  )
+
+  if (alert) {
+    return (
+      <AlertDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        onOpenChangeComplete={onOpenChangeComplete}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{title}</AlertDialogTitle>
+            {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
+          </AlertDialogHeader>
+          {form}
+        </AlertDialogContent>
+      </AlertDialog>
+    )
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete}>
       <DialogContent>
@@ -198,33 +280,7 @@ export function FormDialog({
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
-        <form
-          noValidate
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onSubmit()
-          }}
-        >
-          {children}
-          <FormError message={error} />
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>{cancelLabel}</DialogClose>
-            <Button
-              type="submit"
-              variant={destructive ? "outline" : "default"}
-              className={
-                destructive
-                  ? "border-destructive bg-transparent text-destructive hover:text-destructive"
-                  : undefined
-              }
-              disabled={pending}
-            >
-              {pending && pendingLabel !== undefined ? pendingLabel : submitLabel}
-            </Button>
-          </DialogFooter>
-        </form>
+        {form}
       </DialogContent>
     </Dialog>
   )

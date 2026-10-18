@@ -2,15 +2,6 @@ import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Dialog,
@@ -26,6 +17,7 @@ import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { initialsOf } from "../lib/account-format"
 import { fieldMessage, messageOf } from "../lib/messages"
 
@@ -511,45 +503,35 @@ function LeaveButton({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const consequence = `You'll lose access to ${org.name} right away. An admin can invite you again.`
+  const leave = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onLeave(org.id)
+      setOpen(false)
+    } catch (caught) {
+      setError(messageOf(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
         Leave
       </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Leave {org.name}?</AlertDialogTitle>
-            <AlertDialogDescription>{consequence}</AlertDialogDescription>
-          </AlertDialogHeader>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onLeave(org.id)
-                  setOpen(false)
-                } catch (caught) {
-                  setError(messageOf(caught))
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Leaving…" : "Leave organization"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Leave ${org.name}?`}
+        description={consequence}
+        confirmLabel="Leave organization"
+        pendingLabel="Leaving…"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void leave()}
+      />
     </>
   )
 }
@@ -577,6 +559,18 @@ function DeleteSection({
   const removal = otherNames.length > 0 ? ` and removes you from ${otherNames.join(", ")}` : ""
   const consequence = `Deletes your user, sessions, passkeys and connected accounts${removal}. We email a confirmation link before anything is deleted.`
   const blocked = rolesReady && blockers.length > 0
+  const requestDelete = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onRequestDelete()
+      setOpen(false)
+    } catch (caught) {
+      setError(messageOf(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <DangerZone title="Delete account">
@@ -620,42 +614,22 @@ function DeleteSection({
           }}
         />
       )}
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {consequence} We'll send the link to {email}.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onRequestDelete()
-                  setOpen(false)
-                } catch (caught) {
-                  setError(messageOf(caught))
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Sending…" : "Email me the link"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete your account?"
+        description={
+          <>
+            {consequence} We'll send the link to {email}.
+          </>
+        }
+        confirmLabel="Email me the link"
+        pendingLabel="Sending…"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void requestDelete()}
+      />
     </DangerZone>
   )
 }

@@ -3,15 +3,6 @@ import { cn } from "cn"
 import { useId, useRef, useState, type ReactNode } from "react"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Dialog,
@@ -34,6 +25,7 @@ import {
 } from "@starter/ui/dplus/shell/link"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { messageOf } from "../lib/messages"
 import { BudgetSection } from "./workspace-agents-budget"
 import { settingsTabs } from "../lib/org-settings"
@@ -252,37 +244,19 @@ export function WorkspaceAgentsPage({
       ) : null}
 
       {selected && canDelete ? (
-        <AlertDialog
+        <ConfirmDialog
           open={removing}
           onOpenChange={(open) => {
             if (!open) setRemoving(false)
           }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {selected.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {deleteConsequence(selected.name, runCount)}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {removeError ? (
-              <p role="alert" className="text-sm text-destructive">
-                {removeError}
-              </p>
-            ) : null}
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button
-                variant="outline"
-                className="border-destructive bg-transparent text-destructive hover:text-destructive"
-                disabled={removeBusy}
-                onClick={() => void confirmRemove()}
-              >
-                Delete agent
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={`Delete ${selected.name}?`}
+          description={deleteConsequence(selected.name, runCount)}
+          confirmLabel="Delete agent"
+          destructive
+          pending={removeBusy}
+          error={removeError}
+          onConfirm={() => void confirmRemove()}
+        />
       ) : null}
     </div>
   )

@@ -5,15 +5,6 @@ import { useId, useMemo, useRef, useState } from "react"
 import { cn } from "cn"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Badge } from "@starter/ui/components/ui/badge"
 import { Button } from "@starter/ui/components/ui/button"
 import {
@@ -54,6 +45,7 @@ import {
   sentCopy,
   topRoleOf,
 } from "../lib/members"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { type InviteRole, INVITE_ROLES, INVITE_ROLE_LABEL, settingsTabs } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
 
@@ -613,76 +605,42 @@ export function MembersPage({
         </div>
       </div>
 
-      <AlertDialog
+      <ConfirmDialog
         open={action !== null}
         onOpenChange={(open) => {
           if (!open) setAction(null)
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {dialogAction?.kind === "remove"
-                ? `Remove ${dialogAction.member.name || dialogAction.member.email}?`
-                : `Reset two-factor for ${dialogAction?.member.name || dialogAction?.member.email}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {dialogAction?.kind === "remove"
-                ? removeConsequence(dialogAction.member.name || dialogAction.member.email)
-                : dialogAction
-                  ? resetTwoFactorConsequence(dialogAction.member.name || dialogAction.member.email)
-                  : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {actionError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {actionError}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="outline"
-              className="border-destructive bg-transparent text-destructive hover:text-destructive"
-              disabled={confirming}
-              onClick={() => void confirmAction()}
-            >
-              {dialogAction?.kind === "remove" ? "Remove member" : "Reset two-factor"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={
+          dialogAction?.kind === "remove"
+            ? `Remove ${dialogAction.member.name || dialogAction.member.email}?`
+            : `Reset two-factor for ${dialogAction?.member.name || dialogAction?.member.email}?`
+        }
+        description={
+          dialogAction?.kind === "remove"
+            ? removeConsequence(dialogAction.member.name || dialogAction.member.email)
+            : dialogAction
+              ? resetTwoFactorConsequence(dialogAction.member.name || dialogAction.member.email)
+              : undefined
+        }
+        confirmLabel={dialogAction?.kind === "remove" ? "Remove member" : "Reset two-factor"}
+        destructive
+        pending={confirming}
+        error={actionError}
+        onConfirm={() => void confirmAction()}
+      />
 
-      <AlertDialog
+      <ConfirmDialog
         open={pendingCancel !== null}
         onOpenChange={(open) => {
           if (!open) setPendingCancel(null)
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {dialogCancel?.expired ? "Remove" : "Revoke"} the invitation for {dialogCancel?.email}
-              ?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The link in their email stops working. Nothing else changes; you can invite them
-              again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="outline"
-              className="border-destructive bg-transparent text-destructive hover:text-destructive"
-              disabled={confirming}
-              onClick={() => void confirmCancel()}
-            >
-              {dialogCancel?.expired ? "Remove invitation" : "Revoke invitation"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={`${dialogCancel?.expired ? "Remove" : "Revoke"} the invitation for ${dialogCancel?.email}?`}
+        description="The link in their email stops working. Nothing else changes; you can invite them again."
+        confirmLabel={dialogCancel?.expired ? "Remove invitation" : "Revoke invitation"}
+        destructive
+        pending={confirming}
+        onConfirm={() => void confirmCancel()}
+      />
     </div>
   )
 }

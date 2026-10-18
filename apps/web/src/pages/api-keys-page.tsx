@@ -3,15 +3,6 @@ import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-tab
 import { useId, useMemo, useRef, useState } from "react"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Badge } from "@starter/ui/components/ui/badge"
 import { Button } from "@starter/ui/components/ui/button"
 import { Checkbox } from "@starter/ui/components/ui/checkbox"
@@ -51,6 +42,7 @@ import {
   secretNotice,
   toPermissionsRecord,
 } from "../lib/api-keys"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import type { ApiKey, CreateApiKeyInput } from "../lib/api-keys-api"
 import { settingsTabs } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
@@ -345,37 +337,19 @@ export function ApiKeysPage({
       />
 
       {canRevoke ? (
-        <AlertDialog
+        <ConfirmDialog
           open={revoking !== null}
           onOpenChange={(open) => {
             if (!open) setRevoking(null)
           }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Revoke {dialogRevoking?.name ?? "this key"}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Agents using this key stop working immediately. This can't be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            {revokeError ? (
-              <p role="alert" className="text-sm text-destructive">
-                {revokeError}
-              </p>
-            ) : null}
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button
-                className="border-destructive bg-transparent text-destructive hover:text-destructive"
-                variant="outline"
-                disabled={revokeBusy}
-                onClick={() => void confirmRevoke()}
-              >
-                Revoke key
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          title={`Revoke ${dialogRevoking?.name ?? "this key"}?`}
+          description="Agents using this key stop working immediately. This can't be undone."
+          confirmLabel="Revoke key"
+          destructive
+          pending={revokeBusy}
+          error={revokeError}
+          onConfirm={() => void confirmRevoke()}
+        />
       ) : null}
     </div>
   )

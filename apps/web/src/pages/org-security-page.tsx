@@ -1,15 +1,6 @@
 import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
@@ -22,6 +13,7 @@ import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
 import { Status } from "@starter/ui/dplus/status"
 
+import { ConfirmDialog } from "../components/confirm-dialog"
 import type { ScimToken, SsoProvider } from "../lib/org-security-api"
 import {
   EMPTY_SSO_VALUES,
@@ -298,27 +290,17 @@ function SsoSection({
         )
       ) : null}
 
-      <AlertDialog
+      <ConfirmDialog
         open={pendingDelete !== null}
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null)
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete the {deleteTarget?.domain} provider?</AlertDialogTitle>
-            <AlertDialogDescription>
-              People at {deleteTarget?.domain} can no longer sign in with SSO.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button variant="destructive" onClick={() => void confirmDelete()}>
-              Delete provider
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={`Delete the ${deleteTarget?.domain} provider?`}
+        description={`People at ${deleteTarget?.domain} can no longer sign in with SSO.`}
+        confirmLabel="Delete provider"
+        destructive
+        onConfirm={() => void confirmDelete()}
+      />
     </section>
   )
 }

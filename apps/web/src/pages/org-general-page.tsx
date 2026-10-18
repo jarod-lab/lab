@@ -3,15 +3,6 @@ import { useDebouncedValue } from "@tanstack/react-pacer"
 import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Dialog,
@@ -39,6 +30,7 @@ import {
   settingsTabs,
   slugChangeWarning,
 } from "../lib/org-settings"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
 
 export type GeneralValues = { name: string; slug: string; defaultInviteRole: InviteRole }
@@ -530,6 +522,16 @@ function DeleteRow({
   const inputId = useId()
   const consequence = `Permanently deletes ${countNoun(counts.agents, "agent", "agents")}, ${countNoun(counts.apiKeys, "API key", "API keys")} (they stop working) and all run history, removes ${countNoun(counts.members, "member", "members")}. Cancel any subscription in Billing first. You'll type the organization name to confirm.`
 
+  const remove = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete the organization.")
+      setBusy(false)
+    }
+  }
   return (
     <>
       <DangerAction
@@ -542,49 +544,28 @@ function DeleteRow({
           setOpen(true)
         }}
       />
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {organizationName}?</AlertDialogTitle>
-            <AlertDialogDescription>{consequence}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <Field>
-            <FieldLabel htmlFor={inputId}>Type {organizationName} to confirm</FieldLabel>
-            <Input
-              id={inputId}
-              value={typed}
-              autoComplete="off"
-              onChange={(event) => setTyped(event.currentTarget.value)}
-            />
-          </Field>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={typed !== organizationName || busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onDelete()
-                } catch (caught) {
-                  setError(
-                    caught instanceof Error ? caught.message : "Could not delete the organization.",
-                  )
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Deleting…" : "Delete organization"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${organizationName}?`}
+        description={consequence}
+        confirmLabel="Delete organization"
+        destructive
+        pending={busy}
+        confirmDisabled={typed !== organizationName}
+        error={error}
+        onConfirm={() => void remove()}
+      >
+        <Field>
+          <FieldLabel htmlFor={inputId}>Type {organizationName} to confirm</FieldLabel>
+          <Input
+            id={inputId}
+            value={typed}
+            autoComplete="off"
+            onChange={(event) => setTyped(event.currentTarget.value)}
+          />
+        </Field>
+      </ConfirmDialog>
     </>
   )
 }
@@ -605,6 +586,16 @@ function LeaveRow({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const consequence = `You'll lose access to ${organizationName} right away. An admin can invite you again.`
+  const leave = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onLeave()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not leave the organization.")
+      setBusy(false)
+    }
+  }
   return (
     <>
       <DangerAction
@@ -618,40 +609,18 @@ function LeaveRow({
           setOpen(true)
         }}
       />
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Leave {organizationName}?</AlertDialogTitle>
-            <AlertDialogDescription>{consequence}</AlertDialogDescription>
-          </AlertDialogHeader>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onLeave()
-                } catch (caught) {
-                  setError(
-                    caught instanceof Error ? caught.message : "Could not leave the organization.",
-                  )
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Leaving…" : "Leave organization"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Leave ${organizationName}?`}
+        description={consequence}
+        confirmLabel="Leave organization"
+        pendingLabel="Leaving…"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void leave()}
+      />
     </>
   )
 }

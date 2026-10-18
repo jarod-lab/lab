@@ -32,6 +32,7 @@ import {
   accountErrorMessage,
   totpSecretOf,
 } from "../lib/account-api"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { dateLabel, relativeTime } from "../lib/account-format"
 import { fieldMessage } from "../lib/messages"
 
@@ -183,28 +184,18 @@ function PasskeyRow({
       >
         Remove
       </Button>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {label}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You won't be able to sign in with this passkey any more. Your other ways in stay as
-              they are.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <ErrorLine message={removeAction.error} />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={removeAction.busy}
-              onClick={() => void removeAction.call()}
-            >
-              {removeAction.busy ? "Removing…" : "Remove passkey"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Remove ${label}?`}
+        description="You won't be able to sign in with this passkey any more. Your other ways in stay as they are."
+        confirmLabel="Remove passkey"
+        pendingLabel="Removing…"
+        destructive
+        pending={removeAction.busy}
+        error={removeAction.error}
+        onConfirm={() => void removeAction.call()}
+      />
     </div>
   )
 }
@@ -1070,6 +1061,15 @@ function ConnectedRowView({
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const connected = row.accountId !== null
+  const disconnect = async () => {
+    setBusy(true)
+    try {
+      await onDisconnect()
+      setConfirming(false)
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <div className={last ? ROW_LAST : ROW}>
       <div className={TEXT}>
@@ -1100,35 +1100,16 @@ function ConnectedRowView({
           Connect
         </Button>
       )}
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect {row.label}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You won't be able to sign in with {row.label} any more. You can connect it again
-              later.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  await onDisconnect()
-                  setConfirming(false)
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Disconnect {row.label}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Disconnect ${row.label}?`}
+        description={`You won't be able to sign in with ${row.label} any more. You can connect it again later.`}
+        confirmLabel={`Disconnect ${row.label}`}
+        destructive
+        pending={busy}
+        onConfirm={() => void disconnect()}
+      />
     </div>
   )
 }
@@ -1184,6 +1165,18 @@ export function SessionsSection({
     }
   }
 
+  const signOutOthers = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onRevokeOthers()
+      setConfirming(false)
+    } catch (caught) {
+      setError(accountErrorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <section aria-labelledby={headingId} className="flex flex-col">
       <div className="mb-1.5 flex flex-wrap items-center gap-3">
@@ -1234,38 +1227,17 @@ export function SessionsSection({
           )}
         </div>
       ))}
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out everywhere else?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This signs out {others.length} other {others.length === 1 ? "session" : "sessions"},
-              including any on other devices. This one stays signed in.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onRevokeOthers()
-                  setConfirming(false)
-                } catch (caught) {
-                  setError(accountErrorMessage(caught))
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Sign out others
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Sign out everywhere else?"
+        description={`This signs out ${others.length} other ${others.length === 1 ? "session" : "sessions"}, including any on other devices. This one stays signed in.`}
+        confirmLabel="Sign out others"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void signOutOthers()}
+      />
     </section>
   )
 }

@@ -1,3 +1,4 @@
+import { FieldIssues, invalidOf, issueOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 import { z } from "zod"
@@ -19,7 +20,7 @@ import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { initialsOf } from "../lib/account-format"
-import { fieldMessage, messageOf } from "../lib/messages"
+import { messageOf } from "../lib/messages"
 
 export interface AccountOrganization {
   id: string
@@ -192,16 +193,14 @@ function NameForm({
               name="name"
               autoComplete="name"
               value={field.state.value}
-              aria-invalid={field.state.meta.errors.length > 0 || undefined}
+              aria-invalid={invalidOf(field)}
               onChange={(event) => {
                 setSaved(false)
                 field.handleChange(event.currentTarget.value)
               }}
               onBlur={field.handleBlur}
             />
-            {field.state.meta.errors.length > 0 ? (
-              <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-            ) : null}
+            <FieldIssues field={field} />
           </Field>
         )}
       </form.Field>
@@ -400,10 +399,7 @@ function ChangeEmailDialog({
         >
           <form.Field name="email">
             {(field) => {
-              const message =
-                field.state.meta.errors.length > 0
-                  ? fieldMessage(field.state.meta.errors)
-                  : serverError
+              const message = issueOf(field) ?? serverError
               return (
                 <Field>
                   <FieldLabel htmlFor={id}>New email</FieldLabel>

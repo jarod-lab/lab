@@ -3,10 +3,11 @@ import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { SlugField, type SlugStatus } from "@starter/ui/dplus/shell/slug-field"
 
+import { type FieldLike, FieldIssues, invalidOf } from "../components/form"
 import { type SlugProblem, slugify, slugProblem } from "../lib/org-slug"
 
 // A reserved address has no hint: the field's status line already says it.
@@ -105,7 +106,7 @@ export function CreateOrganizationPage({
                 id={nameId}
                 name="name"
                 value={field.state.value}
-                aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                aria-invalid={invalidOf(field)}
                 onChange={(event) => {
                   const name = event.currentTarget.value
                   field.handleChange(name)
@@ -114,9 +115,7 @@ export function CreateOrganizationPage({
                 onBlur={field.handleBlur}
                 autoComplete="organization"
               />
-              {field.state.meta.errors.length > 0 ? (
-                <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-              ) : null}
+              <FieldIssues field={field} />
             </Field>
           )}
         </form.Field>
@@ -132,7 +131,7 @@ export function CreateOrganizationPage({
                 setSlugTouched(true)
                 field.handleChange(slug)
               }}
-              errors={field.state.meta.errors}
+              field={field}
             />
           )}
         </form.Field>
@@ -184,13 +183,6 @@ export function CreateOrganizationPage({
   )
 }
 
-function messageOf(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
-}
-
 /** The slug field with its availability: checked after the value settles, never for a bad shape. */
 function SlugBlock({
   host,
@@ -198,14 +190,14 @@ function SlugBlock({
   availability,
   checkFailed,
   onChange,
-  errors,
+  field,
 }: {
   host: string
   value: string
   availability: boolean | "checking" | undefined
   checkFailed: boolean
   onChange: (slug: string) => void
-  errors: unknown[]
+  field: FieldLike
 }) {
   const problem = slugProblem(value)
 
@@ -218,7 +210,6 @@ function SlugBlock({
     else if (availability === false) status = "taken"
   }
   const problemText = problem && problem !== "reserved" ? PROBLEM_TEXT[problem] : null
-  const errorText = errors.length > 0 ? messageOf(errors) : null
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -236,7 +227,7 @@ function SlugBlock({
           Could not check this address. Try again in a moment.
         </p>
       ) : null}
-      {errorText && !problem ? <p className="text-sm text-destructive">{errorText}</p> : null}
+      <FieldIssues field={field} hidden={problem !== null} />
     </div>
   )
 }

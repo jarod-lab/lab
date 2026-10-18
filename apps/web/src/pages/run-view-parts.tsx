@@ -1,3 +1,4 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useEffect, useId, useRef, useState } from "react"
 
@@ -10,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { Meter } from "@starter/ui/dplus/meter"
 import { Status } from "@starter/ui/dplus/status"
@@ -33,13 +34,6 @@ import {
 } from "../lib/run-view"
 import type { Approval, RunDetail, RunMessage, RunStep, StepStatus } from "../lib/runs-api"
 import { useNow } from "../lib/use-now"
-
-function fieldMessage(issues: unknown[]): string {
-  const first = issues[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
-}
 
 /** The step's status word: its progress when it runs, or the time it took when it ended. */
 function stepMeta(step: RunStep): string | null {
@@ -416,7 +410,7 @@ export function SteerBar({
                   disabled={disabled}
                   value={field.state.value}
                   placeholder="Steer this run: add context, change the plan, or ask why"
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   className="min-h-12 flex-1 rounded-[10px] border-[1.5px] px-4"
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
@@ -440,17 +434,11 @@ export function SteerBar({
                   </Button>
                 </div>
               </div>
-              {field.state.meta.errors.length > 0 ? (
-                <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-              ) : null}
+              <FieldIssues field={field} />
             </Field>
           )}
         </form.Field>
-        {serverError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {serverError}
-          </p>
-        ) : null}
+        <FormError message={serverError} />
       </form>
       {deferredUntil ? (
         <Status state="queued">Queued until {formatWhen(deferredUntil)}</Status>
@@ -529,23 +517,17 @@ function DeferDialog({
                   name="until"
                   type="datetime-local"
                   value={field.state.value}
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   className="min-h-11"
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
                 />
                 <FieldDescription>Your local time.</FieldDescription>
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
-          {serverError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
-            </p>
-          ) : null}
+          <FormError message={serverError} />
           <DialogFooter>
             <Button type="submit" disabled={busy} className="min-h-11">
               Defer run

@@ -1,3 +1,4 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { cn } from "cn"
 import { useId, useRef, useState, type ReactNode } from "react"
@@ -12,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { Textarea } from "@starter/ui/components/ui/textarea"
 import { Status } from "@starter/ui/dplus/status"
@@ -688,11 +689,7 @@ function PermissionsPanel({
         ))}
       </section>
 
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
 
       <form.Subscribe selector={(state) => state.values}>
         {(draft) => {
@@ -789,12 +786,6 @@ function ToggleSwitch({
 }
 
 /** The first validation message for a field (a Zod issue, or a plain string). */
-function fieldMessage(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
-}
 
 function AgentFormDialog({
   open,
@@ -856,13 +847,11 @@ function AgentFormDialog({
                   name="name"
                   value={field.state.value}
                   placeholder="Release triage"
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
                 />
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
@@ -876,23 +865,17 @@ function AgentFormDialog({
                   name="description"
                   value={field.state.value}
                   placeholder="What it does"
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
                 />
                 <FieldDescription>Optional.</FieldDescription>
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
 
-          {serverError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
-            </p>
-          ) : null}
+          <FormError message={serverError} />
 
           <DialogFooter>
             <form.Subscribe selector={(state) => state.isSubmitting}>

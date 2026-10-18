@@ -1,8 +1,9 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
 import { Textarea } from "@starter/ui/components/ui/textarea"
@@ -111,15 +112,6 @@ export function OrgSecurityPage({
       </div>
     </div>
   )
-}
-
-function messageOf(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) {
-    return String((first as { message?: unknown }).message ?? "")
-  }
-  return ""
 }
 
 function SsoSection({
@@ -266,11 +258,7 @@ function SsoSection({
         </ul>
       )}
 
-      {actionError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {actionError}
-        </p>
-      ) : null}
+      <FormError message={actionError} />
 
       {canChange && providers !== undefined && !providersError ? (
         adding ? (
@@ -329,11 +317,7 @@ function VerificationPanel({
       </p>
       <CopyField label="Record name" value={record.name} />
       <CopyField label="Record value" value={record.value} />
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
       <div className="flex flex-wrap gap-2">
         <Button onClick={onCheck} disabled={checking}>
           Check now
@@ -419,13 +403,11 @@ function ProviderForm({
               placeholder="acme.com"
               autoComplete="off"
               value={field.state.value}
-              aria-invalid={field.state.meta.errors.length > 0 || undefined}
+              aria-invalid={invalidOf(field)}
               onChange={(event) => field.handleChange(event.currentTarget.value)}
               onBlur={field.handleBlur}
             />
-            {field.state.meta.errors.length > 0 ? (
-              <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-            ) : null}
+            <FieldIssues field={field} />
           </Field>
         )}
       </form.Field>
@@ -441,14 +423,12 @@ function ProviderForm({
               placeholder="https://login.example.com"
               autoComplete="off"
               value={field.state.value}
-              aria-invalid={field.state.meta.errors.length > 0 || undefined}
+              aria-invalid={invalidOf(field)}
               onChange={(event) => field.handleChange(event.currentTarget.value)}
               onBlur={field.handleBlur}
             />
             <FieldDescription>From your identity provider's settings.</FieldDescription>
-            {field.state.meta.errors.length > 0 ? (
-              <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-            ) : null}
+            <FieldIssues field={field} />
           </Field>
         )}
       </form.Field>
@@ -466,13 +446,11 @@ function ProviderForm({
                       name="clientId"
                       autoComplete="off"
                       value={field.state.value}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -486,14 +464,12 @@ function ProviderForm({
                       type="password"
                       autoComplete="off"
                       value={field.state.value}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
                     <FieldDescription>Saved on the server and never shown again.</FieldDescription>
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -511,13 +487,11 @@ function ProviderForm({
                       placeholder="https://idp.example.com/sso/saml"
                       autoComplete="off"
                       value={field.state.value}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -531,16 +505,14 @@ function ProviderForm({
                       rows={5}
                       className="font-mono text-xs"
                       value={field.state.value}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
                     />
                     <FieldDescription>
                       The PEM certificate from your identity provider.
                     </FieldDescription>
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -549,11 +521,7 @@ function ProviderForm({
         }
       </form.Subscribe>
 
-      {formError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {formError}
-        </p>
-      ) : null}
+      <FormError message={formError} />
 
       <div className="flex flex-wrap gap-2">
         <form.Subscribe selector={(state) => state.isSubmitting}>
@@ -632,11 +600,7 @@ function ScimSection({
         </div>
       )}
 
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <FormError message={error} />
 
       <div className="flex flex-col gap-1 border-l-2 border-muted-foreground pl-3.5 text-sm">
         <p>Provisioned users don't join this organization yet.</p>

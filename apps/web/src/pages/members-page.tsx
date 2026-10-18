@@ -1,3 +1,4 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -433,11 +434,7 @@ export function MembersPage({
           </ViewOnlyNotice>
         )}
 
-        {actionError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        ) : null}
+        <FormError message={actionError} />
 
         <section aria-labelledby="members-heading" className="flex flex-col gap-2">
           <h2 id="members-heading" className="text-base font-bold">
@@ -698,10 +695,11 @@ function InviteForm({
               value={field.state.value}
               placeholder="name@company.com, another@company.com"
               aria-describedby={emailsHelpId}
-              aria-invalid={field.state.meta.errors.length > 0 || undefined}
+              aria-invalid={invalidOf(field)}
               onChange={(event) => field.handleChange(event.currentTarget.value)}
               onBlur={field.handleBlur}
             />
+            <FieldIssues field={field} />
           </Field>
         )}
       </form.Field>
@@ -711,7 +709,7 @@ function InviteForm({
       <form.Subscribe selector={(state) => state.fieldMeta.emails?.errors ?? []}>
         {(errors) =>
           errors.length > 0 ? (
-            <FieldError className="sm:col-start-1">{messageOfIssue(errors)}</FieldError>
+            <FieldError className="sm:col-start-1">{messageOf(errors)}</FieldError>
           ) : null
         }
       </form.Subscribe>
@@ -761,9 +759,3 @@ function InviteForm({
 }
 
 /** The first validation message for a field (a Zod issue, or a plain string). */
-function messageOfIssue(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
-}

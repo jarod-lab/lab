@@ -1,22 +1,17 @@
+import { FieldIssues, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 
 import type { SignInMethods } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@starter/ui/components/ui/input-otp"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { type AccountApi, accountErrorMessage } from "../lib/account-api"
-import { fieldMessage } from "../lib/messages"
+import {} from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 
 export interface TwoFactorPageProps {
@@ -193,7 +188,7 @@ export function TwoFactorPage({
             }}
           >
             {(field) => {
-              const invalid = field.state.meta.errors.length > 0
+              const invalid = invalidOf(field)
               return (
                 <Field>
                   {useBackup ? (
@@ -245,9 +240,7 @@ export function TwoFactorPage({
                       </FieldDescription>
                     </>
                   )}
-                  {invalid ? (
-                    <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                  ) : null}
+                  <FieldIssues field={field} />
                 </Field>
               )
             }}

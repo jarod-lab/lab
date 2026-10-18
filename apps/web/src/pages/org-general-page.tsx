@@ -1,3 +1,4 @@
+import { FieldIssues, FormError, invalidOf, type FieldLike } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useDebouncedValue } from "@tanstack/react-pacer"
 import { useEffect, useId, useState } from "react"
@@ -12,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
@@ -165,14 +166,12 @@ export function OrgGeneralPage({
                     name="name"
                     value={field.state.value}
                     disabled={!canEdit}
-                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    aria-invalid={invalidOf(field)}
                     onChange={(event) => field.handleChange(event.currentTarget.value)}
                     onBlur={field.handleBlur}
                     autoComplete="organization"
                   />
-                  {field.state.meta.errors.length > 0 ? (
-                    <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                  ) : null}
+                  <FieldIssues field={field} />
                 </Field>
               )}
             </form.Field>
@@ -186,7 +185,7 @@ export function OrgGeneralPage({
                   disabled={!canEdit}
                   checkSlug={checkSlug}
                   onChange={(slug) => field.handleChange(slug)}
-                  errors={field.state.meta.errors}
+                  field={field}
                 />
               )}
             </form.Field>
@@ -254,11 +253,7 @@ export function OrgGeneralPage({
                   values.defaultInviteRole !== defaults.defaultInviteRole
                 return (
                   <div className="flex flex-col gap-2">
-                    {saveError ? (
-                      <p role="alert" className="text-sm text-destructive">
-                        {saveError}
-                      </p>
-                    ) : null}
+                    <FormError message={saveError} />
                     <div className="flex justify-end gap-2.5 border-b border-border pb-1.5">
                       <Button
                         type="button"
@@ -310,7 +305,7 @@ function SlugEditor({
   disabled,
   checkSlug,
   onChange,
-  errors,
+  field,
 }: {
   host: string
   currentSlug: string
@@ -318,7 +313,7 @@ function SlugEditor({
   disabled: boolean
   checkSlug: (slug: string) => Promise<boolean>
   onChange: (slug: string) => void
-  errors: unknown[]
+  field: FieldLike
 }) {
   const status = useSlugAvailability(value, currentSlug, checkSlug)
   const problem = slugProblem(value)
@@ -337,9 +332,7 @@ function SlugEditor({
       {!disabled && problem && problem !== "reserved" ? (
         <FieldDescription>{PROBLEM_TEXT[problem]}</FieldDescription>
       ) : null}
-      {!disabled && errors.length > 0 && !problem ? (
-        <FieldError>{messageOf(errors)}</FieldError>
-      ) : null}
+      <FieldIssues field={field} hidden={disabled || problem !== null} />
       {!disabled && changed && problem === null ? (
         <FieldDescription>{slugChangeWarning(host, currentSlug)}</FieldDescription>
       ) : null}
@@ -468,11 +461,7 @@ function TransferRow({
               ))}
             </NativeSelect>
           </Field>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
@@ -623,11 +612,4 @@ function LeaveRow({
       />
     </>
   )
-}
-
-function messageOf(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
 }

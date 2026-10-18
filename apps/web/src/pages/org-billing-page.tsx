@@ -1,3 +1,4 @@
+import { FormError } from "../components/form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useId, useMemo, useState } from "react"
 import { cn } from "cn"
@@ -132,11 +133,7 @@ export function OrgBillingPage({
           {reason}
         </span>
 
-        {actionError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        ) : null}
+        <FormError message={actionError} />
 
         <section
           aria-labelledby="plan-h"

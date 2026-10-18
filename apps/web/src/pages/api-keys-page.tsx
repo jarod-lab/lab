@@ -1,3 +1,4 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useId, useMemo, useRef, useState } from "react"
@@ -14,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
 import {
@@ -356,12 +357,6 @@ export function ApiKeysPage({
 }
 
 /** The first validation message for a field (a Zod issue, or a plain string). */
-function fieldMessage(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
-}
 
 const createSchema = z.object({
   name: z
@@ -443,13 +438,11 @@ function CreateKeyDialog({
                   name="name"
                   value={field.state.value}
                   placeholder="CI deploy"
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
                 />
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
@@ -488,9 +481,7 @@ function CreateKeyDialog({
                 <FieldDescription>
                   Only what you can do yourself. Owner-only settings are not offered.
                 </FieldDescription>
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </fieldset>
             )}
           </form.Field>
@@ -516,11 +507,7 @@ function CreateKeyDialog({
             )}
           </form.Field>
 
-          {serverError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
-            </p>
-          ) : null}
+          <FormError message={serverError} />
 
           <DialogFooter>
             <form.Subscribe selector={(state) => state.isSubmitting}>

@@ -1,7 +1,8 @@
 // Pure helpers for the members page. No network, no React. Every permission is answered by the
 // caller with the plugin's own check (`allows`), never by a role table written here.
 
-import { type InviteRole, roleParts } from "./org-settings"
+import type { InviteRole } from "./org-settings"
+import { isOwner, roleParts } from "./roles"
 
 /** A permission to test: resource to actions, the shape `roleAllows` takes. */
 export type Permission = Record<string, string[]>
@@ -70,11 +71,6 @@ export const CHANGE_ROLE: Permission = { member: ["update"] }
 export const REMOVE_MEMBER: Permission = { member: ["delete"] }
 export const CANCEL_INVITATION: Permission = { invitation: ["cancel"] }
 export const RESET_TWO_FACTOR: Permission = { twoFactor: ["reset"] }
-
-/** Owners are fixed in the table: only an owner can change an owner, so the menu never offers it. */
-export function isOwner(role: string): boolean {
-  return roleParts(role).includes("owner")
-}
 
 export interface MemberAbilities {
   /** The caller's own row: leaving and transfer live on the General page. */

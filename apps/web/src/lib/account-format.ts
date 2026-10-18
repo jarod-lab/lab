@@ -107,13 +107,8 @@ export function signInMethodLabel(
   return loginMethod === "email" ? "email, password and two-factor" : `${label} and two-factor`
 }
 
-/** Whether a stored role string ("admin,member") includes the owner role. */
-export function isOwnerRole(role: string): boolean {
-  return role
-    .split(",")
-    .map((part) => part.trim())
-    .includes("owner")
-}
+// The owner check lives in roles.ts. Containers still import it under this name.
+export { isOwner as isOwnerRole } from "./roles"
 
 /** The personal organization's slug for a user, as the server names it (membership.ts). */
 export function personalSlugOf(userId: string): string {

@@ -1,5 +1,7 @@
 // Pure helpers for the organization settings page. No network, no React.
 
+import { isOwner } from "./roles"
+
 /** The roles a new invitation can start with (the board's "Default role for new invites"). */
 export const INVITE_ROLES = ["admin", "member", "viewer"] as const
 export type InviteRole = (typeof INVITE_ROLES)[number]
@@ -59,19 +61,11 @@ export function withDefaultInviteRole(
   return { ...parseMetadata(metadata), [INVITE_ROLE_METADATA_KEY]: role }
 }
 
-/** A stored role string ("admin,member") as its parts. */
-export function roleParts(role: string): string[] {
-  return role
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-}
-
 export type MemberSummary = { id: string; userId: string; role: string }
 
 /** How many members hold the owner role. */
 export function ownerCount(members: MemberSummary[]): number {
-  return members.filter((member) => roleParts(member.role).includes("owner")).length
+  return members.filter((member) => isOwner(member.role)).length
 }
 
 /** Human copy for a slug change: the old address stops working. */

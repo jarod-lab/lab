@@ -14,207 +14,326 @@ Repo-owned (not vendored; not in `skills-lock.json`). One operation registry fee
 | OpenAPI 3.1 | `openApiDocument` (`@starter/api`) | `/openapi.json`, snapshot in `apps/api/openapi.json` |
 | Agent docs | `llmsTxt`, `llmsFullTxt` | `/llms.txt`, `/llms-full.txt`, `/` for non-browsers |
 | Registry record | `serverJson` | `/.well-known/mcp/server.json`, root `server.json` |
-| Typed client | `packages/sdk` (generated from `openapi.json`) | `@starter/sdk` |
+| Typed client | `packages/sdk` (generated from `apps/api/openapi.json`) | `@starter/sdk` |
 
-Never hand-write a route, tool, spec entry or docs entry for an operation. If a surface needs something
-the registry can't express, extend `OperationSpec` in `packages/api` and the generators, with tests.
+Never hand-write a route, tool, spec entry or docs entry for an operation. The MCP handler is
+`createMcpHandler({ operations, authenticate, resourceMetadataUrl })`, with
+`protectedResourceMetadata` (RFC 9728) for the resource metadata. If a surface needs something the
+registry can't express, extend `OperationSpec` in `packages/api` and the generators, with tests.
 
 ## The access model
 
-- Every request acts in **one organization**. `ctx.caller` = `{ organizationId, actor, grants, via, clientId }`.
-  `actor` is `{ type: "user", userId }` (session, OAuth) or `{ type: "apiKey", keyId }`.
-- **Catalog**: `statements` in `packages/auth/src/access.ts` lists every resource and its actions (roles live there
-  too; the browser client imports it, so no server imports). Scopes and grant math are in `permissions.ts`. Roles
-  (`owner`, `admin`, `member`, `viewer`), API-key permissions, OAuth scope grants and operation permissions all
-  use it, so a typo is a compile error.
-- **Grants**: one permission set per role the member has, each narrowed to the credential (key permissions, or the
-  token's scopes). A request is allowed only when **one** grant covers all of it (`allowed` in `@starter/api`),
-  matching better-auth's `hasPermission`.
-- **Credentials**: sessions use the active org; API keys belong to an org and carry an explicit subset;
-  OAuth tokens carry an `org` claim fixed at approval (consent or device approval). Membership is re-checked on every request.
+- Every request acts in **one organization**. `ctx.caller` =
+  `{ organizationId, actor, grants, via, clientId }`. `actor` is `{ type: "user", userId }`
+  (session, OAuth) or `{ type: "apiKey", keyId }`.
+- **Catalog**: `statements` in `packages/auth/src/access.ts` lists every resource and its actions
+  (roles live there too; the browser client imports it, so no server imports). Scopes and grant math
+  are in `packages/auth/src/permissions.ts`. Roles (`owner`, `admin`, `member`, `viewer`), API-key
+  permissions, OAuth scope grants and operation permissions all use it, so a typo is a compile
+  error.
+- **Grants**: one permission set per role the member has, each narrowed to the credential (key
+  permissions, or the token's scopes). A request is allowed only when **one** grant covers all of it
+  (`allowed` in `@starter/api`), matching better-auth's `hasPermission`.
+- **Credentials**: sessions use the active org; API keys belong to an org and carry an explicit
+  subset; OAuth tokens carry an `org` claim fixed at approval (consent or device approval).
+  Membership is re-checked on every request.
+- **Visibility.** `invoke` runs scopes, input, handler and output validation in that order, and
+  enforces `op.permissions`. MCP hides the tools a caller can't use, but calling one by name still
+  returns FORBIDDEN with the hint, not "unknown tool".
+- **Member grants.** `memberGrants` (exported from `@starter/auth`) gives a member's grants in an
+  org.
 
 ## Add or change an operation
 
-1. Define it in `apps/api/src/operations.ts` with the file's `defineOperation` (from `operationsFor<Catalog>()`) and
-   add it to the `defineRegistry([...])` call.
-   - `name`: snake_case verb_noun (`create_project`). It is the MCP tool name and operationId: renaming breaks agents.
-   - `path`: `/v1/...`, `:params` must be keys of `input`. Input = path params + query + JSON body, merged.
-     GET/DELETE inputs come from the query as strings: use `z.coerce.number()` / `z.coerce.boolean()`.
-   - `summary`: one line. `description`: for a model: when to use it, what it returns, what to call next, and
-     what to confirm with the user first if it's destructive. `.describe()` input fields.
-   - `permissions`: the least it needs, e.g. `{ project: ["read"] }`. `{}` = any authenticated caller.
-   - `hints`: `readOnly`, `destructive`, `idempotent` become MCP annotations; be honest. `readOnly` also decides
-     whether a call is audited and takes an idempotency key (see Invoke hooks). Calls are metered once they pass
-     the permission and input checks.
-   - `examples`: at least one. Contract tests run each as an org owner over REST and MCP: give `output` when
-     the result is stable, or `error: "NOT_FOUND"` (etc.) to document an expected failure.
-2. Handler: `(input, { caller, requestId })`. Throw `AppError`, never return error shapes.
-   For tenant data, use `inCallerOrg(caller, (org, proof) => ...)` and call data functions that demand proofs
-   (see below). Rows of another org must answer NOT_FOUND, exactly like missing rows.
+1. Define it in its domain file under `apps/api/src/operations/` (`account`, `projects`, `api-keys`,
+   `connected-agents`, `audit`, `workspace-agents`, `runs`, `approvals`, `members`), with
+   `defineOperation` from `operations/shared.ts` (typed by `operationsFor<Catalog>()`). Add it to
+   the array that file returns. `createOperations` in `operations/index.ts` composes the arrays into
+   `defineRegistry([...])`; that order is the order the docs list operations in, so keep it stable.
+   - `name`: snake_case verb_noun (`create_project`). It is the MCP tool name and operationId:
+     renaming breaks agents.
+   - `path`: `/v1/...`, `:params` must be keys of `input`. Input = path params + query + JSON body,
+     merged. GET/DELETE inputs come from the query as strings: use `z.coerce.number()` /
+     `z.coerce.boolean()`.
+   - `summary`: one line. `description`: for a model: when to use it, what it returns, what to call
+     next, and what to confirm with the user first if it's destructive. `.describe()` input fields.
+   - `permissions`: the least it needs, e.g. `{ project: ["read"] }`. `{}` = any authenticated
+     caller.
+   - `hints`: `readOnly`, `destructive`, `idempotent` become MCP annotations; be honest. `readOnly`
+     also decides whether a call is audited and takes an idempotency key (see Invoke hooks). Calls
+     are metered once they pass the permission and input checks.
+   - `examples`: at least one. Contract tests run each as an org owner over REST and MCP: give
+     `output` when the result is stable, or `error: "NOT_FOUND"` (etc.) to document an expected
+     failure.
+2. Handler: `(input, { caller, requestId })`. Throw `AppError`, never return error shapes. For
+   tenant data, use `inCallerOrg(caller, (org, proof) => ...)` and call data functions that demand
+   proofs (see below). Rows of another org must answer NOT_FOUND, exactly like missing rows.
+   `requireInOrg(prove, db, id, org, label)` returns a row's proof or NOT_FOUND.
+   `orNotFound(found, label)` turns an empty result into NOT_FOUND. Both are in
+   `apps/api/src/tenant.ts`.
 3. Output must match `output` (a mismatch is an INTERNAL error). Prefer objects: MCP only returns
-   `structuredContent` for objects. Paginated lists use `paginationInput` and `paginated(key, item)`, with
-   `encodeCursor` / `decodeCursor` for the cursor (`packages/api/src/pagination.ts`; see `list_projects`).
-4. Public operations: `auth: "none"` on the spec makes an operation need no credential (`signup` is the one).
-   `defineOperation` requires `permissions: {}` for it. Its handler gets a `PublicContext` (`public.ip`, no
-   `caller`), not a caller. It is a normal REST route, but it is not an MCP tool (calling it by name is "unknown
-   tool"), runs no invoke hooks (no metering, Idempotency-Key, or audit), and its OpenAPI entry has `security: []`
-   and no `Idempotency-Key`. llms.txt marks it "no credential" from the same flag. A credential sent with it is
-   ignored. Do not add a route by hand for a credential-free call: set `auth: "none"` and handle it in the handler.
+   `structuredContent` for objects. Paginated lists use `paginationInput` and
+   `paginated(key, item)`, with `encodeCursor` / `decodeCursor` for the cursor
+   (`packages/api/src/pagination.ts`; see `list_projects`).
+4. Public operations: `auth: "none"` on the spec makes an operation need no credential (`signup` is
+   the one). `defineOperation` requires `permissions: {}` for it. Its handler gets a `PublicContext`
+   (`public.ip`, no `caller`), not a caller. It is a normal REST route, but it is not an MCP tool
+   (calling it by name is "unknown tool"), runs no invoke hooks (no metering, Idempotency-Key, or
+   audit), and its OpenAPI entry has `security: []` and no `Idempotency-Key`. llms.txt marks it "no
+   credential" from the same flag. A credential sent with it is ignored. Do not add a route by hand
+   for a credential-free call: set `auth: "none"` and handle it in the handler.
 5. Update the contract and review it: `pnpm --filter @starter/api-app test -u`, then read the
-   `apps/api/openapi.json` diff as a public API change. Adding is safe. Removing, renaming, making a field
-   required, narrowing a type or requiring more permissions breaks deployed agents: add a new operation or `/v2`.
-   Then `pnpm --filter @starter/sdk generate` (the SDK's `schema.test.ts` fails while `schema.gen.ts` is stale).
-6. Update `skills/starter/SKILL.md` if customers' agents use it differently. `skill-parity.test.ts` checks it
-   against `ErrorCode`, `OAUTH_SCOPES` and the registry's operation names. Run the done-chain in AGENTS.md.
+   `apps/api/openapi.json` diff as a public API change. Adding is safe. Removing, renaming, making a
+   field required, narrowing a type or requiring more permissions breaks deployed agents: add a new
+   operation or `/v2`. Then `pnpm --filter @starter/sdk generate` (the SDK's
+   `packages/sdk/src/schema.test.ts` fails while `packages/sdk/src/schema.gen.ts` is stale).
+6. Update `skills/starter/SKILL.md` if customers' agents use it differently.
+   `apps/api/src/skill-parity.test.ts` checks it against `ErrorCode`, `OAUTH_SCOPES` and the
+   registry's operation names. Run the done-chain in AGENTS.md.
 
 ## Invoke hooks, idempotency and audit
 
-`apps/api/src/hooks.ts` (`createApiHooks`) passes `invokeOptions` to both `invoke` (REST) and `createMcpHandler`,
-so REST and MCP behave the same:
+`apps/api/src/hooks.ts` (`createApiHooks`) passes `invokeOptions` to both `invoke` (REST) and
+`createMcpHandler`, so REST and MCP behave the same:
 
-- **Before** (`invoke` runs it after the permission and input checks): meters the call against the org's daily
-  limit (`meter.ts`, UTC day). Over the limit is `RATE_LIMITED` with `Retry-After` and `RateLimit-*` headers.
-  Read-only session calls (the web app's polling) are not metered, so they can't spend the agents' budget;
-  writes count for every caller.
-  For a non-readOnly call with an idempotency key, it reserves the key: a finished key replays its stored
-  response, a running or reused-for-another-request key is `CONFLICT`.
-- **After**: completes the reserved key (or releases it on failure, so a retry can run) and audits every
-  non-readOnly call (`audit_event`: actor, OAuth `clientId`, operation, outcome, requestId).
-- `after` does not see FORBIDDEN, BAD_REQUEST or errors thrown by `before`. So `before` audits its own
-  RATE_LIMITED and CONFLICT refusals, and nothing audits FORBIDDEN or BAD_REQUEST attempts yet.
-- **Idempotency-Key**: header on REST (1-255 characters), `idempotencyKey` argument on MCP (non-readOnly tools
-  only, stripped by the registry). The stored key is bound to the operation, actor and validated input; keys
-  expire after 24 hours once completed, and a reservation after `LEASE_MS` (5 minutes), so a failed completion
-  write doesn't refuse retries for a day (they run again after the lease) (`idempotency_key`, reads ignore
-  expired rows, reserve reclaims them). Rows hold no
-  readable secrets: `key` is an HMAC of the client's key under the server secret, and `response` is sealed with
-  AES-256-GCM under a key derived from the secret, the org and the client's raw key (`data/idempotency.ts`), so
-  a replayed `create_api_key` still returns its key but a table dump doesn't. `createApiHooks` takes `secret`.
-- **Metering**: `ORG_DAILY_REQUEST_LIMIT` (claimed) and `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (until an owner
-  verifies their email), counted in `usage_daily` per org per UTC day. `whoami` returns usage and `claimed`.
-- Errors thrown by the hooks are `AppError`s like any other; `after` errors are reported and dropped.
+- **Before** (`invoke` runs it after the permission and input checks): meters the call against the
+  org's daily limit (`apps/api/src/meter.ts`, UTC day). Over the limit is `RATE_LIMITED` with
+  `Retry-After` and `RateLimit-*` headers. Read-only session calls (the web app's polling) are not
+  metered, so they can't spend the agents' budget; writes count for every caller. For a non-readOnly
+  call with an idempotency key, it reserves the key: a finished key replays its stored response, a
+  running or reused-for-another-request key is `CONFLICT`.
+- **After**: completes the reserved key (or releases it on failure, so a retry can run) and audits
+  every non-readOnly call (`audit_event`: actor, OAuth `clientId`, operation, outcome, requestId).
+- `after` does not see FORBIDDEN, BAD_REQUEST or errors thrown by `before`. So `before` audits its
+  own RATE_LIMITED and CONFLICT refusals, and nothing audits FORBIDDEN or BAD_REQUEST attempts yet.
+- **Idempotency-Key**: header on REST (1-255 characters), `idempotencyKey` argument on MCP
+  (non-readOnly tools only, stripped by the registry). The stored key is bound to the operation,
+  actor and validated input; keys expire after 24 hours once completed, and a reservation after
+  `LEASE_MS` (5 minutes), so a failed completion write doesn't refuse retries for a day (they run
+  again after the lease) (`idempotency_key`, reads ignore expired rows, reserve reclaims them). Rows
+  hold no readable secrets: `key` is an HMAC of the client's key under the server secret, and
+  `response` is sealed with AES-256-GCM under a key derived from the secret, the org and the
+  client's raw key (`data/idempotency.ts`), so a replayed `create_api_key` still returns its key but
+  a table dump doesn't. `createApiHooks` takes `secret`.
+- **Metering**: `ORG_DAILY_REQUEST_LIMIT` (claimed) and `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (until
+  an owner verifies their email), counted in `usage_daily` per org per UTC day. `whoami` returns
+  usage and `claimed`.
+- Errors thrown by the hooks are `AppError`s like any other; `after` errors are reported and
+  dropped.
+- **Pagination.** Lists take `cursor` and `limit` and return `nextCursor`. `readCursor` and `cut` in
+  `operations/shared.ts` and `packages/api/src/pagination.ts` do the work.
 
 ## Add a table with customer data
 
 1. In `packages/db/src/schema.ts`: an `organizationId` column referencing `organization.id` with
-   `onDelete: "cascade"`, plus an index on it. `pnpm --filter @starter/db db:generate`, commit the SQL, and ask
-   the user to apply it. `audit_event`, `usage_daily` and `idempotency_key` are the operational examples.
+   `onDelete: "cascade"`, plus an index on it. `pnpm --filter @starter/db db:generate`, commit the
+   SQL, and ask the user to apply it. `audit_event`, `usage_daily` and `idempotency_key` are the
+   operational examples.
 2. Brand its id in `packages/auth-proofs/src/lib/ids.ts`.
-3. If operations address rows by id, add `proofs/<row>-in-org.ts` (copy `project-in-org.ts`): private
-   `defineProof`, exported interface and checking function, nothing else. Test it, including another org's row.
-4. Data functions (like `apps/api/src/data/projects.ts`, `data/audit.ts`, `data/usage.ts`) take `Named<O, OrganizationId>`
-   + `CallerActsFor<O>` (and the row proof for single-row writes), and **still** filter by `organizationId` in SQL.
-5. Add the misuse you almost wrote to `packages/auth-proofs/src/mistakes.types.ts` under `@ts-expect-error`.
-6. Never write `as` to satisfy a proof or `Named`; `pnpm lint` (gdp-ts rules) rejects minting proofs outside `proofs/`.
+3. If operations address rows by id, add `proofs/<row>-in-org.ts` (copy
+   `packages/auth-proofs/src/proofs/project-in-org.ts`, the `ProjectInOrg` proof): private
+   `defineProof`, exported interface and checking function, nothing else. Test it, including another
+   org's row.
+4. Data functions (like `apps/api/src/data/projects.ts`, `data/audit.ts`, `data/usage.ts`) take
+   `Named<O, OrganizationId>` + `CallerActsFor<O>` (and the row proof for single-row writes), and
+   **still** filter by `organizationId` in SQL.
+5. Add the misuse you almost wrote to `packages/auth-proofs/src/mistakes.types.ts` under
+   `@ts-expect-error`.
+6. Never write `as` to satisfy a proof or `Named`; `pnpm lint` (gdp-ts rules) rejects minting proofs
+   outside `proofs/`.
 
 ## Add a resource, action, role or scope
 
-- **Resource/action**: add it to `statements`. Decide which roles get it (`roles`) and which OAuth scope grants it
-  (`OAUTH_SCOPE_GRANTS`), or list it in `OAUTH_EXCLUDED` if no agent token should ever do it. The scope coverage
-  test fails until you choose. No migration is needed; regenerate the contract snapshot.
-- **Role**: add to `roles`; the parity test in `permissions.test.ts` checks it against better-auth's `hasPermission`.
-- **Scope**: add to `OAUTH_SCOPE_GRANTS` as an explicit permission set. It flows to the OAuth provider, OpenAPI and
-  `/.well-known/oauth-protected-resource`. Never derive grants from action names.
-- **Custom roles per org** (later): enable `dynamicAccessControl` in the organization plugin, make `rolePermissions`
-  read roles from the DB, and keep the parity test passing. Not enabled yet.
+- **Resource/action**: add it to `statements`. Decide which roles get it (`roles`) and which OAuth
+  scope grants it (`OAUTH_SCOPE_GRANTS`), or list it in `OAUTH_EXCLUDED` if no agent token should
+  ever do it. The scope coverage test fails until you choose. No migration is needed; regenerate the
+  contract snapshot.
+- **Role**: add to `roles`; the parity test in `packages/auth/src/permissions.test.ts` checks it
+  against better-auth's `hasPermission`.
+- **Scope**: add to `OAUTH_SCOPE_GRANTS` as an explicit permission set. It flows to the OAuth
+  provider, OpenAPI and `/.well-known/oauth-protected-resource`. Never derive grants from action
+  names.
+- **OAuth scopes are coarse.** `read`, `write` and `admin` in `OAUTH_SCOPE_GRANTS`, each an explicit
+  permission set. `OAUTH_EXCLUDED` lists what no token may ever do (org deletion, role editing); a
+  test checks that every action is in one or the other. `openid`, `profile`, `email` and
+  `offline_access` grant nothing.
+- **Custom roles per org** (later): enable `dynamicAccessControl` in the organization plugin, make
+  `rolePermissions` read roles from the DB, and keep the parity test passing. Not enabled yet.
 
 ## Credentials and OAuth (don't break these)
 
-- `resolvePrincipal(auth, headers, { audience })` is the only way to authenticate. Order: API key (`x-api-key` or
-  `Bearer sk_…`), then OAuth bearer JWT, then session cookie.
-- OAuth tokens must carry aud (the resource), iss (`${baseURL}/api/auth`), `azp`/`client_id`, `org` and `scope`.
-  Don't loosen those checks or re-enable the jwt plugin's `set-auth-jwt` header.
-- **Revocation** (`principal.ts`, `grantStands`): a JWT has no row, so every OAuth request checks its grant. It
-  needs a consent or a live refresh token for the same client, org and user, and no revocation stamped after the
-  token's `iat`. For an OAuth client, `revoke_agent_access` deletes the consent and stamps its refresh and access
-  tokens revoked, so the tokens stop at once; the client itself is kept. Three point lookups; a composite index is
-  not added yet. Removing a member (`afterRemoveMember`) or their leaving (`endGrantsOnLeave`, an after hook on
-  `/organization/leave`, which skips the org hooks) runs `revokeMemberGrants` for that user and org.
-- **Device grant** (`packages/auth/src/device.ts`): `oauthDeviceAuthorization` wired to the OAuth token endpoint, with
-  `verificationUri` `/device`. The approving session's active org (it must be one the person belongs to) is kept
-  in a `verification` row keyed `device-org:<deviceCodeId>` at approval, and read at token issuance, so the `org`
-  claim is never missing. `/token` and `/device/token` are in `disabledPaths` (the plugin's own device token is a
-  session token). Device clients have no consent row; their refresh tokens are the evidence for revocation and
-  for `list_connected_agents`. Clients must register the `device_code` grant and should request `offline_access`.
-- **Provisional signup** (`packages/auth/src/signup.ts`, the `signup` operation with `auth: "none"` in `operations.ts`): no credential. Creates an unverified
-  user with a random password, a personal org, and an `sk_` key with project read, create, update and delete, and
-  sends one claim email (a reset link to `/claim`, which verifies the address). Limits: `SIGNUP_LIMITS` (5 per IP
-  per hour, 20 per email domain per day) answer RATE_LIMITED with `Retry-After`; an existing email is CONFLICT.
-  Attempts are recorded in `signup_attempt` before the checks. The key carries `metadata.provisional`; verifying the
-  email (the reset in `onPasswordReset`, or the `user.update` hook for verify-email) disables it through
-  `endProvisionalKeys`, and `resolvePrincipal` answers a disabled key with UNAUTHORIZED and a device-grant hint.
-- API keys: org-owned, no default permissions, created only via `create_api_key` (user actor, subset of the
-  caller's grants). Keep the `rateLimit` override (better-auth defaults to 10 per day). A key is `enabled` and
-  unexpired to count as connected; `revoke_agent_access` deletes it.
-- Keep `nativeLoopbackRegistration`, `clientRegistrationDefaultResources`, the `postLogin` config and
-  `customAccessTokenClaims` (the `org` claim). `oauth-flow.test.ts` covers registration, org choice, refresh,
-  scope narrowing and member removal with real tokens. `device-flow.test.ts` covers the device grant.
-- Auth plugin or option changes: `pnpm --filter @starter/auth generate`, `pnpm --filter @starter/db db:generate`,
-  commit the SQL, ask the user to apply it.
+- `resolvePrincipal(auth, headers, { audience })` is the only way to authenticate. Order: API key
+  (`x-api-key` or `Bearer sk_…`), then OAuth bearer JWT, then session cookie.
+- OAuth tokens must carry aud (the resource), iss (`${baseURL}/api/auth`), `azp`/`client_id`, `org`
+  and `scope`. Don't loosen those checks or re-enable the jwt plugin's `set-auth-jwt` header.
+- **Revocation** (`packages/auth/src/principal.ts`, `grantStands`): a JWT has no row, so every OAuth
+  request checks its grant. It needs a consent or a live refresh token for the same client, org and
+  user, and no revocation stamped after the token's `iat`. For an OAuth client,
+  `revoke_agent_access` deletes the consent and stamps its refresh and access tokens revoked, so the
+  tokens stop at once; the client itself is kept. Three point lookups; a composite index is not
+  added yet. Removing a member (`afterRemoveMember`) or their leaving (`endGrantsOnLeave`, an after
+  hook on `/organization/leave`, which skips the org hooks) runs `revokeMemberGrants` for that user
+  and org.
+- **Device grant** (`packages/auth/src/device.ts`): `oauthDeviceAuthorization` wired to the OAuth
+  token endpoint, with `verificationUri` `/device`. `POST /api/auth/device/code` starts it, and the
+  client polls `/api/auth/oauth2/token` with the `device_code` grant. The approving session's active
+  org (it must be one the person belongs to) is kept in a `verification` row keyed
+  `device-org:<deviceCodeId>` at approval, and read at token issuance, so the `org` claim is never
+  missing. `/token` and `/device/token` are in `disabledPaths` (the plugin's own device token is a
+  session token). Device clients have no consent row; their refresh tokens are the evidence for
+  revocation and for `list_connected_agents`. Clients must register the `device_code` grant and
+  should request `offline_access`. The MCP resource metadata advertises `offline_access` in
+  `scopes_supported`, so clients that request exactly those get a refresh token and keep working
+  after the approving web session signs out. `starter login` (`packages/cli`) is the reference
+  client.
+- **Provisional signup** (`packages/auth/src/signup.ts`, the `signup` operation with `auth: "none"`
+  in `operations/account.ts`): no credential. Creates an unverified user with a random password, a
+  personal org, and an `sk_` key with project read, create, update and delete, and sends one claim
+  email (a reset link to `/claim`, which verifies the address). Limits: `SIGNUP_LIMITS` (5 per IP
+  per hour, 20 per email domain per day) answer RATE_LIMITED with `Retry-After`; an existing email
+  is CONFLICT. Attempts are recorded in `signup_attempt` before the checks. The key carries
+  `metadata.provisional`; verifying the email (the reset in `onPasswordReset`, or the `user.update`
+  hook for verify-email) disables it through `endProvisionalKeys`, and `resolvePrincipal` answers a
+  disabled key with UNAUTHORIZED and a device-grant hint. Until an owner verifies the email, the org
+  gets `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` and `whoami` reports `claimed: false`. The signup
+  response says the key ends when the org is claimed (`apiKeyEndsWhenClaimed`). `POST /v1/signup`
+  with `{ email, name? }` is REST only, not an MCP tool.
+- API keys: org-owned, no default permissions, created only via `create_api_key` (user actor, subset
+  of the caller's grants). Keep the `rateLimit` override (better-auth defaults to 10 per day). A key
+  is `enabled` and unexpired to count as connected; `revoke_agent_access` deletes it. Keys are rate
+  limited per key (600 a minute, `apiKeyRateLimit`); over the limit is 429. Keys of a deleted
+  organization stop working.
+- Keep `nativeLoopbackRegistration`, `clientRegistrationDefaultResources`, the `postLogin` config
+  and `customAccessTokenClaims` (the `org` claim). `apps/api/src/oauth-flow.test.ts` covers
+  registration, org choice, refresh, scope narrowing and member removal with real tokens.
+  `apps/api/src/device-flow.test.ts` covers the device grant.
+- Auth plugin or option changes: `pnpm --filter @starter/auth generate`,
+  `pnpm --filter @starter/db db:generate`, commit the SQL, ask the user to apply it.
 
 ## Workspace agents, runs and approvals
 
-The product's own agents (the org's workers) are the `agent` resource; the connected AI clients stay `list_connected_agents`
-(credentials). Paths: `/v1/workspace-agents`, `/v1/runs`, `/v1/approvals/:id/...`, `/v1/inbox`, `/v1/members/security`.
+The product's own agents (the org's workers) are the `agent` resource; the connected AI clients stay
+`list_connected_agents` (credentials). Paths: `/v1/workspace-agents`, `/v1/runs`,
+`/v1/approvals/:id/...`, `/v1/inbox`, `/v1/members/security`.
 
-- **Tables** (`packages/db/src/schema.ts`, migration `0006_agent_runs`): `agent`, `run` (status queued|running|needs_you|done|failed,
-  footprint: energyWh, tokens, toolCalls; no prices), `run_step`, `approval` (status pending|approved|denied, decidedBy, decidedAt,
-  effectiveAt = decidedAt + 30s, undoneAt), `steer_message`. All carry `organizationId` (cascade).
-- **Proofs**: `AgentInOrg`, `RunInOrg`, `ApprovalInOrg`, `MemberInOrg` (`packages/auth-proofs/src/proofs/`). Data functions in
-  `apps/api/src/data/{agents,runs,members}.ts` take them; each also filters by organizationId in SQL.
-- **Approval window** is a clock question, so data functions take `now`. Decide and undo are single conditional writes
-  (`status = pending`, and `effective_at > now` for undo). An agent's view is `pending` until `effective_at`, with no decision
-  fields; a person sees the decision and `undoableUntil`. `approvalView` is the one place that decides what each sees.
-- **Who can do what** (`statements` in `access.ts`): viewer reads agents and runs; member and admin and owner create, update
-  and act on runs (`run:create|update|approve|steer`), and member can't delete agents; admin reads members (`member:read`).
-  Owner only: `twoFactor:reset`, `sso`, `scim` (`OWNER_ONLY_RESOURCES`, not in the admin role). Owners and admins manage
-  billing: `subscription` (`read`, `update`) is in the admin role too, and, like the owner-only ones, no API key may hold it.
-- **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along with the person-only
-  resources (`PERSON_ONLY_RESOURCES`: the owner-only ones and `subscription`). `decide_approval` and `undo_approval` also require a session (`requirePerson`).
-- **Header**: `ORGANIZATION_HEADER` (`X-Organization-Id`, `@starter/api`) is checked in `resolvePrincipal`: a request naming
-  another organization gets CONFLICT with a reload hint, on REST and MCP alike.
-- **Seeding for e2e**: `scripts/seed-demo-run.mjs` drives a run to needs_you through the API with a key (no bypass).
+- **Tables** (`packages/db/src/schema.ts`, migration `0006_agent_runs`): `agent`, `run` (status
+  queued|running|needs_you|done|failed, footprint: energyWh, tokens, toolCalls; no prices),
+  `run_step`, `approval` (status pending|approved|denied, decidedBy, decidedAt, effectiveAt =
+  decidedAt + 30s, undoneAt), `steer_message`. All carry `organizationId` (cascade).
+- **Proofs**: `AgentInOrg`, `RunInOrg`, `ApprovalInOrg`, `MemberInOrg`
+  (`packages/auth-proofs/src/proofs/`). Data functions in
+  `apps/api/src/data/{agents,runs,members}.ts` take them; each also filters by organizationId in
+  SQL.
+- **Approval window** is a clock question, so data functions take `now`. Decide and undo are single
+  conditional writes (`status = pending`, and `effective_at > now` for undo). An agent's view is
+  `pending` until `effective_at`, with no decision fields; a person sees the decision and
+  `undoableUntil`. `approvalView` is the one place that decides what each sees.
+- **Who can do what** (`statements` in `packages/auth/src/access.ts`): viewer reads agents and runs;
+  member and admin and owner create, update and act on runs (`run:create|update|approve|steer`), and
+  member can't delete agents; admin reads members (`member:read`). Owner only: `twoFactor:reset`,
+  `sso`, `scim` (`OWNER_ONLY_RESOURCES`, not in the admin role). Owners and admins manage billing:
+  `subscription` (`read`, `update`) is in the admin role too, and, like the owner-only ones, no API
+  key may hold it.
+- **Member 2FA reset**: `reset_member_two_factor` (owner) is refused with CONFLICT while the member
+  belongs to another shared organization, because the second factor belongs to the account.
+- **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along
+  with the person-only actions (`PERSON_ONLY_ACTIONS`) and resources (`PERSON_ONLY_RESOURCES`: the
+  owner-only ones and `subscription`). `decide_approval` and `undo_approval` also require a session
+  (`requirePerson`).
+- **Header**: `ORGANIZATION_HEADER` (`X-Organization-Id`, `@starter/api`) is checked in
+  `resolvePrincipal`: a request naming another organization gets CONFLICT with a reload hint, on
+  REST and MCP alike.
+- **Seeding for e2e**: `scripts/seed-demo-run.mjs` drives a run to needs_you through the API with a
+  key (no bypass).
+
+## URLs and origins
+
+- `apps/api` uses `PORTLESS_URL` (set by portless under `pnpm dev`) or else `BETTER_AUTH_URL`. The
+  OAuth issuer, the audiences and the llms.txt links derive from it.
+- The server needs Postgres with every migration applied. The OAuth provider seeds its resources at
+  boot and exits if it can't.
+- `WEB_ORIGINS` (comma-separated bare origins) lists the web app's origins when it is not the API's
+  (`pnpm dev` under portless, the e2e stack). Auth callbacks (`callbackURL`, `redirectTo`) and
+  passkeys trust them; CORS does not. Unset in production.
+- Under `pnpm dev` the web app is `https://app.starter.localhost` and the API
+  `https://api.starter.localhost` (`portless.json`). Set `WEB_ORIGINS=https://app.starter.localhost`
+  in `.env`. Vite proxies to the API's portless URL. Passkeys use `passkeyRpID`: the shared parent
+  domain of the origins (`localhost` for `*.localhost`).
+- The web app provides the OAuth pages: `/sign-in`; `/consent` (shows the org being granted, with a
+  switcher that calls `organization/set-active` before accepting); `/select-organization` (only when
+  the session has no valid active org; then POST `/oauth2/continue` with `{ postLogin: true }`); and
+  `/accept-invitation/:id` (sign in or up as the invited address, then
+  `organization/accept-invitation`). `apps/api/src/oauth-flow.test.ts` covers the flow.
+- `apps/api` has its own request-id and access-log middleware.
 
 ## CORS, pages and discovery
 
-- **CORS** (`apps/api/src/cors.ts`) is on bearer surfaces only: `/mcp`, `/.well-known/*`, `/openapi.json`,
-  `/llms*.txt`, `/v1/*`. `origin: *`, no credentials. Never `/api/auth/*` or the web pages. `cors.test.ts` asserts both.
-- **Web pages** (`apps/web`, TanStack Start SPA) are served by `apps/api` from `WEB_DIST_DIR` (`static.ts`), on the
-  API origin so the auth cookies apply. Only the listed page paths get `index.html` (`PAGE_PATHS`; keep in step with
-  `apps/web/src/routes`). Pages carry CSP, `X-Frame-Options: DENY`; assets are hashed and cached forever.
-- **Discovery**: `llms.txt` (and `/` for non-browsers) carries install snippets for Claude Code, Cursor, VS Code,
-  Codex and the device-grant curl flow (`installSnippets`, `llms.ts`). The MCP registry record comes from
-  `serverJson` (`packages/api/src/server-json.ts`) and is committed as the root `server.json`; `discovery.test.ts`
-  validates it against the vendored registry schema. Regenerate after changing the name or description:
+- **CORS** (`apps/api/src/cors.ts`) is on bearer surfaces only: `/mcp`, `/.well-known/*`,
+  `/openapi.json`, `/llms*.txt`, `/v1/*`. `origin: *`, no credentials. Never `/api/auth/*` or the
+  web pages. `apps/api/src/cors.test.ts` asserts both.
+- **Web pages** (`apps/web`, TanStack Start SPA) are served by `apps/api` from `WEB_DIST_DIR`
+  (`apps/api/src/static.ts`), on the API origin so the auth cookies apply. Only the listed page
+  paths get `index.html` (`PAGE_PATHS`; keep in step with `apps/web/src/routes`). Pages carry CSP,
+  `X-Frame-Options: DENY`; assets are hashed and cached forever.
+- **Discovery**: `llms.txt` (and `/` for non-browsers) carries install snippets for Claude Code,
+  Cursor, VS Code, Codex and the device-grant curl flow (`installSnippets`,
+  `packages/api/src/llms.ts`). The MCP registry record comes from `serverJson`
+  (`packages/api/src/server-json.ts`) and is committed as the root `server.json`;
+  `apps/api/src/discovery.test.ts` validates it against the vendored registry schema. Regenerate
+  after changing the name or description:
   `UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app test discovery`.
-- **Cursor and VS Code** snippet shapes are inferred from their docs (no remote examples checked). Verify before
-  relying on them.
-- **Agents** (`apps/api/src/agents.ts`): `list_connected_agents` lists the org's keys and the OAuth clients that hold
-  consent or a live refresh token; `revoke_agent_access` (`apiKey:delete`) revokes one. Access tokens are not stored.
+- **Cursor and VS Code** snippet shapes are inferred from their docs (no remote examples checked).
+  Verify before relying on them.
+- **Agents** (`apps/api/src/data/connected-agents.ts`): `list_connected_agents` lists the org's keys
+  and the OAuth clients that hold consent or a live refresh token; `revoke_agent_access`
+  (`apiKey:delete`) revokes one. Access tokens are not stored. `revokeGrants` (exported from
+  `@starter/auth`) is the shared code that ends a grant: it deletes the consent and revokes the
+  refresh and access tokens. `revokeMemberGrants` is its member-scoped form, run when a member is
+  removed or leaves. A member who is removed or leaves loses every grant they made in that org, so
+  re-adding them does not revive their old tokens. API keys stay: they belong to the org, not the
+  member.
 
 ## Errors and logging
 
-- Clients get `{ error: { code, message, hint?, docs? } }` via `toPublic()`, plus the error's `headers` (for example
-  `retry-after`). `AppError` takes `hint`, `docs`, `headers` and `context`. A FORBIDDEN hint names the OAuth scope
-  or API key permission that would allow the call (`permissionHint`). MCP tool failures return `isError` results
-  with the same text, so the model can retry with better arguments. Calling a hidden tool (one the caller lacks
-  permissions for) by name also gets FORBIDDEN with the hint.
+- Clients get `{ error: { code, message, hint?, docs? } }` via `toPublic()`, plus the error's
+  `headers` (for example `retry-after`). `AppError` takes `hint`, `docs`, `headers` and `context`. A
+  FORBIDDEN hint names the OAuth scope or API key permission that would allow the call
+  (`permissionHint`). MCP tool failures return `isError` results with the same text, so the model
+  can retry with better arguments. Calling a hidden tool (one the caller lacks permissions for) by
+  name also gets FORBIDDEN with the hint.
 - Report (`reportError`) only 5xx or non-exposed errors.
+
+## Errors
+
+- Clients get `{ error: { code, message, hint?, docs? } }` via `toPublic()`, plus the error's
+  `headers` (for example `retry-after`). `AppError` takes `hint`, `docs`, `headers` and `context`.
+- A FORBIDDEN hint names the OAuth scope or API key permission that would allow the call
+  (`permissionHint`).
+- MCP tool failures return `isError` results with the same text, so the model can retry with better
+  arguments.
+- `reportError` reports only 5xx and non-exposed errors.
 
 ## Tests
 
-- `packages/api`: registry, permission sets, generators, pagination, invoke hooks, `server-json`. `packages/mcp`:
-  protocol with a real SDK client, idempotency key injection.
-- `packages/auth`: `permissions.test.ts` (role parity with better-auth, scope coverage), `principal.test.ts`
-  (sessions, keys, tokens, removal, deleted orgs), `oauth.test.ts` (client registration), `device.test.ts`,
-  `signup.test.ts`.
-- `packages/auth-proofs`: provers against PGlite; `mistakes.types.ts` at typecheck.
-- `packages/sdk` (generated types, transport retries, idempotency, errors, `paginate`) and `packages/cli`
-  (`login`, `call`, `ops`, `whoami`, against a fake server).
-- `apps/api`: `createTestApp()` from `app.test.helpers.ts` gives two orgs (owner, a viewer member, a full and a
-  read-only key; another user's org and key), `as(credential)` and `mcpClient`. `app.test.ts` covers permissions and
-  cross-tenant isolation; `contract.test.ts` the spec; `oauth-flow.test.ts` the OAuth flow; `device-flow.test.ts`
-  the device grant; `revocation.test.ts` revoked grants and key 429s; `hooks.test.ts` metering, idempotency and
-  audit; `signup.test.ts`; `agents.test.ts`; `static.test.ts`; `discovery.test.ts`; `skill-parity.test.ts`;
-  `auth-flows.test.ts` the browser-side auth flows over HTTP with the real client (`browser()`), and auth emails
-  via `t.outbox`.
+- `packages/api`: registry, permission sets, generators, pagination, invoke hooks, `server-json`.
+  `packages/mcp`: protocol with a real SDK client, idempotency key injection.
+- `packages/auth`: `packages/auth/src/permissions.test.ts` (role parity with better-auth, scope
+  coverage), `packages/auth/src/principal.test.ts` (sessions, keys, tokens, removal, deleted orgs),
+  `packages/auth/src/oauth.test.ts` (client registration), `packages/auth/src/device.test.ts`,
+  `packages/auth/src/signup.test.ts`.
+- `packages/auth-proofs`: provers against PGlite; `packages/auth-proofs/src/mistakes.types.ts` at
+  typecheck.
+- `packages/sdk` (generated types, transport retries, idempotency, errors, `paginate`) and
+  `packages/cli` (`login`, `call`, `ops`, `whoami`, against a fake server).
+- `apps/api`: `createTestApp()` from `apps/api/src/app.test.helpers.ts` gives two orgs (owner, a
+  viewer member, a full and a read-only key; another user's org and key), `as(credential)` and
+  `mcpClient`. `apps/api/src/app.test.ts` covers permissions and cross-tenant isolation;
+  `apps/api/src/contract.test.ts` the spec; `apps/api/src/oauth-flow.test.ts` the OAuth flow;
+  `apps/api/src/device-flow.test.ts` the device grant; `apps/api/src/revocation.test.ts` revoked
+  grants and key 429s; `apps/api/src/hooks.test.ts` metering, idempotency and audit;
+  `apps/api/src/signup.test.ts`; `apps/api/src/data/connected-agents.test.ts`,
+  `apps/api/src/member-removal.test.ts`, `apps/api/src/runs.test.ts`,
+  `apps/api/src/operations.test.ts`; `apps/api/src/static.test.ts`;
+  `apps/api/src/discovery.test.ts`; `apps/api/src/skill-parity.test.ts`;
+  `apps/api/src/auth-flows.test.ts` the browser-side auth flows over HTTP with the real client
+  (`browser()`), and auth emails via `t.outbox`.

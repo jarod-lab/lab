@@ -90,13 +90,13 @@ describe("signup (REST, no credentials)", () => {
     }
   })
 
-  it("is refused with credentials, which should use the operation's own path", async () => {
+  it("ignores a credential sent with it: the signup is the same public call", async () => {
     const t = await createTestApp([], { trustProxy: true })
     try {
       const res = await json(await signup(t, "fresh@example.com", "203.0.113.11", t.readKey))
-      expect(res.status).toBe(400)
-      expect(res.body.error).toMatchObject({ code: "BAD_REQUEST" })
-      expect(String((res.body.error as { hint: string }).hint)).toContain("without")
+      expect(res.status).toBe(200)
+      expect(res.body).toMatchObject({ claimUrlSentTo: "fresh@example.com" })
+      expect(res.body.apiKey).not.toBe(t.readKey)
     } finally {
       await t.close()
     }

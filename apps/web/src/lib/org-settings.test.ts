@@ -5,7 +5,6 @@ import {
   defaultInviteRoleOf,
   ownerCount,
   parseMetadata,
-  roleParts,
   slugChangeWarning,
   withDefaultInviteRole,
 } from "./org-settings"
@@ -41,11 +40,6 @@ describe("default invite role", () => {
 })
 
 describe("roles and owners", () => {
-  it("splits a comma-separated role string", () => {
-    expect(roleParts(" admin, member ")).toEqual(["admin", "member"])
-    expect(roleParts("")).toEqual([])
-  })
-
   it("counts the members who hold the owner role, even alongside other roles", () => {
     expect(
       ownerCount([

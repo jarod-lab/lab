@@ -3,8 +3,8 @@ import { AppError } from "@starter/errors"
 import { createLocalJWKSet, type JSONWebKeySet, jwtVerify } from "jose"
 
 import { API_KEY_PREFIX, AUTH_BASE_PATH, type Auth } from "./index"
-import { type Adapter, findMember } from "./membership"
-import { IMPERSONATION_GRANTS, narrow, rolePermissions, scopePermissions } from "./permissions"
+import { type Adapter, memberGrants } from "./membership"
+import { IMPERSONATION_GRANTS, narrow, scopePermissions } from "./permissions"
 import { isImpersonated } from "./guards"
 
 export type Actor = { type: "user"; userId: string } | { type: "apiKey"; keyId: string }
@@ -78,9 +78,8 @@ async function fromSession(auth: Auth, headers: Headers): Promise<Principal | nu
   const session = await auth.api.getSession({ headers })
   const orgId = session?.session.activeOrganizationId
   if (!session || !orgId) return null
-  const member = await findMember((await auth.$context).adapter, session.user.id, orgId)
-  if (!member) return null
-  const roles = rolePermissions(member.role)
+  const roles = await memberGrants((await auth.$context).adapter, session.user.id, orgId)
+  if (!roles) return null
   return {
     organizationId: orgId,
     actor: { type: "user", userId: session.user.id },
@@ -189,6 +188,44 @@ async function isBanned(db: Adapter, userId: string, now: Date): Promise<boolean
   return !user.banExpires || new Date(user.banExpires).getTime() > now.getTime()
 }
 
+/** How long this server's signing keys are reused before they are fetched again. */
+export const JWKS_TTL_MS = 60_000
+
+const jwksCache = new WeakMap<Auth, { keys: LocalKeys; at: number }>()
+type LocalKeys = ReturnType<typeof createLocalJWKSet>
+
+/**
+ * This server's public signing keys, cached per auth instance for JWKS_TTL_MS. The cache only
+ * saves reads of the jwks table; a token signed with a key that rotated in since is handled by
+ * verifyAccessToken, which fetches once more.
+ */
+async function signingKeys(auth: Auth, fresh = false): Promise<LocalKeys> {
+  const cached = jwksCache.get(auth)
+  if (!fresh && cached && Date.now() - cached.at < JWKS_TTL_MS) return cached.keys
+  const keys = createLocalJWKSet((await auth.api.getJwks()) as JSONWebKeySet)
+  jwksCache.set(auth, { keys, at: Date.now() })
+  return keys
+}
+
+/** jose's error for a token whose `kid` names no key we hold (a key rotated since we cached). */
+const isUnknownKey = (error: unknown) =>
+  (error as { code?: unknown } | null)?.code === "ERR_JWKS_NO_MATCHING_KEY"
+
+/**
+ * Verify an access token's signature, audience and issuer. The keys are this server's own, so a
+ * valid signature already means we issued the token. An unknown key id fetches the keys once more.
+ */
+async function verifyAccessToken(auth: Auth, token: string, opts: ResolveOptions) {
+  const verify = (keys: LocalKeys) =>
+    jwtVerify(token, keys, { audience: opts.audience, issuer: oauthIssuer(auth) })
+  try {
+    return await verify(await signingKeys(auth))
+  } catch (error) {
+    if (!isUnknownKey(error)) throw error
+    return verify(await signingKeys(auth, true))
+  }
+}
+
 async function fromAccessToken(
   auth: Auth,
   token: string,
@@ -196,41 +233,35 @@ async function fromAccessToken(
 ): Promise<Principal | null> {
   let payload: Awaited<ReturnType<typeof jwtVerify>>["payload"]
   try {
-    // The keys are this server's own, so a valid signature already means we issued the token.
-    const jwks = createLocalJWKSet((await auth.api.getJwks()) as JSONWebKeySet)
-    ;({ payload } = await jwtVerify(token, jwks, {
-      audience: opts.audience,
-      issuer: oauthIssuer(auth),
-    }))
+    ;({ payload } = await verifyAccessToken(auth, token, opts))
   } catch {
     return null
   }
   // OAuth access tokens always name the client and the organization they were granted for.
   const clientId = payload.azp ?? payload.client_id
   if (!payload.sub || typeof clientId !== "string" || typeof payload.org !== "string") return null
-  const db = (await auth.$context).adapter
-  const [member, banned] = await Promise.all([
-    findMember(db, payload.sub, payload.org),
-    isBanned(db, payload.sub, new Date()),
-  ])
-  if (!member) return null
-  // A ban deletes the user's sessions but not their OAuth grants, so their agents stop here.
-  if (banned) return null
   // A JWT has no row to revoke, so its grant is checked on every request (see grantStands).
   if (typeof payload.iat !== "number") return null
-  const grant = {
-    clientId,
-    organizationId: payload.org,
-    userId: payload.sub,
-    issuedAt: new Date(payload.iat * 1000),
-  }
-  if (!(await grantStands(auth, grant, new Date()))) return null
+  const userId = payload.sub
+  const organizationId = payload.org
+  const grant = { clientId, organizationId, userId, issuedAt: new Date(payload.iat * 1000) }
+  const now = new Date()
+  const db = (await auth.$context).adapter
+  // Independent reads, run together: membership, the ban, and the grant behind the token.
+  const [roles, banned, stands] = await Promise.all([
+    memberGrants(db, userId, organizationId),
+    isBanned(db, userId, now),
+    grantStands(auth, grant, now),
+  ])
+  // Removed members get nothing. A ban deletes the user's sessions but not their OAuth grants, so
+  // their agents stop here.
+  if (!roles || banned || !stands) return null
   const scopes = typeof payload.scope === "string" ? payload.scope.split(" ") : []
   return {
-    organizationId: payload.org,
-    actor: { type: "user", userId: payload.sub },
+    organizationId,
+    actor: { type: "user", userId },
     via: "oauth",
-    grants: narrow(rolePermissions(member.role), scopePermissions(scopes)),
+    grants: narrow(roles, scopePermissions(scopes)),
     clientId,
   }
 }

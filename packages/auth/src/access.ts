@@ -42,6 +42,13 @@ export const OWNER_ONLY_RESOURCES = ["sso", "scim", "twoFactor"] as const
 /** Resources a person holds but no API key may: the owner-only ones, and billing (owner and admin). */
 export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription"] as const
 
+/**
+ * Actions a person holds but no API key or OAuth token may. Approving a run is a person's decision
+ * (the approval is theirs, not an agent's). Keys are refused these in create_api_key, and OAuth
+ * scopes never reach them (OAUTH_EXCLUDED in permissions.ts is built from this).
+ */
+export const PERSON_ONLY_ACTIONS = { run: ["approve"] } as const
+
 const adminStatements = Object.fromEntries(
   Object.entries(all).filter(
     ([resource]) => !(OWNER_ONLY_RESOURCES as readonly string[]).includes(resource),

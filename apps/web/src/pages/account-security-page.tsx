@@ -12,7 +12,7 @@ import {
   SessionsSection,
   type SessionRow,
   TwoFactorSection,
-} from "./account-security-sections"
+} from "./account-security"
 
 export interface AccountSecurityPageProps {
   name: string

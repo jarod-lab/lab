@@ -43,7 +43,7 @@ const SENSITIVE_HEADERS = [
   "X-Api-Key",
 ]
 
-export const redactPaths = [
+const redactPaths = [
   ...SENSITIVE,
   ...SENSITIVE.map((k) => `*.${k}`),
   ...SENSITIVE.map((k) => `*.*.${k}`),

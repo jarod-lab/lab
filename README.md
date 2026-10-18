@@ -8,7 +8,7 @@ OAuth 2.1 for agents.
 ## Use it
 
 ```bash
-gh repo create my-app --template stewartjarod/starter --private --clone && cd my-app
+gh repo create my-app --template <owner>/<repo> --private --clone && cd my-app
 mise trust && mise install        # Node 24, pnpm 11, gitleaks
 pnpm install
 pnpm init-project my-app [owner] [--domain acme.com]  # renames the scope, DB name, display name and MCP registry name
@@ -39,7 +39,7 @@ docker compose up -d db           # local Postgres (tests don't need it)
 ## Commands
 
 ```bash
-pnpm lint typecheck test build   # all via Turborepo
+pnpm turbo run lint typecheck test build   # all via Turborepo
 pnpm test:coverage               # thresholds only go up
 pnpm baseline                    # bans/ratchets (code-baseline)
 pnpm storybook                   # http://localhost:6006
@@ -59,9 +59,22 @@ breaking-change check (pull requests) and a Docker build.
 `AGENTS.md` (also `CLAUDE.md`) holds the conventions. `.claude/settings.json` pre-approves this stack's
 commands and denies destructive ones; skills live in `.claude/skills`.
 
+## Docs
+
+- [`AGENTS.md`](AGENTS.md): the conventions and the done-checks, for agents and people.
+- [`docs/web-app.md`](docs/web-app.md): the web app's routes, data layer and forms.
+- [`docs/auth.md`](docs/auth.md): sign-in methods, two-factor, admin, SSO, SCIM and Stripe.
+- [`docs/database.md`](docs/database.md): tables, migrations and which ones are applied.
+- [`docs/testing.md`](docs/testing.md): test layout, thresholds and the auth-flow tests.
+- [`docs/observability.md`](docs/observability.md): `observe`, health and vendor status.
+- [`docs/ui.md`](docs/ui.md): vendored shadcn components, D+ pieces and stories.
+- [`docs/tooling.md`](docs/tooling.md): Storybook, portless, baseline, e2e, turbo, CI and dependencies.
+- [`docs/roadmap.md`](docs/roadmap.md): what is not built yet.
+- [`.claude/skills/agent-api/SKILL.md`](.claude/skills/agent-api/SKILL.md): the agent-native API in detail.
+
 ## Agent-native API
 
-Every operation in `apps/api/src/operations.ts` is served as REST, as an MCP tool at `/mcp` (except the
+Every operation in `apps/api/src/operations/` (one file per domain) is served as REST, as an MCP tool at `/mcp` (except the
 credential-free `signup`, which is REST only), and in `/openapi.json`, `/llms.txt` and `/llms-full.txt`. Every
 request acts in one organization. Access is the member's role (owner, admin, member, viewer) narrowed by the
 credential: an org API key's permissions, or an OAuth token's scopes (`read`, `write`, `admin`). MCP clients find
@@ -105,17 +118,17 @@ shows up in review, and contract tests run every documented example over REST an
   `io.github.<owner>/<name>`, taking the owner from its second argument or the GitHub `origin` remote. To change it
   later, set `registry` in `apps/api/src/server.ts` and `DEFAULT_REGISTRY_META` in `packages/api/src/server-json.ts`
   to the same value. Either way,
-  replace the placeholder title and description in `server.ts`. The discovery test pins the committed `server.json` to
+  replace the placeholder title and description in `apps/api/src/server.ts`. The discovery test pins the committed `server.json` to
   `DEFAULT_REGISTRY_META` and to `ROOT_INFO` in `apps/api/src/discovery.test.ts`; update `ROOT_INFO` too.
 - **Regenerate the root `server.json`:** `UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app test discovery`, then commit it.
   Its origin is still the placeholder; publish the live record at `<your API>/.well-known/mcp/server.json`.
 - **Submit it** to the MCP registry, the Claude connectors directory and Smithery. Each needs your account.
 - **Publish the skill.** `skills/starter` is what customers' agents install (`npx skills add <owner>/<repo>`).
-  `skill-parity.test.ts` must pass first.
+  `apps/api/src/skill-parity.test.ts` must pass first.
 - **Add a `LICENSE`.** None is set.
 
 ## Not included yet
 
 Custom roles per organization, Stripe billing (metering and limits exist; plans and checkout don't), publishing
 (above), a deploy target beyond the image and release step, the e2e job ([tester-army/e2e](https://github.com/tester-army/e2e)
-needs an app to point at and a model credential), and the LLM onboarding eval. See `AGENTS.md` for the full list.
+needs an app to point at and a model credential), and the LLM onboarding eval. See `docs/roadmap.md` for the full list.

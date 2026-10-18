@@ -1,3 +1,4 @@
+import { FieldIssues, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { z } from "zod"
@@ -9,17 +10,11 @@ import {
   type SocialProvider,
 } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
-import { fieldMessage, messageOf } from "../lib/messages"
+import { messageOf } from "../lib/messages"
 import { navigateTo } from "../lib/navigation"
 import { PASSWORD_ONLY_METHODS, type WebAuth } from "../lib/web-auth"
 
@@ -228,13 +223,11 @@ export function SignInPage({
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       required
                       disabled={pending}
                     />
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -356,13 +349,11 @@ export function SignInPage({
                     value={field.state.value}
                     onChange={(event) => field.handleChange(event.currentTarget.value)}
                     onBlur={field.handleBlur}
-                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    aria-invalid={invalidOf(field)}
                     required
                     disabled={pending}
                   />
-                  {field.state.meta.errors.length > 0 ? (
-                    <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                  ) : null}
+                  <FieldIssues field={field} />
                 </Field>
               )}
             </form.Field>
@@ -394,13 +385,11 @@ export function SignInPage({
                       value={field.state.value}
                       onChange={(event) => field.handleChange(event.currentTarget.value)}
                       onBlur={field.handleBlur}
-                      aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                      aria-invalid={invalidOf(field)}
                       required
                       disabled={pending}
                     />
-                    {field.state.meta.errors.length > 0 ? (
-                      <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                    ) : null}
+                    <FieldIssues field={field} />
                   </Field>
                 )}
               </form.Field>
@@ -561,13 +550,11 @@ export function SignUpPage({
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   required
                   disabled={pending}
                 />
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
@@ -583,13 +570,11 @@ export function SignUpPage({
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   required
                   disabled={pending}
                 />
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
@@ -608,7 +593,7 @@ export function SignUpPage({
                   minLength={8}
                   required
                   disabled={pending}
-                  aria-invalid={breached || field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={breached || invalidOf(field) || undefined}
                   aria-describedby={breached ? `${passwordHelp} ${passwordError}` : passwordHelp}
                   className={breached ? "border-2 border-destructive" : undefined}
                 />
@@ -624,9 +609,7 @@ export function SignUpPage({
                     <span>{PASSWORD_COMPROMISED_MESSAGE}</span>
                   </p>
                 ) : null}
-                {field.state.meta.errors.length > 0 && !breached ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} hidden={breached} />
                 <FieldDescription id={passwordHelp}>
                   Use at least 8 characters. Checked privately with Have I Been Pwned. Your password
                   is never sent.

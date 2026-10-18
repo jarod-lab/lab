@@ -57,6 +57,21 @@ const ping = defineOperation({
   handler: () => ({ ok: true }),
 })
 
+const publicNote = defineOperation({
+  name: "get_public_note",
+  method: "GET",
+  path: "/v1/notes/:id",
+  summary: "Get a public note",
+  description: "Returns one note that anyone may read.",
+  auth: "none",
+  permissions: {},
+  input: z.object({ id: z.string(), fields: z.string().optional() }),
+  output: z.object({ id: z.string() }),
+  hints: { readOnly: true },
+  examples: [{ input: { id: "n 1", fields: "all" }, output: { id: "n 1" } }],
+  handler: (input) => ({ id: input.id }),
+})
+
 const ops = [getNote, updateNote, ping]
 
 describe("openApiDocument", () => {
@@ -184,19 +199,30 @@ describe("llms.txt", () => {
   })
 
   it("marks the operations that need no credential, and says so in the intro", () => {
-    const unauth = { unauthenticated: ["ping"] }
-    const txt = llmsTxt(ops, info, unauth)
-    expect(txt).toContain("(`ping`, no credential)")
-    expect(txt).toContain('Operations marked "no credential" need none (`ping`); the rest do.')
+    const open = [getNote, updateNote, publicNote]
+    const txt = llmsTxt(open, info)
+    expect(txt).toContain("(`get_public_note`, no credential)")
+    expect(txt).toContain(
+      'Operations marked "no credential" need none (`get_public_note`); the rest do.',
+    )
     expect(txt).not.toContain("Every request needs")
     expect(llmsTxt(ops, info)).not.toContain("no credential")
-    expect(llmsFullTxt(ops, info, unauth)).toContain("Credential: none. Anyone may call this.")
-    expect(llmsFullTxt(ops, info, unauth)).toContain("Permissions: note:update")
+    const full = llmsFullTxt(open, info)
+    expect(full).toContain("Credential: none. Anyone may call this.")
+    expect(full).toContain("Permissions: note:update")
     // An anonymous operation's example must not send a credential.
-    const full = llmsFullTxt(ops, info, { unauthenticated: ["get_note"] })
-    const getNote = full.slice(full.indexOf("## get_note\n"), full.indexOf("## update_note\n"))
-    expect(getNote).toContain('curl -X GET "https://api.acme.test/v1/notes/n%201?fields=all"')
-    expect(getNote).not.toContain("x-api-key")
+    const anonymous = full.slice(full.indexOf("## get_public_note\n"))
+    expect(anonymous).toContain('curl -X GET "https://api.acme.test/v1/notes/n%201?fields=all"')
+    expect(anonymous).not.toContain("x-api-key")
     expect(llmsFullTxt(ops, info)).toContain("x-api-key")
+  })
+
+  it("documents a public operation with no security and no Idempotency-Key", () => {
+    const doc = openApiDocument([publicNote], info)
+    const read = doc.paths["/v1/notes/{id}"]?.get as { security: unknown[]; parameters: unknown[] }
+    expect(read.security).toEqual([])
+    expect(read.parameters.map((p) => (p as { name: string }).name)).not.toContain(
+      "Idempotency-Key",
+    )
   })
 })

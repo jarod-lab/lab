@@ -77,7 +77,7 @@ export function MembersContainer({
   })
   // Under the members prefix, so a role change or removal refreshes both lists.
   const security = useQuery({
-    queryKey: [...qk.org(organizationId).members(), "security"],
+    queryKey: qk.org(organizationId).membersSecurity(),
     queryFn: () => membersApi.listSecurity(organizationId),
     enabled: role.isSuccess && showSecurity,
   })
@@ -139,7 +139,7 @@ export function MembersContainer({
     mutationFn: (member: MemberView) => membersApi.resetTwoFactor(organizationId, member.userId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: [...qk.org(organizationId).members(), "security"],
+        queryKey: qk.org(organizationId).membersSecurity(),
       })
     },
   })

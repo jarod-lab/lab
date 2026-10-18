@@ -4,10 +4,9 @@ import {
   OWNS_ORGANIZATION_CODE,
   PASSWORD_COMPROMISED_CODE,
   PASSWORD_COMPROMISED_MESSAGE,
-  createClient,
 } from "@starter/auth/client"
 
-import { WebError } from "./web-auth"
+import { makeAuthClient, WebError } from "./web-auth"
 
 // The person's own account calls (profile, security): their name and email, sign-in methods, passkeys,
 // two-factor, password and sessions. Nothing here names an organization. Each call is made by the
@@ -164,7 +163,7 @@ export interface AccountApi {
 
 /** The browser implementation. Same origin as the page, so the session cookie goes with each call. */
 export function createAccountApi(baseURL?: string, fetchImpl?: typeof fetch): AccountApi {
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+  const client = makeAuthClient(baseURL, fetchImpl)
   // The client's typed methods come from several plugins; the calls below use the same names and
   // shapes better-auth documents for each. Typed through `unknown` so one missing plugin type can't
   // hide a real error at the call site.

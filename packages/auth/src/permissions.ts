@@ -1,10 +1,18 @@
 import { intersect, type PermissionSet, type PermissionsOf, union } from "@starter/api"
-import { type Catalog, type RoleName, roles } from "./access"
+import {
+  type Catalog,
+  PERSON_ONLY_ACTIONS,
+  PERSON_ONLY_RESOURCES,
+  type RoleName,
+  roles,
+  statements,
+} from "./access"
 
 export {
   ac,
   type Catalog,
   OWNER_ONLY_RESOURCES,
+  PERSON_ONLY_ACTIONS,
   PERSON_ONLY_RESOURCES,
   type RoleName,
   roles,
@@ -61,18 +69,23 @@ export const IMPERSONATION_GRANTS = {
   member: ["read"],
 } as const satisfies Permissions
 
-/** Actions no OAuth token can ever get: an agent should not delete orgs or edit roles. */
+/** Every action of the person-only resources (owner-only ones and billing), whole. */
+const personOnlyResources = Object.fromEntries(
+  PERSON_ONLY_RESOURCES.map((resource) => [resource, statements[resource]]),
+) as Permissions
+
+/**
+ * Actions no OAuth token can ever get: an agent should not delete orgs or edit roles. The
+ * person-only part (SSO, SCIM, billing, 2FA reset, approvals) is derived from the catalog, so an
+ * agent never sets up SSO, mints SCIM tokens, changes the subscription, decides an approval or
+ * resets 2FA. Those are for a person, in the web app.
+ */
 export const OAUTH_EXCLUDED: Permissions = {
   organization: ["delete"],
   ac: ["create", "read", "update", "delete"],
   team: ["create", "update", "delete"],
-  // Owner-only: an agent never sets up SSO, mints SCIM tokens or changes the subscription.
-  sso: ["read", "update"],
-  scim: ["create"],
-  subscription: ["read", "update"],
-  // An agent never decides an approval (a person does, in the web app) and never resets 2FA.
-  run: ["approve"],
-  twoFactor: ["reset"],
+  ...personOnlyResources,
+  ...PERSON_ONLY_ACTIONS,
 }
 
 /** What a set of granted OAuth scopes allows (unknown scopes such as `openid` allow nothing). */

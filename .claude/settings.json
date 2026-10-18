@@ -51,7 +51,6 @@
       "Edit(./.env.*.local)"
     ]
   },
-  "enableAllProjectMcpServers": true,
   "hooks": {
     "Stop": [
       {

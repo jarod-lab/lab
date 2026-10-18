@@ -4,11 +4,13 @@ import { type ApiInfo, inputSchema, outputSchema } from "./openapi"
 export interface DocsLinks {
   /** Extra links for the llms.txt "Docs" section, e.g. a quickstart or the agent skill. */
   docs?: { title: string; url: string; note?: string }[]
-  /** Operations that need no credential (e.g. signup). Everything else is called with one. */
-  unauthenticated?: readonly string[]
 }
 
 const fence = (lang: string, body: string) => `\`\`\`${lang}\n${body}\n\`\`\``
+
+/** Operations that need no credential: the ones declared `auth: "none"`. */
+const isPublic = (op: AnyOperation) => op.auth === "none"
+const publicNames = (ops: readonly AnyOperation[]) => ops.filter(isPublic).map((op) => op.name)
 
 /** The device grant's scope and the resource it is bound to (kept in step with device-flow.test.ts). */
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
@@ -163,7 +165,7 @@ export function installSnippets(info: ApiInfo, unauthenticated: readonly string[
 
 /** llms.txt (https://llmstxt.org): an index agents read first. Serve it at /llms.txt. */
 export function llmsTxt(ops: readonly AnyOperation[], info: ApiInfo, links: DocsLinks = {}) {
-  const unauthenticated = links.unauthenticated ?? []
+  const unauthenticated = publicNames(ops)
   const lines = [
     ...intro(info, unauthenticated),
     "## Docs",
@@ -179,7 +181,7 @@ export function llmsTxt(ops: readonly AnyOperation[], info: ApiInfo, links: Docs
     "",
     ...ops.map(
       (op) =>
-        `- \`${op.method} ${op.path}\` (\`${op.name}\`${unauthenticated.includes(op.name) ? ", no credential" : ""}): ${op.summary}`,
+        `- \`${op.method} ${op.path}\` (\`${op.name}\`${isPublic(op) ? ", no credential" : ""}): ${op.summary}`,
     ),
     "",
   ]
@@ -187,11 +189,11 @@ export function llmsTxt(ops: readonly AnyOperation[], info: ApiInfo, links: Docs
 }
 
 /** Every operation in full, as one Markdown file. Serve it at /llms-full.txt. */
-export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo, links: DocsLinks = {}) {
-  const unauthenticated = links.unauthenticated ?? []
+export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
+  const unauthenticated = publicNames(ops)
   const sections = ops.map((op) => {
     const example = op.examples?.[0]
-    const open = unauthenticated.includes(op.name)
+    const open = isPublic(op)
     return [
       `## ${op.name}`,
       "",

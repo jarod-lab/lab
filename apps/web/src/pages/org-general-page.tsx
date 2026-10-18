@@ -1,17 +1,9 @@
+import { FieldIssues, FormError, invalidOf, type FieldLike } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useDebouncedValue } from "@tanstack/react-pacer"
 import { useEffect, useId, useState } from "react"
 import { z } from "zod"
 
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@starter/ui/components/ui/alert-dialog"
 import { Button } from "@starter/ui/components/ui/button"
 import {
   Dialog,
@@ -21,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
@@ -39,6 +31,7 @@ import {
   settingsTabs,
   slugChangeWarning,
 } from "../lib/org-settings"
+import { ConfirmDialog } from "../components/confirm-dialog"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
 
 export type GeneralValues = { name: string; slug: string; defaultInviteRole: InviteRole }
@@ -173,14 +166,12 @@ export function OrgGeneralPage({
                     name="name"
                     value={field.state.value}
                     disabled={!canEdit}
-                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    aria-invalid={invalidOf(field)}
                     onChange={(event) => field.handleChange(event.currentTarget.value)}
                     onBlur={field.handleBlur}
                     autoComplete="organization"
                   />
-                  {field.state.meta.errors.length > 0 ? (
-                    <FieldError>{messageOf(field.state.meta.errors)}</FieldError>
-                  ) : null}
+                  <FieldIssues field={field} />
                 </Field>
               )}
             </form.Field>
@@ -194,7 +185,7 @@ export function OrgGeneralPage({
                   disabled={!canEdit}
                   checkSlug={checkSlug}
                   onChange={(slug) => field.handleChange(slug)}
-                  errors={field.state.meta.errors}
+                  field={field}
                 />
               )}
             </form.Field>
@@ -262,11 +253,7 @@ export function OrgGeneralPage({
                   values.defaultInviteRole !== defaults.defaultInviteRole
                 return (
                   <div className="flex flex-col gap-2">
-                    {saveError ? (
-                      <p role="alert" className="text-sm text-destructive">
-                        {saveError}
-                      </p>
-                    ) : null}
+                    <FormError message={saveError} />
                     <div className="flex justify-end gap-2.5 border-b border-border pb-1.5">
                       <Button
                         type="button"
@@ -318,7 +305,7 @@ function SlugEditor({
   disabled,
   checkSlug,
   onChange,
-  errors,
+  field,
 }: {
   host: string
   currentSlug: string
@@ -326,7 +313,7 @@ function SlugEditor({
   disabled: boolean
   checkSlug: (slug: string) => Promise<boolean>
   onChange: (slug: string) => void
-  errors: unknown[]
+  field: FieldLike
 }) {
   const status = useSlugAvailability(value, currentSlug, checkSlug)
   const problem = slugProblem(value)
@@ -345,9 +332,7 @@ function SlugEditor({
       {!disabled && problem && problem !== "reserved" ? (
         <FieldDescription>{PROBLEM_TEXT[problem]}</FieldDescription>
       ) : null}
-      {!disabled && errors.length > 0 && !problem ? (
-        <FieldError>{messageOf(errors)}</FieldError>
-      ) : null}
+      <FieldIssues field={field} hidden={disabled || problem !== null} />
       {!disabled && changed && problem === null ? (
         <FieldDescription>{slugChangeWarning(host, currentSlug)}</FieldDescription>
       ) : null}
@@ -476,11 +461,7 @@ function TransferRow({
               ))}
             </NativeSelect>
           </Field>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
@@ -530,6 +511,16 @@ function DeleteRow({
   const inputId = useId()
   const consequence = `Permanently deletes ${countNoun(counts.agents, "agent", "agents")}, ${countNoun(counts.apiKeys, "API key", "API keys")} (they stop working) and all run history, removes ${countNoun(counts.members, "member", "members")}. Cancel any subscription in Billing first. You'll type the organization name to confirm.`
 
+  const remove = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete the organization.")
+      setBusy(false)
+    }
+  }
   return (
     <>
       <DangerAction
@@ -542,49 +533,29 @@ function DeleteRow({
           setOpen(true)
         }}
       />
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {organizationName}?</AlertDialogTitle>
-            <AlertDialogDescription>{consequence}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <Field>
-            <FieldLabel htmlFor={inputId}>Type {organizationName} to confirm</FieldLabel>
-            <Input
-              id={inputId}
-              value={typed}
-              autoComplete="off"
-              onChange={(event) => setTyped(event.currentTarget.value)}
-            />
-          </Field>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={typed !== organizationName || busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onDelete()
-                } catch (caught) {
-                  setError(
-                    caught instanceof Error ? caught.message : "Could not delete the organization.",
-                  )
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Deleting…" : "Delete organization"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${organizationName}?`}
+        description={consequence}
+        confirmLabel="Delete organization"
+        pendingLabel="Deleting…"
+        destructive
+        pending={busy}
+        confirmDisabled={typed !== organizationName}
+        error={error}
+        onConfirm={() => void remove()}
+      >
+        <Field>
+          <FieldLabel htmlFor={inputId}>Type {organizationName} to confirm</FieldLabel>
+          <Input
+            id={inputId}
+            value={typed}
+            autoComplete="off"
+            onChange={(event) => setTyped(event.currentTarget.value)}
+          />
+        </Field>
+      </ConfirmDialog>
     </>
   )
 }
@@ -605,6 +576,16 @@ function LeaveRow({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const consequence = `You'll lose access to ${organizationName} right away. An admin can invite you again.`
+  const leave = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onLeave()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not leave the organization.")
+      setBusy(false)
+    }
+  }
   return (
     <>
       <DangerAction
@@ -618,47 +599,18 @@ function LeaveRow({
           setOpen(true)
         }}
       />
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Leave {organizationName}?</AlertDialogTitle>
-            <AlertDialogDescription>{consequence}</AlertDialogDescription>
-          </AlertDialogHeader>
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await onLeave()
-                } catch (caught) {
-                  setError(
-                    caught instanceof Error ? caught.message : "Could not leave the organization.",
-                  )
-                  setBusy(false)
-                }
-              }}
-            >
-              {busy ? "Leaving…" : "Leave organization"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Leave ${organizationName}?`}
+        description={consequence}
+        confirmLabel="Leave organization"
+        pendingLabel="Leaving…"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void leave()}
+      />
     </>
   )
-}
-
-function messageOf(errors: unknown[]): string {
-  const first = errors[0]
-  if (typeof first === "string") return first
-  if (first && typeof first === "object" && "message" in first) return String(first.message)
-  return "Check this field."
 }

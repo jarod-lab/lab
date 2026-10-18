@@ -6,6 +6,7 @@ describe("account-level keys", () => {
   it("are not scoped to an organization", () => {
     expect(qk.session()).toEqual(["session"])
     expect(qk.organizations()).toEqual(["organizations"])
+    expect(qk.organizationSlugAvailable("acme")).toEqual(["organization-slug-available", "acme"])
     expect(qk.account.sessions()).toEqual(["account", "sessions"])
     expect(qk.account.passkeys()).toEqual(["account", "passkeys"])
   })
@@ -21,7 +22,15 @@ describe("organization keys", () => {
   it("put every org query under ['org', orgId]", () => {
     const k = qk.org("acme")
     expect(k.all()).toEqual(["org", "acme"])
-    for (const key of [k.members(), k.invitations(), k.apiKeys(), k.agents(), k.runs()]) {
+    for (const key of [
+      k.members(),
+      k.membersSecurity(),
+      k.invitations(),
+      k.apiKeys(),
+      k.agents(),
+      k.agentsCount(),
+      k.runs(),
+    ]) {
       expect(key.slice(0, 2)).toEqual(["org", "acme"])
     }
   })
@@ -31,8 +40,16 @@ describe("organization keys", () => {
     expect(k.members()).toEqual(["org", "acme", "members"])
     expect(k.invitations()).toEqual(["org", "acme", "invitations"])
     expect(k.apiKeys()).toEqual(["org", "acme", "api-keys"])
+    expect(k.membersSecurity()).toEqual(["org", "acme", "members", "security"])
     expect(k.agents()).toEqual(["org", "acme", "agents"])
+    expect(k.agentsCount()).toEqual(["org", "acme", "agents", "count"])
     expect(k.runs()).toEqual(["org", "acme", "runs"])
+  })
+
+  it("nest the security table under the members list and the count under the agents list", () => {
+    const k = qk.org("acme")
+    expect(k.membersSecurity().slice(0, 3)).toEqual(k.members())
+    expect(k.agentsCount().slice(0, 3)).toEqual(k.agents())
   })
 
   it("nest a single run under the runs list, so invalidating runs covers it", () => {

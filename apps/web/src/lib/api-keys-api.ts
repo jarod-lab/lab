@@ -1,35 +1,15 @@
-import { createAgentsApi } from "./agents-api"
-import { organizationHeaders } from "./org-header"
-import { WebError } from "./web-auth"
+import { payload, productClient, type RequestBody, type ResponseBody } from "./product-client"
 
 /**
  * An organization API key as GET /v1/api-keys (list_api_keys) returns it. `start` is the first
  * characters of the key, for telling keys apart; the key itself is never shown again.
  */
-export interface ApiKey {
-  id: string
-  name: string | null
-  start: string | null
-  /** `resource: [action, ...]`, as the server stores it. */
-  permissions: Record<string, string[]>
-  createdAt: string
-  createdBy: { id: string; name: string } | null
-  lastUsedAt: string | null
-  expiresAt: string | null
-}
+export type ApiKey = ResponseBody<"list_api_keys">["keys"][number]
 
-export interface CreateApiKeyInput {
-  name: string
-  permissions: Record<string, string[]>
-  expiresInDays?: number
-}
+export type CreateApiKeyInput = RequestBody<"create_api_key">
 
 /** The response of create_api_key. `key` is the secret: the server never returns it again. */
-export interface CreatedApiKey {
-  id: string
-  key: string
-  permissions: Record<string, string[]>
-}
+export type CreatedApiKey = ResponseBody<"create_api_key">
 
 /** Product calls for one organization: each sends X-Organization-Id with the session cookie. */
 export interface ApiKeysApi {
@@ -38,59 +18,27 @@ export interface ApiKeysApi {
   revokeKey(organizationId: string, id: string): Promise<void>
 }
 
-const scopedFetch =
-  (fetchImpl: typeof fetch, organizationId: string): typeof fetch =>
-  (input, init) =>
-    fetchImpl(input, {
-      ...init,
-      headers: {
-        ...(init?.headers as Record<string, string> | undefined),
-        ...organizationHeaders(organizationId),
-      },
-    })
-
 /**
  * The browser implementation. Listing goes through list_api_keys (apiKey:read); revoking goes through
  * revoke_agent_access, which names a key as `key_<id>` (the connected-agents id), not by its raw id.
  */
-export function createApiKeysApi(
-  fetchImpl: typeof fetch = (...args) => fetch(...args),
-): ApiKeysApi {
+export function createApiKeysApi(fetchImpl?: typeof fetch): ApiKeysApi {
+  // Each call names its organization, so the client is made per call.
+  const forOrg = (organizationId: string) => productClient(organizationId, fetchImpl)
   return {
     async listKeys(organizationId) {
-      const response = await scopedFetch(fetchImpl, organizationId)("/v1/api-keys", {
-        method: "GET",
-        credentials: "same-origin",
-        headers: { accept: "application/json" },
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: { message?: string }
-        } | null
-        throw new WebError(body?.error?.message ?? "Could not load the API keys", response.status)
-      }
-      const body = (await response.json()) as { keys: ApiKey[] }
-      return body.keys
+      return (await payload(forOrg(organizationId).GET("/v1/api-keys"))).keys
     },
     async createKey(organizationId, input) {
-      const response = await scopedFetch(fetchImpl, organizationId)("/v1/api-keys", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { accept: "application/json", "content-type": "application/json" },
-        body: JSON.stringify(input),
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: { message?: string; hint?: string }
-        } | null
-        // The server says why (e.g. a permission the caller doesn't have); the hint says what to do.
-        const message = [body?.error?.message, body?.error?.hint].filter(Boolean).join(" ")
-        throw new WebError(message || "Could not create the API key", response.status)
-      }
-      return (await response.json()) as CreatedApiKey
+      // The server says why a create is refused (e.g. a permission the caller doesn't have).
+      return payload(forOrg(organizationId).POST("/v1/api-keys", { body: input }))
     },
     async revokeKey(organizationId, id) {
-      await createAgentsApi(scopedFetch(fetchImpl, organizationId)).revokeAgent(revokeIdOf(id))
+      await payload(
+        forOrg(organizationId).DELETE("/v1/agents/{id}", {
+          params: { path: { id: revokeIdOf(id) } },
+        }),
+      )
     },
   }
 }

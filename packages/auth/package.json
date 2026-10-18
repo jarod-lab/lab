@@ -17,27 +17,27 @@
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.7",
-    "@better-auth/oauth-provider": "1.7.7",
-    "@better-auth/passkey": "1.7.7",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/passkey": "catalog:",
     "@better-auth/scim": "1.7.7",
-    "@better-auth/sso": "1.7.7",
-    "@better-auth/stripe": "1.7.7",
+    "@better-auth/sso": "catalog:",
+    "@better-auth/stripe": "catalog:",
     "@starter/api": "workspace:*",
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
     "@wraps.dev/better-auth": "^0.3.0",
     "@wraps.dev/email": "^0.15.0",
-    "better-auth": "1.7.7",
-    "drizzle-orm": "^0.45.3",
-    "jose": "^6.2.3",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "jose": "catalog:",
     "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@starter/config": "workspace:*",
-    "@types/node": "^24.0.0",
+    "@types/node": "catalog:",
     "auth": "1.7.7",
-    "oxlint": "^1.87.0",
-    "vitest": "^5.0.0"
+    "oxlint": "catalog:",
+    "vitest": "catalog:"
   }
 }

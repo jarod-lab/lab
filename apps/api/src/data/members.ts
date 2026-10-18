@@ -7,8 +7,10 @@ import type {
   OrganizationId,
   UserId,
 } from "@starter/auth-proofs"
-import { type Database, member, session, twoFactor, user } from "@starter/db"
-import { and, eq, inArray, max } from "drizzle-orm"
+import { personalSlug } from "@starter/auth"
+import { type Database, member, organization, session, twoFactor, user } from "@starter/db"
+import { AppError } from "@starter/errors"
+import { and, eq, inArray, max, ne } from "drizzle-orm"
 
 export interface MemberSecurity {
   userId: string
@@ -62,6 +64,10 @@ export async function listMemberSecurity<O>(
 /**
  * Turns off a member's two-factor sign-in: their authenticator and backup codes are removed, and the
  * account stops asking for a second factor. Only an owner may call it (the `twoFactor:reset` action).
+ * Two-factor belongs to the account, so this is refused (CONFLICT) while the person is a member of
+ * any other organization: they, or an owner of their only organization, must turn it off instead.
+ * The person's own personal organization (made at sign-up, see membership.ts) doesn't count: every
+ * account has one, so counting it would refuse every reset.
  */
 export async function resetMemberTwoFactor<U, O>(
   db: Database,
@@ -77,6 +83,23 @@ export async function resetMemberTwoFactor<U, O>(
       .where(and(eq(member.userId, userId.value), eq(member.organizationId, org.value)))
       .limit(1)
     if (!inOrg) return
+    const [elsewhere] = await tx
+      .select({ id: member.id })
+      .from(member)
+      .innerJoin(organization, eq(organization.id, member.organizationId))
+      .where(
+        and(
+          eq(member.userId, userId.value),
+          ne(member.organizationId, org.value),
+          ne(organization.slug, personalSlug(userId.value)),
+        ),
+      )
+      .limit(1)
+    if (elsewhere) {
+      throw new AppError("CONFLICT", "This person is a member of another organization", {
+        hint: "Two-factor belongs to the account, not to one organization, so it can't be turned off from here. The person should turn it off in their own security settings, or an owner of their only organization can reset it.",
+      })
+    }
     await tx.delete(twoFactor).where(eq(twoFactor.userId, userId.value))
     await tx.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, userId.value))
   })

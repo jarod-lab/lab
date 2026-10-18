@@ -6,6 +6,7 @@ import { CommandPalette } from "@starter/ui/dplus/shell/command-palette"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
 
+import { modifierKeyLabel } from "../lib/platform"
 import { getRunsApi } from "../lib/runs-api"
 import { type ThemeChoice, toggledTheme, useThemeChoice } from "../lib/theme"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
@@ -165,6 +166,7 @@ export function AppShellContainer({
     <Topbar
       crumbs={crumbs}
       onOpenSearch={() => setPaletteOpen(true)}
+      modifierKey={modifierKeyLabel()}
       inbox={{
         count: inboxCount,
         onOpen: currentSlug ? () => onNavigate(`/${currentSlug}?status=needs_you`) : undefined,

@@ -1,8 +1,9 @@
+import { FieldIssues, FormError, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { type ReactNode, useId, useState } from "react"
 
 import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { messageOf } from "../lib/messages"
@@ -106,7 +107,7 @@ export function BudgetSection({ agent, canUpdate, onSave, pills }: BudgetSection
                   className="min-h-11 max-w-[240px]"
                   value={field.state.value}
                   placeholder="No budget"
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   onChange={(event) => {
                     setSaved(false)
                     field.handleChange(event.currentTarget.value)
@@ -114,18 +115,12 @@ export function BudgetSection({ agent, canUpdate, onSave, pills }: BudgetSection
                   onBlur={field.handleBlur}
                 />
                 <FieldDescription>Leave it empty for no budget.</FieldDescription>
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{issueMessage(field.state.meta.errors[0])}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
 
-          {serverError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {serverError}
-            </p>
-          ) : null}
+          <FormError message={serverError} />
           {saved ? (
             <output className="block text-sm text-muted-foreground">Budget saved.</output>
           ) : null}
@@ -143,10 +138,4 @@ export function BudgetSection({ agent, canUpdate, onSave, pills }: BudgetSection
       )}
     </section>
   )
-}
-
-function issueMessage(issue: unknown): string {
-  if (typeof issue === "string") return issue
-  if (issue && typeof issue === "object" && "message" in issue) return String(issue.message)
-  return "Check this field."
 }

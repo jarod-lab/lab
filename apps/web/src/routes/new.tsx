@@ -1,9 +1,9 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router"
 
 import { AppShellContainer } from "../containers/app-shell"
+import { CreateOrganizationContainer } from "../containers/create-organization"
 import { requireSession } from "../lib/guards"
 import { getWebAuth } from "../lib/web-auth"
-import { CreateOrganizationPage } from "../pages/create-organization-page"
 
 export const Route = createFileRoute("/new")({
   beforeLoad: async ({ context, location }) => {
@@ -24,7 +24,7 @@ function NewOrganizationRoute() {
       onNavigate={(href) => void router.navigate({ href })}
       onSignedOut={() => void router.navigate({ href: "/sign-in", replace: true })}
     >
-      <CreateOrganizationPage
+      <CreateOrganizationContainer
         auth={auth}
         host={window.location.host}
         onCreated={(organization) => void router.navigate({ href: `/${organization.slug}` })}

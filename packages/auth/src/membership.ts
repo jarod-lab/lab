@@ -1,4 +1,7 @@
+import type { PermissionSet } from "@starter/api"
 import type { DBAdapter } from "better-auth"
+
+import { rolePermissions } from "./permissions"
 
 export interface Member {
   id: string
@@ -21,6 +24,20 @@ export function findMember(db: Adapter, userId: string, organizationId: string) 
       { field: "organizationId", value: organizationId },
     ],
   })
+}
+
+/**
+ * The permission sets a member's roles grant in an organization (one per role, see
+ * rolePermissions), or null when the user isn't a member. Membership is read live, so a removed
+ * member gets null at once.
+ */
+export async function memberGrants(
+  db: Adapter,
+  userId: string,
+  organizationId: string,
+): Promise<PermissionSet[] | null> {
+  const member = await findMember(db, userId, organizationId)
+  return member ? rolePermissions(member.role) : null
 }
 
 /** The user's oldest membership, used as the default active organization. */

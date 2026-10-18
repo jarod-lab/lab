@@ -1,19 +1,14 @@
+import { FieldIssues, invalidOf } from "../components/form"
 import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 import { z } from "zod"
 
 import { Button } from "@starter/ui/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@starter/ui/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
-import { fieldMessage, messageOf } from "../lib/messages"
+import { messageOf } from "../lib/messages"
 import type { WebAuth } from "../lib/web-auth"
 
 const schema = z
@@ -140,16 +135,14 @@ export function PasswordPage({
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   minLength={8}
                   required
                   disabled={pending}
                   aria-describedby={`${id}-hint`}
                 />
                 <FieldDescription id={`${id}-hint`}>Use at least 8 characters.</FieldDescription>
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>
@@ -165,13 +158,11 @@ export function PasswordPage({
                   value={field.state.value}
                   onChange={(event) => field.handleChange(event.currentTarget.value)}
                   onBlur={field.handleBlur}
-                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  aria-invalid={invalidOf(field)}
                   required
                   disabled={pending}
                 />
-                {field.state.meta.errors.length > 0 ? (
-                  <FieldError>{fieldMessage(field.state.meta.errors)}</FieldError>
-                ) : null}
+                <FieldIssues field={field} />
               </Field>
             )}
           </form.Field>

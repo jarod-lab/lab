@@ -1,5 +1,5 @@
 import { AppError } from "@starter/errors"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import {
   defineOperation,
@@ -99,5 +99,57 @@ describe("invoke", () => {
     const broken = defineOperation({ ...getNote, handler: () => ({ id: 1 }) as never })
     const err = await invoke(broken, { id: "n1" }, { caller }).catch((e: unknown) => e)
     expect(err).toMatchObject({ code: "INTERNAL", expose: false })
+  })
+})
+
+describe('public operations (auth: "none")', () => {
+  const signup = defineOperation({
+    name: "open_signup",
+    method: "POST",
+    path: "/v1/open-signup",
+    summary: "Sign up",
+    description: "Creates an account from an email address.",
+    auth: "none",
+    permissions: {},
+    input: z.object({ email: z.string() }),
+    output: z.object({ ip: z.string() }),
+    handler: (input, ctx) => ({ ip: `${input.email}@${ctx.public.ip}` }),
+  })
+
+  it("refuses permissions: a public operation has no organization to grant them in", () => {
+    expect(() =>
+      defineOperation({
+        name: "open_read",
+        method: "GET",
+        path: "/v1/open",
+        summary: "Read",
+        description: "Reads.",
+        auth: "none",
+        permissions: { note: ["read"] },
+        input: z.object({}),
+        output: z.object({}),
+        handler: () => ({}),
+      }),
+    ).toThrow(/takes no permissions/)
+  })
+
+  it("runs with no caller and no hooks, and the handler gets the client ip", async () => {
+    const before = vi.fn()
+    const after = vi.fn()
+    const result = await invoke(
+      signup,
+      { email: "a@example.com" },
+      { public: { ip: "203.0.113.7" } },
+      { hooks: { before, after } },
+    )
+    expect(result).toEqual({ ip: "a@example.com@203.0.113.7" })
+    expect(before).not.toHaveBeenCalled()
+    expect(after).not.toHaveBeenCalled()
+  })
+
+  it("still validates its input", async () => {
+    await expect(invoke(signup, {}, { public: { ip: "203.0.113.7" } })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    })
   })
 })

@@ -23,6 +23,8 @@ export type TopbarProps = {
   onOpenSearch?: () => void
   /** Text in the ⌘K trigger. */
   searchLabel?: string
+  /** The modifier keycap shown next to K: "⌘" on Apple platforms, "Ctrl" elsewhere. */
+  modifierKey?: string
   /** Items that need you. Zero shows an empty inbox, not a "0" badge. */
   inbox?: { count: number; onOpen?: () => void }
   /**
@@ -72,6 +74,7 @@ export function Topbar({
   crumbs,
   onOpenSearch,
   searchLabel = "Search or ask an agent",
+  modifierKey = "⌘",
   inbox,
   showMenuButton = false,
   renderLink: renderLinkProp,
@@ -100,12 +103,13 @@ export function Topbar({
         aria-keyshortcuts="Meta+K Control+K"
         onClick={onOpenSearch}
         aria-label={searchLabel}
-        className="h-11 w-11 justify-center border border-border px-0 font-normal text-muted-foreground sm:h-10 sm:w-65 sm:justify-start sm:px-3.5 sm:pr-2"
+        className="h-11 w-11 justify-center border border-border px-0 font-normal text-muted-foreground sm:h-10 sm:w-auto sm:min-w-65 sm:max-w-80 sm:justify-start sm:px-3.5 sm:pr-2"
       >
         <SearchIcon aria-hidden="true" />
-        <span className="sr-only flex-1 text-left sm:not-sr-only">{searchLabel}</span>
-        <KbdGroup className="hidden sm:inline-flex">
-          <Kbd>⌘</Kbd>
+        {/* The button's aria-label carries the text, so the visible copy is a plain span. */}
+        <span className="hidden min-w-0 flex-1 truncate text-left sm:inline">{searchLabel}</span>
+        <KbdGroup className="hidden shrink-0 sm:inline-flex">
+          <Kbd>{modifierKey}</Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>
       </Button>
@@ -114,9 +118,9 @@ export function Topbar({
         size="icon"
         aria-label={count > 0 ? `Inbox, ${count} need you` : "Inbox, nothing needs you"}
         onClick={inbox?.onOpen}
-        className="relative size-11 border"
+        className="relative size-11 border border-border text-muted-foreground sm:size-10"
       >
-        <InboxIcon className="size-5" />
+        <InboxIcon aria-hidden="true" />
         {count > 0 && (
           <Badge
             variant="solar"

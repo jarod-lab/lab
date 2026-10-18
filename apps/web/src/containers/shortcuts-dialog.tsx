@@ -6,18 +6,25 @@ import {
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
 import { Shortcut } from "@starter/ui/dplus/shell/shortcut"
+import { type ModifierKeyLabel, modifierKeyLabel } from "../lib/platform"
 
-/** The `?` list: every key the shell binds, shown with the same keycaps the palette uses. */
-export const SHELL_SHORTCUTS: Array<{ label: string; keys: string[] }> = [
-  { label: "Go to home", keys: ["G", "H"] },
-  { label: "Go to agents", keys: ["G", "A"] },
-  { label: "Go to organization settings", keys: ["G", "O"] },
-  { label: "Open the command palette", keys: ["⌘", "K"] },
-  { label: "Open the command palette (Windows and Linux)", keys: ["Ctrl", "K"] },
-  { label: "Toggle light and dark theme", keys: ["D"] },
-  { label: "Use the system theme", keys: ["Shift", "D"] },
-  { label: "Show this list", keys: ["?"] },
-]
+/**
+ * The `?` list: every key the shell binds, shown with the same keycaps the palette uses. The palette
+ * row shows this platform's modifier (⌘ or Ctrl); both are bound, see `useShellHotkeys`.
+ */
+export function shellShortcuts(
+  modifier: ModifierKeyLabel,
+): Array<{ label: string; keys: string[] }> {
+  return [
+    { label: "Go to home", keys: ["G", "H"] },
+    { label: "Go to agents", keys: ["G", "A"] },
+    { label: "Go to organization settings", keys: ["G", "O"] },
+    { label: "Open the command palette", keys: [modifier, "K"] },
+    { label: "Toggle light and dark theme", keys: ["D"] },
+    { label: "Use the system theme", keys: ["Shift", "D"] },
+    { label: "Show this list", keys: ["?"] },
+  ]
+}
 
 export function ShortcutsDialog({
   open,
@@ -26,6 +33,7 @@ export function ShortcutsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const shortcuts = shellShortcuts(modifierKeyLabel())
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -36,7 +44,7 @@ export function ShortcutsDialog({
           </DialogDescription>
         </DialogHeader>
         <ul className="flex flex-col gap-3">
-          {SHELL_SHORTCUTS.map((shortcut) => (
+          {shortcuts.map((shortcut) => (
             <li key={shortcut.label} className="flex items-center justify-between gap-4">
               <span>{shortcut.label}</span>
               <Shortcut keys={shortcut.keys} />

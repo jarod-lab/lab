@@ -1,6 +1,4 @@
-import { createClient } from "@starter/auth/client"
-
-import { WebError } from "./web-auth"
+import { makeAuthClient, WebError } from "./web-auth"
 
 // The organization settings calls, kept apart from WebAuth so the other pages' fakes don't change.
 // Every call names its organization explicitly: the session's active organization is not necessarily
@@ -52,7 +50,7 @@ function unwrap<T>(result: Result<T>, fallback: string): T {
 
 /** The browser implementation, same origin as the page (cookies go with every call). */
 export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch): OrgSettingsApi {
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+  const client = makeAuthClient(baseURL, fetchImpl)
   const org = client.organization as unknown as {
     getFullOrganization: (args: unknown) => Promise<Result<OrgSettings>>
     listMembers: (args: unknown) => Promise<Result<{ total: number; members: unknown[] }>>

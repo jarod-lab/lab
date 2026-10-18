@@ -4,22 +4,12 @@
 // elsewhere (see whoami's `claimed`).
 import { randomBytes, randomUUID } from "node:crypto"
 
-import type { Database } from "@starter/db"
 import { signupAttempt } from "@starter/db/schema"
 import { AppError } from "@starter/errors"
 import { and, count, eq, gte } from "drizzle-orm"
 
 import type { Auth } from "./index"
 import { type Adapter, firstMembership } from "./membership"
-
-// The signup-attempt table is ours, not better-auth's, so it is reached through the app's Drizzle
-// database, which createAuth registers against the auth instance it returns.
-const databases = new WeakMap<Auth, Database>()
-
-/** Called by createAuth: the database provisionalSignup records attempts in. */
-export function registerSignupDatabase(auth: Auth, db: Database): void {
-  databases.set(auth, db)
-}
 
 /** Attempts (successful or not) allowed per IP per hour, and per email domain per day. */
 export const SIGNUP_LIMITS = { perIpPerHour: 5, perDomainPerDay: 20 } as const
@@ -64,8 +54,9 @@ export async function provisionalSignup(
   if (at <= 0 || domain.length === 0)
     throw new AppError("BAD_REQUEST", "Enter a valid email address")
 
-  const db = databases.get(auth)
-  if (!db) throw new Error("provisionalSignup needs an auth instance from createAuth")
+  // The signup-attempt table is ours, not better-auth's, so it goes through the app's Drizzle
+  // database, which createAuth puts on the instance it returns (`auth.db`).
+  const db = auth.db
   const ctx = await auth.$context
   const adapter = ctx.adapter
   const now = Date.now()

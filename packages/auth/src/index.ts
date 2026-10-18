@@ -46,7 +46,7 @@ import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
 import { twoFactorMagicLink } from "./magic-link-two-factor"
 import { resumeMagicLinkAuthorization } from "./resume"
-import { endProvisionalKeys, registerSignupDatabase } from "./signup"
+import { endProvisionalKeys } from "./signup"
 import {
   type ScimConnection,
   type ScimConnectionInput,
@@ -91,7 +91,7 @@ const isLoopbackHttp = (uri: unknown) => {
  * but don't send `application_type`, which defaults to "web" and makes the provider reject them.
  * Loopback-only redirects mean a native app (RFC 8252), so default those to "native".
  */
-export const nativeLoopbackRegistration = createAuthMiddleware(async (ctx) => {
+const nativeLoopbackRegistration = createAuthMiddleware(async (ctx) => {
   if (ctx.path !== "/oauth2/register") return
   const body = ctx.body as { application_type?: string; redirect_uris?: unknown } | undefined
   const uris = body?.redirect_uris
@@ -173,6 +173,8 @@ const refuseReservedSlug = (slug: string, current?: string | null) => {
  * a real domain: at least two labels, or `localhost` (`api.localhost` and `web.localhost` give
  * `localhost`). IP addresses and hosts with only a TLD in common (`api.acme.com` and `web.other.com`)
  * fall back to the first host, so the API's own passkeys keep working; the other origins then can't use them.
+ *
+ * @internal Exported for the tests only.
  */
 export function passkeyRpID(origins: readonly string[]): string {
   const hosts = origins.map((origin) => new URL(origin).hostname)
@@ -191,6 +193,14 @@ export function passkeyRpID(origins: readonly string[]): string {
   const suffix = shared.reverse().join(".")
   const usable = shared.length >= 2 || suffix === "localhost"
   return usable ? suffix : first
+}
+
+/**
+ * Write columns on a user row directly. This skips better-auth's user hooks, so a caller that needs
+ * them (the claim, two-factor stamping) runs what it needs itself.
+ */
+function setUserFields(db: Adapter, userId: string, update: Record<string, unknown>) {
+  return db.updateMany({ model: "user", where: [{ field: "id", value: userId }], update })
 }
 
 export function createAuth(opts: AuthOptions) {
@@ -284,11 +294,7 @@ export function createAuth(opts: AuthOptions) {
         // Verified first: a failing notice must not leave the claim unrecorded. This write skips
         // the user update hook, so the provisional key is ended here too.
         const db = await adapter()
-        await db.updateMany({
-          model: "user",
-          where: [{ field: "id", value: user.id }],
-          update: { emailVerified: true },
-        })
+        await setUserFields(db, user.id, { emailVerified: true })
         await endProvisionalKeys(db, user.id)
         await wrapsPlugin.emails.passwordChanged({ user })
       },
@@ -358,17 +364,9 @@ export function createAuth(opts: AuthOptions) {
             // The date two-factor was switched on: stamped once, cleared when it is switched off.
             const stamped = (user as { twoFactorEnabledAt?: Date | null }).twoFactorEnabledAt
             if (user.twoFactorEnabled && !stamped) {
-              await db.updateMany({
-                model: "user",
-                where: [{ field: "id", value: user.id }],
-                update: { twoFactorEnabledAt: new Date() },
-              })
+              await setUserFields(db, user.id, { twoFactorEnabledAt: new Date() })
             } else if (!user.twoFactorEnabled && stamped) {
-              await db.updateMany({
-                model: "user",
-                where: [{ field: "id", value: user.id }],
-                update: { twoFactorEnabledAt: null },
-              })
+              await setUserFields(db, user.id, { twoFactorEnabledAt: null })
             }
           },
         },
@@ -530,8 +528,8 @@ export function createAuth(opts: AuthOptions) {
     decommission: (input) => scimEndpoints.decommissionSCIMManagedConnection({ body: input }),
   }
   ref.context = auth.$context
-  registerSignupDatabase(auth, opts.db)
-  return auth
+  // The app's Drizzle handle, for the tables better-auth doesn't own (signup_attempt, see signup.ts).
+  return Object.assign(auth, { db: opts.db })
 }
 
 /** The stripe plugin, in test mode. Organizations are the billing customers; owners and admins may manage one. */
@@ -573,3 +571,4 @@ export {
 export * from "./permissions"
 export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
 export { type GrantScope, revokeGrants } from "./member-grants"
+export { memberGrants } from "./membership"

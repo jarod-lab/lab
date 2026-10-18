@@ -2,16 +2,11 @@
 // refresh tokens for it. Device-grant clients have no consent row, so their refresh tokens are the
 // evidence. Access tokens are JWTs and are not stored, so an OAuth client that holds only an access
 // token (no refresh token) is not listed.
+import { revokeGrants } from "@starter/auth"
 import type { CallerActsFor, Named, OrganizationId } from "@starter/auth-proofs"
-import {
-  type Database,
-  apikey,
-  oauthAccessToken,
-  oauthClient,
-  oauthConsent,
-  oauthRefreshToken,
-} from "@starter/db"
+import { type Database, apikey, oauthClient, oauthConsent, oauthRefreshToken } from "@starter/db"
 import { and, eq, inArray, isNull, gt } from "drizzle-orm"
+import { z } from "zod"
 
 export interface Agent {
   /** `key_<id>` for an API key, `client_<clientId>` for an OAuth client. Pass it to revokeAgentAccess. */
@@ -32,9 +27,21 @@ export interface Agent {
 const KEY_PREFIX = "key_"
 const CLIENT_PREFIX = "client_"
 
+// Stored permissions are JSON written by better-auth. Anything that doesn't parse to the expected
+// shape is treated as no permissions, so one bad row can't fail the whole listing.
+const storedPermissions = z.record(z.string(), z.array(z.string()))
+
 const permissionList = (raw: string | null): string[] => {
-  const parsed = raw ? (JSON.parse(raw) as Record<string, string[]>) : {}
-  return Object.entries(parsed).flatMap(([resource, actions]) =>
+  if (!raw) return []
+  let json: unknown
+  try {
+    json = JSON.parse(raw)
+  } catch {
+    return []
+  }
+  const parsed = storedPermissions.safeParse(json)
+  if (!parsed.success) return []
+  return Object.entries(parsed.data).flatMap(([resource, actions]) =>
     actions.map((action) => `${resource}:${action}`),
   )
 }
@@ -140,34 +147,6 @@ export async function revokeAgentAccess<O>(
   }
   if (!id.startsWith(CLIENT_PREFIX)) return false
   const clientId = id.slice(CLIENT_PREFIX.length)
-  const orgId = org.value
-  return db.transaction(async (tx) => {
-    const refreshed = await tx
-      .update(oauthRefreshToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(oauthRefreshToken.clientId, clientId),
-          eq(oauthRefreshToken.referenceId, orgId),
-          isNull(oauthRefreshToken.revoked),
-        ),
-      )
-      .returning({ id: oauthRefreshToken.id })
-    const access = await tx
-      .update(oauthAccessToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(oauthAccessToken.clientId, clientId),
-          eq(oauthAccessToken.referenceId, orgId),
-          isNull(oauthAccessToken.revoked),
-        ),
-      )
-      .returning({ id: oauthAccessToken.id })
-    const consents = await tx
-      .delete(oauthConsent)
-      .where(and(eq(oauthConsent.clientId, clientId), eq(oauthConsent.referenceId, orgId)))
-      .returning({ id: oauthConsent.id })
-    return refreshed.length + access.length + consents.length > 0
-  })
+  const changed = await revokeGrants(db, { organizationId: org.value, clientId }, now)
+  return changed > 0
 }

@@ -172,4 +172,30 @@ describe("connected agents (real device grant)", () => {
     )
     expect(res.body.error.code).toBe("NOT_FOUND")
   })
+
+  it("treats stored permissions that are not the expected shape as none", async () => {
+    const [key] = await t.db
+      .select({ id: apikey.id, permissions: apikey.permissions })
+      .from(apikey)
+      .where(eq(apikey.referenceId, t.owner.orgId))
+    expect(key).toBeDefined()
+    const stored = key?.permissions ?? null
+    const garbage = ["not json", '["project"]', '{"project":"read"}']
+    try {
+      for (const raw of garbage) {
+        await t.db
+          .update(apikey)
+          .set({ permissions: raw })
+          .where(eq(apikey.id, key?.id ?? ""))
+        const agent = (await list()).find((a) => a.id === `key_${key?.id}`)
+        expect(agent, raw).toBeDefined()
+        expect(agent?.access, raw).toEqual([])
+      }
+    } finally {
+      await t.db
+        .update(apikey)
+        .set({ permissions: stored })
+        .where(eq(apikey.id, key?.id ?? ""))
+    }
+  })
 })

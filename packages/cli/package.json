@@ -24,11 +24,11 @@
   "devDependencies": {
     "@starter/cli": "link:.",
     "@starter/config": "workspace:*",
-    "@types/node": "^24.0.0",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "esbuild": "^0.28.2",
-    "oxlint": "^1.87.0",
-    "typescript": "^5.9.3",
-    "vitest": "^5.0.3"
+    "oxlint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -14,16 +14,16 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@starter/api": "workspace:*",
     "@starter/errors": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@starter/config": "workspace:*",
-    "@types/node": "^24.0.0",
-    "@vitest/coverage-v8": "^5.0.3",
-    "oxlint": "^1.87.0",
-    "vitest": "^5.0.3"
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "oxlint": "catalog:",
+    "vitest": "catalog:"
   }
 }

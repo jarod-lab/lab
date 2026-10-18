@@ -51,5 +51,18 @@
       "Edit(./.env.*.local)"
     ]
   },
-  "enableAllProjectMcpServers": true
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/claude-stop-check.mjs",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
 }

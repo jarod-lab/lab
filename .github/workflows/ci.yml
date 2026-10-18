@@ -24,6 +24,16 @@ jobs:
         run: pnpm commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}
       - run: gitleaks git --redact --config .gitleaks.toml
       - run: pnpm baseline
+      - name: Generated files are current
+        # A schema change without `db:generate`, or auth options changed without `pnpm --filter
+        # @starter/auth generate`, lands here. Neither generator needs a database. openapi.json and the
+        # SDK's schema.gen.ts are checked by tests instead.
+        run: |
+          pnpm --filter @starter/db db:generate
+          pnpm --filter @starter/auth generate
+          pnpm biome format --write packages/db/src/auth-schema.ts
+          git add --intent-to-add packages/db
+          git diff --exit-code --stat -- packages/db
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build

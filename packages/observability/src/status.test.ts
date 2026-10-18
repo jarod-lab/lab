@@ -19,7 +19,8 @@ function awsFeed(events: unknown[], endian: "be" | "le" = "be") {
   return new Response(bytes, { headers: { "content-type": "application/json;charset=utf-16" } })
 }
 
-const body = async (res: Response) => res.json() as Promise<Record<string, any>>
+type Report = Record<string, unknown> & { providers: { status: string; description?: string }[] }
+const body = async (res: Response) => res.json() as Promise<Report>
 
 describe("parseStatusProviders", () => {
   it("reads Statuspage entries and AWS service@region entries", () => {
@@ -101,7 +102,7 @@ describe("createStatusHandler", () => {
       "degraded",
       "operational",
     ])
-    expect(report.providers[0].description).toBe("Increased send latency (ses-us-east-1)")
+    expect(report.providers[0]?.description).toBe("Increased send latency (ses-us-east-1)")
     // One feed request serves every AWS provider.
     expect(fetch).toHaveBeenCalledTimes(1)
   })

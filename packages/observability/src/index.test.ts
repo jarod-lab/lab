@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { REQUEST_ID_HEADER, createHealthHandler, observe, requestIdFrom } from "./index"
 
 function capture() {
-  const lines: Record<string, any>[] = []
+  const lines: (Record<string, unknown> & { req?: { headers?: unknown } })[] = []
   const logger = createLogger({
     level: "info",
     destination: { write: (s: string) => void lines.push(JSON.parse(s)) },
@@ -149,7 +149,7 @@ describe("observe", () => {
 
     const line = lines.at(-1)
     expect(line).toMatchObject({ level: 50, msg: "request failed", status: 500 })
-    expect(line?.req.headers).toEqual({ "user-agent": "vitest" })
+    expect(line?.req?.headers).toEqual({ "user-agent": "vitest" })
     expect(JSON.stringify(lines)).not.toContain("s3cret")
 
     expect(reporter).toHaveBeenCalledOnce()

@@ -3,15 +3,15 @@
 // The app keeps the class in sync afterwards (useThemeSync in __root.tsx).
 ;(function () {
   try {
-    var choice = "system"
+    let choice = "system"
     try {
-      var stored = window.localStorage.getItem("starter.theme")
+      const stored = window.localStorage.getItem("starter.theme")
       if (stored === "light" || stored === "dark" || stored === "system") choice = stored
     } catch {
       // Storage blocked: follow the OS setting.
     }
-    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
-    var dark = choice === "dark" || (choice === "system" && prefersDark)
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+    const dark = choice === "dark" || (choice === "system" && prefersDark)
     document.documentElement.classList.toggle("dark", dark)
   } catch {
     // No matchMedia: the page stays in light mode.

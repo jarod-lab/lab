@@ -5,7 +5,7 @@ import { decodeJwt } from "jose"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
-import { BASE, createTestApp } from "./app.test.helpers"
+import { BASE, createTestApp } from "../app.test.helpers"
 
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 const MCP = `${BASE}/mcp`

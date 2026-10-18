@@ -32,7 +32,7 @@ import type { Database } from "@starter/db"
 import { AppError } from "@starter/errors"
 import { z } from "zod"
 
-import { listConnectedAgents, revokeAgentAccess } from "./agents"
+import { listConnectedAgents, revokeAgentAccess } from "./data/connected-agents"
 import { listAuditEvents } from "./data/audit"
 import {
   type Agent,

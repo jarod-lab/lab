@@ -1,5 +1,5 @@
 import { allowed } from "@starter/api"
-import { PERSON_ONLY_RESOURCES, statements } from "@starter/auth"
+import { PERSON_ONLY_ACTIONS, PERSON_ONLY_RESOURCES, statements } from "@starter/auth"
 import { AppError } from "@starter/errors"
 import { z } from "zod"
 
@@ -8,6 +8,19 @@ import { inCallerOrg } from "../tenant"
 import { defineOperation, type OperationDeps } from "./shared"
 
 const catalog: Readonly<Record<string, readonly string[]>> = statements
+
+// What a key may never hold, from the catalog: owner-only and billing resources, and actions a
+// person must decide (run:approve). Listed in the refusal's hint.
+const personOnlyList = [
+  ...PERSON_ONLY_RESOURCES,
+  ...Object.entries(PERSON_ONLY_ACTIONS).flatMap(([resource, actions]) =>
+    actions.map((action) => `${resource}:${action}`),
+  ),
+].join(", ")
+const holdsPersonOnlyAction = (permissions: Record<string, string[]>) =>
+  Object.entries(PERSON_ONLY_ACTIONS).some(([resource, actions]) =>
+    (permissions[resource] ?? []).some((action) => (actions as readonly string[]).includes(action)),
+  )
 
 /** `{ resource: [actions] }`, limited to the permission catalog. */
 const permissionsInput = z.record(z.string(), z.array(z.string()).min(1)).refine(
@@ -52,12 +65,12 @@ export function apiKeyOperations({ auth, db }: Pick<OperationDeps, "auth" | "db"
       const restricted = Object.keys(permissions).filter((r) =>
         (PERSON_ONLY_RESOURCES as readonly string[]).includes(r),
       )
-      if (restricted.length > 0 || permissions.run?.includes("approve")) {
+      if (restricted.length > 0 || holdsPersonOnlyAction(permissions)) {
         throw new AppError(
           "FORBIDDEN",
-          "A key can't hold owner-only permissions or approve actions",
+          "A key can't hold owner-only permissions or person-only actions",
           {
-            hint: "Keys can't have sso, scim, subscription or twoFactor permissions, or run:approve. Those are for a person signed in to the web app (owners, and admins for subscription).",
+            hint: `Keys can't have these: ${personOnlyList}. Those are for a person signed in to the web app (owners, and admins for subscription).`,
           },
         )
       }

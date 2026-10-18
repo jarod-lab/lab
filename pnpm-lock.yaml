@@ -144,6 +144,9 @@ importers:
       '@starter/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@starter/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@starter/ui':
         specifier: workspace:*
         version: link:../../packages/ui

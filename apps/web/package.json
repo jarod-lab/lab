@@ -18,6 +18,7 @@
     "@better-auth/sso": "1.7.7",
     "@better-auth/stripe": "1.7.7",
     "@starter/auth": "workspace:*",
+    "@starter/sdk": "workspace:*",
     "@starter/ui": "workspace:*",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-hotkeys": "^0.14.3",

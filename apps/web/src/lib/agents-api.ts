@@ -1,23 +1,20 @@
-import { WebError } from "./web-auth"
+import { payload, productClient, type QueryParams, type ResponseBody } from "./product-client"
 
-export interface ConnectedAgent {
-  id: string
-  type: "oauthClient" | "apiKey"
-  name: string
-  createdAt: string
-  lastUsedAt: string | null
-  access: string[]
-}
+// The AI clients connected to an organization (the API keys and OAuth clients that act for it), and
+// its audit trail. Not the workspace agents (workspace-agents-api.ts).
 
-export interface AuditEvent {
-  id: string
-  at: string
-  actor: { type: string; id: string }
-  clientId: string | null
-  operation: string
-  outcome: string
-  requestId: string | null
-}
+/**
+ * One connected agent, as list_connected_agents returns it. clientId and keyId are optional here so
+ * that fixtures written against the earlier hand-typed shape (which omitted them) still type-check.
+ */
+export type ConnectedAgent = Omit<
+  ResponseBody<"list_connected_agents">["agents"][number],
+  "clientId" | "keyId"
+> &
+  Partial<Pick<ResponseBody<"list_connected_agents">["agents"][number], "clientId" | "keyId">>
+
+/** One audit event, as list_audit_events returns it. */
+export type AuditEvent = ResponseBody<"list_audit_events">["events"][number]
 
 /** The REST operations behind the agents settings page (contracts.md, N4 operations). */
 export interface AgentsApi {
@@ -26,43 +23,22 @@ export interface AgentsApi {
   listAuditEvents(cursor?: string): Promise<{ events: AuditEvent[]; nextCursor: string | null }>
 }
 
-/** Errors come back as `{ error: { code, message } }`. */
-async function request<T>(
-  fetchImpl: typeof fetch,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetchImpl(`/v1${path}`, {
-    ...init,
-    credentials: "same-origin",
-    headers: { accept: "application/json", ...init.headers },
-  })
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: { message?: string }
-    } | null
-    throw new WebError(body?.error?.message ?? "Something went wrong", response.status)
-  }
-  return (await response.json()) as T
-}
-
-export function createAgentsApi(fetchImpl: typeof fetch = (...args) => fetch(...args)): AgentsApi {
+/**
+ * The browser implementation. With an organization, every call sends X-Organization-Id; without one
+ * the session's active organization answers.
+ */
+export function createAgentsApi(organizationId?: string, fetchImpl?: typeof fetch): AgentsApi {
+  const client = productClient(organizationId, fetchImpl)
   return {
     async listAgents() {
-      const body = await request<{ agents: ConnectedAgent[] }>(fetchImpl, "/agents")
-      return body.agents
+      return (await payload(client.GET("/v1/agents"))).agents
     },
     async revokeAgent(id) {
-      await request<{ revoked: true }>(fetchImpl, `/agents/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      })
+      await payload(client.DELETE("/v1/agents/{id}", { params: { path: { id } } }))
     },
     async listAuditEvents(cursor) {
-      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""
-      return request<{ events: AuditEvent[]; nextCursor: string | null }>(
-        fetchImpl,
-        `/audit-events${query}`,
-      )
+      const query: QueryParams<"list_audit_events"> = cursor ? { cursor } : {}
+      return payload(client.GET("/v1/audit-events", { params: { query } }))
     },
   }
 }

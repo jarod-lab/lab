@@ -1,17 +1,8 @@
-import { createClient } from "@starter/auth/client"
-
-import { organizationHeaders } from "./org-header"
-import { WebError } from "./web-auth"
+import { payload, productClient, type ResponseBody } from "./product-client"
+import { makeAuthClient, WebError } from "./web-auth"
 
 /** A member's security state, from list_member_security (member:read). */
-export interface MemberSecurity {
-  userId: string
-  name: string
-  email: string
-  role: string
-  twoFactorEnabled: boolean
-  lastActiveAt: string | null
-}
+export type MemberSecurity = ResponseBody<"list_member_security">["members"][number]
 
 /** A pending or expired invitation, as better-auth lists it. */
 export interface OrgInvitation {
@@ -48,36 +39,9 @@ function unwrap<T>(result: Result<T>, fallback: string): T {
   return result.data as T
 }
 
-async function productRequest<T>(
-  fetchImpl: typeof fetch,
-  organizationId: string,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetchImpl(`/v1${path}`, {
-    ...init,
-    credentials: "same-origin",
-    headers: {
-      accept: "application/json",
-      ...organizationHeaders(organizationId),
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  })
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: { message?: string; hint?: string }
-    } | null
-    const message = [body?.error?.message, body?.error?.hint].filter(Boolean).join(" ")
-    throw new WebError(message || "Something went wrong", response.status)
-  }
-  return (await response.json()) as T
-}
-
 /** The browser implementation, same origin as the page. */
 export function createMembersApi(baseURL?: string, fetchImpl?: typeof fetch): MembersApi {
-  const fetchFn: typeof fetch = fetchImpl ?? ((...args) => fetch(...args))
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
-  const org = client.organization as unknown as {
+  const org = makeAuthClient(baseURL, fetchImpl).organization as unknown as {
     listInvitations: (args: unknown) => Promise<Result<OrgInvitation[]>>
     inviteMember: (args: unknown) => Promise<Result<unknown>>
     cancelInvitation: (args: unknown) => Promise<Result<unknown>>
@@ -86,19 +50,14 @@ export function createMembersApi(baseURL?: string, fetchImpl?: typeof fetch): Me
 
   return {
     async listSecurity(organizationId) {
-      const body = await productRequest<{ members: MemberSecurity[] }>(
-        fetchFn,
-        organizationId,
-        "/members/security",
-      )
-      return body.members
+      return (await payload(productClient(organizationId, fetchImpl).GET("/v1/members/security")))
+        .members
     },
     async resetTwoFactor(organizationId, userId) {
-      await productRequest<{ reset: true }>(
-        fetchFn,
-        organizationId,
-        `/members/${encodeURIComponent(userId)}/two-factor/reset`,
-        { method: "POST" },
+      await payload(
+        productClient(organizationId, fetchImpl).POST("/v1/members/{userId}/two-factor/reset", {
+          params: { path: { userId } },
+        }),
       )
     },
     async listInvitations(organizationId) {

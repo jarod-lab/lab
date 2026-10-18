@@ -8,7 +8,13 @@ import {
   paginated,
   paginationInput,
 } from "@starter/api"
-import { type Auth, type Catalog, PERSON_ONLY_RESOURCES, statements } from "@starter/auth"
+import {
+  type Auth,
+  type Catalog,
+  PERSON_ONLY_RESOURCES,
+  provisionalSignup,
+  statements,
+} from "@starter/auth"
 import {
   AgentId,
   agentInOrg,
@@ -128,13 +134,7 @@ const auditEventOutput = z.object({
   requestId: z.string().nullable(),
 })
 
-/**
- * Operations served only over REST. Signup needs no credentials, so it is not an MCP tool (an agent
- * with a key has no use for it there). It stays in the OpenAPI document and llms.txt.
- */
-export const REST_ONLY_OPERATIONS: ReadonlySet<string> = new Set(["signup"])
-
-/** POST /v1/signup's body. Shared with the unauthenticated route in app.ts. */
+/** POST /v1/signup's body. */
 export const signupInput = z.object({
   email: z.email().describe("Address that claims the account; one claim email is sent to it"),
   name: z.string().trim().min(1).max(100).optional().describe("Display name"),
@@ -431,6 +431,8 @@ export function createOperations({
     name: "signup",
     method: "POST",
     path: "/v1/signup",
+    // Public: no credential is read, so the request runs with no caller (see OperationAuth).
+    auth: "none",
     summary: "Create an agent account without signing in",
     description:
       "Creates a personal organization, an API key with project permissions, and sends one email " +
@@ -457,13 +459,20 @@ export function createOperations({
         requestsPerDay: z.number().int().describe("Until the email is verified"),
       }),
     }),
-    // With credentials the request is refused, whatever the input.
-    examples: [{ input: { email: "agent@example.com" }, error: "BAD_REQUEST" }],
-    // Served by the unauthenticated route in app.ts. Reached here only with credentials.
-    handler: () => {
-      throw new AppError("BAD_REQUEST", "Send signup without credentials", {
-        hint: "Signup needs no API key or sign-in. Send the same request again without the Authorization and x-api-key headers.",
+    examples: [{ input: { email: "agent@example.com" } }],
+    handler: async (input, ctx) => {
+      const created = await provisionalSignup(auth, {
+        email: input.email,
+        name: input.name,
+        ip: ctx.public.ip,
       })
+      return {
+        organizationId: created.organizationId,
+        apiKey: created.apiKey,
+        claimUrlSentTo: input.email.trim().toLowerCase(),
+        apiKeyEndsWhenClaimed: true as const,
+        limits: { requestsPerDay: meter.limits.unclaimed },
+      }
     },
   })
 

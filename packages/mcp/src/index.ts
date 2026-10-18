@@ -32,7 +32,10 @@ export interface McpHandlerOptions {
   authenticate: (request: Request) => Promise<Caller | null>
   /** URL of this server's /.well-known/oauth-protected-resource document (RFC 9728). */
   resourceMetadataUrl: string
-  /** Passed to every `invoke`: hooks (audit, metering, idempotency) and permission hints. */
+  /**
+   * Passed to every `invoke`: hooks (audit, metering, idempotency) and permission hints. Public
+   * operations (auth "none") are left out of the tools entirely.
+   */
   invokeOptions?: InvokeOptions
 }
 
@@ -146,7 +149,9 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
     { name: opts.name, version: opts.version },
     { capabilities: { tools: {} }, instructions: opts.instructions },
   )
-  const visible = opts.operations.filter((op) => canCall(op, caller))
+  // Public operations (auth "none") are REST only: they need no caller, so they are never tools.
+  const tools = opts.operations.filter((op) => op.auth !== "none")
+  const visible = tools.filter((op) => canCall(op, caller))
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
   server.setRequestHandler(LooseCallToolRequestSchema, (loose) => {
     // The SDK validates the strict schema itself, as invalid params (-32602), before this runs.
@@ -154,7 +159,7 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
     // Hidden tools are still callable by name: invoke refuses them with FORBIDDEN and a hint naming
     // the scope or permission that would allow it, which is more use to an agent than "unknown".
     // The operation list is public anyway (openapi.json, llms.txt).
-    const op = opts.operations.find((o) => o.name === req.params.name)
+    const op = tools.find((o) => o.name === req.params.name)
     // A name that is no operation at all is a protocol error, as the MCP spec has it.
     if (!op) throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${req.params.name}`)
     return callTool(op, req.params.arguments, caller, {

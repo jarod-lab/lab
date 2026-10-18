@@ -16,12 +16,26 @@ export interface Caller {
   clientId?: string
 }
 
+/** The context of an operation that needs a credential (the default): the caller acts in its org. */
 export interface OperationContext {
   caller: Caller
   requestId?: string
   /** Client-chosen key for safe retries of non-readOnly operations (see `Idempotency-Key`). */
   idempotencyKey?: string
 }
+
+/**
+ * The context of a public operation (`auth: "none"`): there is no caller, only what the request says
+ * about where it came from. `ip` is the client address, for limits on anonymous calls.
+ */
+export interface PublicContext {
+  caller?: undefined
+  public: { ip: string }
+  requestId?: string
+}
+
+/** The context a handler gets, by its operation's `auth`: a caller unless the operation is public. */
+export type HandlerContext<A> = A extends "none" ? PublicContext : OperationContext
 
 export interface InvokeEvent {
   op: AnyOperation
@@ -61,7 +75,25 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 type AnyObject = z.ZodObject<z.ZodRawShape>
 
-export interface OperationSpec<I extends AnyObject, O extends z.ZodType, P = PermissionSet> {
+/**
+ * Who may call an operation. Omitted, a credential is required (an API key or OAuth token), and the
+ * handler gets a `caller`. `"none"` makes the operation public, for the few that exist before anyone
+ * has an account (signup). A public operation:
+ *   - has no organization, so `permissions` must be `{}` (`defineOperation` throws otherwise);
+ *   - is served over REST only, not as an MCP tool (calling it by name is "unknown tool");
+ *   - runs no invoke hooks: no metering, no Idempotency-Key, no audit. Its handler gets a
+ *     `PublicContext` with the client's `ip` and no caller;
+ *   - is documented with `security: []` in OpenAPI, and listed as needing no credential in llms.txt.
+ * A credential sent with a public operation is ignored.
+ */
+export type OperationAuth = "none"
+
+export interface OperationSpec<
+  I extends AnyObject,
+  O extends z.ZodType,
+  P = PermissionSet,
+  A extends OperationAuth | undefined = undefined,
+> {
   /** snake_case. The MCP tool name and the OpenAPI operationId. */
   name: string
   method: HttpMethod
@@ -73,6 +105,8 @@ export interface OperationSpec<I extends AnyObject, O extends z.ZodType, P = Per
   description: string
   /** Required permissions, all of them, in the caller's organization. `{}` means any caller. */
   permissions: P
+  /** Omitted: a credential is required. `"none"`: public (see `OperationAuth`). */
+  auth?: A
   /**
    * Path params, query and JSON body are merged into one object and validated against this.
    * Query values arrive as strings: use `z.coerce` for numbers and booleans in GET operations.
@@ -86,26 +120,32 @@ export interface OperationSpec<I extends AnyObject, O extends z.ZodType, P = Per
    * organization owner: `output` must validate, and `error` documents an expected failure instead.
    */
   examples?: { input: z.input<I>; output?: z.input<O>; error?: ErrorCode }[]
-  handler: (input: z.output<I>, ctx: OperationContext) => Promise<z.input<O>> | z.input<O>
+  // Method syntax keeps the handler's parameters bivariant, so typed operations fit in one list.
+  handler(input: z.output<I>, ctx: HandlerContext<A>): Promise<z.input<O>> | z.input<O>
 }
 
 export type Operation<
   I extends AnyObject = AnyObject,
   O extends z.ZodType = z.ZodType,
-> = OperationSpec<I, O>
+  A extends OperationAuth | undefined = undefined,
+> = OperationSpec<I, O, PermissionSet, A>
 
-// Method syntax keeps handler parameters bivariant, so typed operations fit in one list.
 // biome-ignore lint: an array of differently-typed operations needs this escape hatch
-export type AnyOperation = Operation<any, any>
+export type AnyOperation = Operation<any, any, OperationAuth | undefined>
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/
 
 /** Declare an operation once; REST routes, MCP tools, OpenAPI and llms.txt are generated from it. */
-export function defineOperation<I extends AnyObject, O extends z.ZodType>(
-  spec: OperationSpec<I, O>,
-): Operation<I, O> {
+export function defineOperation<
+  I extends AnyObject,
+  O extends z.ZodType,
+  A extends OperationAuth | undefined = undefined,
+>(spec: OperationSpec<I, O, PermissionSet, A>): Operation<I, O, A> {
   for (const [resource, actions] of Object.entries(spec.permissions)) {
     if (actions.length === 0) throw new Error(`${spec.name}: no actions listed for ${resource}`)
+  }
+  if (spec.auth === "none" && Object.keys(spec.permissions).length > 0) {
+    throw new Error(`${spec.name}: a public operation (auth: "none") takes no permissions`)
   }
   if (!NAME.test(spec.name)) throw new Error(`Operation name must be snake_case: ${spec.name}`)
   for (const param of pathParams(spec.path)) {
@@ -121,9 +161,13 @@ export function defineOperation<I extends AnyObject, O extends z.ZodType>(
  * `const defineOperation = operationsFor<Catalog>()`, then `permissions: { project: ["read"] }`.
  */
 export function operationsFor<C extends PermissionSet>() {
-  return <I extends AnyObject, O extends z.ZodType>(
-    spec: OperationSpec<I, O, PermissionsOf<C>>,
-  ): Operation<I, O> => defineOperation(spec as OperationSpec<I, O>)
+  return <
+    I extends AnyObject,
+    O extends z.ZodType,
+    A extends OperationAuth | undefined = undefined,
+  >(
+    spec: OperationSpec<I, O, PermissionsOf<C>, A>,
+  ): Operation<I, O, A> => defineOperation(spec as OperationSpec<I, O, PermissionSet, A>)
 }
 
 /** Names of `:params` in a path. */
@@ -170,17 +214,18 @@ export function assertAllowed(
 export async function invoke(
   op: AnyOperation,
   raw: unknown,
-  ctx: OperationContext,
+  ctx: OperationContext | PublicContext,
   options: InvokeOptions = {},
 ) {
-  assertAllowed(op, ctx.caller, options)
-  const parsed = op.input.safeParse(raw ?? {})
-  if (!parsed.success) {
-    throw new AppError("BAD_REQUEST", z.prettifyError(parsed.error), {
-      context: { operation: op.name },
-    })
+  // A public operation has no caller to check and no organization for hooks to meter or audit.
+  if (op.auth === "none") return runHandler(op, parseInput(op, raw), ctx)
+
+  if (!hasCaller(ctx)) {
+    throw new AppError("INTERNAL", `${op.name} needs a caller`, { context: { operation: op.name } })
   }
-  const event: InvokeEvent = { op, input: parsed.data, ctx }
+  assertAllowed(op, ctx.caller, options)
+  const input = parseInput(op, raw)
+  const event: InvokeEvent = { op, input, ctx }
   const hooks = options.hooks
   const replay = await hooks?.before?.(event)
   if (replay) {
@@ -189,20 +234,43 @@ export async function invoke(
   }
   let result: unknown
   try {
-    const out = op.output.safeParse(await op.handler(parsed.data, ctx))
-    if (!out.success) {
-      throw new AppError("INTERNAL", `${op.name} returned an invalid result`, {
-        cause: out.error,
-        context: { operation: op.name },
-      })
-    }
-    result = out.data
+    result = await runHandler(op, input, ctx)
   } catch (e) {
     await runAfter(hooks, event, { ok: false, error: toAppError(e) })
     throw e
   }
   await runAfter(hooks, event, { ok: true, result, replayed: false })
   return result
+}
+
+const hasCaller = (ctx: OperationContext | PublicContext): ctx is OperationContext =>
+  ctx.caller !== undefined
+
+/** The input, validated against the operation's schema (BAD_REQUEST when it does not match). */
+function parseInput(op: AnyOperation, raw: unknown): unknown {
+  const parsed = op.input.safeParse(raw ?? {})
+  if (!parsed.success) {
+    throw new AppError("BAD_REQUEST", z.prettifyError(parsed.error), {
+      context: { operation: op.name },
+    })
+  }
+  return parsed.data
+}
+
+/** The handler, with its output checked against the operation's output schema. */
+async function runHandler(
+  op: AnyOperation,
+  input: unknown,
+  ctx: OperationContext | PublicContext,
+): Promise<unknown> {
+  const out = op.output.safeParse(await op.handler(input, ctx))
+  if (!out.success) {
+    throw new AppError("INTERNAL", `${op.name} returned an invalid result`, {
+      cause: out.error,
+      context: { operation: op.name },
+    })
+  }
+  return out.data
 }
 
 /** Errors from `after` are reported and dropped: they must not change the response. */

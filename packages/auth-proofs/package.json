@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "lint": "oxlint -c ../../.oxlintrc.json"
+    "lint": "oxlint --type-aware -c ../../.oxlintrc.json"
   },
   "dependencies": {
     "@gdp-ts/core": "^0.1.0",

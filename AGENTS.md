@@ -1,6 +1,8 @@
 # starter
 
 Turborepo + pnpm 11 monorepo, TypeScript. `apps/api` is a reference Hono API; add more apps under `apps/`.
+`GLOSSARY.md` names the concepts (organization, grant, operation, run, approval, ...); use those words in code,
+docs and UI, and add a line there before introducing a new one.
 
 ## Setup
 
@@ -97,9 +99,17 @@ its turn and sends the failures back; it does not replace the list above.
   `use-starter-env`; its exceptions are listed in `baseline.toml`). Never read or edit `.env` (denied in settings).
 - **Authorization:** declare what an operation needs in its `permissions` (enforced by `invoke`), and guard tenant data
   with gdp-ts proofs (see the gdp-ts and agent-api skills). Don't hand-roll role or ownership checks in handlers.
+  Handlers never query the database: every query lives in `apps/api/src/data/`, in a function that takes a proof
+  (baseline `api-queries-in-data-layer` and `api-tables-in-data-layer`; outside `data/` only `import type { Database }`).
+  `apps/api/src/authorization.test.ts` runs every operation's first example as a no-grant key, as the viewer role and
+  as another organization, and fails when an operation has no permissions and is not on its `PUBLIC` list, or when
+  a path prefix has no fixture there. A new operation under a new path needs a fixture in that file.
 - **UI:** semantic tokens and dark-mode variants only, no raw colors like `bg-white` (baseline `shadcn-strict`).
   `@shadcn/lint` is registered with no rules enabled; add rules in `.oxlintrc.json`.
-- **Formatting and lint:** Biome formats only (no semicolons, 100 columns); Oxlint lints. Biome skips `.claude/` and lockfiles.
+- **Formatting and lint:** Biome formats only (no semicolons, 100 columns); Oxlint lints, type-aware (`--type-aware`
+  in every package's `lint` script, via `oxlint-tsgolint`): `no-floating-promises`, `no-misused-promises` (except JSX
+  attributes, where React handlers may return promises) and `await-thenable` are errors. A promise you mean to drop
+  takes `void`. The other type-aware rules warn; `unbound-method` is off. Biome skips `.claude/` and lockfiles.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`). pnpm maintains
   `minimumReleaseAgeExclude` itself for very new releases; don't hand-edit it.
 - **Vendored shadcn code:** `packages/ui/src/components/ui/` (60 components) and `src/hooks/` come from the shadcn CLI, style
@@ -363,9 +373,12 @@ All `@better-auth/*` at the pinned version; flows in `auth-flows.test.ts`.
   exception), `no-new-function` (outside tests), `no-server-imports-in-client` (no `@starter/db`, `env`, `auth-proofs` or
   `observability` from `apps/web`, `packages/ui`, `sdk` or `cli`), `use-app-error` (no bare `new Error` in `apps/api`),
   `no-focused-tests`, `no-sleep-in-e2e`, `e2e-test-import`, the two `ui-css-*-import` rules (`styles.css` must keep its
-  `shadcn/tailwind.css` and `tw-animate-css` imports) and `required-files`.
+  `shadcn/tailwind.css` and `tw-animate-css` imports), `required-files`, and `api-queries-in-data-layer` plus
+  `api-tables-in-data-layer` (see Authorization).
+  `no-cross-package-relative-imports` bans `../../packages/x/src` imports: export the thing from its package instead
+  (the web app gets `roles`, `statements` and `ORGANIZATION_HEADER` from `@starter/auth/client`).
   Ratchets (ceilings that only go down; lower one with `baseline ratchet down <id>` after removing call sites):
-  `ratchet-cross-package-relative-imports` (4), `ratchet-as-unknown-as` (10, outside tests and `*.types.ts`),
+  `ratchet-as-unknown-as` (10, outside tests and `*.types.ts`),
   `ratchet-vi-mock` (8), `ratchet-lint-disable` (3), `ratchet-ts-expect-error` (2, outside `*.types.ts`) and
   `ratchet-skipped-tests` (2). Never raise a ceiling to make room.
   Rules are regex/import matches, not type-aware;

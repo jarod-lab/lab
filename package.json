@@ -30,6 +30,7 @@
     "e2e": "^0.17.0",
     "lefthook": "^2.1.16",
     "oxlint": "^1.87.0",
+    "oxlint-tsgolint": "^7.0.2004",
     "portless": "^0.15.7",
     "turbo": "^2.11.7",
     "typescript": "^7.0.2"

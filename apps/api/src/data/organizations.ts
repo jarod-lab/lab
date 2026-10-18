@@ -1,0 +1,13 @@
+// Organization facts the API needs that carry no tenant data: read by organization id, so no proof.
+import { type Database, member, user } from "@starter/db"
+import { and, eq } from "drizzle-orm"
+
+/** Whether an owner of the organization has verified their email: the organization is "claimed". */
+export async function organizationClaimed(db: Database, organizationId: string): Promise<boolean> {
+  const owners = await db
+    .select({ verified: user.emailVerified })
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, organizationId), eq(member.role, "owner")))
+  return owners.some((o) => o.verified === true)
+}

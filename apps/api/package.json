@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc",
-    "lint": "oxlint -c ../../.oxlintrc.json",
+    "lint": "oxlint --type-aware -c ../../.oxlintrc.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

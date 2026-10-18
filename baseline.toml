@@ -219,20 +219,20 @@ message = "Import test from @e2e-dev/web (it provides app, screen, browser); exp
 id = "required-files"
 type = "file-presence"
 severity = "error"
-required_files = ["AGENTS.md", ".env.example", "SECURITY.md", "lefthook.yml", "baseline.toml", ".github/workflows/ci.yml", "packages/env/src/index.ts", "packages/config/vitest.base.ts"]
+required_files = ["AGENTS.md", "GLOSSARY.md", ".env.example", "SECURITY.md", "lefthook.yml", "baseline.toml", ".github/workflows/ci.yml", "packages/env/src/index.ts", "packages/config/vitest.base.ts"]
 message = "A file the checks depend on is missing"
 
 # ── Ratchets: ceilings that only go down. Lower max_count with `baseline ratchet down <id>` ───────
 
 [[rule]]
-id = "ratchet-cross-package-relative-imports"
-type = "ratchet"
+id = "no-cross-package-relative-imports"
+type = "banned-pattern"
 severity = "error"
 glob = "{apps,packages}/**/*.{ts,tsx}"
 regex = true
 pattern = "from \"(\\.\\./)+(apps|packages)/"
-max_count = 4
 message = "Import another package through its name, not a relative path into its src"
+suggest = "Export it from the package (apps/web gets the auth catalog from @starter/auth/client)"
 
 [[rule]]
 id = "ratchet-as-unknown-as"
@@ -283,3 +283,30 @@ regex = true
 pattern = "\\b(it|test|describe)\\.skip\\("
 max_count = 2
 message = "A skipped test is a missing test"
+
+# ── Tenant data stays behind proofs ───────────────────────────────────────────────────────────────
+# apps/api handlers never query the database themselves: they call a function in apps/api/src/data/
+# whose signature demands a gdp-ts proof (see the gdp-ts and agent-api skills). A query in a handler
+# has skipped the proof. Table imports are banned there for the same reason; `import type { Database }`
+# is fine. apps/api/src/authorization.test.ts checks the other half: every operation's permissions.
+[[rule]]
+id = "api-queries-in-data-layer"
+type = "banned-pattern"
+severity = "error"
+glob = "apps/api/src/**/*.ts"
+exclude_glob = ["apps/api/src/data/**", "**/*.test.ts", "**/*.test.helpers.ts"]
+regex = true
+skip_strings = true
+pattern = "\\b(db|tx)\\.(select|insert|update|delete|query|execute|transaction)\\("
+message = "Query the database from apps/api/src/data/, in a function that takes a proof"
+suggest = "Add or reuse a function in apps/api/src/data/ that takes Named<O, OrganizationId> and a proof"
+
+[[rule]]
+id = "api-tables-in-data-layer"
+type = "banned-pattern"
+severity = "error"
+glob = "apps/api/src/**/*.ts"
+exclude_glob = ["apps/api/src/data/**", "apps/api/src/server.ts", "**/*.test.ts", "**/*.test.helpers.ts"]
+regex = true
+pattern = "^(import \\{[^}]*\\}|\\}) from \"@starter/db\""
+message = "Only apps/api/src/data/ imports tables from @starter/db; elsewhere use import type { Database }"

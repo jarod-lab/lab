@@ -25,13 +25,6 @@
     "@starter/api-app#test:coverage": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/routeTree.gen.ts"],
       "outputs": ["coverage/**"]
-    },
-    "@starter/web#test": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/api/src/headers.ts"]
-    },
-    "@starter/web#test:coverage": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/api/src/headers.ts"],
-      "outputs": ["coverage/**"]
     }
   }
 }

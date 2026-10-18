@@ -20,6 +20,9 @@ import type { SignInMethods } from "./sign-in-methods-shared"
 import { TWO_FACTOR_PATH } from "./constants"
 
 export { RESERVED_ORG_SLUGS, isReservedOrgSlug } from "./reserved-slugs"
+// The server's catalog and the organization header, for the web app (which depends only on this entry).
+export { roles, statements } from "./access"
+export { ORGANIZATION_HEADER } from "@starter/api"
 export { personalSlug } from "./membership"
 export type { SignInMethods, SocialProvider } from "./sign-in-methods-shared"
 export {

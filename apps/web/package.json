@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "typecheck": "tsc",
-    "lint": "oxlint -c ../../.oxlintrc.json src vite.config.ts vitest.config.ts",
+    "lint": "oxlint --type-aware -c ../../.oxlintrc.json src vite.config.ts vitest.config.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

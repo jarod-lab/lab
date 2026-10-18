@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 // The catalog's own roles (not a copy): the matrix must agree with what the server enforces.
-import { roles } from "../../../../packages/auth/src/access"
+import { roles } from "@starter/auth/client"
 import {
   type Allows,
   type MatrixRole,

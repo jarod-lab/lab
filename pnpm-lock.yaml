@@ -22,7 +22,7 @@ importers:
         version: 0.15.1(e2e@0.17.0(ai@7.0.130(zod@4.6.5)))
       '@gdp-ts/core':
         specifier: ^0.1.0
-        version: 0.1.0(oxlint@1.87.0)(typescript@7.0.2)
+        version: 0.1.0(oxlint@1.87.0(oxlint-tsgolint@7.0.2004))(typescript@7.0.2)
       '@shadcn/lint':
         specifier: ^0.2.0
         version: 0.2.0
@@ -40,7 +40,10 @@ importers:
         version: 2.1.16
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      oxlint-tsgolint:
+        specifier: ^7.0.2004
+        version: 7.0.2004
       portless:
         specifier: ^0.15.7
         version: 0.15.7
@@ -119,7 +122,7 @@ importers:
         version: 6.2.12
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -246,7 +249,7 @@ importers:
         version: 30.1.2(@noble/hashes@2.4.0)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -280,7 +283,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -347,7 +350,7 @@ importers:
         version: 1.7.7(@better-fetch/fetch@1.3.2)(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(better-call@1.4.0(zod@4.6.5))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(jose@6.2.12)(kysely@0.29.6)(magicast@0.5.5)(nanostores@1.5.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -356,7 +359,7 @@ importers:
     dependencies:
       '@gdp-ts/core':
         specifier: ^0.1.0
-        version: 0.1.0(oxlint@1.87.0)(typescript@7.0.2)
+        version: 0.1.0(oxlint@1.87.0(oxlint-tsgolint@7.0.2004))(typescript@7.0.2)
       '@starter/api':
         specifier: workspace:*
         version: link:../api
@@ -375,7 +378,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@26.6.4)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -403,7 +406,7 @@ importers:
         version: 0.28.2
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -443,7 +446,7 @@ importers:
         version: 0.31.11
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -468,7 +471,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -486,7 +489,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -511,7 +514,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -533,7 +536,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -564,7 +567,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -589,7 +592,7 @@ importers:
         version: 5.0.3(vitest@5.0.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       vitest:
         specifier: ^5.0.0
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -614,7 +617,7 @@ importers:
         version: 7.13.0(typescript@5.9.3)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -726,7 +729,7 @@ importers:
         version: 30.1.2(@noble/hashes@2.4.0)
       oxlint:
         specifier: ^1.87.0
-        version: 1.87.0
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
       storybook:
         specifier: ^10.6.1
         version: 10.6.1(@types/react@19.3.0)(prettier@3.9.9)(react@19.3.0)
@@ -2507,6 +2510,36 @@ packages:
 
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
     resolution: {integrity: sha512-VPoCAhKvCQTlG7vxqaBXcmuvbh77BfnGXj8g0pbvVXpm1F/R8rDVwqIWcEbMzrI1JvJlm8v7T9uMVQb6UctMRg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@oxlint-tsgolint/darwin-arm64@7.0.2004':
+    resolution: {integrity: sha512-uJk3ttju7Lz+Nv8WG4CsLyewoL1qf/Ny8S8OksJ7Bm/F14Tc9gMfW6arM1PCc57IzH/X/I79YsCWTgxX1FKibQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@oxlint-tsgolint/darwin-x64@7.0.2004':
+    resolution: {integrity: sha512-0BFfHTzDxNDFPcu0UZAXT6CyCJHAXM0dZveyDb4KEHa2qF/DSnOKOrmvK/wFuFol9kvijbGM9JfuOsor+zWXRw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@oxlint-tsgolint/linux-arm64@7.0.2004':
+    resolution: {integrity: sha512-TAehQc+qdRXyDN3nl/r/3/oPrBVrbtrDeGMkFyG6mf+XphpoJ2lAMVFLclyvrVZCw02RbKROjyw8h72XwQQHcw==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@oxlint-tsgolint/linux-x64@7.0.2004':
+    resolution: {integrity: sha512-LPunZvm6ZbWPfHMAyfZf9ci3HHvNEzLejO8zdqO3GoVGoSEHqqufHUD7+OgeatVSaJP7uXDJ2HaNOHIoH7go4Q==}
+    cpu: [x64]
+    os: [linux]
+
+  '@oxlint-tsgolint/win32-arm64@7.0.2004':
+    resolution: {integrity: sha512-FVWplzDImWhiuawnIZVETaQecv4GWom6Jv4Fx2xj7hhXXDZ5okEgiw1gTCImHTIQsi2ycC5oSxVwrn69bMh7iw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@oxlint-tsgolint/win32-x64@7.0.2004':
+    resolution: {integrity: sha512-7PsxuUx11Ry9DYTWcljTzRbmZY9B6O9fFFfZV+aodQEMy6pfRT3fhoQRv9PtGN/89z1pPz3nFKrsFm6WqNtX7w==}
     cpu: [x64]
     os: [win32]
 
@@ -6019,6 +6052,10 @@ packages:
   oxc-resolver@11.21.2:
     resolution: {integrity: sha512-w5tLwYN3Zo24w5EeWJjJWZOwhYqTtC8PS2B1tIt7BZUuqTIcU07sQValbDw+rq7+AuAGzOHklgK+ifsy4lpXfw==}
 
+  oxlint-tsgolint@7.0.2004:
+    resolution: {integrity: sha512-vQ9WDF3fiZJvRdSDosNOflerOCOpwol6vWzVDxW76RcU19cjTh7engvkHLvmv+tzedR8fAiJUVUGr6IVZdkzXQ==}
+    hasBin: true
+
   oxlint@1.87.0:
     resolution: {integrity: sha512-drxVlaW7Oqq7wSy1CN25znRu00aRq8n57Q2wniJRxCmtYVz07ufCm7EVDPQFZURrTgQIjzKrVEHAD/HcvJXObg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -8468,9 +8505,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@gdp-ts/core@0.1.0(oxlint@1.87.0)(typescript@7.0.2)':
+  '@gdp-ts/core@0.1.0(oxlint@1.87.0(oxlint-tsgolint@7.0.2004))(typescript@7.0.2)':
     optionalDependencies:
-      oxlint: 1.87.0
+      oxlint: 1.87.0(oxlint-tsgolint@7.0.2004)
       typescript: 7.0.2
 
   '@hexagon/base64@1.1.28': {}
@@ -8847,6 +8884,24 @@ snapshots:
     optional: true
 
   '@oxc-resolver/binding-win32-x64-msvc@11.21.2':
+    optional: true
+
+  '@oxlint-tsgolint/darwin-arm64@7.0.2004':
+    optional: true
+
+  '@oxlint-tsgolint/darwin-x64@7.0.2004':
+    optional: true
+
+  '@oxlint-tsgolint/linux-arm64@7.0.2004':
+    optional: true
+
+  '@oxlint-tsgolint/linux-x64@7.0.2004':
+    optional: true
+
+  '@oxlint-tsgolint/win32-arm64@7.0.2004':
+    optional: true
+
+  '@oxlint-tsgolint/win32-x64@7.0.2004':
     optional: true
 
   '@oxlint/binding-android-arm-eabi@1.87.0':
@@ -10367,7 +10422,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.0.3(@types/node@26.6.4)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -12355,7 +12410,16 @@ snapshots:
       '@oxc-resolver/binding-win32-arm64-msvc': 11.21.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.21.2
 
-  oxlint@1.87.0:
+  oxlint-tsgolint@7.0.2004:
+    optionalDependencies:
+      '@oxlint-tsgolint/darwin-arm64': 7.0.2004
+      '@oxlint-tsgolint/darwin-x64': 7.0.2004
+      '@oxlint-tsgolint/linux-arm64': 7.0.2004
+      '@oxlint-tsgolint/linux-x64': 7.0.2004
+      '@oxlint-tsgolint/win32-arm64': 7.0.2004
+      '@oxlint-tsgolint/win32-x64': 7.0.2004
+
+  oxlint@1.87.0(oxlint-tsgolint@7.0.2004):
     optionalDependencies:
       '@oxlint/binding-android-arm-eabi': 1.87.0
       '@oxlint/binding-android-arm64': 1.87.0
@@ -12376,6 +12440,7 @@ snapshots:
       '@oxlint/binding-win32-arm64-msvc': 1.87.0
       '@oxlint/binding-win32-ia32-msvc': 1.87.0
       '@oxlint/binding-win32-x64-msvc': 1.87.0
+      oxlint-tsgolint: 7.0.2004
 
   p-limit@2.3.0:
     dependencies:

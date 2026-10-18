@@ -14,6 +14,23 @@ import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
 
 export const BASE = "http://localhost:3000"
+
+/** The REST request for an operation's input: path params in the path, the rest as query or body. */
+export function requestFor(op: AnyOperation, input: Record<string, unknown>) {
+  let path = op.path
+  const rest = { ...input }
+  for (const [k, v] of Object.entries(input)) {
+    if (path.includes(`:${k}`)) {
+      path = path.replace(`:${k}`, encodeURIComponent(String(v)))
+      delete rest[k]
+    }
+  }
+  if (op.method === "GET" || op.method === "DELETE") {
+    const qs = new URLSearchParams(Object.entries(rest).map(([k, v]) => [k, String(v)])).toString()
+    return { path: qs ? `${path}?${qs}` : path, init: { method: op.method } }
+  }
+  return { path, init: { method: op.method, body: JSON.stringify(rest) } }
+}
 /** The test server secret: better-auth's, and the one idempotency records are sealed with. */
 export const SECRET = "a-test-secret-that-is-long-enough-123456" // gitleaks:allow
 

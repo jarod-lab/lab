@@ -7,7 +7,7 @@ import { type AnyOperation, openApiPath } from "@starter/api"
 import { Ajv2020 } from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { createTestApp } from "./app.test.helpers"
+import { createTestApp, requestFor } from "./app.test.helpers"
 import { REST_ONLY_OPERATIONS } from "./operations"
 
 type Spec = {
@@ -28,22 +28,6 @@ addFormats.default(ajv)
 function check(schema: object, value: unknown) {
   const validate = ajv.compile(schema)
   return validate(value) ? null : ajv.errorsText(validate.errors)
-}
-
-function requestFor(op: AnyOperation, input: Record<string, unknown>) {
-  let path = op.path
-  const rest = { ...input }
-  for (const [k, v] of Object.entries(input)) {
-    if (path.includes(`:${k}`)) {
-      path = path.replace(`:${k}`, encodeURIComponent(String(v)))
-      delete rest[k]
-    }
-  }
-  if (op.method === "GET" || op.method === "DELETE") {
-    const qs = new URLSearchParams(Object.entries(rest).map(([k, v]) => [k, String(v)])).toString()
-    return { path: qs ? `${path}?${qs}` : path, init: { method: op.method } }
-  }
-  return { path, init: { method: op.method, body: JSON.stringify(rest) } }
 }
 
 const t = await createTestApp()

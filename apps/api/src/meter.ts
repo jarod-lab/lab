@@ -2,8 +2,8 @@
 // "unclaimed" while its owners' emails are unverified (provisional signups, see @starter/auth
 // signup.ts). It gets the smaller limit until an owner claims the account.
 import type { Caller } from "@starter/api"
-import { type Database, member, user } from "@starter/db"
-import { and, eq } from "drizzle-orm"
+import type { Database } from "@starter/db"
+import { organizationClaimed } from "./data/organizations"
 
 import { getUsage, incrementUsage } from "./data/usage"
 import { inCallerOrg } from "./tenant"
@@ -48,12 +48,7 @@ export function createMeter({ db, limits }: { db: Database; limits: MeterLimits 
   const statuses = new WeakMap<Caller, Promise<OrgStatus>>()
 
   async function loadStatus(orgId: string): Promise<OrgStatus> {
-    const owners = await db
-      .select({ verified: user.emailVerified })
-      .from(member)
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(and(eq(member.organizationId, orgId), eq(member.role, "owner")))
-    const claimed = owners.some((o) => o.verified === true)
+    const claimed = await organizationClaimed(db, orgId)
     return { claimed, limit: claimed ? limits.claimed : limits.unclaimed }
   }
 

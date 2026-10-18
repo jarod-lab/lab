@@ -65,12 +65,19 @@ const title = name
   .join(" ")
 
 const SKIP = new Set(["node_modules", ".git", ".turbo", "dist", "pnpm-lock.yaml", "worktrees"])
+// Vendored third-party skills are not ours to rewrite. Local .env files hold secrets and are never
+// read (.env.example, the template, is still renamed).
+const SKIP_PATHS = new Set([join(".claude", "skills")])
 const SELF = "scripts/init-project.mjs"
+// The shipped skill's frontmatter `name` and prose follow the product. The folder keeps its name.
+const SKILL = join("skills", "starter", "SKILL.md")
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     if (SKIP.has(entry)) continue
+    if (entry.startsWith(".env") && entry !== ".env.example") continue
     const path = join(dir, entry)
+    if (SKIP_PATHS.has(path)) continue
     if (statSync(path).isDirectory()) walk(path, out)
     else out.push(path)
   }
@@ -93,13 +100,23 @@ for (const file of walk(".")) {
     .replace(/^# starter$/m, `# ${name}`)
     .replace(/(name = ")starter(")/g, `$1${name}$2`)
     .replaceAll("localhost:5432/starter", `localhost:5432/${name}`)
+    // compose's DATABASE_URL points at the same database as POSTGRES_DB.
+    .replace(/(@db:5432\/)starter\b/g, `$1${name}`)
     .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${name}`)
     .replace(/-d starter/g, `-d ${name}`)
+    // Origins in comments and env docs (portless names the same way; the bare form is the auth
+    // test's passkey parent domain).
+    .replace(/\b(app|api)\.starter\.localhost\b/g, `$1.${name}.localhost`)
+    .replaceAll('"starter.localhost"', `"${name}.localhost"`)
     .replace(/^New project from this template:.*\n/m, "")
     // The display name as a whole word ("Starter API", "Starter"), never inside an identifier such
     // as the SDK's "StarterError", whose class name stays as it is.
     .replace(/"Starter(?=[ "])/g, `"${title}`)
+    .replace(/\bStarter API\b/g, `${title} API`)
     .replaceAll("Starter <", `${title} <`)
+  if (file === SKILL) {
+    next = next.replace(/^name: starter$/m, `name: ${name}`).replace(/\bStarter\b/g, title)
+  }
   // The registry name in server.ts, its fallback and the committed server.json stay in step.
   if (registryName) next = next.replaceAll("io.github.example/starter", registryName)
   if (next !== text) {
@@ -109,6 +126,10 @@ for (const file of walk(".")) {
 }
 
 console.log(`Renamed to "${name}" in ${changed} files.`)
+console.log(
+  "Kept the skills/starter folder name (the skill's frontmatter name and prose were renamed; " +
+    "rename the folder by hand, and update apps/api/src/skill-parity.test.ts with it).",
+)
 if (registryName) console.log(`MCP registry name: ${registryName}`)
 else
   console.warn(

@@ -150,6 +150,7 @@ describe("AccountSecurityPage", () => {
       expect(onEnableTwoFactor).toHaveBeenCalledWith("correct horse battery staple 42"),
     )
 
+    expect(within(dialog).getByRole("img", { name: "QR code for the setup link" })).toBeTruthy()
     expect(within(dialog).getByLabelText("Setup key")).toHaveProperty("value", "JBSWY3DPEHPK3PXP")
     expect(within(dialog).getByLabelText("Setup link")).toHaveProperty("value", TOTP_URI)
     await user.type(within(dialog).getByLabelText("Six-digit code from the app"), "123456")

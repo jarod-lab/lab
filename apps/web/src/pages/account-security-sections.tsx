@@ -24,6 +24,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/com
 import { Input } from "@starter/ui/components/ui/input"
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
+import { QrCode } from "@starter/ui/dplus/qr-code"
 
 import {
   type PasskeyInfo,
@@ -529,10 +530,15 @@ function EnrolDialog({
             <DialogHeader>
               <DialogTitle>Add to your authenticator app</DialogTitle>
               <DialogDescription>
-                Scanning a QR code isn't available here yet. Add a new account in your app and enter
-                the setup key, or open the setup link on this device.
+                Scan the code with your app. Can't scan? Enter the setup key, or open the setup link
+                on this device.
               </DialogDescription>
             </DialogHeader>
+            <QrCode
+              value={setup.totpURI}
+              label="QR code for the setup link"
+              className="self-center"
+            />
             <CopyField label="Setup key" value={secret} />
             <CopyField label="Setup link" value={setup.totpURI} />
             <codeForm.Field name="code">

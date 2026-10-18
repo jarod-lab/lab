@@ -1,5 +1,7 @@
 // Paginated lists: pages line up with no repeats or gaps, and a bad cursor is a BAD_REQUEST.
 import { encodeCursor } from "@starter/api"
+import { member, twoFactor, user as userTable } from "@starter/db"
+import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestApp } from "./app.test.helpers"
@@ -112,5 +114,55 @@ describe("paginated operations", () => {
       expect(res.status).toBe(400)
       expect(res.body.error).toMatchObject({ code: "BAD_REQUEST" })
     })
+  })
+})
+
+describe("reset_member_two_factor scope", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp()
+  })
+  afterAll(() => t.close())
+
+  const reset = (userId: string) =>
+    t.req(`/v1/members/${userId}/two-factor/reset`, t.as(t.owner.cookie, { method: "POST" }))
+
+  const enableTwoFactor = async (userId: string) => {
+    await t.db
+      .insert(twoFactor)
+      .values({ id: `tf-${userId}`, secret: "s", backupCodes: "b", userId })
+    await t.db.update(userTable).set({ twoFactorEnabled: true }).where(eq(userTable.id, userId))
+  }
+
+  it("lets an owner reset a member whose only organization is this one", async () => {
+    await enableTwoFactor(t.viewer.userId)
+    const res = await reset(t.viewer.userId)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ reset: true })
+    const rows = await t.db.select().from(twoFactor).where(eq(twoFactor.userId, t.viewer.userId))
+    expect(rows).toHaveLength(0)
+  })
+
+  it("refuses with CONFLICT, and changes nothing, for a member of another organization too", async () => {
+    await t.db.insert(member).values({
+      id: "member-elsewhere",
+      organizationId: t.other.orgId,
+      userId: t.viewer.userId,
+      role: "member",
+      createdAt: new Date(),
+    })
+    await enableTwoFactor(t.viewer.userId)
+    const res = await reset(t.viewer.userId)
+    expect(res.status).toBe(409)
+    const body = (await res.json()) as { error: { code: string; hint?: string } }
+    expect(body.error.code).toBe("CONFLICT")
+    expect(body.error.hint).toMatch(/own security settings/)
+    const rows = await t.db.select().from(twoFactor).where(eq(twoFactor.userId, t.viewer.userId))
+    expect(rows).toHaveLength(1)
+    const [u] = await t.db
+      .select({ enabled: userTable.twoFactorEnabled })
+      .from(userTable)
+      .where(eq(userTable.id, t.viewer.userId))
+    expect(u?.enabled).toBe(true)
   })
 })

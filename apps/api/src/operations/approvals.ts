@@ -95,17 +95,9 @@ export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now"
     handler: ({ id, decision }, { caller }) =>
       inCallerOrg(caller, (org) =>
         name(ApprovalId(id), async (approvalId) => {
-          requirePerson(caller)
+          const userId = requirePerson(caller)
           const inOrg = await requireInOrg(approvalInOrg, db, approvalId, org, "Approval")
-          const row = await decideApproval(
-            db,
-            approvalId,
-            org,
-            inOrg,
-            decision,
-            caller.actor.type === "user" ? caller.actor.userId : "",
-            now(),
-          )
+          const row = await decideApproval(db, approvalId, org, inOrg, decision, userId, now())
           return approvalView(row, now(), "person")
         }),
       ),

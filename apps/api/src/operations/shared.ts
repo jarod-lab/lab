@@ -65,13 +65,17 @@ export const actorOf = (caller: Caller): { type: "user" | "apiKey"; id: string }
 export const viewerOf = (caller: Caller): "person" | "agent" =>
   caller.via === "session" ? "person" : "agent"
 
-/** Only a person signed in to the web app decides approvals: never a key, never an OAuth token. */
-export function requirePerson(caller: Caller): void {
+/**
+ * Only a person signed in to the web app decides approvals: never a key, never an OAuth token.
+ * Returns the person's user id, so the caller needs no second look at the actor.
+ */
+export function requirePerson(caller: Caller): string {
   if (caller.via !== "session" || caller.actor.type !== "user") {
     throw new AppError("FORBIDDEN", "Only a person can decide an approval", {
       hint: "Open the run in the web app and decide there. API keys and AI clients can't approve.",
     })
   }
+  return caller.actor.userId
 }
 
 export const approvalOutputSchema = z.object({

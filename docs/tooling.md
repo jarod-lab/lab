@@ -10,12 +10,31 @@
 - **Web and CLI builds**: `pnpm --filter @starter/web build` writes `apps/web/dist`, which
   `WEB_DIST_DIR` needs. `pnpm --filter @starter/cli build` writes `dist/bin.js`.
 - **baseline** (`code-baseline`): bans, ratchets and design-system rules in `baseline.toml`.
-  Localhost `http://` warnings are fine. Our own error rules: `no-console-log` (every console
-  method), `use-starter-logger` (no pino, winston, ...), `use-cn` (no clsx, tailwind-merge,
-  classnames), `use-starter-ui` (no Base UI, Radix or other kits outside `packages/ui`) and
-  `use-starter-env` (no `process.env` outside `packages/env`). Rules are regex or import matches,
-  not type-aware. `skip_strings` ignores string and template literals (including code inside `${}`),
-  but comments still match.
+  Warnings don't fail the run (localhost `http://`, inline styles, the React and a11y advice in
+  `apps/web`); errors do. Presets: `shadcn-strict`, `dependency-hygiene`, `security` and
+  `ai-codegen` everywhere; `react` and `accessibility` scoped to `apps/web` (minus the
+  size/useReducer/DOM-query opinions and `no-array-index-key`, see the comment there) and
+  `accessibility` on `packages/ui/src/dplus`. Generated files (`*.gen.ts`), `scripts/`, `docs/` and
+  the shadcn demos are excluded.
+  Our own rules (errors): `no-console-log` (every console method), `use-starter-logger` (no pino,
+  winston, ...), `use-cn` (no clsx, tailwind-merge, classnames), `use-starter-ui` (no Base UI, Radix
+  or other kits outside `packages/ui`), `use-starter-env` (no `process.env` outside `packages/env`),
+  `no-type-any` (type positions only; `operation.ts` is the one exception), `no-new-function`
+  (outside tests), `no-server-imports-in-client` (no `@starter/db`, `env`, `auth-proofs` or
+  `observability` from `apps/web`, `packages/ui`, `sdk` or `cli`), `use-app-error` (no bare
+  `new Error` in `apps/api`), `no-focused-tests`, `no-sleep-in-e2e`, `e2e-test-import`, the two
+  `ui-css-*-import` rules (`styles.css` must keep its `shadcn/tailwind.css` and `tw-animate-css`
+  imports) and `required-files`.
+  Ratchets (ceilings that only go down; lower one with `baseline ratchet down <id>` after removing
+  call sites): `ratchet-cross-package-relative-imports` (4), `ratchet-as-unknown-as` (10, outside
+  tests and `*.types.ts`), `ratchet-vi-mock` (8), `ratchet-lint-disable` (3),
+  `ratchet-ts-expect-error` (2, outside `*.types.ts`) and `ratchet-skipped-tests` (2). Never raise a
+  ceiling to make room. Rules are regex or import matches, not type-aware; `skip_strings` ignores
+  string and template literals (including code inside `${}`), but comments still match.
+- **Stop hook** (`scripts/claude-stop-check.mjs`, wired in `.claude/settings.json`): runs baseline
+  and typecheck when an agent tries to end its turn and sends failures back. It steps aside on its
+  second run in a turn (`stop_hook_active`), so a failure the agent can't fix is reported, not
+  looped on. It does not replace the full check list.
 - **e2e** (tester-army, `pnpm e2e`; docs in `node_modules/e2e/docs`): `e2e.config.ts`, one
   `e2e/<page>.e2e.ts` per page following its board's journey, helpers in `e2e/support/`. Targets
   desktop 1280x720 and phone 390x844.

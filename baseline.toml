@@ -1,8 +1,23 @@
 [baseline]
 name = "starter"
-extends = ["shadcn-strict", "dependency-hygiene", "security"]
-# scripts: CLIs may log. *-example.tsx: shadcn demo code, full of raw colors by design.
-exclude = ["scripts/**", "packages/ui/src/components/examples/**"]
+extends = ["shadcn-strict", "dependency-hygiene", "security", "ai-codegen"]
+# scripts: CLIs may log. *-example.tsx: shadcn demo code, full of raw colors by design. *.gen.ts:
+# generated (TanStack's route tree is full of `as any`). docs: agent prompts, not product text.
+exclude = ["scripts/**", "packages/ui/src/components/examples/**", "**/*.gen.ts", "docs/**"]
+
+# React correctness rules for the app code we write (not the vendored shadcn components). Dropped:
+# max-component-size, prefer-use-reducer and no-direct-document-query are opinions (and the DOM
+# queries are in tests); no-array-index-key flags the three positional lists here (highlighter tokens,
+# OTP slots) where the index is the identity; no-new-function is re-added below without tests, since
+# theme.test.ts runs the pre-paint script with it.
+[[baseline.scoped]]
+preset = ["react", "accessibility"]
+path = "apps/web"
+exclude_rules = ["max-component-size", "prefer-use-reducer", "no-direct-document-query", "no-array-index-key", "no-new-function"]
+
+[[baseline.scoped]]
+preset = "accessibility"
+path = "packages/ui/src/dplus"
 
 # Overrides the shadcn-strict rule of the same id (presets are replaced whole): identical except
 # the overlay scrim used by shadcn's dialog, alert-dialog, sheet and drawer (Sera), which is
@@ -107,3 +122,164 @@ type = "file-presence"
 severity = "error"
 forbidden_files = [".env.production", ".env.staging"]
 message = "Deploy env files don't belong in the repo: keep them in the platform's secret store"
+
+# Overrides ai-codegen's no-type-any, whose pattern also matched "any" in prose comments. Type positions
+# only. packages/api/src/operation.ts keeps `Operation<any, any>` on purpose (see its biome-ignore).
+[[rule]]
+id = "no-type-any"
+type = "banned-pattern"
+severity = "error"
+glob = "**/*.{ts,tsx}"
+exclude_glob = ["packages/api/src/operation.ts"]
+regex = true
+skip_strings = true
+pattern = ":\\s*any\\b|<any\\b|,\\s*any[,>]|\\bas any\\b"
+message = "Avoid 'any'; use a specific type or 'unknown'"
+
+[[rule]]
+id = "no-new-function"
+type = "banned-pattern"
+severity = "error"
+glob = "**/*.{ts,tsx,js,mjs}"
+exclude_glob = ["**/*.test.{ts,tsx}"]
+pattern = "new Function("
+message = "new Function() is eval; no dynamic code execution"
+
+# ── Rules from AGENTS.md that were prose until now ────────────────────────────────────────────────
+
+# Without these two imports Tailwind silently drops the data-open:/data-closed: variants and the
+# animate-in/animate-out utilities, and typecheck won't notice.
+[[rule]]
+id = "ui-css-shadcn-import"
+type = "required-pattern"
+severity = "error"
+glob = "packages/ui/src/styles.css"
+pattern = "@import \"shadcn/tailwind.css\""
+message = "packages/ui/src/styles.css must keep @import \"shadcn/tailwind.css\""
+
+[[rule]]
+id = "ui-css-animate-import"
+type = "required-pattern"
+severity = "error"
+glob = "packages/ui/src/styles.css"
+pattern = "@import \"tw-animate-css\""
+message = "packages/ui/src/styles.css must keep @import \"tw-animate-css\""
+
+# Server-only packages never reach a client bundle or a customer's machine.
+[[rule]]
+id = "no-server-imports-in-client"
+type = "banned-import"
+severity = "error"
+glob = "{apps/web,packages/ui,packages/sdk,packages/cli}/**/*.{ts,tsx}"
+packages = ["@starter/db", "@starter/env", "@starter/auth-proofs", "@starter/observability"]
+message = "Server-only package imported from client code"
+suggest = "Go through the API (@starter/sdk) or move the shared piece to a package both sides can use"
+
+# Handlers and data access throw AppError (clients get error.toPublic()); bare Error leaks nothing but
+# also carries no code.
+[[rule]]
+id = "use-app-error"
+type = "banned-pattern"
+severity = "error"
+glob = "apps/api/src/**/*.ts"
+exclude_glob = ["**/*.test.ts", "**/*.test.helpers.ts"]
+skip_strings = true
+pattern = "new Error("
+message = "Throw AppError from @starter/errors"
+suggest = "throw new AppError(\"INTERNAL\", \"...\")"
+
+[[rule]]
+id = "no-focused-tests"
+type = "banned-pattern"
+severity = "error"
+glob = "**/*.{test,e2e}.{ts,tsx}"
+regex = true
+pattern = "\\b(it|test|describe)\\.only\\("
+message = "A focused test skips the rest of the suite"
+
+[[rule]]
+id = "no-sleep-in-e2e"
+type = "banned-pattern"
+severity = "error"
+glob = "e2e/**/*.ts"
+skip_strings = true
+pattern = "sleep("
+message = "No sleep in e2e tests; use matchers, which retry"
+
+[[rule]]
+id = "e2e-test-import"
+type = "required-pattern"
+severity = "error"
+glob = "e2e/**/*.e2e.ts"
+pattern = "from \"@e2e-dev/web\""
+message = "Import test from @e2e-dev/web (it provides app, screen, browser); expect from e2e"
+
+# The floor itself.
+[[rule]]
+id = "required-files"
+type = "file-presence"
+severity = "error"
+required_files = ["AGENTS.md", ".env.example", "SECURITY.md", "lefthook.yml", "baseline.toml", ".github/workflows/ci.yml", "packages/env/src/index.ts", "packages/config/vitest.base.ts"]
+message = "A file the checks depend on is missing"
+
+# ── Ratchets: ceilings that only go down. Lower max_count with `baseline ratchet down <id>` ───────
+
+[[rule]]
+id = "ratchet-cross-package-relative-imports"
+type = "ratchet"
+severity = "error"
+glob = "{apps,packages}/**/*.{ts,tsx}"
+regex = true
+pattern = "from \"(\\.\\./)+(apps|packages)/"
+max_count = 4
+message = "Import another package through its name, not a relative path into its src"
+
+[[rule]]
+id = "ratchet-as-unknown-as"
+type = "ratchet"
+severity = "error"
+glob = "{apps,packages}/**/*.{ts,tsx}"
+exclude_glob = ["**/*.test.{ts,tsx}", "**/*.types.ts", "**/test-helpers.ts", "**/*.test.helpers.ts"]
+pattern = "as unknown as"
+max_count = 10
+message = "Double casts hide type errors; fix the type at the source"
+
+[[rule]]
+id = "ratchet-vi-mock"
+type = "ratchet"
+severity = "error"
+glob = "**/*.test.{ts,tsx}"
+pattern = "vi.mock("
+max_count = 8
+message = "Prefer the real module (PGlite, fake SES, in-process app) over vi.mock"
+
+[[rule]]
+id = "ratchet-lint-disable"
+type = "ratchet"
+severity = "error"
+glob = "{apps,packages,e2e}/**/*.{ts,tsx}"
+regex = true
+pattern = "(oxlint|eslint)-disable|biome-ignore"
+max_count = 3
+message = "Fix the lint error instead of disabling the rule"
+
+[[rule]]
+id = "ratchet-ts-expect-error"
+type = "ratchet"
+severity = "error"
+glob = "{apps,packages,e2e}/**/*.{ts,tsx}"
+exclude_glob = ["**/*.types.ts"]
+regex = true
+pattern = "@ts-(ignore|expect-error|nocheck)"
+max_count = 2
+message = "Fix the type error (type-level tests in *.types.ts may use @ts-expect-error)"
+
+[[rule]]
+id = "ratchet-skipped-tests"
+type = "ratchet"
+severity = "error"
+glob = "**/*.{test,e2e}.{ts,tsx}"
+regex = true
+pattern = "\\b(it|test|describe)\\.skip\\("
+max_count = 2
+message = "A skipped test is a missing test"

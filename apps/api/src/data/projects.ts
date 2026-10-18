@@ -7,6 +7,7 @@ import type {
   ProjectId,
   ProjectInOrg,
 } from "@starter/auth-proofs"
+import { AppError } from "@starter/errors"
 import { type Database, project } from "@starter/db"
 import { and, asc, eq, gt, or, sql } from "drizzle-orm"
 
@@ -63,7 +64,7 @@ export async function createProject<O>(
       createdAt: new Date(),
     })
     .returning()
-  if (!row) throw new Error("insert returned no row")
+  if (!row) throw new AppError("INTERNAL", "insert returned no row")
   return row
 }
 

@@ -13,26 +13,27 @@ export interface Sent {
 }
 
 /**
- * A fetch stub for the product client: it records each request as a Sent (the client passes a
- * Request) and answers with `reply`. `fetchImpl` is cast to typeof fetch for the API factories.
+ * A fetch stub for the product client: it records each request as a Sent and answers with `reply`.
+ * It takes fetch's own parameters, so the API factories accept it as `typeof fetch` without a cast.
  */
 export function productFetch(reply: (sent: Sent, index: number) => Response | Promise<Response>) {
   const sent: Sent[] = []
-  const fetchImpl = vi.fn(async (input: Request) => {
-    const url = new URL(input.url)
-    const text = input.method === "GET" || input.method === "HEAD" ? "" : await input.text()
+  const fetchImpl: typeof fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(request.url)
+    const text = request.method === "GET" || request.method === "HEAD" ? "" : await request.text()
     const entry: Sent = {
-      method: input.method,
+      method: request.method,
       path: url.pathname,
       search: url.search,
-      organization: input.headers.get("X-Organization-Id"),
+      organization: request.headers.get("X-Organization-Id"),
       body: text ? JSON.parse(text) : undefined,
-      credentials: input.credentials,
+      credentials: request.credentials,
     }
     sent.push(entry)
     return reply(entry, sent.length - 1)
   })
-  return { fetchImpl: fetchImpl as unknown as typeof fetch, sent }
+  return { fetchImpl, sent }
 }
 
 export function json(body: unknown, init: { status?: number; date?: string } = {}) {

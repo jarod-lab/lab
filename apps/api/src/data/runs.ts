@@ -156,7 +156,7 @@ export async function startRun<A, O>(
       createdAt: now,
     })
     .returning()
-  if (!row) throw new Error("insert returned no row")
+  if (!row) throw new AppError("INTERNAL", "insert returned no row")
   return row
 }
 

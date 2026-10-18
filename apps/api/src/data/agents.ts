@@ -7,6 +7,7 @@ import type {
   Named,
   OrganizationId,
 } from "@starter/auth-proofs"
+import { AppError } from "@starter/errors"
 import { type Database, agent, run } from "@starter/db"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
@@ -62,7 +63,7 @@ export async function createAgent<O>(
       updatedAt: now,
     })
     .returning()
-  if (!row) throw new Error("insert returned no row")
+  if (!row) throw new AppError("INTERNAL", "insert returned no row")
   return row
 }
 

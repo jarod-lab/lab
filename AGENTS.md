@@ -56,8 +56,8 @@ pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm baseline && \
 ```
 
 After an API change, run `pnpm --filter @starter/api-app test -u` and
-`pnpm --filter @starter/sdk generate` first. CI adds gitleaks, commitlint, an OpenAPI check and a
-Docker build (`docs/tooling.md`). `pnpm format` fixes formatting.
+`pnpm --filter @starter/sdk generate` first. CI adds gitleaks, commitlint, a generated-files check,
+an OpenAPI check and a Docker build (`docs/tooling.md`). `pnpm format` fixes formatting.
 
 ## Rules
 
@@ -167,8 +167,10 @@ Details: `docs/tooling.md`.
 
 - Storybook (`pnpm storybook`, port 6006) serves MCP at `/mcp` while it runs. `pnpm dev` runs the
   apps on portless `*.localhost` URLs (`portless.json`).
-- baseline (`baseline.toml`) enforces our error rules: no console, no other loggers, `cn` only, no
-  kits outside `packages/ui`, no `process.env` outside `packages/env`.
+- baseline (`baseline.toml`): presets, our error rules (no console, no other loggers, `cn` only, no
+  kits outside `packages/ui`, no `process.env` outside `packages/env`, no `any` in types, no bare
+  `new Error` in `apps/api`, no server imports in client packages) and ratchets whose ceilings only
+  go down (`baseline ratchet down <id>`; never raise one). Warnings don't fail the run; errors do.
 - e2e (`pnpm e2e`) is not in CI yet. Turbo's graph is in `turbo.jsonc`; its `transit` task carries
   the package graph into test hashes.
 - Dependencies align through the pnpm `catalog:`. Keep TypeScript at `^5.9.3`.
@@ -177,7 +179,10 @@ Details: `docs/tooling.md`.
 
 `.claude/settings.json` pre-approves pnpm, turbo, baseline, gitleaks and local git (status, diff,
 log, add, commit). It denies force-push, `--no-verify`, `git reset --hard`, DB migrations and `.env`
-access. Anything else, such as `git push`, `docker` or installing skills, needs the user.
+access. Anything else, such as `git push`, `docker` or installing skills, needs the user. The Stop
+hook (`scripts/claude-stop-check.mjs`) blocks ending a turn while baseline or typecheck fail; it
+steps aside on its second run in a turn (`stop_hook_active`), so an unfixable failure is reported,
+not looped on.
 
 ## Skills (this repo)
 

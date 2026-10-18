@@ -302,7 +302,7 @@ export function createAuth(opts: AuthOptions) {
     // grant standing (principal.ts), so it would look like a revocation without being one.
     // revoke_agent_access ends a grant.
     disabledPaths: ["/token", "/device/token", "/oauth2/delete-consent"],
-    hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave(endScim) },
+    hooks: { before: nativeLoopbackRegistration, after: endGrantsOnLeave(opts.db, endScim) },
     user: {
       // Changing the sign-in email: the new address gets a confirmation link, the old one a notice.
       changeEmail: { enabled: true },
@@ -450,7 +450,7 @@ export function createAuth(opts: AuthOptions) {
           },
           // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
           afterRemoveMember: async ({ member, organization }) => {
-            await revokeMemberGrants(await adapter(), member.userId, organization.id)
+            await revokeMemberGrants(opts.db, member.userId, organization.id)
             await endScim(member.userId, organization.id)
           },
         },
@@ -572,3 +572,4 @@ export {
 } from "@better-auth/oauth-provider"
 export * from "./permissions"
 export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
+export { type GrantScope, revokeGrants } from "./member-grants"

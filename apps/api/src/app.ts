@@ -10,6 +10,7 @@ import {
   llmsTxt,
   type OperationContext,
   openApiDocument,
+  type PublicContext,
   type RegistryMeta,
   serverJson,
 } from "@starter/api"
@@ -20,13 +21,13 @@ import {
   OAUTH_SCOPES,
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
-  provisionalSignup,
   resolvePrincipal,
 } from "@starter/auth"
 import { AppError, reportError, toAppError } from "@starter/errors"
 import { type Logger } from "@starter/logger"
 import { createMcpHandler, protectedResourceMetadata } from "@starter/mcp"
 import {
+  createHealthHandler,
   createStatusHandler,
   requestIdFrom,
   type StatusOptions,
@@ -38,7 +39,6 @@ import { BEARER_PATHS, bearerCors } from "./cors"
 import type { ApiHooks } from "./hooks"
 import { type DevMailSink, devMailRoute } from "./dev-mail"
 import { mountWeb } from "./static"
-import { REST_ONLY_OPERATIONS, signupInput } from "./operations"
 
 export interface AppOptions {
   auth: Auth
@@ -71,9 +71,6 @@ export interface AppOptions {
    */
   devMail?: DevMailSink
 }
-
-/** Operations that take no credential. Everything else needs an API key or OAuth token. */
-const UNAUTHENTICATED = ["signup"]
 
 /** Idempotency-Key: 1 to 255 characters, or absent. */
 function idempotencyKeyOf(value: string | undefined): string | undefined {
@@ -118,23 +115,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
 
 /**
- * The OpenAPI document, with the one operation that needs no credentials and takes no idempotency
- * key (signup) corrected: its generated entry would advertise auth and a retry header it ignores.
- */
-function openApi(doc: ReturnType<typeof openApiDocument>) {
-  const post = doc.paths["/v1/signup"]?.post
-  if (isRecord(post)) {
-    post.security = []
-    if (Array.isArray(post.parameters)) {
-      post.parameters = post.parameters.filter(
-        (p) => !(isRecord(p) && p.name === "Idempotency-Key"),
-      )
-    }
-  }
-  return doc
-}
-
-/**
  * The request path for the access log. better-auth's emailed reset link (also the claim link) puts a
  * live token in the path, `/api/auth/reset-password/<token>`, so that segment is replaced.
  */
@@ -167,10 +147,10 @@ export function createApp(opts: AppOptions) {
         OAUTH_SCOPES.filter((s) => covers(OAUTH_SCOPE_GRANTS[s], permissions)),
     },
   }
-  const openapi = openApi(openApiDocument(operations, info))
-  const docLinks = { unauthenticated: UNAUTHENTICATED }
-  const llms = llmsTxt(operations, info, docLinks)
-  const llmsFull = llmsFullTxt(operations, info, docLinks)
+  const openapi = openApiDocument(operations, info)
+  const llms = llmsTxt(operations, info)
+  const llmsFull = llmsFullTxt(operations, info)
+  const health = createHealthHandler({})
   const registryRecord = serverJson(info, opts.registry ?? DEFAULT_REGISTRY_META)
 
   const authenticate = (req: Request): Promise<Caller | null> =>
@@ -180,7 +160,7 @@ export function createApp(opts: AppOptions) {
     name: opts.name,
     version: opts.version,
     instructions: `${opts.description} Full reference: ${baseURL}/llms-full.txt`,
-    operations: operations.filter((op) => !REST_ONLY_OPERATIONS.has(op.name)),
+    operations,
     authenticate,
     resourceMetadataUrl: `${baseURL}/.well-known/oauth-protected-resource/mcp`,
     invokeOptions: hooks.invokeOptions,
@@ -254,7 +234,7 @@ export function createApp(opts: AppOptions) {
   app.get("/.well-known/mcp/server.json", (c) => c.json(registryRecord))
   // Liveness only: it says this process answers, and pings no dependency. /status reports the
   // vendors, from what they publish about themselves.
-  app.get("/health", (c) => c.json({ ok: true }))
+  app.get("/health", () => health())
   if (opts.status) {
     const status = createStatusHandler(opts.status.providers, { fetch: opts.status.fetch, logger })
     app.get("/status", () => status())
@@ -271,33 +251,6 @@ export function createApp(opts: AppOptions) {
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))
 
-  // Signup needs no credentials. With credentials, it falls through to the operation (which refuses).
-  app.post("/v1/signup", async (c, next) => {
-    if (await authenticate(c.req.raw)) return next()
-    const body = await c.req.json().catch(() => {
-      throw new AppError("BAD_REQUEST", "Body must be JSON")
-    })
-    const input = signupInput.safeParse(body)
-    if (!input.success)
-      throw new AppError("BAD_REQUEST", "Invalid signup", {
-        hint: input.error.issues
-          .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
-          .join("; "),
-      })
-    const created = await provisionalSignup(auth, {
-      email: input.data.email,
-      name: input.data.name,
-      ip: clientIp(c, trustProxy),
-    })
-    return c.json({
-      organizationId: created.organizationId,
-      apiKey: created.apiKey,
-      claimUrlSentTo: input.data.email.trim().toLowerCase(),
-      apiKeyEndsWhenClaimed: true,
-      limits: { requestsPerDay: hooks.limits.unclaimed },
-    })
-  })
-
   /**
    * The browser sends the session cookie with any request to this origin, including a form another
    * same-site page posts as text/plain. So a write the cookie authenticates must come from a trusted
@@ -311,29 +264,43 @@ export function createApp(opts: AppOptions) {
     })
   }
 
+  /** The operation's input from the request: query, JSON body and path params, merged. */
+  async function inputOf(c: Context, op: AnyOperation): Promise<unknown> {
+    let body: unknown = {}
+    if (op.method !== "GET" && op.method !== "DELETE") {
+      // No body is an empty input: an operation whose input is all path parameters has none.
+      const text = await c.req.text()
+      try {
+        body = text.trim() === "" ? {} : JSON.parse(text)
+      } catch {
+        throw new AppError("BAD_REQUEST", "Body must be JSON")
+      }
+      // Spreading an array or a string would turn it into numbered fields.
+      if (!isRecord(body) || Array.isArray(body)) {
+        throw new AppError("BAD_REQUEST", "Body must be a JSON object", {
+          hint: 'Send the input fields as one object, e.g. {"name": "..."}.',
+        })
+      }
+    }
+    return { ...c.req.query(), ...(body as object), ...c.req.param() }
+  }
+
   // REST: one route per operation.
   for (const op of operations) {
     app.on(op.method, op.path, async (c) => {
+      // A public operation (signup) reads no credential: one sent with it is ignored. It runs
+      // without hooks, so it is metered, keyed and audited by nothing, and gets no rate-limit headers.
+      if (op.auth === "none") {
+        const context: PublicContext = {
+          public: { ip: clientIp(c, trustProxy) },
+          requestId: c.get("requestId"),
+        }
+        return c.json(await invoke(op, await inputOf(c, op), context))
+      }
       const caller = await authenticate(c.req.raw)
       if (!caller) throw new AppError("UNAUTHORIZED", "Send an API key or OAuth access token")
       if (caller.via === "session" && op.method !== "GET") await assertTrustedOrigin(c.req.raw)
-      let body: unknown = {}
-      if (op.method !== "GET" && op.method !== "DELETE") {
-        // No body is an empty input: an operation whose input is all path parameters has none.
-        const text = await c.req.text()
-        try {
-          body = text.trim() === "" ? {} : JSON.parse(text)
-        } catch {
-          throw new AppError("BAD_REQUEST", "Body must be JSON")
-        }
-        // Spreading an array or a string would turn it into numbered fields.
-        if (!isRecord(body) || Array.isArray(body)) {
-          throw new AppError("BAD_REQUEST", "Body must be a JSON object", {
-            hint: 'Send the input fields as one object, e.g. {"name": "..."}.',
-          })
-        }
-      }
-      const input = { ...c.req.query(), ...(body as object), ...c.req.param() }
+      const input = await inputOf(c, op)
       const ctx: OperationContext = {
         caller,
         requestId: c.get("requestId"),

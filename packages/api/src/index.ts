@@ -23,8 +23,11 @@ export {
   type InvokeOptions,
   type InvokeOutcome,
   type Operation,
+  type HandlerContext,
+  type OperationAuth,
   type OperationContext,
   type OperationSpec,
+  type PublicContext,
 } from "./operation"
 export { ORGANIZATION_HEADER } from "./headers"
 export {

@@ -54,12 +54,12 @@ the registry can't express, extend `OperationSpec` in `packages/api` and the gen
 3. Output must match `output` (a mismatch is an INTERNAL error). Prefer objects: MCP only returns
    `structuredContent` for objects. Paginated lists use `paginationInput` and `paginated(key, item)`, with
    `encodeCursor` / `decodeCursor` for the cursor (`packages/api/src/pagination.ts`; see `list_projects`).
-4. REST-only operations: a name in `REST_ONLY_OPERATIONS` (`operations.ts`) is left out of MCP. `signup` is the
-   one. Its route is the exception to "never hand-write a route": `app.ts` mounts `POST /v1/signup` by hand before
-   the generated per-operation routes, because it takes no credential. A credential-free operation needs the same
-   treatment: its own route in `app.ts`, a correction to its OpenAPI entry in `openApi()` (today hard-coded to
-   `/v1/signup`: `security: []`, no `Idempotency-Key`), and the name in `UNAUTHENTICATED`, which only feeds the
-   llms.txt docs. The operation's handler just refuses requests that carry credentials.
+4. Public operations: `auth: "none"` on the spec makes an operation need no credential (`signup` is the one).
+   `defineOperation` requires `permissions: {}` for it. Its handler gets a `PublicContext` (`public.ip`, no
+   `caller`), not a caller. It is a normal REST route, but it is not an MCP tool (calling it by name is "unknown
+   tool"), runs no invoke hooks (no metering, Idempotency-Key, or audit), and its OpenAPI entry has `security: []`
+   and no `Idempotency-Key`. llms.txt marks it "no credential" from the same flag. A credential sent with it is
+   ignored. Do not add a route by hand for a credential-free call: set `auth: "none"` and handle it in the handler.
 5. Update the contract and review it: `pnpm --filter @starter/api-app test -u`, then read the
    `apps/api/openapi.json` diff as a public API change. Adding is safe. Removing, renaming, making a field
    required, narrowing a type or requiring more permissions breaks deployed agents: add a new operation or `/v2`.
@@ -136,7 +136,7 @@ so REST and MCP behave the same:
   claim is never missing. `/token` and `/device/token` are in `disabledPaths` (the plugin's own device token is a
   session token). Device clients have no consent row; their refresh tokens are the evidence for revocation and
   for `list_connected_agents`. Clients must register the `device_code` grant and should request `offline_access`.
-- **Provisional signup** (`packages/auth/src/signup.ts`, route in `app.ts`): no credential. Creates an unverified
+- **Provisional signup** (`packages/auth/src/signup.ts`, the `signup` operation with `auth: "none"` in `operations.ts`): no credential. Creates an unverified
   user with a random password, a personal org, and an `sk_` key with project read, create, update and delete, and
   sends one claim email (a reset link to `/claim`, which verifies the address). Limits: `SIGNUP_LIMITS` (5 per IP
   per hour, 20 per email domain per day) answer RATE_LIMITED with `Retry-After`; an existing email is CONFLICT.

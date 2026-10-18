@@ -78,6 +78,8 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
   const required = new Set(schema.required ?? [])
   const inPath = new Set(pathParams(op.path))
   const hasBody = op.method !== "GET" && op.method !== "DELETE"
+  // A public operation runs no hooks, so it takes no Idempotency-Key either.
+  const isPublic = op.auth === "none"
   const parameters = [
     ...Object.entries(props)
       .filter(([key]) => inPath.has(key) || !hasBody)
@@ -87,7 +89,7 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
         required: inPath.has(key) || required.has(key),
         schema: s,
       })),
-    ...(op.hints?.readOnly ? [] : [IDEMPOTENCY_KEY_PARAM]),
+    ...(op.hints?.readOnly || isPublic ? [] : [IDEMPOTENCY_KEY_PARAM]),
   ]
   const bodyProps = Object.fromEntries(Object.entries(props).filter(([k]) => !inPath.has(k)))
   // An operation whose input is all path parameters reads no body, so it declares none.
@@ -103,7 +105,9 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
     operationId: op.name,
     summary: op.summary,
     description: op.description,
-    ...(parameters.length > 0 && { parameters }),
+    // A body operation always lists its parameters, even none (the committed contract's public
+    // signup has always carried `parameters: []`).
+    ...((parameters.length > 0 || takesBody) && { parameters }),
     ...(takesBody && {
       requestBody: {
         required: true,
@@ -127,16 +131,18 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
         content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
       },
     },
-    security: [
-      { apiKey: [] },
-      { bearer: [] },
-      // Any token works for operations that need no permissions; otherwise any one listed scope.
-      ...(oauth
-        ? isEmpty(op.permissions)
-          ? [{ oauth2: [] }]
-          : oauth.scopesFor(op.permissions).map((s) => ({ oauth2: [s] }))
-        : []),
-    ],
+    security: isPublic
+      ? []
+      : [
+          { apiKey: [] },
+          { bearer: [] },
+          // Any token works for operations that need no permissions; otherwise any one listed scope.
+          ...(oauth
+            ? isEmpty(op.permissions)
+              ? [{ oauth2: [] }]
+              : oauth.scopesFor(op.permissions).map((s) => ({ oauth2: [s] }))
+            : []),
+        ],
     "x-required-permissions": formatPermissions(op.permissions).split(", ").filter(Boolean),
     ...(op.hints && { "x-agent-hints": op.hints }),
   }

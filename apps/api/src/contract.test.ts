@@ -8,7 +8,6 @@ import { Ajv2020 } from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createTestApp } from "./app.test.helpers"
-import { REST_ONLY_OPERATIONS } from "./operations"
 
 type Spec = {
   paths: Record<string, Record<string, OperationObject>>
@@ -103,7 +102,8 @@ describe("API contract", () => {
     it("answers each example over REST as documented and as the spec says", async () => {
       for (const ex of op.examples ?? []) {
         const { path, init } = requestFor(op, ex.input as Record<string, unknown>)
-        const res = await t.req(path, t.as(t.owner.cookie, init))
+        // A public operation is called with no credential, as its example says.
+        const res = await t.req(path, op.auth === "none" ? init : t.as(t.owner.cookie, init))
         const body = await res.json()
         if (ex.error) {
           expect(body).toMatchObject({ error: { code: ex.error } })
@@ -116,38 +116,36 @@ describe("API contract", () => {
       }
     })
 
-    it.skipIf(REST_ONLY_OPERATIONS.has(op.name))(
-      "behaves the same over MCP as over REST",
-      async () => {
-        const client = await t.mcpClient(t.owner.cookie)
-        // Results with generated fields (ids, keys, timestamps) differ per call; compare their shape.
-        const shape = (v: unknown): unknown =>
-          Array.isArray(v)
-            ? v.map(shape)
-            : v && typeof v === "object"
-              ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x)]))
-              : typeof v
-        try {
-          for (const ex of op.examples ?? []) {
-            const args = ex.input as Record<string, unknown>
-            const { path, init } = requestFor(op, args)
-            const rest = await (await t.req(path, t.as(t.owner.cookie, init))).json()
-            const mcp = await client.callTool({ name: op.name, arguments: args })
-            const text = (mcp.content as { type: string; text: string }[])[0]?.text ?? "null"
-            const result = mcp.structuredContent ?? JSON.parse(text)
-            if (ex.error) {
-              expect(mcp.isError).toBe(true)
-              expect(result).toMatchObject({ code: ex.error })
-              expect(rest).toMatchObject({ error: { code: ex.error } })
-            } else {
-              expect(mcp.isError ?? false).toBe(false)
-              expect(shape(result)).toEqual(shape(rest))
-            }
+    // Public operations are not MCP tools, so there is nothing to compare them with.
+    it.skipIf(op.auth === "none")("behaves the same over MCP as over REST", async () => {
+      const client = await t.mcpClient(t.owner.cookie)
+      // Results with generated fields (ids, keys, timestamps) differ per call; compare their shape.
+      const shape = (v: unknown): unknown =>
+        Array.isArray(v)
+          ? v.map(shape)
+          : v && typeof v === "object"
+            ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x)]))
+            : typeof v
+      try {
+        for (const ex of op.examples ?? []) {
+          const args = ex.input as Record<string, unknown>
+          const { path, init } = requestFor(op, args)
+          const rest = await (await t.req(path, t.as(t.owner.cookie, init))).json()
+          const mcp = await client.callTool({ name: op.name, arguments: args })
+          const text = (mcp.content as { type: string; text: string }[])[0]?.text ?? "null"
+          const result = mcp.structuredContent ?? JSON.parse(text)
+          if (ex.error) {
+            expect(mcp.isError).toBe(true)
+            expect(result).toMatchObject({ code: ex.error })
+            expect(rest).toMatchObject({ error: { code: ex.error } })
+          } else {
+            expect(mcp.isError ?? false).toBe(false)
+            expect(shape(result)).toEqual(shape(rest))
           }
-        } finally {
-          await client.close()
         }
-      },
-    )
+      } finally {
+        await client.close()
+      }
+    })
   })
 })

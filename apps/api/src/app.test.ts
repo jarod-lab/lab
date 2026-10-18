@@ -63,7 +63,7 @@ describe("api app (real Postgres via PGlite)", () => {
 
     it("serves health and JSON 404s, and echoes a request id", async () => {
       const health = await t.req("/health", { headers: { "x-request-id": "r-1" } })
-      expect(await health.json()).toEqual({ ok: true })
+      expect(await health.json()).toEqual({ status: "ok", checks: {} })
       expect(health.headers.get("x-request-id")).toBe("r-1")
       expect(await json(await t.req("/nope"))).toEqual({
         status: 404,
@@ -467,7 +467,7 @@ describe("GET /status", () => {
     })
     expect(asked).toEqual(["https://status.host.example/api/v2/status.json"])
     // /health stays a liveness check: it asks no one.
-    expect(await (await t.req("/health")).json()).toEqual({ ok: true })
+    expect(await (await t.req("/health")).json()).toEqual({ status: "ok", checks: {} })
     expect(asked).toHaveLength(1)
 
     const plain = await createTestApp()

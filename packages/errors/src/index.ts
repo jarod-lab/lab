@@ -76,20 +76,6 @@ export function toAppError(e: unknown): AppError {
   return new AppError("INTERNAL", message, { cause: e })
 }
 
-export type Result<T, E = AppError> = { ok: true; value: T } | { ok: false; error: E }
-
-export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value })
-export const err = <E = AppError>(error: E): Result<never, E> => ({ ok: false, error })
-
-/** Run a throwing function and capture the outcome as a Result. */
-export async function attempt<T>(fn: () => Promise<T> | T): Promise<Result<T>> {
-  try {
-    return ok(await fn())
-  } catch (e) {
-    return err(toAppError(e))
-  }
-}
-
 export type ErrorReporter = (error: AppError, context?: Record<string, unknown>) => void
 
 let reporter: ErrorReporter | undefined

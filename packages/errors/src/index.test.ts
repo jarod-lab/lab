@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { AppError, attempt, err, ok, reportError, setErrorReporter, toAppError } from "./index"
+import { AppError, reportError, setErrorReporter, toAppError } from "./index"
 
 afterEach(() => setErrorReporter(undefined))
 
@@ -25,21 +25,6 @@ describe("toAppError", () => {
     expect(wrapped.code).toBe("INTERNAL")
     expect(wrapped.cause).toBe(cause)
     expect(toAppError("str").message).toBe("str")
-  })
-})
-
-describe("Result", () => {
-  it("builds ok and err", () => {
-    expect(ok(1)).toEqual({ ok: true, value: 1 })
-    expect(err(new AppError("BAD_REQUEST", "x")).ok).toBe(false)
-  })
-
-  it("attempt captures throws as err", async () => {
-    expect(await attempt(() => 5)).toEqual({ ok: true, value: 5 })
-    const r = await attempt(() => {
-      throw new AppError("FORBIDDEN", "no")
-    })
-    expect(r.ok === false && r.error.code).toBe("FORBIDDEN")
   })
 })
 

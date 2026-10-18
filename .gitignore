@@ -7,6 +7,8 @@ dist
 coverage
 storybook-static
 .claude/worktrees/
+# agent-graph working state (graph.md, checks.md, progress.md) stays local
+.claude/graph/
 
 # e2e (tester-army) output: reports, artifacts, replay cache, logs
 .e2e/

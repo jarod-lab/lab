@@ -26,7 +26,5 @@ minimumReleaseAgeExclude:
   - '@wraps.dev/better-auth@0.3.0'
 
 allowBuilds:
-  '@prisma/client': false
-  better-sqlite3: false
   esbuild: true
   lefthook: true

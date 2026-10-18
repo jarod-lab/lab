@@ -63,7 +63,7 @@ export function OrgGeneralContainer({
     enabled: role.isSuccess,
   })
   const agents = useQuery({
-    queryKey: [...qk.org(organizationId).agents(), "count"],
+    queryKey: qk.org(organizationId).agentsCount(),
     queryFn: async () => (await agentsApi.list(organizationId)).length,
     enabled: isOwner,
   })

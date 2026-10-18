@@ -9,7 +9,7 @@ function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
       role="status"
       aria-label="Loading"
       viewBox="0 0 16 16"
-      className={cn("size-4 shrink-0 motion-safe:animate-[spin_2.4s_linear_infinite]", className)}
+      className={cn("size-4 shrink-0 motion-safe:animate-[spin_1.2s_linear_infinite]", className)}
       {...props}
     >
       <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />

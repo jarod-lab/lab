@@ -130,6 +130,8 @@
   --color-sidebar: var(--sidebar);
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
+  /* The one curve for anything entering or leaving: fast start, long settle. */
+  --ease-out-expo: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer base {
@@ -139,13 +141,26 @@
   body {
     @apply bg-background font-sans text-foreground;
   }
+  /* Every enter, exit and transition settles on the same curve unless a utility says otherwise. */
+  *,
+  ::before,
+  ::after {
+    --tw-ease: var(--ease-out-expo);
+  }
+  /* Reduced motion keeps the fades and drops the movement: nothing scales, slides or loops. */
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,
     ::after {
-      animation-duration: 0.01ms !important;
+      --tw-enter-scale: 1 !important;
+      --tw-exit-scale: 1 !important;
+      --tw-enter-translate-x: 0 !important;
+      --tw-enter-translate-y: 0 !important;
+      --tw-exit-translate-x: 0 !important;
+      --tw-exit-translate-y: 0 !important;
       animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
+      transition-property:
+        opacity, color, background-color, border-color, text-decoration-color !important;
     }
   }
 }

@@ -1,6 +1,4 @@
-import { createClient } from "@starter/auth/client"
-
-import { WebError } from "./web-auth"
+import { makeAuthClient, WebError } from "./web-auth"
 
 // The admin page's calls, through better-auth's admin client (adminClient in packages/auth/src/client.ts).
 // The server refuses every call from a non-admin session (and from an impersonated one, for the
@@ -84,8 +82,7 @@ const toUser = (raw: Record<string, unknown>): AdminUser => ({
 
 /** The browser implementation. Same-origin, like web-auth.ts: the session cookie goes with each call. */
 export function createAdminApi(baseURL?: string, fetchImpl?: typeof fetch): AdminApi {
-  // Only set when given: an explicit undefined would replace better-auth's default fetch.
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+  const client = makeAuthClient(baseURL, fetchImpl)
 
   return {
     async getSession() {

@@ -131,14 +131,23 @@ const toIso = (value: unknown): string | undefined => {
 const urlFrom = (body: { url?: string; redirect_uri?: string } | null | undefined) =>
   body?.url ?? body?.redirect_uri ?? undefined
 
+export type AuthClient = ReturnType<typeof createClient>
+
+/**
+ * The better-auth client for a page: same origin by default, so session cookies go with every call.
+ * The custom fetch is set only when given: an explicit undefined would replace better-auth's default.
+ */
+export function makeAuthClient(baseURL?: string, fetchImpl?: typeof fetch): AuthClient {
+  return createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+}
+
 /**
  * The browser implementation. Same-origin: the API serves these pages, so `baseURL` is the page's
  * origin and session cookies go with every request. The client's OAuth fetch plugin adds the page's
  * signed query to sign-in, sign-up, consent and continue, which is how those requests resume the flow.
  */
 export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAuth {
-  // Only set when given: an explicit undefined would replace better-auth's default fetch.
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+  const client = makeAuthClient(baseURL, fetchImpl)
 
   return {
     async getSession() {

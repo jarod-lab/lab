@@ -1,17 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { json, productFetch } from "../test/product-fetch"
 import { createMembersApi } from "./members-api"
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  })
-}
 
 describe("product calls for members", () => {
   it("reads member security with the organization header", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const { fetchImpl, sent } = productFetch(() =>
       json({
         members: [
           {
@@ -25,29 +19,27 @@ describe("product calls for members", () => {
         ],
       }),
     )
-    const members = await createMembersApi(
-      undefined,
-      fetchImpl as unknown as typeof fetch,
-    ).listSecurity("org-a")
+    const members = await createMembersApi(undefined, fetchImpl).listSecurity("org-a")
     expect(members[0]?.twoFactorEnabled).toBe(true)
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe("/v1/members/security")
-    expect((init.headers as Record<string, string>)["X-Organization-Id"]).toBe("org-a")
+    expect(sent[0]).toMatchObject({
+      method: "GET",
+      path: "/v1/members/security",
+      organization: "org-a",
+    })
   })
 
   it("resets a member's two-factor by user id", async () => {
-    const fetchImpl = vi.fn(async () => json({ reset: true }))
-    await createMembersApi(undefined, fetchImpl as unknown as typeof fetch).resetTwoFactor(
-      "org-a",
-      "user-2",
-    )
-    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe("/v1/members/user-2/two-factor/reset")
-    expect(init.method).toBe("POST")
+    const { fetchImpl, sent } = productFetch(() => json({ reset: true }))
+    await createMembersApi(undefined, fetchImpl).resetTwoFactor("org-a", "user-2")
+    expect(sent[0]).toMatchObject({
+      method: "POST",
+      path: "/v1/members/user-2/two-factor/reset",
+      organization: "org-a",
+    })
   })
 
   it("shows the server's message and hint when a product call is refused", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const { fetchImpl } = productFetch(() =>
       json(
         {
           error: {
@@ -56,14 +48,11 @@ describe("product calls for members", () => {
             hint: "Ask an owner.",
           },
         },
-        403,
+        { status: 403 },
       ),
     )
     await expect(
-      createMembersApi(undefined, fetchImpl as unknown as typeof fetch).resetTwoFactor(
-        "org-a",
-        "user-2",
-      ),
+      createMembersApi(undefined, fetchImpl).resetTwoFactor("org-a", "user-2"),
     ).rejects.toThrow("Only an owner can reset two-factor Ask an owner.")
   })
 })

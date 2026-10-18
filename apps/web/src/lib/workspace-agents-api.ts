@@ -1,47 +1,27 @@
-import { organizationHeaders } from "./org-header"
-import { WebError } from "./web-auth"
+import { payload, productClient, type RequestBody, type ResponseBody } from "./product-client"
 
 // The workspace agents: the workers an organization configures (list_agents and friends, /v1/workspace-agents).
 // Not the AI clients connected to it (those are agents-api.ts). Every call names its organization and
 // sends X-Organization-Id, so the server can refuse a call made for another org.
 
-export type Autonomy = "suggest_only" | "ask_first" | "autonomous"
+/** One workspace agent, as list_agents returns it. */
+export type WorkspaceAgent = ResponseBody<"list_agents">["agents"][number]
+
+export type Autonomy = WorkspaceAgent["autonomy"]
 
 /** What the agent is doing now, from its open runs. */
-export type ActivityState = "running" | "needs_you" | "queued" | "idle"
+export type ActivityState = WorkspaceAgent["activity"]
 
 /** The settings the permissions board edits. */
-export interface PermissionSettings {
-  autonomy: Autonomy
-  alwaysAskExternalPost: boolean
-  alwaysAskMergeOrDeploy: boolean
-  alwaysAskOverEnergyBudget: boolean
-}
+export type PermissionSettings = Pick<
+  WorkspaceAgent,
+  "autonomy" | "alwaysAskExternalPost" | "alwaysAskMergeOrDeploy" | "alwaysAskOverEnergyBudget"
+>
 
-export interface WorkspaceAgent extends PermissionSettings {
-  id: string
-  name: string
-  description: string | null
-  energyBudgetWh: number | null
-  pinned: boolean
-  activity: ActivityState
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CreateAgentInput {
-  name: string
-  description?: string | null
-}
+export type CreateAgentInput = RequestBody<"create_agent">
 
 /** The fields update_agent takes. Omitted fields stay as they are. */
-export type AgentPatch = Partial<PermissionSettings> & {
-  name?: string
-  description?: string | null
-  pinned?: boolean
-  /** Watt-hours per run; null clears the budget. */
-  energyBudgetWh?: number | null
-}
+export type AgentPatch = RequestBody<"update_agent">
 
 export interface WorkspaceAgentsApi {
   list(organizationId: string): Promise<WorkspaceAgent[]>
@@ -54,80 +34,43 @@ export interface WorkspaceAgentsApi {
 
 const RUN_PAGE_SIZE = 100
 
-async function request<T>(
-  fetchImpl: typeof fetch,
-  organizationId: string,
-  path: string,
-  init: { method?: string; body?: unknown } = {},
-): Promise<T> {
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    ...organizationHeaders(organizationId),
-  }
-  if (init.body !== undefined) headers["content-type"] = "application/json"
-  const response = await fetchImpl(`/v1${path}`, {
-    method: init.method ?? "GET",
-    credentials: "same-origin",
-    headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  })
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      error?: { message?: string; hint?: string }
-    } | null
-    const message = [body?.error?.message, body?.error?.hint].filter(Boolean).join(" ")
-    throw new WebError(message || "Something went wrong", response.status)
-  }
-  return (await response.json()) as T
-}
-
-export function createWorkspaceAgentsApi(
-  fetchImpl: typeof fetch = (...args) => fetch(...args),
-): WorkspaceAgentsApi {
+export function createWorkspaceAgentsApi(fetchImpl?: typeof fetch): WorkspaceAgentsApi {
+  // Each call names its organization, so the client is made per call.
+  const forOrg = (organizationId: string) => productClient(organizationId, fetchImpl)
   return {
     async list(organizationId) {
-      const body = await request<{ agents: WorkspaceAgent[] }>(
-        fetchImpl,
-        organizationId,
-        "/workspace-agents",
-      )
-      return body.agents
+      return (await payload(forOrg(organizationId).GET("/v1/workspace-agents"))).agents
     },
     async create(organizationId, input) {
-      return request<WorkspaceAgent>(fetchImpl, organizationId, "/workspace-agents", {
-        method: "POST",
-        body: input,
-      })
+      return payload(forOrg(organizationId).POST("/v1/workspace-agents", { body: input }))
     },
     async update(organizationId, id, patch) {
-      return request<WorkspaceAgent>(
-        fetchImpl,
-        organizationId,
-        `/workspace-agents/${encodeURIComponent(id)}`,
-        { method: "PATCH", body: patch },
+      return payload(
+        forOrg(organizationId).PATCH("/v1/workspace-agents/{id}", {
+          params: { path: { id } },
+          body: patch,
+        }),
       )
     },
     async remove(organizationId, id) {
-      await request<{ deleted: true }>(
-        fetchImpl,
-        organizationId,
-        `/workspace-agents/${encodeURIComponent(id)}`,
-        { method: "DELETE" },
+      await payload(
+        forOrg(organizationId).DELETE("/v1/workspace-agents/{id}", {
+          params: { path: { id } },
+        }),
       )
     },
     async countRuns(organizationId, agentId) {
+      const client = forOrg(organizationId)
       let count = 0
-      let cursor: string | null = null
+      let cursor: string | undefined
       do {
-        const query = new URLSearchParams({ agentId, limit: String(RUN_PAGE_SIZE) })
-        if (cursor) query.set("cursor", cursor)
-        const page: { runs: unknown[]; nextCursor: string | null } = await request(
-          fetchImpl,
-          organizationId,
-          `/runs?${query}`,
+        const page = await payload(
+          client.GET("/v1/runs", {
+            params: { query: { agentId, limit: RUN_PAGE_SIZE, cursor } },
+          }),
         )
         count += page.runs.length
-        cursor = page.nextCursor
+        cursor = page.nextCursor ?? undefined
       } while (cursor)
       return count
     },

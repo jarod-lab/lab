@@ -1,8 +1,6 @@
-import { createClient } from "@starter/auth/client"
-
 import { ssoRegisterBody } from "./org-security"
 import type { SsoFormValues } from "./org-security"
-import { WebError } from "./web-auth"
+import { makeAuthClient, WebError } from "./web-auth"
 
 // The organization's Security calls: SSO providers (the sso plugin) and the SCIM token (starter's
 // owner-only endpoint). Every call names its organization. The server allows them to the owner alone.
@@ -50,7 +48,7 @@ function unwrap<T>(result: Result<T>, fallback: string): T {
 
 /** The browser implementation, same origin as the page (cookies go with every call). */
 export function createOrgSecurityApi(baseURL?: string, fetchImpl?: typeof fetch): OrgSecurityApi {
-  const client = createClient(baseURL, fetchImpl ? { customFetchImpl: fetchImpl } : undefined)
+  const client = makeAuthClient(baseURL, fetchImpl)
 
   return {
     async listSsoProviders(organizationId) {

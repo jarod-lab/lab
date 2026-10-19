@@ -43,6 +43,8 @@ export function methodOfPath(context: LoginContext): LoginMethod | null {
   if (path === "/passkey/verify-authentication") return "passkey"
   if (path.startsWith("/sso/callback/")) return "sso"
   if (path.startsWith("/magic-link/verify")) return "magic-link"
+  // The passkey sign-up link signs in the same way: by proving the mailbox (passkey-signup.ts).
+  if (path === "/passkey-signup/verify") return "magic-link"
   return null
 }
 

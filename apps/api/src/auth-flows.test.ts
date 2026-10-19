@@ -11,6 +11,7 @@ import {
   member,
   organization,
   passkey as passkeyTable,
+  session as sessionTable,
   user as userTable,
   verification,
 } from "@starter/db/schema"
@@ -2389,6 +2390,25 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const opened = await b.request(mail.link)
       expect(opened.status).toBe(302)
       expect(opened.headers.getSetCookie().length).toBeGreaterThan(0)
+      // The row as the link wrote it, before getSession can refresh it: the configured lifetime (not
+      // the one-day "don't remember me" one), started in the personal organization, and recorded as
+      // an emailed-link sign-in.
+      const [account] = await t.db
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(eq(userTable.email, address))
+      const [row] = await t.db
+        .select()
+        .from(sessionTable)
+        .where(eq(sessionTable.userId, account?.id ?? ""))
+      expect(row?.expiresAt.getTime() ?? 0).toBeGreaterThan(Date.now() + 2 * 24 * 60 * 60 * 1000)
+      expect(row).toMatchObject({ loginMethod: "magic-link" })
+      const [personal] = await t.db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.slug, personalSlug(account?.id ?? "")))
+      expect(row?.activeOrganizationId).toBe(personal?.id)
+
       const { data } = await b.client.getSession()
       expect(data?.user).toMatchObject({ email: address, emailVerified: true })
     })

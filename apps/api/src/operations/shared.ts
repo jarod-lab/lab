@@ -5,8 +5,10 @@ import { AppError, reportError } from "@starter/errors"
 import type { FileStore } from "@starter/storage"
 import { z } from "zod"
 
+import type { FlagService } from "../flags"
 import type { Meter } from "../meter"
 import type { ApiNotifier } from "../notifications"
+import type { Operator } from "../tenant"
 
 /** What the operation files draw on: the auth instance, the database, metering, notices and the clock. */
 export interface OperationDeps {
@@ -19,6 +21,10 @@ export interface OperationDeps {
   now: () => Date
   /** Where uploads go (STORAGE_DRIVER). Unset, uploads are off and their operations say so. */
   files?: FileStore
+  /** The organization that runs the product: only it calls the operator operations. */
+  operator: Operator
+  /** Feature flag evaluation; the operator operations invalidate its cache after a write. */
+  flags: FlagService
 }
 
 /**

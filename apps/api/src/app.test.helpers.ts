@@ -1,20 +1,24 @@
 // Test-only: the real app on in-process Postgres (PGlite) with two organizations:
 //   - "acme": owner (session), a viewer member (session), a full key and a read-only key
 //   - "other": a separate user's personal org, for cross-tenant checks
+// acme is the operator organization (feature flag rollouts) unless a test says otherwise.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { AnyOperation } from "@starter/api"
 import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { createLogger, type Logger } from "@starter/logger"
+import type { FlagCatalog } from "@starter/flags"
 import { createMemoryStore, type FileStore } from "@starter/storage"
 import { type AppOptions, createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
+import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter, type MeterLimits } from "./meter"
 import { type ApiNotifier, createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
+import type { Operator } from "./tenant"
 
 export const BASE = "http://localhost:3000"
 
@@ -77,6 +81,10 @@ export interface TestAppOptions {
   onAuthEvent?: (event: AuthEvent) => void | Promise<void>
   /** The file store uploads go to. Defaults to one in memory served at BASE/files; false turns uploads off. */
   files?: FileStore | false
+  /** Make acme the operator organization (the default), or leave the operator unset (false). */
+  operator?: boolean
+  /** The flags the app declares. Defaults to the product's catalog (packages/flags). */
+  flagCatalog?: FlagCatalog
 }
 
 export async function createTestApp(
@@ -132,12 +140,30 @@ export async function createTestApp(
     options.files === false
       ? undefined
       : (options.files ?? createMemoryStore({ driver: "memory", publicUrl: `${BASE}/files` }))
+  // Named once acme exists, below: the operations read it at call time.
+  const operator: Operator = { organizationId: undefined }
+  const flags = createFlagService({
+    db: t.db,
+    catalog: options.flagCatalog,
+    now: options.now,
+    autoFlush: false,
+  })
   const operations = [
-    ...createOperations({ auth, db: t.db, meter, now: options.now, notifier, files }),
+    ...createOperations({
+      auth,
+      db: t.db,
+      meter,
+      now: options.now,
+      notifier,
+      files,
+      operator,
+      flags,
+    }),
     ...extra,
   ]
   const app = createApp({
-    hooks: createApiHooks({ db: t.db, meter, secret: SECRET, notifier }),
+    hooks: createApiHooks({ db: t.db, meter, secret: SECRET, notifier, operator }),
+    flags,
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
     status: options.status,
@@ -169,6 +195,7 @@ export async function createTestApp(
   }
 
   const owner = await signUp("Owner")
+  if (options.operator !== false) operator.organizationId = owner.orgId
   const viewer = await signUp("Viewer")
   await auth.api.addMember({
     body: { organizationId: owner.orgId, userId: viewer.userId, role: "viewer" },
@@ -240,7 +267,12 @@ export async function createTestApp(
     otherKey,
     outbox,
     devMail,
+    flags,
+    operator,
     db: t.db,
-    close: t.close,
+    close: async () => {
+      await flags.close()
+      await t.close()
+    },
   }
 }

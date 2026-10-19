@@ -39,18 +39,27 @@ export function rolePermissions(role: string): PermissionSet[] {
  * AND what its scopes allow. Defined explicitly; never derived from action names.
  */
 export const OAUTH_SCOPE_GRANTS = {
-  read: { project: ["read"], apiKey: ["read"], agent: ["read"], run: ["read"] },
+  read: {
+    project: ["read"],
+    apiKey: ["read"],
+    agent: ["read"],
+    run: ["read"],
+    featureFlag: ["read"],
+  },
   write: {
     project: ["create", "read", "update", "delete"],
     apiKey: ["read"],
     agent: ["create", "read", "update", "delete"],
     run: ["create", "read", "update", "steer"],
+    // Ramping a flag (operator organization only): an agent may target and ramp, not delete.
+    featureFlag: ["read", "update"],
   },
   admin: {
     organization: ["update"],
     member: ["create", "read", "update", "delete"],
     invitation: ["create", "cancel"],
     apiKey: ["create", "read", "update", "delete"],
+    featureFlag: ["read", "update", "delete"],
   },
 } as const satisfies Record<string, Permissions>
 

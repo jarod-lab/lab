@@ -434,8 +434,22 @@ describe("api app (real Postgres via PGlite)", () => {
         "get_upload_limits",
         "set_organization_logo",
         "remove_organization_logo",
+        // acme is the operator organization, so its owner sees the operator tools.
+        "list_feature_flags",
+        "get_feature_flag",
+        "update_feature_flag",
+        "target_feature_flag",
+        "untarget_feature_flag",
+        "reclaim_feature_flag",
+        "delete_feature_flag",
         "boom",
       ])
+      // Another organization's owner holds featureFlag too, but never sees an operator tool.
+      const other = await t.mcpClient(t.other.cookie)
+      const otherTools = (await other.listTools()).tools.map((x) => x.name)
+      expect(otherTools).toContain("list_projects")
+      expect(otherTools.filter((name) => name.includes("feature_flag"))).toEqual([])
+      await other.close()
       const res = await owner.callTool({ name: "create_project", arguments: { name: "Via MCP" } })
       expect(res.structuredContent).toMatchObject({ name: "Via MCP" })
       await owner.close()

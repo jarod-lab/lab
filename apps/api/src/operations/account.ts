@@ -1,6 +1,7 @@
 import { provisionalSignup } from "@starter/auth"
 import { z } from "zod"
 
+import { actsForOperator } from "../tenant"
 import { actorOf, defineOperation, type OperationDeps } from "./shared"
 
 /** POST /v1/signup's body. */
@@ -9,7 +10,11 @@ export const signupInput = z.object({
   name: z.string().trim().min(1).max(100).optional().describe("Display name"),
 })
 
-export function accountOperations({ auth, meter }: Pick<OperationDeps, "auth" | "meter">) {
+export function accountOperations({
+  auth,
+  meter,
+  operator,
+}: Pick<OperationDeps, "auth" | "meter" | "operator">) {
   const whoami = defineOperation({
     name: "whoami",
     method: "GET",
@@ -19,7 +24,7 @@ export function accountOperations({ auth, meter }: Pick<OperationDeps, "auth" | 
       "Returns the organization this credential acts for, who is acting (a user or an API key), " +
       "how it authenticated, its permission grants (a request is allowed when one grant covers all " +
       "of it), today's usage against the daily limit, and whether the owner has claimed the " +
-      "account (verified the email). Call this first to check a credential.",
+      "account (verified the email), and whether this is the operator organization. Call this first to check a credential.",
     permissions: {},
     input: z.object({}),
     output: z.object({
@@ -33,6 +38,9 @@ export function accountOperations({ auth, meter }: Pick<OperationDeps, "auth" | 
         limit: z.number().int().describe("Requests allowed per day for this organization"),
       }),
       claimed: z.boolean().describe("False while the owner's email is unverified (lower limit)"),
+      operator: z
+        .boolean()
+        .describe("True in the operator organization, which runs the product (feature flags)"),
     }),
     hints: { readOnly: true, idempotent: true },
     examples: [
@@ -45,6 +53,7 @@ export function accountOperations({ auth, meter }: Pick<OperationDeps, "auth" | 
           grants: [{ project: ["read", "create"] }],
           usage: { day: "2026-10-15", total: 3, limit: 500 },
           claimed: false,
+          operator: false,
         },
       },
     ],
@@ -59,6 +68,7 @@ export function accountOperations({ auth, meter }: Pick<OperationDeps, "auth" | 
         ),
         usage: { day: usage.day, total: usage.total, limit: status.limit },
         claimed: status.claimed,
+        operator: actsForOperator(operator)(caller),
       }
     },
   })

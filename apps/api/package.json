@@ -21,6 +21,7 @@
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
+    "@starter/flags": "workspace:*",
     "@starter/logger": "workspace:*",
     "@starter/mcp": "workspace:*",
     "@starter/observability": "workspace:*",

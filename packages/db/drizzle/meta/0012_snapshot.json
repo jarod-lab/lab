@@ -1,5 +1,5 @@
 {
-  "id": "9596fc94-065c-4703-991f-feace3d36bb2",
+  "id": "a1897f49-8bf4-4240-a173-b169203a6780",
   "prevId": "b45e6eee-4240-40a1-ad85-18ffd33ef918",
   "version": "7",
   "dialect": "postgresql",
@@ -400,7 +400,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "percentage": {
           "name": "percentage",
@@ -492,6 +492,13 @@
         },
         "count": {
           "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "errors": {
+          "name": "errors",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

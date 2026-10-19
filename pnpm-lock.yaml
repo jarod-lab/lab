@@ -169,6 +169,9 @@ importers:
       '@starter/errors':
         specifier: workspace:*
         version: link:../../packages/errors
+      '@starter/flags':
+        specifier: workspace:*
+        version: link:../../packages/flags
       '@starter/logger':
         specifier: workspace:*
         version: link:../../packages/logger

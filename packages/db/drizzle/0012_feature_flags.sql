@@ -1,7 +1,7 @@
 CREATE TABLE "feature_flag" (
 	"key" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
-	"enabled" boolean DEFAULT false NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
 	"percentage" integer DEFAULT 0 NOT NULL,
 	"reclaimed_value" boolean,
 	"reclaimed_at" timestamp (3),
@@ -14,6 +14,7 @@ CREATE TABLE "feature_flag_exposure_daily" (
 	"day" text NOT NULL,
 	"value" boolean NOT NULL,
 	"count" integer DEFAULT 0 NOT NULL,
+	"errors" integer DEFAULT 0 NOT NULL,
 	CONSTRAINT "feature_flag_exposure_daily_key" UNIQUE("flag_key","day","value")
 );
 --> statement-breakpoint

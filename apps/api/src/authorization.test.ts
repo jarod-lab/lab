@@ -97,6 +97,8 @@ function aimedAtAcme(op: AnyOperation, input: Json): Json {
     ["/v1/agents/", { id: `key_${keyId}` }],
     ["/v1/members/", { userId: t.viewer.userId }],
     ["/v1/scim/tokens/", { id: scimTokenId }],
+    // Flags are the operator's (acme here); the target is another organization.
+    ["/v1/feature-flags/", { key: "whats-new-card", organization: t.other.orgId }],
   ]
   const values = fixtures.find(([prefix]) => op.path.startsWith(prefix))?.[1]
   const missing = params.filter((p) => !values || !(p in values))

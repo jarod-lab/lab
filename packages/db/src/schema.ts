@@ -244,8 +244,9 @@ export const steerMessage = pgTable(
 
 // Feature flag rollouts. A flag is declared in code (packages/flags); this is its runtime state,
 // managed by the operator organization (OPERATOR_ORGANIZATION_ID) and read for every organization
-// when flags are evaluated. No row means the code default everywhere. Percentage is whole percent
-// of the organizations that are not targets; once reclaimed, `reclaimedValue` is served to all.
+// when flags are evaluated. No row means the code default everywhere. `enabled` is the kill switch
+// (off serves the default to all); percentage is whole percent of the organizations that are not
+// targets; once reclaimed, `reclaimedValue` is served to all.
 export const featureFlag = pgTable(
   "feature_flag",
   {
@@ -254,7 +255,7 @@ export const featureFlag = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    enabled: boolean("enabled").notNull().default(false),
+    enabled: boolean("enabled").notNull().default(true),
     percentage: integer("percentage").notNull().default(0),
     reclaimedValue: boolean("reclaimed_value"),
     reclaimedAt: timestamp("reclaimed_at", { precision: 3 }),
@@ -286,8 +287,9 @@ export const featureFlagTarget = pgTable(
 )
 
 // Evaluations per flag, value and UTC day, across all organizations: the evidence for stale
-// signals (inactive, one value only). Counted in memory and added with an upsert; no foreign key,
-// since a flag with no rollout is still evaluated (to its default).
+// signals (inactive, one value only), and `errors`, the API requests that evaluated the flag to
+// this value and then failed with a 5xx (the evidence to compare before reclaiming). Counted in
+// memory and added with an upsert; no foreign key, since a flag with no rollout is still evaluated.
 export const featureFlagExposureDaily = pgTable(
   "feature_flag_exposure_daily",
   {
@@ -295,6 +297,7 @@ export const featureFlagExposureDaily = pgTable(
     day: text("day").notNull(),
     value: boolean("value").notNull(),
     count: integer("count").notNull().default(0),
+    errors: integer("errors").notNull().default(0),
   },
   (t) => [unique("feature_flag_exposure_daily_key").on(t.flagKey, t.day, t.value)],
 )

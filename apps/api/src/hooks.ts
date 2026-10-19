@@ -4,6 +4,7 @@
 //   - audit: every non-readOnly call is recorded with its outcome (including refusals made here)
 //   - permission hints: a FORBIDDEN names the OAuth scope or API key permission that would allow it
 //   - fresh sessions: a `fresh` operation refuses a session that signed in over an hour ago
+//   - operator operations: only the operator organization's callers may run them
 import { createHash } from "node:crypto"
 
 import {
@@ -30,7 +31,7 @@ import {
 import { claimNotice } from "./data/usage"
 import { type Meter, type MeterLimits, secondsUntilReset } from "./meter"
 import type { ApiNotifier } from "./notifications"
-import { inCallerOrg } from "./tenant"
+import { actsForOperator, inCallerOrg, type Operator } from "./tenant"
 
 export interface ApiHooks {
   /** Pass to `invoke` (REST) and `createMcpHandler` (MCP). */
@@ -101,9 +102,12 @@ export function createApiHooks({
   meter,
   secret,
   notifier,
+  operator,
 }: {
   db: Database
   meter: Meter
+  /** The operator organization: only its callers may run `audience: "operator"` operations. */
+  operator?: Operator
   /** The server secret (BETTER_AUTH_SECRET): idempotency records are keyed and sealed with it. */
   secret: string
   /** Sends usage.limit_reached. Without it the limit is enforced but nobody is told. */
@@ -244,7 +248,11 @@ export function createApiHooks({
   }
 
   return {
-    invokeOptions: { hooks: { before, after }, permissionHint },
+    invokeOptions: {
+      hooks: { before, after },
+      permissionHint,
+      isOperator: operator ? actsForOperator(operator) : undefined,
+    },
     limits: meter.limits,
     rateLimitHeaders(ctx): Record<string, string> {
       const r = readings.get(ctx)

@@ -12,6 +12,7 @@ export const BEARER_PATHS = [
   "/llms.txt",
   "/llms-full.txt",
   "/v1/*",
+  "/ofrep/*",
 ] as const
 
 /** Request headers a browser may send on these paths. */
@@ -19,6 +20,7 @@ export const ALLOWED_REQUEST_HEADERS = [
   "authorization",
   "content-type",
   "idempotency-key",
+  "if-none-match",
   "mcp-protocol-version",
   "x-api-key",
   "x-organization-id",
@@ -28,6 +30,7 @@ export const ALLOWED_REQUEST_HEADERS = [
 export const EXPOSED_RESPONSE_HEADERS = [
   "mcp-session-id",
   "x-request-id",
+  "etag",
   "retry-after",
   "ratelimit-limit",
   "ratelimit-remaining",

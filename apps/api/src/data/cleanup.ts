@@ -4,7 +4,14 @@
 // These queries are cross-tenant on purpose. There is no caller and no organization to prove, so
 // they take no gdp-ts proof (like organizationClaimed in ./organizations.ts). Nothing in the
 // operation registry calls them, and the only caller is the cleanup entry.
-import { createDb, type Database, idempotencyKey, signupAttempt, verification } from "@starter/db"
+import {
+  createDb,
+  type Database,
+  featureFlagExposureDaily,
+  idempotencyKey,
+  signupAttempt,
+  verification,
+} from "@starter/db"
 import { and, inArray, like, lt } from "drizzle-orm"
 
 export const CLEANUP_BATCH_SIZE = 1000
@@ -16,6 +23,12 @@ export const CLEANUP_BATCH_SIZE = 1000
  */
 export const SIGNUP_RETENTION_MS = 25 * 60 * 60 * 1000
 
+/**
+ * Flag exposure days older than this are deleted. The stale signals look back 30 days
+ * (INACTIVE_DAYS in @starter/flags); the margin keeps a quarter of history for a reclaim decision.
+ */
+export const EXPOSURE_RETENTION_DAYS = 90
+
 /** Verification identifiers written by the device grant for an approved code (see device.ts). */
 const DEVICE_ORG_PREFIX = "device-org:"
 
@@ -23,6 +36,7 @@ export interface PruneCounts {
   signupAttempts: number
   idempotencyKeys: number
   deviceOrgVerifications: number
+  flagExposureDays: number
 }
 
 export interface PruneOptions {
@@ -46,7 +60,7 @@ async function deleteInBatches(
   }
 }
 
-/** Remove expired rows from the three tables that only accumulate. Live rows are never touched. */
+/** Remove expired rows from the tables that only accumulate. Live rows are never touched. */
 export async function pruneExpired(
   db: Database,
   now: Date = new Date(),
@@ -113,7 +127,16 @@ export async function pruneExpired(
       .returning({ id: verification.id }),
   )
 
-  return { signupAttempts, idempotencyKeys, deviceOrgVerifications }
+  // One row per flag, value and day: few enough to delete in one statement.
+  const exposureCutoff = new Date(now.getTime() - EXPOSURE_RETENTION_DAYS * 86_400_000)
+  const flagExposureDays = (
+    await db
+      .delete(featureFlagExposureDaily)
+      .where(lt(featureFlagExposureDaily.day, exposureCutoff.toISOString().slice(0, 10)))
+      .returning({ key: featureFlagExposureDaily.flagKey })
+  ).length
+
+  return { signupAttempts, idempotencyKeys, deviceOrgVerifications, flagExposureDays }
 }
 
 /** Open the database at `databaseUrl` and prune once. The cleanup entry calls this with the env URL. */

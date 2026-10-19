@@ -192,6 +192,7 @@ describe("OAuth scopes", () => {
       apiKey: ["read"],
       agent: ["read"],
       run: ["read"],
+      featureFlag: ["read"],
     })
   })
 

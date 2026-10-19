@@ -20,6 +20,9 @@ export const statements = {
   // requests); `approve` is a person's decision (never granted to a key or an OAuth token);
   // `steer` covers the messages and deferrals a person sends to a run.
   run: ["create", "read", "update", "approve", "steer"],
+  // Feature flag rollouts. Owners and admins hold it in every organization, but the operations
+  // using it are for the operator organization only (audience "operator"), refused anywhere else.
+  featureFlag: ["read", "update", "delete"],
   // Owner only (see roles): single sign-on providers and SCIM provisioning tokens (mint, list, revoke).
   sso: ["read", "update"],
   scim: ["create", "read", "delete"],

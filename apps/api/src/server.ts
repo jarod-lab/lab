@@ -10,6 +10,7 @@ import { createFileStore, type FileStore } from "@starter/storage"
 import { createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
+import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createApiNotifier } from "./notifications"
@@ -112,16 +113,24 @@ const meter = createMeter({
 // One notifier for operations and the invoke hooks (usage.limit_reached).
 const notifier = createApiNotifier({ auth, db })
 
+// Feature flags (docs/feature-flags.md): one evaluator for OFREP and the operations, and the
+// organization that manages the rollouts. Unset, nobody can change a rollout.
+const flags = createFlagService({ db })
+const operator = { organizationId: env.OPERATOR_ORGANIZATION_ID }
+if (!operator.organizationId)
+  logger.info("OPERATOR_ORGANIZATION_ID is unset: flag rollouts are read-only")
+
 const app = createApp({
   devMail,
   auth,
-  operations: createOperations({ auth, db, meter, notifier, files }),
+  operations: createOperations({ auth, db, meter, notifier, files, operator, flags }),
   baseURL,
   name: "Starter API",
   version: "0.0.0",
   description: "The Starter API. Replace this with one sentence about what your product does.",
   logger,
-  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET, notifier }),
+  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET, notifier, operator }),
+  flags,
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
   files,
@@ -144,3 +153,8 @@ const app = createApp({
 
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)
 serve({ fetch: app.fetch, port }, (addr) => logger.info({ port: addr.port }, "api listening"))
+
+// Write the flag exposures counted since the last flush before the process goes.
+process.once("SIGTERM", () => {
+  void flags.close().finally(() => process.exit(0))
+})

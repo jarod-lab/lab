@@ -39,6 +39,8 @@ import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 
 import { BEARER_PATHS, bearerCors } from "./cors"
+import type { FlagService } from "./flags"
+import { mountOfrep } from "./ofrep"
 import type { ApiHooks } from "./hooks"
 import { type DevMailSink, devMailRoute } from "./dev-mail"
 import { mountWeb } from "./static"
@@ -80,6 +82,12 @@ export interface AppOptions {
   files?: FileStore
   /** Other origins page images load from: social sign-in avatars (GitHub, Google) in `user.image`. */
   imageOrigins?: readonly string[]
+  /**
+   * Feature flag evaluation: served over OFREP at /ofrep/v1/*, and each request's evaluations are
+   * remembered, so a 5xx is counted against the values it saw and its error report names them.
+   * Unset, there are no /ofrep routes.
+   */
+  flags?: FlagService
 }
 
 /**
@@ -214,6 +222,17 @@ export function createApp(opts: AppOptions) {
 
   const app = new Hono<{ Variables: { requestId: string } }>()
 
+  // The flags a request evaluates are remembered for it: a 5xx counts against each value it saw.
+  const flags = opts.flags
+  if (flags) {
+    app.use(async (c, next) =>
+      flags.scope(async () => {
+        await next()
+        if (c.res.status >= 500) flags.failed()
+      }),
+    )
+  }
+
   app.use(async (c, next) => {
     // An incoming id goes into every log line and back out in a header: short, plain ones only.
     const requestId = requestIdFrom(c.req.raw.headers)
@@ -242,7 +261,11 @@ export function createApp(opts: AppOptions) {
     const error = toAppError(e)
     // Agents sending bad requests is normal traffic; only report what we'd want to be paged for.
     if (error.status >= 500 || !error.expose) {
-      reportError(error, { requestId: c.get("requestId"), path: loggedPath(c.req.path) })
+      reportError(error, {
+        requestId: c.get("requestId"),
+        path: loggedPath(c.req.path),
+        flags: flags?.seen(),
+      })
       logger.error({ err: error, requestId: c.get("requestId") }, error.message)
     }
     for (const [name, value] of Object.entries(errorHeaders(error))) c.header(name, value)
@@ -328,6 +351,9 @@ export function createApp(opts: AppOptions) {
       })
     })
   }
+
+  // OpenFeature's remote evaluation protocol: a protocol route, outside the registry (ofrep.ts).
+  if (flags) mountOfrep(app, { flags, authenticate })
 
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))

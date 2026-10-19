@@ -1,8 +1,14 @@
-import { idempotencyKey, organization, signupAttempt, verification } from "@starter/db"
+import {
+  featureFlagExposureDaily,
+  idempotencyKey,
+  organization,
+  signupAttempt,
+  verification,
+} from "@starter/db"
 import { createTestDb } from "@starter/db/testing"
 import { count } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { pruneExpired, SIGNUP_RETENTION_MS } from "./cleanup"
+import { EXPOSURE_RETENTION_DAYS, pruneExpired, SIGNUP_RETENTION_MS } from "./cleanup"
 
 const NOW = new Date("2026-06-01T12:00:00.000Z")
 const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000)
@@ -17,7 +23,11 @@ describe("pruneExpired", () => {
   afterEach(() => t.close())
 
   const countRows = async (
-    table: typeof signupAttempt | typeof idempotencyKey | typeof verification,
+    table:
+      | typeof signupAttempt
+      | typeof idempotencyKey
+      | typeof verification
+      | typeof featureFlagExposureDaily,
   ) => {
     const [row] = await t.db.select({ n: count() }).from(table)
     return row?.n ?? 0
@@ -116,7 +126,12 @@ describe("pruneExpired", () => {
     // Batch size 2: 5 rows take three statements (2, 2, 1); 4 rows take three (2, 2, 0).
     const counts = await pruneExpired(t.db, NOW, { batchSize: 2 })
 
-    expect(counts).toEqual({ signupAttempts: 5, idempotencyKeys: 4, deviceOrgVerifications: 3 })
+    expect(counts).toEqual({
+      signupAttempts: 5,
+      idempotencyKeys: 4,
+      deviceOrgVerifications: 3,
+      flagExposureDays: 0,
+    })
     expect(await countRows(signupAttempt)).toBe(0)
     expect(await countRows(idempotencyKey)).toBe(0)
     expect(await countRows(verification)).toBe(0)
@@ -134,8 +149,20 @@ describe("pruneExpired", () => {
       signupAttempts: 0,
       idempotencyKeys: 0,
       deviceOrgVerifications: 0,
+      flagExposureDays: 0,
     })
     expect(await countRows(verification)).toBe(1)
+  })
+
+  it("deletes flag exposure days past the retention, keeping the recent ones", async () => {
+    const day = (days: number) =>
+      new Date(NOW.getTime() - days * 86_400_000).toISOString().slice(0, 10)
+    await t.db.insert(featureFlagExposureDaily).values([
+      { flagKey: "f", day: day(EXPOSURE_RETENTION_DAYS + 1), value: true, count: 1 },
+      { flagKey: "f", day: day(EXPOSURE_RETENTION_DAYS - 1), value: true, count: 1 },
+    ])
+    expect((await pruneExpired(t.db, NOW)).flagExposureDays).toBe(1)
+    expect(await countRows(featureFlagExposureDaily)).toBe(1)
   })
 
   it("rejects a batch size that would never make progress", async () => {
@@ -154,6 +181,7 @@ describe("pruneExpired", () => {
       signupAttempts: 0,
       idempotencyKeys: 0,
       deviceOrgVerifications: 0,
+      flagExposureDays: 0,
     })
   })
 })

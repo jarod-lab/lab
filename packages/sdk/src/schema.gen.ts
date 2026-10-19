@@ -10,7 +10,7 @@ export interface paths {
         };
         /**
          * Show the caller, its organization, permissions and usage
-         * @description Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email). Call this first to check a credential.
+         * @description Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), and whether this is the operator organization. Call this first to check a credential.
          */
         get: operations["whoami"];
         put?: never;
@@ -593,6 +593,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/feature-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List feature flags with their rollout and stale signals
+         * @description Returns every flag the running code declares, plus any rollout whose flag the code no longer declares (status orphaned), each with its status, percentage, target counts, the last 7 days of evaluations and 5xx errors per value, and its stale signals. Pass stale=true for only the flags due for removal. Use get_feature_flag for one flag's targets.
+         */
+        get: operations["list_feature_flags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feature-flags/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one flag with its targets and daily evaluations
+         * @description Returns the flag as list_feature_flags does, plus its target organizations (id, name, slug, value) and its evaluations and 5xx errors per UTC day and value for the last 30 days. Compare errors per evaluation between true and false before ramping further or reclaiming. NOT_FOUND when neither the code nor a rollout has the key.
+         */
+        get: operations["get_feature_flag"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete the rollout of a flag the code no longer declares
+         * @description Deletes a flag's rollout and targets: the last step, after the flag is reclaimed, removed from the code, and that code is deployed (status orphaned). CONFLICT while the running code still declares it, since deleting the rollout would drop every organization back to the code default. NOT_FOUND if it has no rollout.
+         */
+        delete: operations["delete_feature_flag"];
+        options?: never;
+        head?: never;
+        /**
+         * Ramp a flag's percentage, or pause and resume it
+         * @description Sets the percentage of all non-target organizations that get true (each keeps a fixed bucket, so raising it only adds organizations), and/or the kill switch: enabled=false serves the code default to everyone, targets included, until enabled=true. Creates the rollout if the flag has none. Ramp in steps (1, 5, 25, 50, 100) and check get_feature_flag between them. CONFLICT once reclaimed; NOT_FOUND for a key the code doesn't declare.
+         */
+        patch: operations["update_feature_flag"];
+        trace?: never;
+    };
+    "/v1/feature-flags/{key}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn a flag on (or off) for named organizations
+         * @description Adds organizations, by id or slug, to the flag's targets: value true turns it on for them whatever the percentage (an allow-list, the first step of a rollout), false turns it off for them (a deny-list, to take one organization out of a ramp). Re-targeting changes the value. Creates the rollout if the flag has none. BAD_REQUEST names organizations that don't exist; CONFLICT once reclaimed.
+         */
+        post: operations["target_feature_flag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feature-flags/{key}/targets/{organization}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an organization from a flag's targets
+         * @description Removes one organization (by id or slug) from the flag's targets, so the percentage decides for it again. Answers with the flag; removed is false if it was not a target. CONFLICT once reclaimed.
+         */
+        delete: operations["untarget_feature_flag"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/feature-flags/{key}/reclaim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a rollout: serve one value to everyone, for good
+         * @description Records the decision a rollout was for: every organization gets `value` from now on, whatever the targets, percentage or kill switch, and the rollout can no longer change. Then remove the flag from the code (replacing each read with `value`), deploy, and call delete_feature_flag. Not reversible: confirm with the user first, with the evidence (get_feature_flag: evaluations and errors per value). CONFLICT if already reclaimed.
+         */
+        post: operations["reclaim_feature_flag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -652,6 +760,8 @@ export interface operations {
                         };
                         /** @description False while the owner's email is unverified (lower limit) */
                         claimed: boolean;
+                        /** @description True in the operator organization, which runs the product (feature flags) */
+                        operator: boolean;
                     };
                 };
             };
@@ -2900,6 +3010,627 @@ export interface operations {
                     "application/json": {
                         /** @description The avatar's public URL; null shows the initials */
                         image: string | null;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_feature_flags: {
+        parameters: {
+            query?: {
+                stale?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        flags: {
+                            key: string;
+                            /** @description Null once the code no longer declares it */
+                            description: string | null;
+                            owner: string | null;
+                            /** @description The code default; null once undeclared */
+                            default: boolean | null;
+                            /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                            reclaimBy: string | null;
+                            /** @description Whether the running code declares it */
+                            inCatalog: boolean;
+                            /**
+                             * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                             * @enum {string}
+                             */
+                            status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                            /** @description The kill switch; false serves the default to everyone */
+                            enabled: boolean;
+                            /** @description Percent of non-target organizations that get true */
+                            percentage: number;
+                            /** @description Organizations turned on by a target */
+                            targetsOn: number;
+                            /** @description Organizations turned off by a target */
+                            targetsOff: number;
+                            reclaimedValue: boolean | null;
+                            reclaimedAt: string | null;
+                            /** @description When the rollout last changed; null with no rollout */
+                            updatedAt: string | null;
+                            /** @description Counts over the last 7 UTC days, across every organization */
+                            exposures: {
+                                /** @description Evaluations that served true */
+                                on: number;
+                                /** @description Evaluations that served false */
+                                off: number;
+                                /** @description API requests that evaluated it to true and then failed with a 5xx */
+                                errorsOn: number;
+                                /** @description API requests that evaluated it to false and then failed with a 5xx */
+                                errorsOff: number;
+                            };
+                            /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                            stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        key: string;
+                        /** @description Null once the code no longer declares it */
+                        description: string | null;
+                        owner: string | null;
+                        /** @description The code default; null once undeclared */
+                        default: boolean | null;
+                        /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                        reclaimBy: string | null;
+                        /** @description Whether the running code declares it */
+                        inCatalog: boolean;
+                        /**
+                         * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                         * @enum {string}
+                         */
+                        status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                        /** @description The kill switch; false serves the default to everyone */
+                        enabled: boolean;
+                        /** @description Percent of non-target organizations that get true */
+                        percentage: number;
+                        /** @description Organizations turned on by a target */
+                        targetsOn: number;
+                        /** @description Organizations turned off by a target */
+                        targetsOff: number;
+                        reclaimedValue: boolean | null;
+                        reclaimedAt: string | null;
+                        /** @description When the rollout last changed; null with no rollout */
+                        updatedAt: string | null;
+                        /** @description Counts over the last 7 UTC days, across every organization */
+                        exposures: {
+                            /** @description Evaluations that served true */
+                            on: number;
+                            /** @description Evaluations that served false */
+                            off: number;
+                            /** @description API requests that evaluated it to true and then failed with a 5xx */
+                            errorsOn: number;
+                            /** @description API requests that evaluated it to false and then failed with a 5xx */
+                            errorsOff: number;
+                        };
+                        /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                        stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                        targets: {
+                            organizationId: string;
+                            name: string;
+                            slug: string;
+                            /** @description true: turned on for it (allow-list); false: turned off (deny-list) */
+                            value: boolean;
+                            createdAt: string;
+                        }[];
+                        days: {
+                            day: string;
+                            value: boolean;
+                            count: number;
+                            errors: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    delete_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        deleted: true;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    update_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "percentage": 5
+                 *     }
+                 */
+                "application/json": {
+                    /** @description 0 to 100, whole percent */
+                    percentage?: number;
+                    /** @description The kill switch: false pauses the rollout */
+                    enabled?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        key: string;
+                        /** @description Null once the code no longer declares it */
+                        description: string | null;
+                        owner: string | null;
+                        /** @description The code default; null once undeclared */
+                        default: boolean | null;
+                        /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                        reclaimBy: string | null;
+                        /** @description Whether the running code declares it */
+                        inCatalog: boolean;
+                        /**
+                         * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                         * @enum {string}
+                         */
+                        status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                        /** @description The kill switch; false serves the default to everyone */
+                        enabled: boolean;
+                        /** @description Percent of non-target organizations that get true */
+                        percentage: number;
+                        /** @description Organizations turned on by a target */
+                        targetsOn: number;
+                        /** @description Organizations turned off by a target */
+                        targetsOff: number;
+                        reclaimedValue: boolean | null;
+                        reclaimedAt: string | null;
+                        /** @description When the rollout last changed; null with no rollout */
+                        updatedAt: string | null;
+                        /** @description Counts over the last 7 UTC days, across every organization */
+                        exposures: {
+                            /** @description Evaluations that served true */
+                            on: number;
+                            /** @description Evaluations that served false */
+                            off: number;
+                            /** @description API requests that evaluated it to true and then failed with a 5xx */
+                            errorsOn: number;
+                            /** @description API requests that evaluated it to false and then failed with a 5xx */
+                            errorsOff: number;
+                        };
+                        /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                        stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    target_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "organizations": [
+                 *         "no-such-org"
+                 *       ]
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Organization ids or slugs, 1 to 100 */
+                    organizations: string[];
+                    /**
+                     * @description true (default): on for them; false: off
+                     * @default true
+                     */
+                    value?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        key: string;
+                        /** @description Null once the code no longer declares it */
+                        description: string | null;
+                        owner: string | null;
+                        /** @description The code default; null once undeclared */
+                        default: boolean | null;
+                        /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                        reclaimBy: string | null;
+                        /** @description Whether the running code declares it */
+                        inCatalog: boolean;
+                        /**
+                         * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                         * @enum {string}
+                         */
+                        status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                        /** @description The kill switch; false serves the default to everyone */
+                        enabled: boolean;
+                        /** @description Percent of non-target organizations that get true */
+                        percentage: number;
+                        /** @description Organizations turned on by a target */
+                        targetsOn: number;
+                        /** @description Organizations turned off by a target */
+                        targetsOff: number;
+                        reclaimedValue: boolean | null;
+                        reclaimedAt: string | null;
+                        /** @description When the rollout last changed; null with no rollout */
+                        updatedAt: string | null;
+                        /** @description Counts over the last 7 UTC days, across every organization */
+                        exposures: {
+                            /** @description Evaluations that served true */
+                            on: number;
+                            /** @description Evaluations that served false */
+                            off: number;
+                            /** @description API requests that evaluated it to true and then failed with a 5xx */
+                            errorsOn: number;
+                            /** @description API requests that evaluated it to false and then failed with a 5xx */
+                            errorsOff: number;
+                        };
+                        /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                        stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    untarget_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                key: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        key: string;
+                        /** @description Null once the code no longer declares it */
+                        description: string | null;
+                        owner: string | null;
+                        /** @description The code default; null once undeclared */
+                        default: boolean | null;
+                        /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                        reclaimBy: string | null;
+                        /** @description Whether the running code declares it */
+                        inCatalog: boolean;
+                        /**
+                         * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                         * @enum {string}
+                         */
+                        status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                        /** @description The kill switch; false serves the default to everyone */
+                        enabled: boolean;
+                        /** @description Percent of non-target organizations that get true */
+                        percentage: number;
+                        /** @description Organizations turned on by a target */
+                        targetsOn: number;
+                        /** @description Organizations turned off by a target */
+                        targetsOff: number;
+                        reclaimedValue: boolean | null;
+                        reclaimedAt: string | null;
+                        /** @description When the rollout last changed; null with no rollout */
+                        updatedAt: string | null;
+                        /** @description Counts over the last 7 UTC days, across every organization */
+                        exposures: {
+                            /** @description Evaluations that served true */
+                            on: number;
+                            /** @description Evaluations that served false */
+                            off: number;
+                            /** @description API requests that evaluated it to true and then failed with a 5xx */
+                            errorsOn: number;
+                            /** @description API requests that evaluated it to false and then failed with a 5xx */
+                            errorsOff: number;
+                        };
+                        /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                        stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                        removed: boolean;
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reclaim_feature_flag: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "value": true
+                 *     }
+                 */
+                "application/json": {
+                    /** @description The value everyone keeps: true to keep the feature */
+                    value: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        key: string;
+                        /** @description Null once the code no longer declares it */
+                        description: string | null;
+                        owner: string | null;
+                        /** @description The code default; null once undeclared */
+                        default: boolean | null;
+                        /** @description The day it should be reclaimed by (YYYY-MM-DD) */
+                        reclaimBy: string | null;
+                        /** @description Whether the running code declares it */
+                        inCatalog: boolean;
+                        /**
+                         * @description off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout.
+                         * @enum {string}
+                         */
+                        status: "off" | "targeting" | "ramping" | "on" | "paused" | "reclaimed" | "orphaned";
+                        /** @description The kill switch; false serves the default to everyone */
+                        enabled: boolean;
+                        /** @description Percent of non-target organizations that get true */
+                        percentage: number;
+                        /** @description Organizations turned on by a target */
+                        targetsOn: number;
+                        /** @description Organizations turned off by a target */
+                        targetsOff: number;
+                        reclaimedValue: boolean | null;
+                        reclaimedAt: string | null;
+                        /** @description When the rollout last changed; null with no rollout */
+                        updatedAt: string | null;
+                        /** @description Counts over the last 7 UTC days, across every organization */
+                        exposures: {
+                            /** @description Evaluations that served true */
+                            on: number;
+                            /** @description Evaluations that served false */
+                            off: number;
+                            /** @description API requests that evaluated it to true and then failed with a 5xx */
+                            errorsOn: number;
+                            /** @description API requests that evaluated it to false and then failed with a 5xx */
+                            errorsOff: number;
+                        };
+                        /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
+                        stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
                     };
                 };
             };

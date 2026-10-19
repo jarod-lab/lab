@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createApp } from "./app"
 import { BASE, createTestApp, SECRET, type SentEmail } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
+import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createOperations } from "./operations"
@@ -526,11 +527,13 @@ describe("onboarding journey C: the CLI against a live server", () => {
       },
     })
     const meter = createMeter({ db: t.db, limits: { claimed: 10_000, unclaimed: 500 } })
+    const flags = createFlagService({ db: t.db, autoFlush: false })
     const app = createApp({
       hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
       trustProxy: false,
       auth,
-      operations: createOperations({ auth, db: t.db, meter }),
+      operations: createOperations({ auth, db: t.db, meter, flags }),
+      flags,
       baseURL: origin,
       name: "Live API",
       version: "1.0.0",

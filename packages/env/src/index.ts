@@ -102,6 +102,12 @@ export const env = createEnv({
      */
     STRIPE_PLANS: z.string().min(1).optional(),
     /**
+     * The organization that runs the product (docs/feature-flags.md): only its members, keys and
+     * agents may change feature flag rollouts. Unset, flags serve their rollouts but nobody can
+     * change one.
+     */
+    OPERATOR_ORGANIZATION_ID: z.string().min(1).optional(),
+    /**
      * The file store uploads (avatars, organization logos) go to: `local` (a directory this API
      * serves at /files), `s3`, `r2` (Cloudflare) or `vercel-blob`. Unset, uploads are off. Each one's
      * variables are below; the check after createEnv names any that are missing (docs/storage.md).

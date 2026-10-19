@@ -15,7 +15,7 @@
       "get": {
         "operationId": "whoami",
         "summary": "Show the caller, its organization, permissions and usage",
-        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email). Call this first to check a credential.",
+        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), and whether this is the operator organization. Call this first to check a credential.",
         "responses": {
           "200": {
             "description": "OK",
@@ -96,6 +96,10 @@
                     "claimed": {
                       "type": "boolean",
                       "description": "False while the owner's email is unverified (lower limit)"
+                    },
+                    "operator": {
+                      "type": "boolean",
+                      "description": "True in the operator organization, which runs the product (feature flags)"
                     }
                   },
                   "required": [
@@ -104,7 +108,8 @@
                     "via",
                     "grants",
                     "usage",
-                    "claimed"
+                    "claimed",
+                    "operator"
                   ],
                   "additionalProperties": false
                 }
@@ -5927,6 +5932,1819 @@
           "idempotent": true
         }
       }
+    },
+    "/v1/feature-flags": {
+      "get": {
+        "operationId": "list_feature_flags",
+        "summary": "List feature flags with their rollout and stale signals",
+        "description": "Returns every flag the running code declares, plus any rollout whose flag the code no longer declares (status orphaned), each with its status, percentage, target counts, the last 7 days of evaluations and 5xx errors per value, and its stale signals. Pass stale=true for only the flags due for removal. Use get_feature_flag for one flag's targets.",
+        "parameters": [
+          {
+            "name": "stale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "description": "true: only flags with at least one stale signal",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "flags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "description": "Null once the code no longer declares it",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "owner": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "default": {
+                            "description": "The code default; null once undeclared",
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "reclaimBy": {
+                            "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "inCatalog": {
+                            "type": "boolean",
+                            "description": "Whether the running code declares it"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "off",
+                              "targeting",
+                              "ramping",
+                              "on",
+                              "paused",
+                              "reclaimed",
+                              "orphaned"
+                            ],
+                            "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                          },
+                          "enabled": {
+                            "type": "boolean",
+                            "description": "The kill switch; false serves the default to everyone"
+                          },
+                          "percentage": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Percent of non-target organizations that get true"
+                          },
+                          "targetsOn": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Organizations turned on by a target"
+                          },
+                          "targetsOff": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Organizations turned off by a target"
+                          },
+                          "reclaimedValue": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "reclaimedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updatedAt": {
+                            "description": "When the rollout last changed; null with no rollout",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "exposures": {
+                            "type": "object",
+                            "properties": {
+                              "on": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Evaluations that served true"
+                              },
+                              "off": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Evaluations that served false"
+                              },
+                              "errorsOn": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "API requests that evaluated it to true and then failed with a 5xx"
+                              },
+                              "errorsOff": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "API requests that evaluated it to false and then failed with a 5xx"
+                              }
+                            },
+                            "required": [
+                              "on",
+                              "off",
+                              "errorsOn",
+                              "errorsOff"
+                            ],
+                            "additionalProperties": false,
+                            "description": "Counts over the last 7 UTC days, across every organization"
+                          },
+                          "stale": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "expired",
+                                "inactive",
+                                "single-value",
+                                "reclaimed-in-code",
+                                "orphaned"
+                              ]
+                            },
+                            "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "description",
+                          "owner",
+                          "default",
+                          "reclaimBy",
+                          "inCatalog",
+                          "status",
+                          "enabled",
+                          "percentage",
+                          "targetsOn",
+                          "targetsOff",
+                          "reclaimedValue",
+                          "reclaimedAt",
+                          "updatedAt",
+                          "exposures",
+                          "stale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "flags"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        },
+        "x-audience": "operator"
+      }
+    },
+    "/v1/feature-flags/{key}": {
+      "get": {
+        "operationId": "get_feature_flag",
+        "summary": "Get one flag with its targets and daily evaluations",
+        "description": "Returns the flag as list_feature_flags does, plus its target organizations (id, name, slug, value) and its evaluations and 5xx errors per UTC day and value for the last 30 days. Compare errors per evaluation between true and false before ramping further or reclaiming. NOT_FOUND when neither the code nor a rollout has the key.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "Null once the code no longer declares it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": {
+                      "description": "The code default; null once undeclared",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimBy": {
+                      "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inCatalog": {
+                      "type": "boolean",
+                      "description": "Whether the running code declares it"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "targeting",
+                        "ramping",
+                        "on",
+                        "paused",
+                        "reclaimed",
+                        "orphaned"
+                      ],
+                      "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "The kill switch; false serves the default to everyone"
+                    },
+                    "percentage": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Percent of non-target organizations that get true"
+                    },
+                    "targetsOn": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned on by a target"
+                    },
+                    "targetsOff": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned off by a target"
+                    },
+                    "reclaimedValue": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "description": "When the rollout last changed; null with no rollout",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exposures": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served true"
+                        },
+                        "off": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served false"
+                        },
+                        "errorsOn": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to true and then failed with a 5xx"
+                        },
+                        "errorsOff": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to false and then failed with a 5xx"
+                        }
+                      },
+                      "required": [
+                        "on",
+                        "off",
+                        "errorsOn",
+                        "errorsOff"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Counts over the last 7 UTC days, across every organization"
+                    },
+                    "stale": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "expired",
+                          "inactive",
+                          "single-value",
+                          "reclaimed-in-code",
+                          "orphaned"
+                        ]
+                      },
+                      "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                    },
+                    "targets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "boolean",
+                            "description": "true: turned on for it (allow-list); false: turned off (deny-list)"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "organizationId",
+                          "name",
+                          "slug",
+                          "value",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "day": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "boolean"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "errors": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "day",
+                          "value",
+                          "count",
+                          "errors"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "owner",
+                    "default",
+                    "reclaimBy",
+                    "inCatalog",
+                    "status",
+                    "enabled",
+                    "percentage",
+                    "targetsOn",
+                    "targetsOff",
+                    "reclaimedValue",
+                    "reclaimedAt",
+                    "updatedAt",
+                    "exposures",
+                    "stale",
+                    "targets",
+                    "days"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:read"
+        ],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        },
+        "x-audience": "operator"
+      },
+      "patch": {
+        "operationId": "update_feature_flag",
+        "summary": "Ramp a flag's percentage, or pause and resume it",
+        "description": "Sets the percentage of all non-target organizations that get true (each keeps a fixed bucket, so raising it only adds organizations), and/or the kill switch: enabled=false serves the code default to everyone, targets included, until enabled=true. Creates the rollout if the flag has none. Ramp in steps (1, 5, 25, 50, 100) and check get_feature_flag between them. CONFLICT once reclaimed; NOT_FOUND for a key the code doesn't declare.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "percentage": {
+                    "description": "0 to 100, whole percent",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "enabled": {
+                    "description": "The kill switch: false pauses the rollout",
+                    "type": "boolean"
+                  }
+                },
+                "required": []
+              },
+              "example": {
+                "percentage": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "Null once the code no longer declares it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": {
+                      "description": "The code default; null once undeclared",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimBy": {
+                      "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inCatalog": {
+                      "type": "boolean",
+                      "description": "Whether the running code declares it"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "targeting",
+                        "ramping",
+                        "on",
+                        "paused",
+                        "reclaimed",
+                        "orphaned"
+                      ],
+                      "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "The kill switch; false serves the default to everyone"
+                    },
+                    "percentage": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Percent of non-target organizations that get true"
+                    },
+                    "targetsOn": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned on by a target"
+                    },
+                    "targetsOff": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned off by a target"
+                    },
+                    "reclaimedValue": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "description": "When the rollout last changed; null with no rollout",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exposures": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served true"
+                        },
+                        "off": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served false"
+                        },
+                        "errorsOn": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to true and then failed with a 5xx"
+                        },
+                        "errorsOff": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to false and then failed with a 5xx"
+                        }
+                      },
+                      "required": [
+                        "on",
+                        "off",
+                        "errorsOn",
+                        "errorsOff"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Counts over the last 7 UTC days, across every organization"
+                    },
+                    "stale": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "expired",
+                          "inactive",
+                          "single-value",
+                          "reclaimed-in-code",
+                          "orphaned"
+                        ]
+                      },
+                      "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "owner",
+                    "default",
+                    "reclaimBy",
+                    "inCatalog",
+                    "status",
+                    "enabled",
+                    "percentage",
+                    "targetsOn",
+                    "targetsOff",
+                    "reclaimedValue",
+                    "reclaimedAt",
+                    "updatedAt",
+                    "exposures",
+                    "stale"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:update"
+        ],
+        "x-agent-hints": {
+          "idempotent": true
+        },
+        "x-audience": "operator"
+      },
+      "delete": {
+        "operationId": "delete_feature_flag",
+        "summary": "Delete the rollout of a flag the code no longer declares",
+        "description": "Deletes a flag's rollout and targets: the last step, after the flag is reclaimed, removed from the code, and that code is deployed (status orphaned). CONFLICT while the running code still declares it, since deleting the rollout would drop every organization back to the code default. NOT_FOUND if it has no rollout.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:delete"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        },
+        "x-audience": "operator"
+      }
+    },
+    "/v1/feature-flags/{key}/targets": {
+      "post": {
+        "operationId": "target_feature_flag",
+        "summary": "Turn a flag on (or off) for named organizations",
+        "description": "Adds organizations, by id or slug, to the flag's targets: value true turns it on for them whatever the percentage (an allow-list, the first step of a rollout), false turns it off for them (a deny-list, to take one organization out of a ramp). Re-targeting changes the value. Creates the rollout if the flag has none. BAD_REQUEST names organizations that don't exist; CONFLICT once reclaimed.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "organizations": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Organization ids or slugs, 1 to 100"
+                  },
+                  "value": {
+                    "default": true,
+                    "description": "true (default): on for them; false: off",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "organizations"
+                ]
+              },
+              "example": {
+                "organizations": [
+                  "no-such-org"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "Null once the code no longer declares it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": {
+                      "description": "The code default; null once undeclared",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimBy": {
+                      "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inCatalog": {
+                      "type": "boolean",
+                      "description": "Whether the running code declares it"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "targeting",
+                        "ramping",
+                        "on",
+                        "paused",
+                        "reclaimed",
+                        "orphaned"
+                      ],
+                      "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "The kill switch; false serves the default to everyone"
+                    },
+                    "percentage": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Percent of non-target organizations that get true"
+                    },
+                    "targetsOn": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned on by a target"
+                    },
+                    "targetsOff": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned off by a target"
+                    },
+                    "reclaimedValue": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "description": "When the rollout last changed; null with no rollout",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exposures": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served true"
+                        },
+                        "off": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served false"
+                        },
+                        "errorsOn": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to true and then failed with a 5xx"
+                        },
+                        "errorsOff": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to false and then failed with a 5xx"
+                        }
+                      },
+                      "required": [
+                        "on",
+                        "off",
+                        "errorsOn",
+                        "errorsOff"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Counts over the last 7 UTC days, across every organization"
+                    },
+                    "stale": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "expired",
+                          "inactive",
+                          "single-value",
+                          "reclaimed-in-code",
+                          "orphaned"
+                        ]
+                      },
+                      "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "owner",
+                    "default",
+                    "reclaimBy",
+                    "inCatalog",
+                    "status",
+                    "enabled",
+                    "percentage",
+                    "targetsOn",
+                    "targetsOff",
+                    "reclaimedValue",
+                    "reclaimedAt",
+                    "updatedAt",
+                    "exposures",
+                    "stale"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:update"
+        ],
+        "x-agent-hints": {
+          "idempotent": true
+        },
+        "x-audience": "operator"
+      }
+    },
+    "/v1/feature-flags/{key}/targets/{organization}": {
+      "delete": {
+        "operationId": "untarget_feature_flag",
+        "summary": "Remove an organization from a flag's targets",
+        "description": "Removes one organization (by id or slug) from the flag's targets, so the percentage decides for it again. Answers with the flag; removed is false if it was not a target. CONFLICT once reclaimed.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Organization id or slug"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "Null once the code no longer declares it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": {
+                      "description": "The code default; null once undeclared",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimBy": {
+                      "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inCatalog": {
+                      "type": "boolean",
+                      "description": "Whether the running code declares it"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "targeting",
+                        "ramping",
+                        "on",
+                        "paused",
+                        "reclaimed",
+                        "orphaned"
+                      ],
+                      "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "The kill switch; false serves the default to everyone"
+                    },
+                    "percentage": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Percent of non-target organizations that get true"
+                    },
+                    "targetsOn": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned on by a target"
+                    },
+                    "targetsOff": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned off by a target"
+                    },
+                    "reclaimedValue": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "description": "When the rollout last changed; null with no rollout",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exposures": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served true"
+                        },
+                        "off": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served false"
+                        },
+                        "errorsOn": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to true and then failed with a 5xx"
+                        },
+                        "errorsOff": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to false and then failed with a 5xx"
+                        }
+                      },
+                      "required": [
+                        "on",
+                        "off",
+                        "errorsOn",
+                        "errorsOff"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Counts over the last 7 UTC days, across every organization"
+                    },
+                    "stale": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "expired",
+                          "inactive",
+                          "single-value",
+                          "reclaimed-in-code",
+                          "orphaned"
+                        ]
+                      },
+                      "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                    },
+                    "removed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "owner",
+                    "default",
+                    "reclaimBy",
+                    "inCatalog",
+                    "status",
+                    "enabled",
+                    "percentage",
+                    "targetsOn",
+                    "targetsOff",
+                    "reclaimedValue",
+                    "reclaimedAt",
+                    "updatedAt",
+                    "exposures",
+                    "stale",
+                    "removed"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:update"
+        ],
+        "x-agent-hints": {
+          "idempotent": true,
+          "destructive": true
+        },
+        "x-audience": "operator"
+      }
+    },
+    "/v1/feature-flags/{key}/reclaim": {
+      "post": {
+        "operationId": "reclaim_feature_flag",
+        "summary": "End a rollout: serve one value to everyone, for good",
+        "description": "Records the decision a rollout was for: every organization gets `value` from now on, whatever the targets, percentage or kill switch, and the rollout can no longer change. Then remove the flag from the code (replacing each read with `value`), deploy, and call delete_feature_flag. Not reversible: confirm with the user first, with the evidence (get_feature_flag: evaluations and errors per value). CONFLICT if already reclaimed.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Flag key, as list_feature_flags shows it (kebab-case, declared in code)"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "boolean",
+                    "description": "The value everyone keeps: true to keep the feature"
+                  }
+                },
+                "required": [
+                  "value"
+                ]
+              },
+              "example": {
+                "value": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "Null once the code no longer declares it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "owner": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "default": {
+                      "description": "The code default; null once undeclared",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimBy": {
+                      "description": "The day it should be reclaimed by (YYYY-MM-DD)",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "inCatalog": {
+                      "type": "boolean",
+                      "description": "Whether the running code declares it"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "targeting",
+                        "ramping",
+                        "on",
+                        "paused",
+                        "reclaimed",
+                        "orphaned"
+                      ],
+                      "description": "off: no rollout, or 0% and no targets on. targeting: only its targets. ramping: a percentage between 0 and 100. on: 100%. paused: the kill switch is off (everyone gets the default). reclaimed: decided, serving reclaimedValue to everyone. orphaned: the code no longer declares it; delete the rollout."
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "The kill switch; false serves the default to everyone"
+                    },
+                    "percentage": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Percent of non-target organizations that get true"
+                    },
+                    "targetsOn": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned on by a target"
+                    },
+                    "targetsOff": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Organizations turned off by a target"
+                    },
+                    "reclaimedValue": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "reclaimedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updatedAt": {
+                      "description": "When the rollout last changed; null with no rollout",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "exposures": {
+                      "type": "object",
+                      "properties": {
+                        "on": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served true"
+                        },
+                        "off": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Evaluations that served false"
+                        },
+                        "errorsOn": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to true and then failed with a 5xx"
+                        },
+                        "errorsOff": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "API requests that evaluated it to false and then failed with a 5xx"
+                        }
+                      },
+                      "required": [
+                        "on",
+                        "off",
+                        "errorsOn",
+                        "errorsOff"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Counts over the last 7 UTC days, across every organization"
+                    },
+                    "stale": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "expired",
+                          "inactive",
+                          "single-value",
+                          "reclaimed-in-code",
+                          "orphaned"
+                        ]
+                      },
+                      "description": "Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout)"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "description",
+                    "owner",
+                    "default",
+                    "reclaimBy",
+                    "inCatalog",
+                    "status",
+                    "enabled",
+                    "percentage",
+                    "targetsOn",
+                    "targetsOff",
+                    "reclaimedValue",
+                    "reclaimedAt",
+                    "updatedAt",
+                    "exposures",
+                    "stale"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          },
+          {
+            "oauth2": [
+              "admin"
+            ]
+          }
+        ],
+        "x-required-permissions": [
+          "featureFlag:update"
+        ],
+        "x-agent-hints": {
+          "destructive": true
+        },
+        "x-audience": "operator"
+      }
     }
   },
   "components": {
@@ -5987,9 +7805,9 @@
             "authorizationUrl": "http://localhost:3000/api/auth/oauth2/authorize",
             "tokenUrl": "http://localhost:3000/api/auth/oauth2/token",
             "scopes": {
-              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"],\"agent\":[\"read\"],\"run\":[\"read\"]}",
-              "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"],\"agent\":[\"create\",\"read\",\"update\",\"delete\"],\"run\":[\"create\",\"read\",\"update\",\"steer\"]}",
-              "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"read\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"]}"
+              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"],\"agent\":[\"read\"],\"run\":[\"read\"],\"featureFlag\":[\"read\"]}",
+              "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"],\"agent\":[\"create\",\"read\",\"update\",\"delete\"],\"run\":[\"create\",\"read\",\"update\",\"steer\"],\"featureFlag\":[\"read\",\"update\"]}",
+              "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"read\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"],\"featureFlag\":[\"read\",\"update\",\"delete\"]}"
             }
           }
         }

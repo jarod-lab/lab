@@ -6,7 +6,9 @@ import {
   callerActsFor,
   type Named,
   name,
+  type OperatorOrg,
   OrganizationId,
+  operatorOrg,
 } from "@starter/auth-proofs"
 import type { Database } from "@starter/db"
 import { AppError } from "@starter/errors"
@@ -19,6 +21,35 @@ export function inCallerOrg<T>(
   return name(OrganizationId(caller.organizationId), (org) => {
     const proof = callerActsFor(caller, org)
     if (!proof) throw new AppError("FORBIDDEN", "Not acting for this organization")
+    return fn(org, proof)
+  })
+}
+
+/**
+ * The operator organization (OPERATOR_ORGANIZATION_ID): the one that runs the product and manages
+ * its feature flags. Read at call time, so tests can name theirs once it exists.
+ */
+export interface Operator {
+  organizationId: string | undefined
+}
+
+/** Whether the caller acts for the operator organization (`InvokeOptions.isOperator`). */
+export const actsForOperator = (operator: Operator) => (caller: Caller) =>
+  operator.organizationId !== undefined && caller.organizationId === operator.organizationId
+
+/**
+ * Run `fn` in the operator organization, with the proof operator data functions require. Operator
+ * operations are refused to anyone else before their handler runs (audience "operator"); this is
+ * the same check again, as a proof.
+ */
+export function inOperatorOrg<T>(
+  caller: Caller,
+  operator: Operator,
+  fn: <O>(org: Named<O, OrganizationId>, proof: OperatorOrg<O>) => Promise<T>,
+): Promise<T> {
+  return name(OrganizationId(caller.organizationId), (org) => {
+    const proof = operatorOrg(caller, org, operator.organizationId)
+    if (!proof) throw new AppError("FORBIDDEN", "Only the operator organization can do this")
     return fn(org, proof)
   })
 }

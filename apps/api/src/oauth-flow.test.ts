@@ -221,7 +221,13 @@ describe("OAuth authorization code flow (real tokens)", () => {
       pickOrg: t.owner.orgId,
     })
     expect((await whoami(access_token)).grants).toEqual([
-      { apiKey: ["read"], project: ["read"], agent: ["read"], run: ["read"] },
+      {
+        apiKey: ["read"],
+        project: ["read"],
+        agent: ["read"],
+        run: ["read"],
+        featureFlag: ["read"],
+      },
     ])
     const mint = await t.req("/v1/api-keys", {
       method: "POST",

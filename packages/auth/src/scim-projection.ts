@@ -2,13 +2,17 @@
 // organization (its token's domain) becomes a member with the role every new member gets, "member".
 // The directory decides membership, not the role: a role an owner later gives them is kept while they
 // stay active. A deprovisioned user (active=false, or their SCIM User deleted) loses the membership
-// and the access that came with it, in the same transaction as the directory's write, except an
-// owner: the directory never removes one (see reconcileUser).
+// and the access that came with it, in the same transaction as the directory's write. The directory
+// removes only what it provisioned: a membership made by hand (an invitation, an owner adding them)
+// has no "scim" source and stays. An owner is never removed (see reconcileUser).
 import type { SCIMProjection } from "@better-auth/scim"
-import { type Adapter, findMember } from "./membership"
+import { type Adapter, type Member } from "./membership"
 
 /** The member role a directory-provisioned user gets. better-auth's organization default. */
 export const SCIM_MEMBER_ROLE = "member"
+
+/** The member `source` of a membership the directory created. Every other membership has none (null). */
+export const SCIM_SOURCE = "scim"
 
 /** better-auth's creator role: the organization's owners. */
 export const OWNER_ROLE = "owner"
@@ -20,8 +24,9 @@ export const hasOwnerRole = (role: string) =>
     .map((r) => r.trim())
     .includes(OWNER_ROLE)
 
-/** The one logging call the projection makes. The app's @starter/logger instance satisfies it. */
+/** The logging calls the projection makes. The app's @starter/logger instance satisfies it. */
 export interface ProjectionLogger {
+  info(fields: Record<string, unknown>, msg: string): void
   warn(fields: Record<string, unknown>, msg: string): void
 }
 
@@ -41,8 +46,16 @@ export const scimProjection = (
     const active = state.sources.some(
       (source) => source.active && source.provisioningDomainId === organizationId,
     )
-    const member = await findMember(database, state.userId, organizationId)
+    const member = await database.findOne<Member & { source: string | null }>({
+      model: "member",
+      where: [
+        { field: "userId", value: state.userId },
+        { field: "organizationId", value: organizationId },
+      ],
+    })
     if (active) {
+      // An existing membership keeps its source: a hand-made member the directory also provisions
+      // stays hand-made, so a later deprovisioning leaves them in place.
       if (member) return
       await database.create({
         model: "member",
@@ -50,6 +63,7 @@ export const scimProjection = (
           organizationId,
           userId: state.userId,
           role: SCIM_MEMBER_ROLE,
+          source: SCIM_SOURCE,
           createdAt: new Date(),
         },
       })
@@ -62,6 +76,14 @@ export const scimProjection = (
       logger.warn(
         { event: "scim.deprovision.owner_kept", userId: state.userId, orgId: organizationId },
         "SCIM deprovisioning kept an owner's membership",
+      )
+      return
+    }
+    // The directory removes only a membership it created. A hand-made one stays, with its access.
+    if (member.source !== SCIM_SOURCE) {
+      logger.info(
+        { event: "scim.deprovision.hand_made_kept", userId: state.userId, orgId: organizationId },
+        "SCIM deprovisioning kept a membership the directory did not create",
       )
       return
     }

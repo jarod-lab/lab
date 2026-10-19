@@ -7,11 +7,10 @@ import { scimProjection } from "./scim-projection"
 type Reconcile = NonNullable<SCIMProjection["reconcileUser"]>
 type Context = Parameters<Reconcile>[1]
 
-describe("scimProjection deprovisioning (real Postgres via PGlite)", () => {
+describe("scimProjection (real Postgres via PGlite)", () => {
   let t: Awaited<ReturnType<typeof createTestAuth>>
   let org: string
   let owner: string
-  let alice: string
   let n = 0
 
   beforeAll(async () => {
@@ -19,15 +18,15 @@ describe("scimProjection deprovisioning (real Postgres via PGlite)", () => {
     const signed = await t.signUp("Owner")
     org = signed.orgId
     owner = signed.userId
-    alice = (await t.signUp("Alice")).userId
   })
   afterAll(() => t.close())
 
   const endAccess = vi.fn(async (_db: Adapter, _userId: string, _organizationId: string) => {})
-  const logger = { warn: vi.fn() }
+  const logger = { info: vi.fn(), warn: vi.fn() }
 
   beforeEach(() => {
     endAccess.mockClear()
+    logger.info.mockClear()
     logger.warn.mockClear()
   })
 
@@ -40,20 +39,43 @@ describe("scimProjection deprovisioning (real Postgres via PGlite)", () => {
     grants: [],
   })
 
+  /** A user with an active SCIM source in the organization (provisioned). */
+  const provisioned = (userId: string) => ({
+    provisioningDomainId: org,
+    userId,
+    active: true,
+    sources: [{ id: `src-${++n}`, connectionId: "conn", provisioningDomainId: org, active: true }],
+    grants: [],
+  })
+
   /** The adapter the transaction would hand the projection. */
   async function context(): Promise<Context> {
     const adapter = (await t.auth.$context).adapter
     return { database: adapter as unknown as Context["database"] }
   }
 
+  const adapter = async () => (await t.auth.$context).adapter
+
   async function reconcile(userId: string) {
     const projection = scimProjection(endAccess, logger)
     await projection.reconcileUser(deprovisioned(userId), await context())
   }
 
+  async function provision(userId: string) {
+    const projection = scimProjection(endAccess, logger)
+    await projection.reconcileUser(provisioned(userId), await context())
+  }
+
+  /** A member the directory provisioned: created by the projection, so source "scim". */
+  async function scimMember(name: string) {
+    const userId = (await t.signUp(name)).userId
+    await provision(userId)
+    return userId
+  }
+
   it("keeps the owner's membership, ends nothing, and logs a warning without the email", async () => {
     await reconcile(owner)
-    expect((await findMember((await t.auth.$context).adapter, owner, org))?.role).toBe("owner")
+    expect((await findMember(await adapter(), owner, org))?.role).toBe("owner")
     expect(endAccess).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledTimes(1)
     const [fields] = logger.warn.mock.calls[0] ?? []
@@ -61,47 +83,68 @@ describe("scimProjection deprovisioning (real Postgres via PGlite)", () => {
     expect(JSON.stringify(fields)).not.toContain("@")
   })
 
-  it("keeps a member whose role is comma-separated and includes owner", async () => {
+  it("keeps an owner even when the directory made the membership", async () => {
     const co = (await t.signUp("Co-owner")).userId
     await t.addMember(org, co, "owner,member")
+    await provision(co)
     await reconcile(co)
-    expect((await findMember((await t.auth.$context).adapter, co, org))?.role).toBe("owner,member")
+    expect((await findMember(await adapter(), co, org))?.role).toBe("owner,member")
     expect(endAccess).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledTimes(1)
   })
 
-  it("removes a plain member and ends their access, without a warning", async () => {
-    await t.addMember(org, alice, "member")
+  it("removes a member the directory provisioned and ends their access, without a warning", async () => {
+    const alice = await scimMember("Alice")
+    expect((await findMember(await adapter(), alice, org))?.role).toBe("member")
     await reconcile(alice)
-    expect(await findMember((await t.auth.$context).adapter, alice, org)).toBeNull()
+    expect(await findMember(await adapter(), alice, org)).toBeNull()
     expect(endAccess).toHaveBeenCalledTimes(1)
     expect(endAccess.mock.calls[0]?.slice(1)).toEqual([alice, org])
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
-  it("removes an admin: admin is not protected, the owner rule is the only one", async () => {
-    const admin = (await t.signUp("Admin")).userId
-    await t.addMember(org, admin, "admin")
+  it("keeps a member an owner added by hand, with their access, and logs at info", async () => {
+    const hand = (await t.signUp("Hand")).userId
+    await t.addMember(org, hand, "member")
+    await reconcile(hand)
+    expect((await findMember(await adapter(), hand, org))?.role).toBe("member")
+    expect(endAccess).not.toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledTimes(1)
+    expect(logger.info.mock.calls[0]?.[0]).toEqual({
+      event: "scim.deprovision.hand_made_kept",
+      userId: hand,
+      orgId: org,
+    })
+  })
+
+  it("keeps a hand-made member the directory also provisions, after their deprovisioning", async () => {
+    const invited = (await t.signUp("Invited")).userId
+    await t.addMember(org, invited, "member")
+    await provision(invited)
+    expect((await findMember(await adapter(), invited, org))?.role).toBe("member")
+    await reconcile(invited)
+    expect(await findMember(await adapter(), invited, org)).not.toBeNull()
+    expect(endAccess).not.toHaveBeenCalled()
+  })
+
+  it("removes an admin the directory provisioned: admin is not protected, the owner rule is the only one", async () => {
+    const admin = await scimMember("Admin")
+    const db = await adapter()
+    await db.updateMany({
+      model: "member",
+      where: [{ field: "userId", value: admin }],
+      update: { role: "admin" },
+    })
     await reconcile(admin)
-    expect(await findMember((await t.auth.$context).adapter, admin, org)).toBeNull()
+    expect(await findMember(db, admin, org)).toBeNull()
     expect(endAccess).toHaveBeenCalledTimes(1)
   })
 
   it("does nothing for a user with an active source in the organization", async () => {
-    const active = (await t.signUp("Active")).userId
-    await t.addMember(org, active, "member")
-    const projection = scimProjection(endAccess, logger)
-    await projection.reconcileUser(
-      {
-        provisioningDomainId: org,
-        userId: active,
-        active: true,
-        sources: [{ id: "s", connectionId: "c", provisioningDomainId: org, active: true }],
-        grants: [],
-      },
-      await context(),
-    )
-    expect(await findMember((await t.auth.$context).adapter, active, org)).not.toBeNull()
+    const active = await scimMember("Active")
+    await provision(active)
+    expect(await findMember(await adapter(), active, org)).not.toBeNull()
     expect(endAccess).not.toHaveBeenCalled()
   })
 })

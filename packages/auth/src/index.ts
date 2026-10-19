@@ -540,6 +540,13 @@ export function createAuth(opts: AuthOptions) {
         ac,
         roles,
         creatorRole: "owner",
+        // How a membership came to be: "scim" when the directory provisioned it (scim-projection.ts).
+        // Null for every other path (invitation, owner adds, signup). Not client-settable.
+        schema: {
+          member: {
+            additionalFields: { source: { type: "string", required: false, input: false } },
+          },
+        },
         sendInvitationEmail: wrapsPlugin.emails.invitation,
         // Organization slugs are URL segments, so the app's own paths are refused (RESERVED_ORG_SLUGS).
         organizationHooks: {

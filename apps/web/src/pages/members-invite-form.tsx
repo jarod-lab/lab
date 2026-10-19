@@ -13,10 +13,10 @@ import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/nati
 import {} from "@starter/ui/dplus/shell/settings-header"
 import {} from "@starter/ui/dplus/shell/view-only-notice"
 
-import { ASSIGNABLE_ROLES, parseInviteEmails } from "../lib/members"
+import { ASSIGNABLE_ROLES, type AssignableRole, parseInviteEmails } from "../lib/members"
 import {} from "../components/confirm-dialog"
-import { type InviteRole, INVITE_ROLES, INVITE_ROLE_LABEL } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
+import { ROLE_LABEL } from "../lib/roles"
 
 /** A member as the table shows them. Security fields are undefined when the caller can't see them. */
 import type { InviteOutcome } from "./members-page"
@@ -30,7 +30,7 @@ export const schema = z.object({
       ctx.addIssue({ code: "custom", message: "Enter at least one email address." })
     }
   }),
-  role: z.enum(INVITE_ROLES),
+  role: z.enum(ASSIGNABLE_ROLES),
 })
 
 export type InviteValues = z.infer<typeof schema>
@@ -44,9 +44,9 @@ export function InviteForm({
 }: {
   emailsId: string
   roleId: string
-  defaultRole: InviteRole
+  defaultRole: AssignableRole
   failures: InviteOutcome["failed"]
-  onInvite: (emails: string[], role: InviteRole) => Promise<InviteOutcome>
+  onInvite: (emails: string[], role: AssignableRole) => Promise<InviteOutcome>
 }) {
   const emailsHelpId = useId()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -114,12 +114,12 @@ export function InviteForm({
               id={roleId}
               name="role"
               value={field.state.value}
-              onChange={(event) => field.handleChange(event.currentTarget.value as InviteRole)}
+              onChange={(event) => field.handleChange(event.currentTarget.value as AssignableRole)}
               onBlur={field.handleBlur}
             >
               {ASSIGNABLE_ROLES.map((role) => (
                 <NativeSelectOption key={role} value={role}>
-                  {INVITE_ROLE_LABEL[role]}
+                  {ROLE_LABEL[role]}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

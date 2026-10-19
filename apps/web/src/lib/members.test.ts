@@ -17,6 +17,8 @@ import {
   permissionMatrix,
   removeConsequence,
   roleLabelOf,
+  ASSIGNABLE_ROLES,
+  shownRoleOf,
   sentCopy,
   topRoleOf,
 } from "./members"
@@ -116,6 +118,26 @@ describe("roles and labels", () => {
     expect(topRoleOf("admin,member")).toBe("admin")
     expect(roleLabelOf("member")).toBe("Member")
     expect(roleLabelOf("unknown-role")).toBe("Viewer")
+  })
+
+  it("shows a capability role by its own name, ahead of viewer", () => {
+    expect(roleLabelOf("approver")).toBe("Approver")
+    expect(roleLabelOf("viewer,approver")).toBe("Approver")
+    expect(roleLabelOf("operator,billing")).toBe("Operator")
+    expect(roleLabelOf("member,approver")).toBe("Member")
+    expect(shownRoleOf("owner,billing")).toBe("owner")
+    expect(roleLabelOf("billing")).toBe("Billing")
+  })
+
+  it("offers every catalog role but owner, in picker order", () => {
+    expect(ASSIGNABLE_ROLES).toEqual([
+      "admin",
+      "member",
+      "viewer",
+      "approver",
+      "operator",
+      "billing",
+    ])
   })
 })
 

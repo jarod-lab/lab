@@ -8,6 +8,7 @@ import { messageOf } from "../lib/messages"
 
 import {
   type Allows,
+  type AssignableRole,
   CANCEL_INVITATION,
   INVITE_PERMISSION,
   type MatrixRole,
@@ -21,7 +22,7 @@ import {
   roleLabelOf,
 } from "../lib/members"
 import type { MembersApi, MemberSecurity, OrgInvitation } from "../lib/members-api"
-import { type InviteRole, defaultInviteRoleOf } from "../lib/org-settings"
+import { defaultInviteRoleOf } from "../lib/org-settings"
 import { type OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
@@ -102,7 +103,7 @@ export function MembersContainer({
   }
 
   const invite = useMutation({
-    mutationFn: async (input: { emails: string[]; role: InviteRole }) => {
+    mutationFn: async (input: { emails: string[]; role: AssignableRole }) => {
       const failed: InviteOutcome["failed"] = []
       // One call per address: better-auth invites one email at a time.
       for (const email of input.emails) {
@@ -120,7 +121,7 @@ export function MembersContainer({
   })
 
   const changeRole = useMutation({
-    mutationFn: async (input: { member: MemberView; role: InviteRole }) => {
+    mutationFn: async (input: { member: MemberView; role: AssignableRole }) => {
       await guard(() => api.updateMemberRole(organizationId, input.member.id, input.role))
     },
     onSuccess: (_data, input) => {

@@ -27,5 +27,6 @@ expectTypeOf<Parameters<typeof client.signUp.email>[0]>().toMatchTypeOf<{
 // The product's own roles, not just better-auth's defaults, are valid in the client. This file is
 // only type-checked, never run.
 void client.organization.inviteMember({ email: "a@example.com", role: "viewer" })
+void client.organization.inviteMember({ email: "a@example.com", role: "approver" })
 // @ts-expect-error not a role
 void client.organization.inviteMember({ email: "a@example.com", role: "superuser" })

@@ -163,3 +163,48 @@ describe("authorization", () => {
     )
   })
 })
+
+// The fixed capability roles, each held by a real member of acme: every operation answers exactly as
+// the role's statements say (allowed where they cover the operation's permissions, FORBIDDEN where
+// they don't). A role added to `roles` without a row here fails the first test.
+const CAPABILITY_ROLES = ["approver", "operator", "billing"] as const
+const capability: Record<string, { cookie: string; grants: readonly PermissionSet[] }> = {}
+for (const role of CAPABILITY_ROLES) {
+  const member = await t.signUp(role)
+  await t.auth.api.addMember({
+    body: { organizationId: t.owner.orgId, userId: member.userId, role },
+  })
+  await t.auth.api.setActiveOrganization({
+    headers: new Headers({ cookie: member.cookie }),
+    body: { organizationId: t.owner.orgId },
+  })
+  capability[role] = {
+    cookie: member.cookie,
+    grants: [roles[role].statements as PermissionSet],
+  }
+}
+
+describe("fixed capability roles", () => {
+  it("are each covered by a member fixture", () => {
+    expect(Object.keys(capability).sort()).toEqual([...CAPABILITY_ROLES].sort())
+  })
+
+  describe.each(
+    t.operations.filter((op) => !PUBLIC.has(op.name)).map((op) => [op.name, op] as const),
+  )("%s", (_name, op) => {
+    it("answers each capability role by its statements", async () => {
+      const { path, init } = requestFor(op, aimedAtAcme(op, example(op)))
+      for (const role of CAPABILITY_ROLES) {
+        const { cookie, grants } = capability[role] as (typeof capability)[string]
+        const res = await call(cookie, path, init)
+        const shown = `${role}: ${res.status} ${JSON.stringify(res.body)}`
+        if (allowed(grants, op.permissions)) {
+          expect(res.status, shown).not.toBe(403)
+        } else {
+          expect(res.status, shown).toBe(403)
+          expect(res.body, shown).toMatchObject({ error: { code: "FORBIDDEN" } })
+        }
+      }
+    })
+  })
+})

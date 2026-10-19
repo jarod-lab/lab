@@ -22,7 +22,14 @@ describe("rolePermissions matches better-auth's hasPermission (real Postgres via
   let t: Awaited<ReturnType<typeof createTestAuth>>
   let orgId: string
   const cookies: Record<string, string> = {}
-  const ROLES = [...Object.keys(roles), "admin,member", "viewer,member", "unknown"]
+  const ROLES = [
+    ...Object.keys(roles),
+    "admin,member",
+    "viewer,member",
+    "viewer,approver",
+    "operator,billing",
+    "unknown",
+  ]
 
   beforeAll(async () => {
     t = await createTestAuth()
@@ -69,6 +76,82 @@ describe("rolePermissions matches better-auth's hasPermission (real Postgres via
         )
       }
     }
+  })
+})
+
+describe("fixed capability roles", () => {
+  it("grant exactly the permissions their statements list", () => {
+    expect(roles.approver.statements).toEqual({
+      run: ["read", "approve"],
+      project: ["read"],
+      agent: ["read"],
+    })
+    expect(roles.operator.statements).toEqual({
+      project: ["read"],
+      agent: ["read"],
+      run: ["create", "read", "update", "steer"],
+    })
+    expect(roles.billing.statements).toEqual({ subscription: ["read", "update"] })
+  })
+
+  it("let an approver approve but not steer, start or change anything", () => {
+    const grants = rolePermissions("approver")
+    expect(allowed(grants, { run: ["approve"] })).toBe(true)
+    expect(allowed(grants, { run: ["read", "approve"] })).toBe(true)
+    for (const need of [
+      { run: ["create"] },
+      { run: ["steer"] },
+      { agent: ["update"] },
+    ] as PermissionSet[]) {
+      expect(allowed(grants, need), JSON.stringify(need)).toBe(false)
+    }
+  })
+
+  it("let an operator run and steer, but never approve or change agents", () => {
+    const grants = rolePermissions("operator")
+    expect(allowed(grants, { run: ["create", "steer"] })).toBe(true)
+    for (const need of [
+      { run: ["approve"] },
+      { agent: ["create"] },
+      { apiKey: ["read"] },
+    ] as PermissionSet[]) {
+      expect(allowed(grants, need), JSON.stringify(need)).toBe(false)
+    }
+  })
+
+  it("let billing manage the subscription and nothing else", () => {
+    const grants = rolePermissions("billing")
+    expect(allowed(grants, { subscription: ["read", "update"] })).toBe(true)
+    for (const need of [
+      { project: ["read"] },
+      { member: ["read"] },
+      { run: ["read"] },
+    ] as PermissionSet[]) {
+      expect(allowed(grants, need), JSON.stringify(need)).toBe(false)
+    }
+  })
+
+  it("never reach an agent credential: no OAuth scope grants approve or subscription", () => {
+    const everyScope = scopePermissions(Object.keys(OAUTH_SCOPE_GRANTS))
+    expect(allowed([everyScope], { run: ["approve"] })).toBe(false)
+    expect(allowed([everyScope], { subscription: ["read"] })).toBe(false)
+  })
+
+  it("hold person-only permissions only where intended: approve for approvers, billing for billing", () => {
+    // create_api_key refuses these for keys, and no OAuth scope reaches them. The roles that hold
+    // them are people's roles; no other fixed role may pick them up by accident.
+    for (const name of ["approver", "operator", "billing"] as const) {
+      for (const resource of PERSON_ONLY_RESOURCES) {
+        const reaches = allowed(rolePermissions(name), {
+          [resource]: [statements[resource][0]],
+        } as PermissionSet)
+        expect(reaches, `${name} ${resource}`).toBe(
+          name === "billing" && resource === "subscription",
+        )
+      }
+    }
+    expect(allowed(rolePermissions("operator"), { run: ["approve"] })).toBe(false)
+    expect(allowed(rolePermissions("billing"), { run: ["approve"] })).toBe(false)
   })
 })
 

@@ -1,8 +1,7 @@
 // Pure helpers for the members page. No network, no React. Every permission is answered by the
 // caller with the plugin's own check (`allows`), never by a role table written here.
 
-import type { InviteRole } from "./org-settings"
-import { isOwner, roleParts } from "./roles"
+import { isOrgRole, isOwner, type OrgRole, ROLE_LABEL, roleParts } from "./roles"
 
 /** A permission to test: resource to actions, the shape `roleAllows` takes. */
 export type Permission = Record<string, string[]>
@@ -25,9 +24,28 @@ export function topRoleOf(role: string): MatrixRole {
   return MATRIX_ROLES.find((candidate) => parts.includes(candidate)) ?? "viewer"
 }
 
-/** The label for a stored role string: its highest role's name. */
+/**
+ * The role a stored role string shows as in the members list and the picker. Owner wins, then the
+ * stored roles in this order: the capability roles before viewer, since each of them covers what a
+ * viewer can see. A role we don't know is a viewer.
+ */
+const SHOWN_ORDER: readonly OrgRole[] = [
+  "owner",
+  "admin",
+  "member",
+  "approver",
+  "operator",
+  "billing",
+  "viewer",
+]
+export function shownRoleOf(role: string): OrgRole {
+  const parts = roleParts(role).filter(isOrgRole)
+  return SHOWN_ORDER.find((candidate) => parts.includes(candidate)) ?? "viewer"
+}
+
+/** The label for a stored role string: the name of the role shownRoleOf picks. */
 export function roleLabelOf(role: string): string {
-  return MATRIX_ROLE_LABEL[topRoleOf(role)]
+  return ROLE_LABEL[shownRoleOf(role)]
 }
 
 /**
@@ -94,8 +112,22 @@ export function canResetTwoFactor(member: MemberAbilities, allows: Allows): bool
   return !member.isSelf && member.twoFactorEnabled === true && allows(RESET_TWO_FACTOR)
 }
 
-/** The roles an invitation or a role change can name. Owner is never offered here. */
-export const ASSIGNABLE_ROLES: InviteRole[] = ["admin", "member", "viewer"]
+/** A role an invitation or a role change can name. Owner is never offered here. */
+export type AssignableRole = Exclude<OrgRole, "owner">
+
+/**
+ * The roles an invitation or a role change can name, in the order the picker lists them. Each is a
+ * catalog role (roles.ts); the server still decides whether the caller may grant it (member:update
+ * or invitation:create, held by owners and admins).
+ */
+export const ASSIGNABLE_ROLES: AssignableRole[] = [
+  "admin",
+  "member",
+  "viewer",
+  "approver",
+  "operator",
+  "billing",
+]
 
 /** The exact consequence of removing a member (AGENTS.md: member-grants). */
 export function removeConsequence(name: string): string {

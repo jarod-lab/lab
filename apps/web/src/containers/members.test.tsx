@@ -164,6 +164,41 @@ describe("MembersContainer as owner", () => {
     expect(membersApi.removeMember).not.toHaveBeenCalled()
   })
 
+  it("offers the capability roles in the picker and assigns one", async () => {
+    const user = userEvent.setup()
+    const { membersApi } = setup()
+    await screen.findByText("Cy")
+    await user.click(screen.getByRole("button", { name: "Role for Cy: Member" }))
+    const items = await screen.findAllByRole("menuitemradio")
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Admin",
+      "Member",
+      "Viewer",
+      "Approver",
+      "Operator",
+      "Billing",
+    ])
+    await user.click(screen.getByRole("menuitemradio", { name: "Approver" }))
+    await waitFor(() =>
+      expect(settings.updateMemberRole).toHaveBeenCalledWith("org-a", "m-cy", "approver"),
+    )
+    expect(membersApi.removeMember).not.toHaveBeenCalled()
+  })
+
+  it("offers the capability roles when inviting", async () => {
+    setup()
+    await screen.findByText("Cy")
+    const select = screen.getByLabelText("Role") as HTMLSelectElement
+    expect([...select.options].map((option) => option.value)).toEqual([
+      "admin",
+      "member",
+      "viewer",
+      "approver",
+      "operator",
+      "billing",
+    ])
+  })
+
   it("removes a member, naming the consequence first", async () => {
     const user = userEvent.setup()
     const { membersApi } = setup()

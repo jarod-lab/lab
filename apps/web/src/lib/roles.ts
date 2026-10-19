@@ -31,3 +31,26 @@ export type OrgRole = keyof typeof roles
 export function isOrgRole(role: string): role is OrgRole {
   return Object.hasOwn(roles, role)
 }
+
+/** The name a person sees for each catalog role. */
+export const ROLE_LABEL: Record<OrgRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
+  viewer: "Viewer",
+  approver: "Approver",
+  operator: "Operator",
+  billing: "Billing",
+}
+
+/** What a role is for, in one line (the role picker's help text). */
+export const ROLE_DESCRIPTION: Record<OrgRole, string> = {
+  owner: "Everything, including SSO, SCIM and billing. Can't be changed from the member list.",
+  admin: "Manages members, agents, API keys and billing.",
+  member: "Creates and runs agents, and approves their actions.",
+  viewer: "Sees agents, runs and projects. Changes nothing.",
+  approver:
+    "Reviews runs and approves or denies their actions. Doesn't start runs or change agents.",
+  operator: "Starts runs and steers agents. Can't approve actions or change agents.",
+  billing: "Sees and changes the subscription. No access to agents, runs or members.",
+}

@@ -56,8 +56,10 @@ const adminStatements = Object.fromEntries(
 ) as typeof all
 
 /**
- * Fixed roles. To let organizations define their own, enable the organization plugin's
- * `dynamicAccessControl` and resolve roles through `rolePermissions` in ./permissions.
+ * Fixed capability roles: the catalog's named bundles of permissions, shipped with the product.
+ * A member may hold several ("viewer,approver"), and better-auth grants a request only when one
+ * role covers all of it (see rolePermissions). Organizations can't define their own yet: database
+ * roles (the organization plugin's dynamicAccessControl) are on the roadmap (docs/roadmap.md).
  */
 export const roles = {
   owner: ac.newRole(all),
@@ -70,6 +72,16 @@ export const roles = {
     run: ["create", "read", "update", "approve", "steer"],
   }),
   viewer: ac.newRole({ project: ["read"], agent: ["read"], run: ["read"] }),
+  // A reviewer: signs off on runs. Never changes agents or starts runs.
+  approver: ac.newRole({ run: ["read", "approve"], project: ["read"], agent: ["read"] }),
+  // Runs and steers agents, without deciding approvals or changing their configuration.
+  operator: ac.newRole({
+    project: ["read"],
+    agent: ["read"],
+    run: ["create", "read", "update", "steer"],
+  }),
+  // Finance: the subscription and its billing, without admin rights over members or agents.
+  billing: ac.newRole({ subscription: ["read", "update"] }),
 } as const
 
 export type RoleName = keyof typeof roles

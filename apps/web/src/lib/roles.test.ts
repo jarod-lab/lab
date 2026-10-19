@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { hasRole, isOrgRole, isOwner, roleParts } from "./roles"
+import { ROLE_DESCRIPTION, ROLE_LABEL, hasRole, isOrgRole, isOwner, roleParts } from "./roles"
+import { roles } from "@starter/auth/client"
 
 describe("roleParts", () => {
   it("splits a stored role string into trimmed, non-empty parts", () => {
@@ -36,5 +37,23 @@ describe("isOrgRole", () => {
     expect(isOrgRole("admin,member")).toBe(false)
     expect(isOrgRole("superuser")).toBe(false)
     expect(isOrgRole("constructor")).toBe(false)
+  })
+})
+
+describe("role labels and descriptions", () => {
+  it("name and describe every catalog role, the capability roles included", () => {
+    for (const role of Object.keys(roles)) {
+      expect(ROLE_LABEL[role as keyof typeof roles], role).toBeTruthy()
+      expect(ROLE_DESCRIPTION[role as keyof typeof roles], role).toBeTruthy()
+    }
+    expect(ROLE_LABEL.approver).toBe("Approver")
+    expect(ROLE_LABEL.operator).toBe("Operator")
+    expect(ROLE_LABEL.billing).toBe("Billing")
+  })
+
+  it("accepts the capability roles as catalog roles", () => {
+    expect(isOrgRole("approver")).toBe(true)
+    expect(isOrgRole("operator")).toBe(true)
+    expect(isOrgRole("billing")).toBe(true)
   })
 })

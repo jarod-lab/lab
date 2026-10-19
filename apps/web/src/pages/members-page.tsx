@@ -31,6 +31,7 @@ import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
 
 import {
   ASSIGNABLE_ROLES,
+  type AssignableRole,
   LONG_LIST,
   MATRIX_ROLES,
   MATRIX_ROLE_LABEL,
@@ -41,10 +42,11 @@ import {
   removeConsequence,
   resetTwoFactorConsequence,
   sentCopy,
-  topRoleOf,
+  shownRoleOf,
 } from "../lib/members"
 import { ConfirmDialog } from "../components/confirm-dialog"
-import { type InviteRole, INVITE_ROLE_LABEL, settingsTabs } from "../lib/org-settings"
+import { ROLE_DESCRIPTION, ROLE_LABEL } from "../lib/roles"
+import { settingsTabs } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
 import { InviteForm } from "./members-invite-form"
 
@@ -98,14 +100,14 @@ export interface MembersPageProps {
   /** The invitations could not be loaded: say so, rather than showing an empty list. */
   invitationsError?: string | null
   /** The stored default role for new invitations (metadata.defaultInviteRole). */
-  defaultInviteRole: InviteRole
+  defaultInviteRole: AssignableRole
   members: MemberView[]
   /** Each role's permissions from the plugin's own check (see permissionMatrix). */
   matrix: MatrixRowView[]
   /** For "Last active" and the expiry copy. Defaults to now. */
   now?: Date
-  onInvite: (emails: string[], role: InviteRole) => Promise<InviteOutcome>
-  onChangeRole: (member: MemberView, role: InviteRole) => Promise<void>
+  onInvite: (emails: string[], role: AssignableRole) => Promise<InviteOutcome>
+  onChangeRole: (member: MemberView, role: AssignableRole) => Promise<void>
   onRemove: (member: MemberView) => Promise<void>
   onResetTwoFactor: (member: MemberView) => Promise<void>
   onResend: (invitation: InvitationView) => Promise<void>
@@ -212,10 +214,10 @@ export function MembersPage({
                 />
                 <DropdownMenuContent align="start">
                   <DropdownMenuRadioGroup
-                    value={topRoleOf(m.role)}
+                    value={shownRoleOf(m.role)}
                     onValueChange={(value) => {
                       const next = ASSIGNABLE_ROLES.find((r) => r === value)
-                      if (!next || next === topRoleOf(m.role)) return
+                      if (!next || next === shownRoleOf(m.role)) return
                       setActionError(null)
                       void onChangeRole(m, next).catch((caught: unknown) =>
                         setActionError(messageOf(caught)),
@@ -223,8 +225,8 @@ export function MembersPage({
                     }}
                   >
                     {ASSIGNABLE_ROLES.map((role) => (
-                      <DropdownMenuRadioItem key={role} value={role}>
-                        {INVITE_ROLE_LABEL[role]}
+                      <DropdownMenuRadioItem key={role} value={role} title={ROLE_DESCRIPTION[role]}>
+                        {ROLE_LABEL[role]}
                       </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>

@@ -5,6 +5,7 @@
 //   - permission hints: a FORBIDDEN names the OAuth scope or API key permission that would allow it
 //   - fresh sessions: a `fresh` operation refuses a session that signed in over an hour ago
 //   - operator operations: only the operator organization's callers may run them
+//   - analytics: every call is an `operation.called` event, except a person's reads in the web app
 import { createHash } from "node:crypto"
 
 import {
@@ -18,6 +19,7 @@ import {
   type OperationContext,
   type PermissionSet,
 } from "@starter/api"
+import { type Analytics, noopAnalytics } from "@starter/analytics"
 import { isFresh, OAUTH_SCOPE_GRANTS, OAUTH_SCOPES } from "@starter/auth"
 import type { Database } from "@starter/db"
 import { AppError, type ErrorCode, reportError } from "@starter/errors"
@@ -103,6 +105,7 @@ export function createApiHooks({
   secret,
   notifier,
   operator,
+  analytics = noopAnalytics,
 }: {
   db: Database
   meter: Meter
@@ -112,6 +115,8 @@ export function createApiHooks({
   secret: string
   /** Sends usage.limit_reached. Without it the limit is enforced but nobody is told. */
   notifier?: ApiNotifier
+  /** Where `operation.called` goes. Default: nowhere. */
+  analytics?: Analytics
 }): ApiHooks {
   const readings = new WeakMap<OperationContext, Reading>()
   // Keys this call reserved; completed or released in `after`.
@@ -135,6 +140,27 @@ export function createApiHooks({
       // An audit write that fails must not change the response the caller gets.
       reportError(e, { operation: op.name, phase: "audit" })
     }
+  }
+
+  /**
+   * One `operation.called` event. A person's reads in the web app are skipped, as metering skips
+   * them: they are its polling, and its page views say what the person looked at.
+   */
+  function track(op: AnyOperation, ctx: OperationContext, outcome: "ok" | ErrorCode) {
+    const { caller } = ctx
+    if (caller.via === "session" && !isMutating(op)) return
+    analytics.capture(
+      {
+        name: "operation.called",
+        properties: {
+          operation: op.name,
+          outcome,
+          via: caller.via,
+          ...(caller.via === "oauth" && caller.clientId && { oauthClientId: caller.clientId }),
+        },
+      },
+      { actor: caller.actor, organizationId: caller.organizationId },
+    )
   }
 
   /**
@@ -226,6 +252,7 @@ export function createApiHooks({
       ) {
         await audit(op, ctx, err.code)
       }
+      if (err instanceof AppError) track(op, ctx, err.code)
       throw err
     }
   }
@@ -243,7 +270,9 @@ export function createApiHooks({
         )
       }
     } finally {
-      if (isMutating(op)) await audit(op, ctx, outcome.ok ? "ok" : outcome.error.code)
+      const result = outcome.ok ? "ok" : outcome.error.code
+      track(op, ctx, result)
+      if (isMutating(op)) await audit(op, ctx, result)
     }
   }
 

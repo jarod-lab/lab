@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
+    "@starter/analytics": "workspace:*",
     "@starter/api": "workspace:*",
     "@starter/auth": "workspace:*",
     "@starter/auth-proofs": "workspace:*",

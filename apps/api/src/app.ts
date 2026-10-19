@@ -15,6 +15,12 @@ import {
   serverJson,
 } from "@starter/api"
 import {
+  ANALYTICS_EVENTS_PATH,
+  type Analytics,
+  clientEventBatchSchema,
+  noopAnalytics,
+} from "@starter/analytics"
+import {
   AUTH_BASE_PATH,
   type Auth,
   CLIENT_IP_HEADER,
@@ -88,6 +94,11 @@ export interface AppOptions {
    * Unset, there are no /ofrep routes.
    */
   flags?: FlagService
+  /**
+   * Where the web app's events (POST /api/events) go. Default: nowhere. Operation calls are captured
+   * by the invoke hooks, which take the same instance (createApiHooks).
+   */
+  analytics?: Analytics
 }
 
 /**
@@ -171,6 +182,7 @@ const loggedPath = (path: string) =>
  */
 export function createApp(opts: AppOptions) {
   const { auth, operations, baseURL, logger, hooks } = opts
+  const analytics = opts.analytics ?? noopAnalytics
   const trustProxy = opts.trustProxy ?? false
   const issuer = `${baseURL}${AUTH_BASE_PATH}`
   const mcpUrl = `${baseURL}/mcp`
@@ -354,6 +366,32 @@ export function createApp(opts: AppOptions) {
 
   // OpenFeature's remote evaluation protocol: a protocol route, outside the registry (ofrep.ts).
   if (flags) mountOfrep(app, { flags, authenticate })
+  // The web app's analytics events. Not an operation: it is no part of the API agents use, and the
+  // invoke hooks would meter and audit every page view. A signed-in person only, from the web app;
+  // who sent it comes from the session, never the body.
+  const eventsLimit = bodyLimit({
+    maxSize: 16 * 1024,
+    onError: () => {
+      throw new AppError("BAD_REQUEST", "Too many analytics events in one request")
+    },
+  })
+  app.post(ANALYTICS_EVENTS_PATH, eventsLimit, async (c) => {
+    const caller = await authenticate(c.req.raw)
+    if (!caller) throw new AppError("UNAUTHORIZED", "Sign in to send analytics events")
+    if (caller.via !== "session") {
+      throw new AppError("FORBIDDEN", "Analytics events come from the web app only", {
+        hint: "Operation calls are counted on their own; agents don't send analytics events.",
+      })
+    }
+    await assertTrustedOrigin(c.req.raw)
+    const body: unknown = await c.req.json().catch(() => undefined)
+    const parsed = clientEventBatchSchema.safeParse(body)
+    if (!parsed.success) throw new AppError("BAD_REQUEST", "Not a batch of web app events")
+    for (const event of parsed.data.events) {
+      analytics.capture(event, { actor: caller.actor, organizationId: caller.organizationId })
+    }
+    return c.body(null, 204)
+  })
 
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))

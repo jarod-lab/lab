@@ -21,6 +21,7 @@
     "@openfeature/ofrep-web-provider": "^0.4.3",
     "@openfeature/react-sdk": "^1.4.1",
     "@openfeature/web-sdk": "^1.10.0",
+    "@starter/analytics": "workspace:*",
     "@starter/auth": "workspace:*",
     "@starter/flags": "workspace:*",
     "@starter/sdk": "workspace:*",

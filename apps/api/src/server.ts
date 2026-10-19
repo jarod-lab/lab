@@ -7,6 +7,7 @@ import { createLogger } from "@starter/logger"
 import { parseStatusProviders } from "@starter/observability"
 import { createFileStore, type FileStore } from "@starter/storage"
 
+import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
@@ -21,6 +22,8 @@ const logger = createLogger({ name: "api" })
 const baseURL = (env.PORTLESS_URL ?? env.BETTER_AUTH_URL).replace(/\/$/, "")
 
 const db = createDb(env.DATABASE_URL)
+// Product analytics (docs/analytics.md): operation calls, auth events and the web app's page views.
+const analytics = analyticsFromEnv(env, logger)
 // Dev and e2e only (env refuses it in production): auth emails are kept in memory for GET /api/dev/mail.
 const devMail = env.DEV_MAIL_SINK ? createDevMailSink() : undefined
 if (devMail) logger.warn("DEV_MAIL_SINK is on: auth emails are not sent, they are kept in memory")
@@ -56,10 +59,12 @@ const auth = createAuth({
   rateLimit: env.AUTH_RATE_LIMIT === "on" ? {} : false,
   // Auth activity (sign-in, failed sign-in, sign-out, ...) lands in the audit trail (auth-events.ts).
   onAuthEvent: async (event) => {
+    captureAuthEvent(analytics, event)
     await recordAuthEvent(db, event)
   },
   // A notification that could not be recorded never fails the request; it is reported here.
   onNotificationError: (error, type) => reportError(error, { notification: type }),
+  onSignUp: (event) => captureSignUp(analytics, event),
 })
 
 // Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
@@ -129,8 +134,16 @@ const app = createApp({
   version: "0.0.0",
   description: "The Starter API. Replace this with one sentence about what your product does.",
   logger,
-  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET, notifier, operator }),
+  hooks: createApiHooks({
+    db,
+    meter,
+    secret: env.BETTER_AUTH_SECRET,
+    notifier,
+    operator,
+    analytics,
+  }),
   flags,
+  analytics,
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
   files,
@@ -154,7 +167,10 @@ const app = createApp({
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)
 serve({ fetch: app.fetch, port }, (addr) => logger.info({ port: addr.port }, "api listening"))
 
-// Write the flag exposures counted since the last flush before the process goes.
-process.once("SIGTERM", () => {
-  void flags.close().finally(() => process.exit(0))
-})
+// Before the process goes (a deploy's SIGTERM, or Ctrl-C): write the flag exposures counted since
+// the last flush, and send the analytics still queued.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    void Promise.allSettled([flags.close(), analytics.shutdown()]).finally(() => process.exit(0))
+  })
+}

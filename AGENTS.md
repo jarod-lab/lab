@@ -55,6 +55,9 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   stale signals; browser-safe. See `docs/feature-flags.md`.
 - `packages/storage` — `@starter/storage`, the file store uploads go to (S3, R2, Vercel Blob or a
   local directory, by `STORAGE_DRIVER`) and image checks. See `docs/storage.md`.
+- `packages/analytics` — `@starter/analytics`, product analytics: the event catalog (browser-safe at
+  `@starter/analytics/events`) and the provider (log or PostHog, by `ANALYTICS_PROVIDER`). The web
+  app posts page views to `POST /api/events`. See `docs/analytics.md`.
 - `packages/env` — the only place env vars are read (Zod). `packages/config` — shared tsconfig and
   Vitest base.
 - `scripts/` — `scripts/worktree.mjs` (`pnpm wt`), `scripts/init-project.mjs`,

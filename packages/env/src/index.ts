@@ -136,6 +136,15 @@ export const env = createEnv({
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     /** vercel-blob: the store's read-write token. Vercel sets it when the store is connected. */
     BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+    /**
+     * Where product analytics go: `log` (the API's log, for dev) or `posthog`. Unset, nothing is
+     * captured (docs/analytics.md).
+     */
+    ANALYTICS_PROVIDER: z.enum(["log", "posthog"]).optional(),
+    /** posthog: the project API key (`phc_...`). */
+    POSTHOG_API_KEY: z.string().min(1).optional(),
+    /** posthog: the ingestion host. Default https://us.i.posthog.com; EU is https://eu.i.posthog.com. */
+    POSTHOG_HOST: z.url().optional(),
   },
   runtimeEnv: process.env,
   // Only an explicit yes: "false" or "0" must not turn validation off.
@@ -188,4 +197,11 @@ if (env.STORAGE_DRIVER) {
       `STORAGE_DRIVER=${env.STORAGE_DRIVER} needs ${missing.join(", ")}. Set them, or unset STORAGE_DRIVER to turn uploads off (docs/storage.md).`,
     )
   }
+}
+
+// Like the file store: a provider without its key would drop every event; say so at startup.
+if (env.ANALYTICS_PROVIDER === "posthog" && env.POSTHOG_API_KEY === undefined) {
+  throw new Error(
+    "ANALYTICS_PROVIDER=posthog needs POSTHOG_API_KEY. Set it, or unset ANALYTICS_PROVIDER to turn analytics off (docs/analytics.md).",
+  )
 }

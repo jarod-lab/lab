@@ -288,3 +288,29 @@ describe("account rules", () => {
     })
   })
 })
+
+describe("onSignUp", () => {
+  it("names each new account and its personal organization, once", async () => {
+    const seen: { userId: string; organizationId: string }[] = []
+    const h = await createTestAuth({ onSignUp: (event) => seen.push(event) })
+    try {
+      const user = await h.signUp("New")
+      expect(seen).toEqual([{ userId: user.userId, organizationId: user.orgId }])
+    } finally {
+      await h.close()
+    }
+  })
+
+  it("never fails the sign-up", async () => {
+    const h = await createTestAuth({
+      onSignUp: () => {
+        throw new Error("analytics down")
+      },
+    })
+    try {
+      await expect(h.signUp("Still")).resolves.toMatchObject({ orgId: expect.any(String) })
+    } finally {
+      await h.close()
+    }
+  })
+})

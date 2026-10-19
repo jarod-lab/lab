@@ -21,7 +21,22 @@ const OPTIONAL_UNDER_TEST = [
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "BLOB_READ_WRITE_TOKEN",
+  "ANALYTICS_PROVIDER",
+  "POSTHOG_API_KEY",
+  "POSTHOG_HOST",
 ]
+
+/** A valid environment with every optional variable under test unset, and a fresh module. */
+function base() {
+  vi.unstubAllEnvs()
+  vi.resetModules()
+  vi.stubEnv("SKIP_ENV_VALIDATION", "")
+  vi.stubEnv("DATABASE_URL", "postgres://u:p@localhost:5432/db")
+  vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
+  vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
+  vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+  for (const name of OPTIONAL_UNDER_TEST) vi.stubEnv(name, "")
+}
 
 describe("env", () => {
   it("fails fast on missing variables", async () => {
@@ -232,17 +247,6 @@ describe("env", () => {
   })
 
   describe("file store", () => {
-    const base = () => {
-      vi.unstubAllEnvs()
-      vi.resetModules()
-      vi.stubEnv("SKIP_ENV_VALIDATION", "")
-      vi.stubEnv("DATABASE_URL", "postgres://u:p@localhost:5432/db")
-      vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
-      vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
-      vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
-      for (const name of OPTIONAL_UNDER_TEST) vi.stubEnv(name, "")
-    }
-
     it("is off when unset, and local needs nothing more", async () => {
       base()
       expect((await import("./index")).env.STORAGE_DRIVER).toBeUndefined()
@@ -280,6 +284,32 @@ describe("env", () => {
     it("refuses an unknown driver", async () => {
       base()
       vi.stubEnv("STORAGE_DRIVER", "gcs")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+    })
+  })
+
+  describe("analytics", () => {
+    it("is off when unset, and log needs nothing more", async () => {
+      base()
+      expect((await import("./index")).env.ANALYTICS_PROVIDER).toBeUndefined()
+      base()
+      vi.stubEnv("ANALYTICS_PROVIDER", "log")
+      expect((await import("./index")).env.ANALYTICS_PROVIDER).toBe("log")
+    })
+
+    it("refuses posthog without its key", async () => {
+      base()
+      vi.stubEnv("ANALYTICS_PROVIDER", "posthog")
+      await expect(import("./index")).rejects.toThrow(/needs POSTHOG_API_KEY/)
+      base()
+      vi.stubEnv("ANALYTICS_PROVIDER", "posthog")
+      vi.stubEnv("POSTHOG_API_KEY", "phc_test")
+      expect((await import("./index")).env.POSTHOG_API_KEY).toBe("phc_test")
+    })
+
+    it("refuses an unknown provider", async () => {
+      base()
+      vi.stubEnv("ANALYTICS_PROVIDER", "segment")
       await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
     })
   })

@@ -81,4 +81,5 @@ export async function personalOrganization(db: Adapter, user: { id: string; name
     where: [{ field: "userId", value: user.id }],
     update: { activeOrganizationId: org.id },
   })
+  return org.id
 }

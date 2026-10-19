@@ -193,6 +193,12 @@ export interface AuthOptions {
    * Defaults to reportError, which reports only 5xx and unexposed errors.
    */
   onNotificationError?: (error: unknown, type: NotificationType) => void
+  /**
+   * Called once per new account, by every sign-up path (email, social, passkey, provisional
+   * signup), after its personal organization exists. server.ts counts it in analytics. Errors are
+   * reported, never returned: a sign-up never fails for it.
+   */
+  onSignUp?: (event: { userId: string; organizationId: string }) => void
 }
 
 const defaultNotificationError = (error: unknown, type: NotificationType) => {
@@ -494,7 +500,16 @@ export function createAuth(opts: AuthOptions) {
       // Every account works inside an organization: signing up creates a personal one.
       // A verified address is a claimed account (verify-email, or any other path that sets it).
       user: {
-        create: { after: async (user) => personalOrganization(await adapter(), user) },
+        create: {
+          after: async (user) => {
+            const organizationId = await personalOrganization(await adapter(), user)
+            try {
+              opts.onSignUp?.({ userId: user.id, organizationId })
+            } catch (error) {
+              reportError(error, { phase: "onSignUp" })
+            }
+          },
+        },
         update: {
           after: async (user) => {
             if (!user) return

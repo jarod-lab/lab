@@ -115,6 +115,10 @@ Code: `packages/auth/src/passkey-signup.ts`.
   a request takes (a failed sign-in can't reveal whether the address has an account). Tests await
   `drainAuthEvents()` or poll for the row. `apps/api/src/server.ts` passes `recordAuthEvent`
   (`apps/api/src/data/audit.ts`), which writes an `audit_event` row.
+- Email sign-up is not an auth event. `onSignUp` (a `createAuth` option) is called once per new
+  account, by every sign-up path, from the user-create hook, with the account's personal
+  organization. `apps/api` counts it in analytics (`account.created`, `docs/analytics.md`). It
+  never fails the sign-up.
 - A refused call, including a validation failure (`isAPIError`), is an event whose outcome is its
   error code. Failed social and SSO callbacks are not
   recorded.

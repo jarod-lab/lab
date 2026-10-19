@@ -4,12 +4,14 @@
 // acme is the operator organization (feature flag rollouts) unless a test says otherwise.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import type { Analytics } from "@starter/analytics"
 import type { AnyOperation } from "@starter/api"
 import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { createLogger, type Logger } from "@starter/logger"
 import type { FlagCatalog } from "@starter/flags"
 import { createMemoryStore, type FileStore } from "@starter/storage"
+import { captureSignUp } from "./analytics"
 import { type AppOptions, createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
@@ -73,6 +75,8 @@ export interface TestAppOptions {
   devMail?: boolean
   /** The notifier the operations and hooks send through. Defaults to the real one; tests pass a failing one. */
   notifier?: ApiNotifier
+  /** Where operation calls and web app events go (createAnalytics with a memory provider). */
+  analytics?: Analytics
   /** Stripe test mode, with these plans (see auth's stripe option). Unset, billing is not mounted. */
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
   /** Auth rate limits. Off unless a test opts in (auth-flows: the limiter test), so flows don't 429. */
@@ -108,6 +112,7 @@ export async function createTestApp(
     },
   }
   const devMail = options.devMail ? createDevMailSink() : undefined
+  const { analytics } = options
   const auth = createAuth({
     db: t.db,
     secret: SECRET,
@@ -125,6 +130,7 @@ export async function createTestApp(
     github: options.github,
     google: options.google,
     rateLimit: options.rateLimit ?? false,
+    onSignUp: analytics && ((event) => captureSignUp(analytics, event)),
     onAuthEvent:
       options.onAuthEvent ??
       (async (event) => {
@@ -162,8 +168,9 @@ export async function createTestApp(
     ...extra,
   ]
   const app = createApp({
-    hooks: createApiHooks({ db: t.db, meter, secret: SECRET, notifier, operator }),
+    hooks: createApiHooks({ db: t.db, meter, secret: SECRET, notifier, operator, analytics }),
     flags,
+    analytics,
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
     status: options.status,

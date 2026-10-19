@@ -117,6 +117,9 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
   running or reused-for-another-request key is `CONFLICT`.
 - **After**: completes the reserved key (or releases it on failure, so a retry can run) and audits
   every non-readOnly call (`audit_event`: actor, OAuth `clientId`, operation, outcome, requestId).
+- **Analytics**: every call is an `operation.called` event (operation, outcome, `via`), captured in
+  `after` and with `before`'s refusals; a session's readOnly calls are skipped, as for metering
+  (`docs/analytics.md`). `capture` only queues, so it never slows or fails a call.
 - `after` does not see FORBIDDEN, BAD_REQUEST or errors thrown by `before`. So `before` audits its
   own RATE_LIMITED and CONFLICT refusals, and nothing audits FORBIDDEN or BAD_REQUEST attempts yet.
 - **Idempotency-Key**: header on REST (1-255 characters), `idempotencyKey` argument on MCP
@@ -288,6 +291,9 @@ The product's own agents (the org's workers) are the `agent` resource; the conne
   (`apps/api/src/static.ts`), on the API origin so the auth cookies apply. Only the listed page
   paths get `index.html` (`PAGE_PATHS`; keep in step with `apps/web/src/routes`). Pages carry CSP,
   `X-Frame-Options: DENY`; assets are hashed and cached forever.
+- **`POST /api/events`** (the web app's analytics) is a hand route, not an operation: agents never
+  use it, and the invoke hooks would meter and audit every page view. Session only, trusted origin,
+  `clientEventBatchSchema`; the actor comes from the session. Not in OpenAPI, not under CORS.
 - **Discovery**: `llms.txt` (and `/` for non-browsers) carries install snippets for Claude Code,
   Cursor, VS Code, Codex and the device-grant curl flow (`installSnippets`,
   `packages/api/src/llms.ts`). The MCP registry record comes from `serverJson`

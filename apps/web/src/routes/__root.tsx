@@ -11,6 +11,7 @@ import { type ReactNode, Suspense, lazy, useSyncExternalStore } from "react"
 import { ReauthProvider } from "../components/reauth-dialog"
 import { ImpersonationBanner } from "../containers/impersonation-banner"
 import { getAdminApi } from "../lib/admin-api"
+import { usePageViews } from "../lib/analytics"
 import { useThemeSync } from "../lib/theme"
 import themeBootScript from "../theme-boot.js?raw"
 
@@ -44,6 +45,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 function RootOutlet() {
   const { queryClient } = Route.useRouteContext()
   const router = useRouter()
+  usePageViews()
   return (
     <QueryClientProvider client={queryClient}>
       {/* One "Confirm it's you" dialog for every page's refused sensitive action (lib/reauth.ts). */}

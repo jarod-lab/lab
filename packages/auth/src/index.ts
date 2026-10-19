@@ -9,7 +9,7 @@ import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { inbox } from "better-inbox"
-import { wraps } from "@wraps.dev/better-auth"
+import { type WrapsSesOptions, wraps } from "@wraps.dev/better-auth"
 import { reportError } from "@starter/errors"
 import Stripe from "stripe"
 import {
@@ -158,7 +158,7 @@ export interface AuthOptions {
   /** Device-grant minimum poll interval (e.g. "5s"). Tests use a short one; the default is 5s. */
   deviceInterval?: DeviceInterval
   /** Passed to `WrapsEmail` for auth emails (`client`, `region`, `roleArn`, ...); tests inject a fake. */
-  ses?: Record<string, unknown>
+  ses?: WrapsSesOptions
   /** Called when an auth email fails to send. Sends never block the auth flow. */
   onEmailError?: (error: Error) => void
   /** GitHub OAuth app. The sign-in button is offered only when both values are set. */
@@ -313,14 +313,7 @@ export function createAuth(opts: AuthOptions) {
   // The API's own origin is trusted by better-auth already; these are the extra web origins.
   const webOrigins = opts.webOrigins ?? []
   const apiOrigin = new URL(opts.baseURL).origin
-  // The account emails wraps doesn't send (change of address, deletion), on the same SES client.
   const billing = !!opts.stripe
-  const notices = createNotices({
-    from: opts.emailFrom,
-    appName: opts.appName ?? "Starter",
-    ses: opts.ses,
-    onError: opts.onEmailError,
-  })
   // The SCIM plugin's managed-connection endpoint is server-only; it is called on the instance built below.
   const scimApi: {
     connect?: (input: ScimConnectionInput) => Promise<ScimConnection>
@@ -379,6 +372,11 @@ export function createAuth(opts: AuthOptions) {
       ses: opts.ses,
       onError: opts.onEmailError,
     },
+  })
+  // The account emails wraps doesn't send (change of address, deletion), on the same SES client.
+  const notices = createNotices({
+    appName: opts.appName ?? "Starter",
+    send: wrapsPlugin.emails.send,
   })
 
   const auth = betterAuth({

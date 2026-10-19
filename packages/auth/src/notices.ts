@@ -1,16 +1,13 @@
 // Account emails the wraps plugin doesn't send: a change-of-address confirmation (to the NEW address),
 // a notice to the OLD address when a change is requested, and the account-deletion confirmation.
-// They go through the same SES client as the other auth emails. Like the wraps senders, a failure is
-// reported (through `onError`) and never fails the request that caused it.
-import { WrapsEmail, type WrapsEmailConfig } from "@wraps.dev/email"
-import { renderLayout } from "@wraps.dev/better-auth"
+// They go out through the plugin's `emails.send`, on the same SES client, sender and `onError` as the
+// other auth emails, so a failure is reported and never fails the request that caused it.
+import { renderLayout, type WrapsAuthEmails } from "@wraps.dev/better-auth"
 
 export interface NoticeOptions {
-  from: string
   appName: string
-  /** SES client options, as passed to auth's `ses` option (tests inject a fake client here). */
-  ses?: Record<string, unknown>
-  onError?: (error: Error) => void
+  /** The wraps plugin's `emails.send`. */
+  send: WrapsAuthEmails["send"]
 }
 
 export interface Notices {
@@ -35,24 +32,8 @@ const greeting = (name?: string) => {
 }
 
 export function createNotices(options: NoticeOptions): Notices {
-  let client: WrapsEmail | undefined
-  const send = async (to: string, rendered: { subject: string; html: string; text: string }) => {
-    try {
-      // Loose like the wraps plugin's own `ses` option, so tests and the dev mail sink can pass a client
-      // that only has `send`.
-      client ??= new WrapsEmail(options.ses as WrapsEmailConfig | undefined)
-      await client.send({
-        from: options.from,
-        to,
-        subject: rendered.subject,
-        html: rendered.html,
-        text: rendered.text,
-      })
-    } catch (error) {
-      const wrapped = error instanceof Error ? error : new Error(String(error))
-      options.onError?.(wrapped)
-    }
-  }
+  const send = (to: string, rendered: { subject: string; html: string; text: string }) =>
+    options.send({ to, ...rendered })
   const app = options.appName
 
   return {

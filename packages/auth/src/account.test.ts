@@ -1,6 +1,7 @@
 // The account rules (account-plugin.ts), login-method resolution, security summary and account
 // notices, against a real auth instance on PGlite. The HTTP flows are in apps/api/auth-flows.test.ts;
 // these pin the rules and the helpers so a change in auth's own tests can't hide one.
+import { wrapsAuthEmails } from "@wraps.dev/better-auth"
 import { SignJWT } from "jose"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
@@ -246,9 +247,8 @@ describe("account rules", () => {
 
     it("sends each account email, and reports a failed send without throwing", async () => {
       const sent: string[] = []
-      const notices = createNotices({
+      const emails = wrapsAuthEmails({
         from: "Test <auth@example.com>",
-        appName: "Test",
         ses: {
           client: {
             send: async (command: { input: unknown }) => {
@@ -258,6 +258,7 @@ describe("account rules", () => {
           },
         },
       })
+      const notices = createNotices({ appName: "Test", send: emails.send })
       await notices.emailChangeConfirmation({
         to: "new@example.com",
         oldEmail: "old@example.com",
@@ -270,9 +271,8 @@ describe("account rules", () => {
       expect(sent.join("\n")).toMatch(/Confirm deleting your Test account/)
 
       const errors: Error[] = []
-      const failing = createNotices({
+      const down = wrapsAuthEmails({
         from: "Test <auth@example.com>",
-        appName: "Test",
         onError: (e) => errors.push(e),
         ses: {
           client: {
@@ -282,6 +282,7 @@ describe("account rules", () => {
           },
         },
       })
+      const failing = createNotices({ appName: "Test", send: down.send })
       await failing.deleteAccountConfirmation({ to: "x@example.com", url: `${BASE}/delete` })
       expect(errors.map((e) => e.message)).toEqual(["ses down"])
     })

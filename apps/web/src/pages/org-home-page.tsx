@@ -4,6 +4,7 @@ import { type CSSProperties, useEffect, useRef } from "react"
 import { Button } from "@starter/ui/components/ui/button"
 import { Status } from "@starter/ui/dplus/status"
 import { anchorLink, type RenderLink } from "@starter/ui/dplus/shell/link"
+import { PageBody, PageHeader, PageTabs } from "@starter/ui/dplus/shell/page-header"
 
 import {
   formatCount,
@@ -18,12 +19,9 @@ const ROW_HEIGHT = 84
 
 export interface OrgHomePageProps {
   organization: { name: string; slug: string }
-  /** The caller's role label (Owner, Admin, Member, Viewer). */
-  roleLabel: string
   renderLink?: RenderLink
-  /** The status filter in the URL: "all" or one run status. */
+  /** The status filter in the URL: "all" or one run status. Each filter is a tab linking to it. */
   filter: RunStatus | "all"
-  onFilterChange: (filter: RunStatus | "all") => void
   /** Runs that need a person, shown first when no filter is set. */
   needsYou: RunSummary[]
   /** The list, newest first, below the needs-you section. */
@@ -42,10 +40,8 @@ export interface OrgHomePageProps {
  */
 export function OrgHomePage({
   organization,
-  roleLabel,
   renderLink = anchorLink,
   filter,
-  onFilterChange,
   needsYou,
   runs,
   status,
@@ -78,112 +74,110 @@ export function OrgHomePage({
   const empty = status === "ready" && runs.length === 0 && !showNeedsYou
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 md:px-9">
-      <header className="flex flex-col gap-1">
-        <p className="text-sm text-muted-foreground">Runs</p>
-        <h1 className="text-2xl font-bold">{organization.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          Your role: {roleLabel} · <span className="font-mono">/{organization.slug}</span>
-        </p>
-      </header>
-
-      <fieldset className="flex flex-wrap gap-2">
-        <legend className="sr-only">Filter runs by status</legend>
-        {RUN_FILTERS.map((option) => (
-          <Button
-            key={option.id}
-            type="button"
-            variant="outline"
-            aria-pressed={filter === option.id}
-            onClick={() => onFilterChange(option.id)}
-            className={`min-h-11 rounded-lg border-2 ${filter === option.id ? "border-foreground bg-foreground text-background hover:bg-foreground/90 hover:text-background" : "border-border"}`}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </fieldset>
-
-      {status === "loading" ? (
-        <output className="block text-muted-foreground">Loading runs…</output>
-      ) : null}
-      {status === "error" ? (
-        <div role="alert" className="flex flex-col gap-3">
-          <p className="text-destructive">Could not load runs. {errorMessage}</p>
-          <Button type="button" variant="outline" className="min-h-11 self-start" onClick={onRetry}>
-            Try again
-          </Button>
-        </div>
-      ) : null}
-
-      {showNeedsYou ? (
-        <section aria-labelledby="home-needs-you" className="flex flex-col gap-2">
-          <h2 id="home-needs-you" className="text-lg font-bold">
-            Needs you
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {needsYou.map((run) => (
-              <RunRow key={run.id} run={run} slug={organization.slug} Link={Link} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {empty ? (
-        <p className="text-muted-foreground">
-          {filter === "all"
-            ? "No runs yet. Runs appear here when an agent starts work."
-            : `No ${RUN_STATUS_LABEL[filter].toLowerCase()} runs.`}
-        </p>
-      ) : null}
-
-      {runs.length > 0 ? (
-        <section aria-labelledby="home-runs" className="flex flex-col gap-2">
-          <h2 id="home-runs" className="text-lg font-bold">
-            {filter === "all" ? "All runs" : RUN_STATUS_LABEL[filter]}
-          </h2>
-          <div ref={scrollRef} className="max-h-[70vh] overflow-auto" data-testid="run-list">
-            <ol
-              aria-label="Runs"
-              className="relative w-full"
-              style={{ height: `${virtualizer.getTotalSize()}px` }}
-            >
-              {items.map((item) => {
-                const run = runs[item.index]
-                if (!run) return null
-                return (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    slug={organization.slug}
-                    Link={Link}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${item.start}px)`,
-                      height: `${item.size}px`,
-                    }}
-                  />
-                )
-              })}
-            </ol>
-          </div>
-          {loadingMore ? (
-            <output className="text-sm text-muted-foreground">Loading more runs…</output>
-          ) : null}
-          {hasNextPage && !loadingMore ? (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader title={organization.name}>
+        <PageTabs
+          label="Filter runs by status"
+          tabs={RUN_FILTERS.map((option) => ({
+            id: option.id,
+            label: option.label,
+            href:
+              option.id === "all"
+                ? `/${organization.slug}`
+                : `/${organization.slug}?status=${option.id}`,
+          }))}
+          activeTab={filter}
+          renderLink={renderLink}
+        />
+      </PageHeader>
+      <PageBody>
+        {status === "loading" ? (
+          <output className="block text-muted-foreground">Loading runs…</output>
+        ) : null}
+        {status === "error" ? (
+          <div role="alert" className="flex flex-col gap-3">
+            <p className="text-destructive">Could not load runs. {errorMessage}</p>
             <Button
               type="button"
               variant="outline"
               className="min-h-11 self-start"
-              onClick={onLoadMore}
+              onClick={onRetry}
             >
-              Load more runs
+              Try again
             </Button>
-          ) : null}
-        </section>
-      ) : null}
+          </div>
+        ) : null}
+
+        {showNeedsYou ? (
+          <section aria-labelledby="home-needs-you" className="flex flex-col gap-2">
+            <h2 id="home-needs-you" className="text-lg font-bold">
+              Needs you
+            </h2>
+            <ul className="flex flex-col gap-2">
+              {needsYou.map((run) => (
+                <RunRow key={run.id} run={run} slug={organization.slug} Link={Link} />
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {empty ? (
+          <p className="text-muted-foreground">
+            {filter === "all"
+              ? "No runs yet. Runs appear here when an agent starts work."
+              : `No ${RUN_STATUS_LABEL[filter].toLowerCase()} runs.`}
+          </p>
+        ) : null}
+
+        {runs.length > 0 ? (
+          <section aria-labelledby="home-runs" className="flex flex-col gap-2">
+            <h2 id="home-runs" className="text-lg font-bold">
+              {filter === "all" ? "All runs" : RUN_STATUS_LABEL[filter]}
+            </h2>
+            <div ref={scrollRef} className="max-h-[70vh] overflow-auto" data-testid="run-list">
+              <ol
+                aria-label="Runs"
+                className="relative w-full"
+                style={{ height: `${virtualizer.getTotalSize()}px` }}
+              >
+                {items.map((item) => {
+                  const run = runs[item.index]
+                  if (!run) return null
+                  return (
+                    <RunRow
+                      key={run.id}
+                      run={run}
+                      slug={organization.slug}
+                      Link={Link}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${item.start}px)`,
+                        height: `${item.size}px`,
+                      }}
+                    />
+                  )
+                })}
+              </ol>
+            </div>
+            {loadingMore ? (
+              <output className="text-sm text-muted-foreground">Loading more runs…</output>
+            ) : null}
+            {hasNextPage && !loadingMore ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 self-start"
+                onClick={onLoadMore}
+              >
+                Load more runs
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+      </PageBody>
     </div>
   )
 }

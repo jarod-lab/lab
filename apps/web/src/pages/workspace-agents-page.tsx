@@ -23,6 +23,7 @@ import {
   anchorLink,
   useRenderLink,
 } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
@@ -140,7 +141,7 @@ export function WorkspaceAgentsPage({
     view === "connected" ? (
       connected(pills)
     ) : (
-      <div className="flex max-w-[1040px] flex-col gap-5 px-4 py-6 md:px-9">
+      <PageBody className="gap-5">
         {view === "guardrails" ? (
           <PlaceholderSection
             heading="Guardrails"
@@ -181,7 +182,7 @@ export function WorkspaceAgentsPage({
             renderLink={renderLink}
           />
         )}
-      </div>
+      </PageBody>
     )
 
   return (

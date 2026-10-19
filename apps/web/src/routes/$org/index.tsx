@@ -19,7 +19,6 @@ export const Route = createFileRoute("/$org/")({
 function OrgHomeRoute() {
   const { org: slug } = Route.useParams()
   const { status } = Route.useSearch()
-  const navigate = Route.useNavigate()
   const auth = getWebAuth()
   const organizations = useOrganizationsQuery(auth)
   const organization = organizations.data?.find((org) => org.slug === slug)
@@ -31,12 +30,6 @@ function OrgHomeRoute() {
       api={getRunsApi()}
       organization={organization}
       filter={filter}
-      onFilterChange={(next) =>
-        void navigate({
-          search: next === "all" ? {} : { status: next },
-          replace: true,
-        })
-      }
       renderLink={RouterLink}
     />
   )

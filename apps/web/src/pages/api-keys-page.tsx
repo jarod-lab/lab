@@ -28,6 +28,7 @@ import {
 } from "@starter/ui/components/ui/table"
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
 
@@ -207,7 +208,7 @@ export function ApiKeysPage({
         renderLink={renderLink}
       />
 
-      <div className="flex max-w-[960px] flex-col gap-5 px-4 py-6 md:px-9">
+      <PageBody className="gap-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <h2 className="text-[22px] font-extrabold tracking-tight">API keys</h2>
@@ -327,7 +328,7 @@ export function ApiKeysPage({
             <span>Revoking takes effect at once.</span>
           </div>
         ) : null}
-      </div>
+      </PageBody>
 
       <CreateKeyDialog
         open={creating}

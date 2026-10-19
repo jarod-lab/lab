@@ -70,15 +70,11 @@ export function countOrPlaceholder(count: number | undefined): string {
   return count === undefined ? "[PLACEHOLDER]" : String(count)
 }
 
-/**
- * The settings tabs for an organization's pages, with each tab's href. `counts` names a tab's quiet
- * count by section id (e.g. `{ members: "12" }`).
- */
-export function settingsTabs(slug: string, counts: Partial<Record<string, string>> = {}) {
+/** The settings tabs for an organization's pages, with each tab's href. */
+export function settingsTabs(slug: string) {
   return ORG_SETTINGS_SECTIONS.map((section) => ({
     id: section.id,
     label: section.label,
     href: `/${slug}/settings/${section.id}`,
-    count: counts[section.id],
   }))
 }

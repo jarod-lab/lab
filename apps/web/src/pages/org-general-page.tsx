@@ -19,6 +19,7 @@ import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/nati
 import { CopyField } from "@starter/ui/dplus/shell/copy-field"
 import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 import { type SlugStatus, SlugField } from "@starter/ui/dplus/shell/slug-field"
 import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
@@ -121,10 +122,7 @@ export function OrgGeneralPage({
     },
   })
 
-  const tabs = settingsTabs(
-    organization.slug,
-    counts.members === undefined ? {} : { members: String(counts.members) },
-  )
+  const tabs = settingsTabs(organization.slug)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -136,7 +134,7 @@ export function OrgGeneralPage({
         renderLink={renderLink}
       />
 
-      <div className="flex max-w-[720px] flex-col gap-5 px-4 py-6 md:px-9">
+      <PageBody className="gap-5">
         {!canEdit ? (
           <ViewOnlyNotice subject={organization.name}>
             Ask an owner or admin to change these settings.
@@ -288,7 +286,7 @@ export function OrgGeneralPage({
             <LeaveRow organizationName={organization.name} onLeave={onLeave} />
           </div>
         )}
-      </div>
+      </PageBody>
     </div>
   )
 }

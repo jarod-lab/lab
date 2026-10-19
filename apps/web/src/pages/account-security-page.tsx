@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import type { PasskeyInfo, TotpSetup } from "../lib/account-api"
@@ -73,7 +74,7 @@ export function AccountSecurityPage({
         renderLink={renderLink}
       />
 
-      <div className="flex max-w-[820px] flex-col gap-6 px-4 py-6 md:px-9">
+      <PageBody className="gap-6">
         <SummaryRow
           lastSignIn={lastSignIn}
           passkeyCount={passkeys.length}
@@ -113,7 +114,7 @@ export function AccountSecurityPage({
           onRevoke={actions.onRevokeSession}
           onRevokeOthers={actions.onRevokeOtherSessions}
         />
-      </div>
+      </PageBody>
     </div>
   )
 }

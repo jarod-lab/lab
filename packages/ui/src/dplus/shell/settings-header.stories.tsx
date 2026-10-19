@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { withDark } from "../pages/story-kit"
+import { PageBody } from "./page-header"
 import { SettingsHeader, type SettingsHeaderProps } from "./settings-header"
 
 const orgTabs = [
@@ -29,6 +30,11 @@ const meta = {
   render: (args) => (
     <div className="min-w-0 bg-background text-foreground">
       <SettingsHeader {...args} />
+      <PageBody>
+        <p className="text-sm text-muted-foreground">
+          Page content sits here, at the shared width.
+        </p>
+      </PageBody>
     </div>
   ),
 } satisfies Meta<SettingsHeaderProps>

@@ -30,6 +30,9 @@ codes, sessions, password, connected accounts, plus `shared.tsx`.
 
 Shared pieces to reuse rather than rebuild:
 
+- `@starter/ui/dplus/shell/page-header`: `PageHeader` (the bordered title band), `PageTabs` (link
+  tabs under it) and `PageBody` (the content, one width for every page). Settings pages use
+  `SettingsHeader`, which builds on them. Don't set a page's own `max-w` or centre it.
 - `components/confirm-dialog.tsx`: `ConfirmDialog`, for destructive confirmations.
 - `components/form.tsx`: `useAppForm` (TanStack Form + Zod), `TextField`, `PasswordField`,
   `SubmitButton`, `FieldIssues`, `FormError`, `FormDialog`. Field errors hold Zod issues: render

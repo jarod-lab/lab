@@ -27,9 +27,7 @@ function run(id: string, overrides: Partial<RunSummary> = {}): RunSummary {
 function props(overrides: Partial<OrgHomePageProps> = {}): OrgHomePageProps {
   return {
     organization: { name: "Analytical Ltd", slug: "analytical" },
-    roleLabel: "Owner",
     filter: "all",
-    onFilterChange: vi.fn(),
     needsYou: [],
     runs: [run("r1")],
     status: "ready",
@@ -62,10 +60,9 @@ describe("OrgHomePage", () => {
     })
   })
 
-  it("shows the organization, the caller's role and each run as a link to its view", async () => {
+  it("shows the organization and each run as a link to its view", async () => {
     render(<OrgHomePage {...props()} />)
     expect(screen.getByRole("heading", { name: "Analytical Ltd" })).toBeTruthy()
-    expect(screen.getByText(/Your role: Owner/)).toBeTruthy()
     expect(screen.getByRole("link", { name: /Run r1/ }).getAttribute("href")).toBe(
       "/analytical/runs/r1",
     )
@@ -86,14 +83,14 @@ describe("OrgHomePage", () => {
     expect(within(section).getByRole("heading", { name: "Needs you" })).toBeTruthy()
   })
 
-  it("marks the selected status filter with aria-pressed and reports a change", () => {
-    const onFilterChange = vi.fn()
-    render(<OrgHomePage {...props({ filter: "needs_you", onFilterChange, needsYou: [] })} />)
-    expect(screen.getByRole("button", { name: "Needs you" }).getAttribute("aria-pressed")).toBe(
-      "true",
+  it("shows each status filter as a tab linking to it, with the selected one current", () => {
+    render(<OrgHomePage {...props({ filter: "needs_you", needsYou: [] })} />)
+    const tabs = within(screen.getByRole("navigation", { name: "Filter runs by status" }))
+    expect(tabs.getByRole("link", { name: "Needs you" }).getAttribute("aria-current")).toBe("page")
+    expect(tabs.getByRole("link", { name: "All" }).getAttribute("href")).toBe("/analytical")
+    expect(tabs.getByRole("link", { name: "Failed" }).getAttribute("href")).toBe(
+      "/analytical?status=failed",
     )
-    fireEvent.click(screen.getByRole("button", { name: "Failed" }))
-    expect(onFilterChange).toHaveBeenCalledWith("failed")
   })
 
   it("says so when there are no runs, and words the empty filter", () => {

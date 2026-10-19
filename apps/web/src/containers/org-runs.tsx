@@ -9,7 +9,7 @@ import { runKeys } from "../lib/run-keys"
 import type { RunStatus, RunsApi, RunSummary } from "../lib/runs-api"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { OrgHomePage } from "../pages/org-home-page"
-import { memberRoleQuery, orgRoleLabel } from "./shell-data"
+import { memberRoleQuery } from "./shell-data"
 
 const PAGE_SIZE = 50
 
@@ -19,7 +19,6 @@ export interface OrgRunsContainerProps {
   organization: WebOrganization
   /** The filter from the URL (`?status=`). */
   filter: RunStatus | "all"
-  onFilterChange: (filter: RunStatus | "all") => void
   renderLink?: RenderLink
 }
 
@@ -29,13 +28,11 @@ export function OrgRunsContainer({
   api,
   organization,
   filter,
-  onFilterChange,
   renderLink,
 }: OrgRunsContainerProps) {
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
-  const roleText = role.data ?? ""
 
   const listStatus = filter === "all" ? undefined : filter
   const list = useInfiniteQuery({
@@ -87,10 +84,8 @@ export function OrgRunsContainer({
   return (
     <OrgHomePage
       organization={organization}
-      roleLabel={orgRoleLabel(roleText)}
       renderLink={renderLink}
       filter={filter}
-      onFilterChange={onFilterChange}
       needsYou={needsRuns}
       runs={runs}
       status={status}

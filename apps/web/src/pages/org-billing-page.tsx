@@ -14,6 +14,7 @@ import {
 } from "@starter/ui/components/ui/table"
 import { Meter } from "@starter/ui/dplus/meter"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
 
@@ -103,7 +104,7 @@ export function OrgBillingPage({
         renderLink={renderLink}
       />
 
-      <div className="flex max-w-[1040px] flex-col gap-[18px] px-4 py-6 md:px-9">
+      <PageBody className="gap-[18px]">
         <p className="text-sm text-muted-foreground">
           Payments are handled by Stripe. Buttons marked <span aria-hidden="true">↗</span>
           <span className="sr-only">with an arrow</span> open Stripe&apos;s secure portal in a new
@@ -292,7 +293,7 @@ export function OrgBillingPage({
             onCancel()
           }}
         />
-      </div>
+      </PageBody>
     </div>
   )
 }

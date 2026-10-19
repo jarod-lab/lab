@@ -131,3 +131,16 @@ describe("OrgHomePage landmark", () => {
     expect(document.querySelector("main")).toBeNull()
   })
 })
+
+describe("OrgHomePage What's new card (whats-new-card flag)", () => {
+  it("is hidden while the flag is off", () => {
+    render(<OrgHomePage {...props()} />)
+    expect(screen.queryByRole("heading", { name: "What's new" })).toBeNull()
+  })
+
+  it("shows above the runs when the flag is on", async () => {
+    render(<OrgHomePage {...props({ whatsNew: true })} />)
+    expect(screen.getByRole("region", { name: "What's new" })).toBeTruthy()
+    await expectNoA11yViolations(document.body.innerHTML)
+  })
+})

@@ -35,6 +35,7 @@ import { Route as OrgSettingsIndexRouteImport } from './routes/$org/settings/ind
 import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
 import { Route as OrgSettingsApiKeysRouteImport } from './routes/$org/settings/api-keys'
 import { Route as OrgSettingsBillingRouteImport } from './routes/$org/settings/billing'
+import { Route as OrgSettingsFlagsRouteImport } from './routes/$org/settings/flags'
 import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
 import { Route as OrgSettingsMembersRouteImport } from './routes/$org/settings/members'
 import { Route as OrgSettingsSecurityRouteImport } from './routes/$org/settings/security'
@@ -170,6 +171,11 @@ const OrgSettingsBillingRoute = OrgSettingsBillingRouteImport.update({
   path: '/settings/billing',
   getParentRoute: () => OrgRoute,
 } as any)
+const OrgSettingsFlagsRoute = OrgSettingsFlagsRouteImport.update({
+  id: '/settings/flags',
+  path: '/settings/flags',
+  getParentRoute: () => OrgRoute,
+} as any)
 const OrgSettingsGeneralRoute = OrgSettingsGeneralRouteImport.update({
   id: '/settings/general',
   path: '/settings/general',
@@ -212,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
+  '/$org/settings/flags': typeof OrgSettingsFlagsRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
@@ -241,6 +248,7 @@ export interface FileRoutesByTo {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
+  '/$org/settings/flags': typeof OrgSettingsFlagsRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
@@ -273,6 +281,7 @@ export interface FileRoutesById {
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
   '/$org/settings/billing': typeof OrgSettingsBillingRoute
+  '/$org/settings/flags': typeof OrgSettingsFlagsRoute
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/billing'
+    | '/$org/settings/flags'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
@@ -335,6 +345,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/billing'
+    | '/$org/settings/flags'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
@@ -366,6 +377,7 @@ export interface FileRouteTypes {
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
     | '/$org/settings/billing'
+    | '/$org/settings/flags'
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
@@ -576,6 +588,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSettingsBillingRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/$org/settings/flags': {
+      id: '/$org/settings/flags'
+      path: '/settings/flags'
+      fullPath: '/$org/settings/flags'
+      preLoaderRoute: typeof OrgSettingsFlagsRouteImport
+      parentRoute: typeof OrgRoute
+    }
     '/$org/settings/general': {
       id: '/$org/settings/general'
       path: '/settings/general'
@@ -606,6 +625,7 @@ interface OrgRouteChildren {
   OrgSettingsAgentsRoute: typeof OrgSettingsAgentsRoute
   OrgSettingsApiKeysRoute: typeof OrgSettingsApiKeysRoute
   OrgSettingsBillingRoute: typeof OrgSettingsBillingRoute
+  OrgSettingsFlagsRoute: typeof OrgSettingsFlagsRoute
   OrgSettingsGeneralRoute: typeof OrgSettingsGeneralRoute
   OrgSettingsMembersRoute: typeof OrgSettingsMembersRoute
   OrgSettingsSecurityRoute: typeof OrgSettingsSecurityRoute
@@ -618,6 +638,7 @@ const OrgRouteChildren: OrgRouteChildren = {
   OrgSettingsAgentsRoute: OrgSettingsAgentsRoute,
   OrgSettingsApiKeysRoute: OrgSettingsApiKeysRoute,
   OrgSettingsBillingRoute: OrgSettingsBillingRoute,
+  OrgSettingsFlagsRoute: OrgSettingsFlagsRoute,
   OrgSettingsGeneralRoute: OrgSettingsGeneralRoute,
   OrgSettingsMembersRoute: OrgSettingsMembersRoute,
   OrgSettingsSecurityRoute: OrgSettingsSecurityRoute,

@@ -2,13 +2,14 @@
 
 `apps/web` (`@starter/web`) is TanStack Start in SPA mode, the D+ app. `vite build` writes
 `apps/web/dist`, which `apps/api` serves from its origin. Dev: `vite dev` proxies `/api`, `/v1`,
-`/mcp` and `/.well-known` to `API_URL`.
+`/mcp`, `/.well-known` and `/ofrep` to `API_URL`.
 
 ## Routes
 
 - `/:org` (org slug; `OrgGate` sets the active org before org content renders)
 - `/:org/runs/:runId`
-- `/:org/settings/{general,members,api-keys,billing,agents,security}`
+- `/:org/settings/{general,members,api-keys,billing,agents,security}`, and `/:org/settings/flags`
+  in the operator organization only
 - `/account/{profile,security}`
 - `/new`, `/two-factor`, `/admin`
 - the OAuth, device, claim, reset and `/accept-invitation/:id` pages (`/invite/:id` is an alias;
@@ -61,6 +62,23 @@ Shared pieces to reuse rather than rebuild:
 - Run summaries: react-markdown with no raw HTML, and sugar-high tokens rendered as React spans
   (`.run-code` in `app.css`).
 - Plugin endpoints the typed client lacks go through `client.$fetch`, with a method/path table test.
+
+## Feature flags
+
+`containers/org-features.tsx` (`OrgFeatures`, inside `OrgGate`) binds an OpenFeature provider to
+the organization the page shows: `@openfeature/ofrep-web-provider` against this origin's
+`/ofrep/v1/evaluate/flags` (session cookie and `X-Organization-Id`, `network-first` so a paused flag
+never shows on from a stale cache), with `targetingKey` set to the org id. Read a flag with
+`useFlag(key)` from `lib/flags.ts`: keys are typed to `packages/flags`, and the catalog default
+answers until the provider does. Keep the call in the route file or a container and pass a boolean
+down, so pages stay props-in (the org home's `whats-new-card` is the example). Tests pass
+`createProvider` an `InMemoryProvider` (`containers/org-features.test.tsx`).
+
+`OrgFeatures` also asks `whoami` whether this is the operator organization (`OperatorContext`,
+`lib/operator.ts`). Settings pages build their tabs with `useSettingsTabs(slug)`, which adds
+Feature flags (`/:org/settings/flags`: rollouts, targets, reclaim, delete) only there. It has no
+board or e2e journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server
+start, which the e2e stack can't know before it creates its organizations.
 
 ## Theme
 

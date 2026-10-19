@@ -45,7 +45,7 @@ import {
 } from "../lib/members"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ROLE_DESCRIPTION, ROLE_LABEL } from "../lib/roles"
-import { settingsTabs } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
 import { messageOf } from "../lib/messages"
 import { InviteForm } from "./members-invite-form"
 
@@ -142,6 +142,7 @@ export function MembersPage({
   onCancel,
   renderLink = anchorLink,
 }: MembersPageProps) {
+  const tabs = useSettingsTabs(organization.slug)
   const when = useMemo(() => now ?? new Date(), [now])
   const [showAll, setShowAll] = useState(false)
   const [action, setAction] = useState<MemberAction | null>(null)
@@ -395,7 +396,7 @@ export function MembersPage({
       <SettingsHeader
         title="Organization settings"
         context={`${organization.name} · you are ${roleLabel}`}
-        tabs={settingsTabs(organization.slug)}
+        tabs={tabs}
         activeTab="members"
         renderLink={renderLink}
       />

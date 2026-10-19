@@ -27,7 +27,8 @@ import { OrgMark } from "@starter/ui/dplus/org-mark"
 
 import { ASSIGNABLE_ROLES, type AssignableRole } from "../lib/members"
 import { ROLE_LABEL } from "../lib/roles"
-import { settingsTabs, slugChangeWarning } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
+import { slugChangeWarning } from "../lib/org-settings"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ImageUpload, type ImageUploadLimits } from "../components/image-upload"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
@@ -133,7 +134,7 @@ export function OrgGeneralPage({
     },
   })
 
-  const tabs = settingsTabs(organization.slug)
+  const tabs = useSettingsTabs(organization.slug)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

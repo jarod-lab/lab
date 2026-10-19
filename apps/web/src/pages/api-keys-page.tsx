@@ -46,7 +46,7 @@ import {
 } from "../lib/api-keys"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import type { ApiKey, CreateApiKeyInput } from "../lib/api-keys-api"
-import { settingsTabs } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
 import { messageOf } from "../lib/messages"
 
 export interface ApiKeysPageProps {
@@ -180,7 +180,7 @@ export function ApiKeysPage({
 
   const table = useTable({ features, columns, data: keys ?? NO_KEYS })
 
-  const tabs = settingsTabs(organization.slug)
+  const tabs = useSettingsTabs(organization.slug)
 
   async function confirmRevoke() {
     if (!revoking || revokeBusyRef.current) return

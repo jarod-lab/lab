@@ -36,7 +36,7 @@ export default defineConfig({
       ? { port: Number(process.env.PORT), strictPort: true, host: process.env.HOST }
       : {}),
     proxy: Object.fromEntries(
-      ["/api", "/v1", "/mcp", "/.well-known"].map((path) => [path, apiProxy]),
+      ["/api", "/v1", "/mcp", "/.well-known", "/ofrep"].map((path) => [path, apiProxy]),
     ),
   },
   plugins: [

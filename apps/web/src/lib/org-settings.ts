@@ -19,6 +19,9 @@ export const ORG_SETTINGS_SECTIONS = [
   { id: "security", label: "Security" },
 ] as const
 
+/** Settings tabs only the operator organization has (feature flag rollouts). */
+export const OPERATOR_SETTINGS_SECTIONS = [{ id: "flags", label: "Feature flags" }] as const
+
 /**
  * better-auth stores organization metadata as JSON text and may hand it back as a string or as an
  * object, depending on the path. Anything that isn't an object reads as empty.
@@ -70,9 +73,13 @@ export function countOrPlaceholder(count: number | undefined): string {
   return count === undefined ? "[PLACEHOLDER]" : String(count)
 }
 
-/** The settings tabs for an organization's pages, with each tab's href. */
-export function settingsTabs(slug: string) {
-  return ORG_SETTINGS_SECTIONS.map((section) => ({
+/**
+ * The settings tabs for an organization's pages, with each tab's href. The operator organization
+ * also gets its own tabs (`operator`, from whoami).
+ */
+export function settingsTabs(slug: string, operator = false) {
+  const sections = [...ORG_SETTINGS_SECTIONS, ...(operator ? OPERATOR_SETTINGS_SECTIONS : [])]
+  return sections.map((section) => ({
     id: section.id,
     label: section.label,
     href: `/${slug}/settings/${section.id}`,

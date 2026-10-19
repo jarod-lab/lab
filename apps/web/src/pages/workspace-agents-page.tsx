@@ -30,7 +30,7 @@ import { ConfirmDialog } from "../components/confirm-dialog"
 import { messageOf } from "../lib/messages"
 import { BudgetSection } from "./workspace-agents-budget"
 import { PermissionsView } from "./workspace-agents-permissions"
-import { settingsTabs } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
 import {
   type AgentView,
   agentFormSchema,
@@ -117,7 +117,7 @@ export function WorkspaceAgentsPage({
 
   // Level 2 sits in each view's section heading, not in the org header.
   const pills = <ViewPills slug={organization.slug} activeView={view} renderLink={renderLink} />
-  const tabs = settingsTabs(organization.slug)
+  const tabs = useSettingsTabs(organization.slug)
 
   async function confirmRemove() {
     if (!selected || removeBusyRef.current) return

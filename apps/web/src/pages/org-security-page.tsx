@@ -26,7 +26,7 @@ import {
   scimBaseUrl,
   ssoFormSchema,
 } from "../lib/org-security"
-import { settingsTabs } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
 
 export interface OrgSecurityPageProps {
   organization: { name: string; slug: string }
@@ -72,7 +72,7 @@ export function OrgSecurityPage({
   onDismissScim,
   renderLink = anchorLink,
 }: OrgSecurityPageProps) {
-  const tabs = settingsTabs(organization.slug)
+  const tabs = useSettingsTabs(organization.slug)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SettingsHeader

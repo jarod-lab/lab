@@ -19,6 +19,8 @@ export interface OrgRunsContainerProps {
   organization: WebOrganization
   /** The filter from the URL (`?status=`). */
   filter: RunStatus | "all"
+  /** Show the What's new card (the `whats-new-card` feature flag). */
+  whatsNew?: boolean
   renderLink?: RenderLink
 }
 
@@ -28,6 +30,7 @@ export function OrgRunsContainer({
   api,
   organization,
   filter,
+  whatsNew = false,
   renderLink,
 }: OrgRunsContainerProps) {
   const queryClient = useQueryClient()
@@ -89,6 +92,7 @@ export function OrgRunsContainer({
       organization={organization}
       renderLink={renderLink}
       filter={filter}
+      whatsNew={whatsNew}
       needsYou={needsRuns}
       runs={runs}
       status={status}

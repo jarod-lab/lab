@@ -1,4 +1,4 @@
-import { ORG_SETTINGS_SECTIONS } from "./org-settings"
+import { OPERATOR_SETTINGS_SECTIONS, ORG_SETTINGS_SECTIONS } from "./org-settings"
 
 export type OrgNav = "home" | "agents" | "settings"
 
@@ -17,6 +17,8 @@ export function settingsCrumbs(pathname: string, slug: string): { label: string 
   const rest = pathname.slice(`/${slug}`.length)
   if (rest.startsWith("/runs/")) return [{ label: "Runs" }]
   const match = /^\/settings\/([^/]+)/.exec(rest)
-  const section = ORG_SETTINGS_SECTIONS.find((item) => item.id === match?.[1])
+  const section = [...ORG_SETTINGS_SECTIONS, ...OPERATOR_SETTINGS_SECTIONS].find(
+    (item) => item.id === match?.[1],
+  )
   return section ? [{ label: "Settings" }, { label: section.label }] : []
 }

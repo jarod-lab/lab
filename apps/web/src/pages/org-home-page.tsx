@@ -22,6 +22,8 @@ export interface OrgHomePageProps {
   renderLink?: RenderLink
   /** The status filter in the URL: "all" or one run status. Each filter is a tab linking to it. */
   filter: RunStatus | "all"
+  /** Show the What's new card above the runs (the `whats-new-card` feature flag). */
+  whatsNew?: boolean
   /** Runs that need a person, shown first when no filter is set. */
   needsYou: RunSummary[]
   /** The list, newest first, below the needs-you section. */
@@ -42,6 +44,7 @@ export function OrgHomePage({
   organization,
   renderLink = anchorLink,
   filter,
+  whatsNew = false,
   needsYou,
   runs,
   status,
@@ -91,6 +94,7 @@ export function OrgHomePage({
         />
       </PageHeader>
       <PageBody>
+        {whatsNew ? <WhatsNewCard /> : null}
         {status === "loading" ? (
           <output className="block text-muted-foreground">Loading runs…</output>
         ) : null}
@@ -179,6 +183,23 @@ export function OrgHomePage({
         ) : null}
       </PageBody>
     </div>
+  )
+}
+
+/** Release notes in brief, behind the `whats-new-card` flag. Replace the text with your own. */
+function WhatsNewCard() {
+  return (
+    <section
+      aria-labelledby="home-whats-new"
+      className="flex flex-col gap-1 rounded-lg border-2 border-foreground bg-card p-4"
+    >
+      <h2 id="home-whats-new" className="text-lg font-bold">
+        What's new
+      </h2>
+      <p className="text-muted-foreground">
+        [PLACEHOLDER] One line about your latest release, with a link to its notes.
+      </p>
+    </section>
   )
 }
 

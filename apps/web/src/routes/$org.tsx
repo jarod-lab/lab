@@ -9,9 +9,11 @@ import { isReservedOrgSlug } from "@starter/auth/client"
 import { Button } from "@starter/ui/components/ui/button"
 
 import { AppShellContainer } from "../containers/app-shell"
+import { OrgFeatures } from "../containers/org-features"
 import { OrgGate } from "../containers/org-gate"
 import { RouterLink } from "../containers/router-link"
 import { useOrganizationsQuery } from "../containers/shell-data"
+import { getFeatureFlagsApi } from "../lib/feature-flags-api"
 import { requireSession } from "../lib/guards"
 import { activeNavFor, settingsCrumbs } from "../lib/org-nav"
 import { getWorkspaceAgentsApi } from "../lib/workspace-agents-api"
@@ -56,7 +58,9 @@ function OrgLayout() {
           organization={organization}
           signInHref={`/sign-in?next=${encodeURIComponent(pathname)}`}
         >
-          <Outlet />
+          <OrgFeatures organizationId={organization.id} api={getFeatureFlagsApi()}>
+            <Outlet />
+          </OrgFeatures>
         </OrgGate>
       ) : organizations.isError ? (
         // A failed list is not an answer: say so, rather than that the organization is missing.

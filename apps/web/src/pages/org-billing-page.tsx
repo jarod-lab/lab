@@ -30,7 +30,7 @@ import {
   SAMPLE_LABEL,
 } from "../lib/billing/adapter"
 import { ConfirmDialog } from "../components/confirm-dialog"
-import { settingsTabs } from "../lib/org-settings"
+import { useSettingsTabs } from "../lib/operator"
 
 export interface OrgBillingPageProps {
   organization: { name: string; slug: string }
@@ -84,6 +84,7 @@ export function OrgBillingPage({
   onCancel,
   renderLink = anchorLink,
 }: OrgBillingPageProps) {
+  const tabs = useSettingsTabs(organization.slug)
   const reasonId = useId()
   const [confirmCancel, setConfirmCancel] = useState(false)
   const connected = mode === "stripe"
@@ -99,7 +100,7 @@ export function OrgBillingPage({
       <SettingsHeader
         title="Organization settings"
         context={`${organization.name} · you are ${roleLabel}`}
-        tabs={settingsTabs(organization.slug)}
+        tabs={tabs}
         activeTab="billing"
         renderLink={renderLink}
       />

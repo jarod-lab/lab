@@ -1,14 +1,20 @@
+import { createTestDb } from "@starter/db/testing"
+import { type AppError, setErrorReporter } from "@starter/errors"
 import { APIError } from "better-auth/api"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { AUDIENCE, BASE } from "./auth.test.helpers"
 import {
   AUTH_EVENT_NAMES,
   AUTH_EVENT_PATHS,
   type AuthCallContext,
+  type AuthEvent,
   type AuthSession,
   authEvents,
+  drainAuthEvents,
   errorCodeOf,
   mapAuthEvent,
 } from "./auth-events"
+import { createAuth } from "./index"
 
 const session = (userId: string, activeOrganizationId: string | null = null): AuthSession => ({
   user: { id: userId },
@@ -343,5 +349,120 @@ describe("authEvents plugin", () => {
     expect(matcher({ path: "/sign-in/email" })).toBe(true)
     expect(matcher({ path: "/get-session" })).toBe(false)
     expect(matcher({})).toBe(false)
+  })
+})
+
+/** A real better-auth instance on PGlite, with the audit hook writing to `onAuthEvent`. */
+async function instance(onAuthEvent: (event: AuthEvent) => void | Promise<void>) {
+  const t = await createTestDb()
+  const auth = createAuth({
+    db: t.db,
+    secret: "a-test-secret-that-is-long-enough-123456", // gitleaks:allow
+    baseURL: BASE,
+    emailFrom: "Test <auth@example.com>",
+    oauthResources: [BASE, AUDIENCE],
+    ses: {
+      client: {
+        send: async () => ({ MessageId: "test", $metadata: { requestId: "test" } }),
+      },
+    } as never,
+    rateLimit: false,
+    onAuthEvent,
+  })
+  await auth.api.signUpEmail({
+    body: { email: "ann@example.com", password: "correct-horse-battery", name: "Ann" },
+  })
+  return { auth, close: t.close }
+}
+
+describe("authEvents on a real instance", () => {
+  let close: (() => Promise<void>) | undefined
+  afterEach(async () => {
+    setErrorReporter(undefined)
+    await drainAuthEvents()
+    await close?.()
+    close = undefined
+  })
+
+  it("records a failed sign-in for a known email, after the response", async () => {
+    const events: AuthEvent[] = []
+    const h = await instance((event) => {
+      events.push(event)
+    })
+    close = h.close
+    await expect(
+      h.auth.api.signInEmail({
+        body: { email: "ann@example.com", password: "wrong-password-here" },
+      }),
+    ).rejects.toBeInstanceOf(Error)
+    await drainAuthEvents()
+    expect(events).toEqual([
+      expect.objectContaining({
+        name: "auth.sign_in_failed",
+        outcome: "INVALID_EMAIL_OR_PASSWORD",
+        path: "/sign-in/email",
+      }),
+    ])
+    expect(events[0]?.userId).toEqual(expect.any(String))
+  })
+
+  it("records a validation failure (better-call's APIError, not better-auth's) as a failed sign-in", async () => {
+    const events: AuthEvent[] = []
+    const h = await instance((event) => {
+      events.push(event)
+    })
+    close = h.close
+    // A malformed body fails validation before the endpoint runs; the error is better-call's.
+    await expect(
+      h.auth.api.signInEmail({ body: { email: "ann@example.com", password: 12345 } as never }),
+    ).rejects.toThrow()
+    await drainAuthEvents()
+    expect(events).toEqual([
+      expect.objectContaining({
+        name: "auth.sign_in_failed",
+        userId: expect.any(String),
+        outcome: "VALIDATION_ERROR",
+        path: "/sign-in/email",
+      }),
+    ])
+  })
+
+  it("returns the response before a slow audit write settles", async () => {
+    let finished = false
+    const h = await instance(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      finished = true
+    })
+    close = h.close
+    await expect(
+      h.auth.api.signInEmail({
+        body: { email: "ann@example.com", password: "wrong-password-here" },
+      }),
+    ).rejects.toBeInstanceOf(Error)
+    expect(finished).toBe(false)
+    await drainAuthEvents()
+    expect(finished).toBe(true)
+  })
+
+  it("reports an audit write that throws, and the auth response still succeeds", async () => {
+    const reported: unknown[] = []
+    setErrorReporter((error: AppError, context) => {
+      reported.push({ error, context })
+    })
+    const h = await instance(() => {
+      throw new Error("audit db down")
+    })
+    close = h.close
+    const res = await h.auth.api.signInEmail({
+      body: { email: "ann@example.com", password: "correct-horse-battery" },
+    })
+    expect(res.token).toEqual(expect.any(String))
+    await drainAuthEvents()
+    expect(reported).toEqual([
+      {
+        error: expect.objectContaining({ message: "audit db down" }),
+        context: expect.objectContaining({ phase: "auth-event", path: "/sign-in/email" }),
+      },
+    ])
   })
 })

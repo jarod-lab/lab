@@ -4,9 +4,13 @@
 // after hooks for failed calls too, with the APIError in `ctx.context.returned`, so a failure is an
 // event with its error code as the outcome.
 //
+// The write runs after the response (`defer`), never inside it: a response's timing must not depend
+// on whether an account exists (the email lookup and the audit row both happen in that deferred
+// work).
+//
 // The writer is injected (`onAuthEvent`), so this package never imports the API's data layer.
 import type { BetterAuthPlugin } from "better-auth"
-import { APIError, createAuthMiddleware } from "better-auth/api"
+import { createAuthMiddleware, isAPIError } from "better-auth/api"
 import { reportError } from "@starter/errors"
 
 export const AUTH_EVENT_NAMES = [
@@ -72,7 +76,7 @@ export interface AuthSession {
 }
 
 export interface AuthEventsOptions {
-  /** Awaited after each event. Its errors are reported and never reach the auth response. */
+  /** Called after each event, off the response path. Its errors are reported, never thrown. */
   onAuthEvent: (event: AuthEvent) => void | Promise<void>
   /** Header holding the trusted client IP. Defaults to `x-starter-client-ip`. */
   ipHeader?: string
@@ -234,7 +238,7 @@ export const AUTH_EVENT_PATHS = Object.keys(RULES)
 
 /** The error code of a refused call: better-auth's code, else its status name. */
 export function errorCodeOf(error: unknown): string {
-  if (!(error instanceof APIError)) return "INTERNAL"
+  if (!isAPIError(error)) return "INTERNAL"
   const code = (error.body as { code?: unknown } | undefined)?.code
   return typeof code === "string" ? code : String(error.status)
 }
@@ -246,7 +250,7 @@ export function errorCodeOf(error: unknown): string {
 export async function mapAuthEvent(call: AuthCallContext): Promise<AuthEvent | null> {
   const rule = RULES[call.path]
   if (!rule) return null
-  const failed = call.returned instanceof APIError
+  const failed = isAPIError(call.returned)
   const draft = await rule(call, failed)
   if (!draft) return null
   const { outcome, ...fields } = draft
@@ -256,6 +260,31 @@ export async function mapAuthEvent(call: AuthCallContext): Promise<AuthEvent | n
     ...(call.ip ? { ip: call.ip } : {}),
     path: call.path,
   }
+}
+
+/** Deferred audit work in flight. Only `drainAuthEvents` reads it. */
+const pending = new Set<Promise<void>>()
+
+/**
+ * Runs `work` after the current response has been handed back, not awaited by the caller. Its
+ * errors are reported, so the promise never rejects and nothing is left unhandled.
+ */
+function defer(work: () => Promise<void>, context: Record<string, unknown>): void {
+  const task = new Promise<void>((resolve) => setImmediate(resolve))
+    .then(work)
+    .catch((error: unknown) => {
+      reportError(error, { phase: "auth-event", ...context })
+    })
+  pending.add(task)
+  void task.finally(() => pending.delete(task))
+}
+
+/**
+ * Resolves once every deferred auth-event write has settled. For tests: production never waits on
+ * the audit trail.
+ */
+export async function drainAuthEvents(): Promise<void> {
+  while (pending.size > 0) await Promise.all(pending)
 }
 
 /** The better-auth plugin: one after hook, matched on the mapped paths. */
@@ -268,27 +297,32 @@ export function authEvents(opts: AuthEventsOptions): BetterAuthPlugin {
         {
           matcher: (ctx: { path?: string }) => ctx.path !== undefined && ctx.path in RULES,
           handler: createAuthMiddleware(async (ctx) => {
-            try {
-              const event = await mapAuthEvent({
-                path: ctx.path,
-                body: ctx.body as Record<string, unknown> | undefined,
-                session: ctx.context.session as AuthSession | null | undefined,
-                newSession: ctx.context.newSession as AuthSession | null | undefined,
-                returned: ctx.context.returned,
-                ip: ctx.headers?.get(ipHeader) ?? undefined,
-                findUserIdByEmail: async (email) => {
-                  const user = await ctx.context.adapter.findOne<{ id: string }>({
-                    model: "user",
-                    where: [{ field: "email", value: email }],
-                  })
-                  return user?.id ?? null
-                },
-              })
-              if (event) await opts.onAuthEvent(event)
-            } catch (error) {
-              // An audit write must never change the auth response the person gets.
-              reportError(error, { phase: "auth-event", path: ctx.path })
+            // Snapshot what the mapper reads now: the response is already on its way.
+            const call = {
+              path: ctx.path,
+              body: ctx.body as Record<string, unknown> | undefined,
+              session: ctx.context.session as AuthSession | null | undefined,
+              newSession: ctx.context.newSession as AuthSession | null | undefined,
+              returned: ctx.context.returned,
+              ip: ctx.headers?.get(ipHeader) ?? undefined,
             }
+            const adapter = ctx.context.adapter
+            defer(
+              async () => {
+                const event = await mapAuthEvent({
+                  ...call,
+                  findUserIdByEmail: async (email) => {
+                    const user = await adapter.findOne<{ id: string }>({
+                      model: "user",
+                      where: [{ field: "email", value: email }],
+                    })
+                    return user?.id ?? null
+                  },
+                })
+                if (event) await opts.onAuthEvent(event)
+              },
+              { path: ctx.path },
+            )
           }),
         },
       ],

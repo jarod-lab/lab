@@ -1681,6 +1681,74 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(await memberOf(address, org)).toBeNull()
     })
 
+    it("a directory deprovisioning removes only what it provisioned: a member an owner added by hand stays", async () => {
+      const { owner, org, scim } = await ownerWithScim("Hand-made kept")
+      // SCIM refuses an address that already has an account, so the directory provisions first.
+      const handMade = email()
+      const listed = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: handMade,
+          emails: [{ value: handMade, primary: true }],
+          active: true,
+        }),
+      )
+      expect(listed.status).toBe(201)
+      const { id: listedId } = (await listed.json()) as { id: string }
+      expect(await memberOf(handMade, org)).toEqual({ role: "member" })
+
+      // The owner takes the membership back and adds the person by hand: no SCIM source now.
+      const [row] = await t.db
+        .select({ id: member.id, userId: member.userId })
+        .from(member)
+        .innerJoin(userTable, eq(userTable.id, member.userId))
+        .where(and(eq(userTable.email, handMade), eq(member.organizationId, org)))
+      const removed = await owner.b.client.organization.removeMember({
+        memberIdOrEmail: row?.id ?? "",
+        organizationId: org,
+      })
+      expect(removed.error).toBeNull()
+      await t.auth.api.addMember({
+        body: { organizationId: org, userId: row?.userId ?? "", role: "member" },
+      })
+      expect(await memberOf(handMade, org)).toEqual({ role: "member" })
+
+      // The directory deactivates the person: the hand-made membership stays.
+      const off = await scim(
+        `/Users/${listedId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(off.status).toBe(200)
+      expect(await memberOf(handMade, org)).toEqual({ role: "member" })
+
+      // A member the directory created itself is removed by the same deactivation.
+      const address = email()
+      const created = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: address,
+          emails: [{ value: address, primary: true }],
+          active: true,
+        }),
+      )
+      const { id: createdId } = (await created.json()) as { id: string }
+      expect(await memberOf(address, org)).toEqual({ role: "member" })
+      const gone = await scim(
+        `/Users/${createdId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(gone.status).toBe(200)
+      expect(await memberOf(address, org)).toBeNull()
+    })
+
     it("a directory that deactivates an owner leaves them an owner, and the SCIM token still works", async () => {
       const { owner, org, scim } = await ownerWithScim("Owner kept")
       // Provisioned as a member first, then promoted: a directory cannot link an existing account.
@@ -2282,14 +2350,18 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       await visitor.client.signIn.email({ email: address, password: PASSWORD })
       await b.client.signOut()
 
-      const rows = await auditRowsOf(userId)
-      expect(rows).toEqual(
-        expect.arrayContaining([
-          { operation: "auth.sign_in", outcome: "ok" },
-          { operation: "auth.sign_in_failed", outcome: expect.any(String) },
-          { operation: "auth.sign_out", outcome: "ok" },
-        ]),
-      )
+      // Audit writes run after the response (auth-events.ts), so wait for them to land.
+      const rows = await vi.waitFor(async () => {
+        const found = await auditRowsOf(userId)
+        expect(found).toEqual(
+          expect.arrayContaining([
+            { operation: "auth.sign_in", outcome: "ok" },
+            { operation: "auth.sign_in_failed", outcome: expect.any(String) },
+            { operation: "auth.sign_out", outcome: "ok" },
+          ]),
+        )
+        return found
+      })
       expect(rows.find((r) => r.operation === "auth.sign_in_failed")?.outcome).not.toBe("ok")
     })
   })

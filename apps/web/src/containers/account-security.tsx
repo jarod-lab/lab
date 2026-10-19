@@ -10,6 +10,8 @@ import {
   signInMethodLabel,
 } from "../lib/account-format"
 import { accountKeys } from "../lib/account-keys"
+import { withReauth } from "../lib/reauth"
+import { useReauth } from "../components/reauth-dialog"
 import { getWebAuth } from "../lib/web-auth"
 import { navigateTo } from "../lib/navigation"
 import { AccountSecurityPage } from "../pages/account-security-page"
@@ -34,6 +36,9 @@ export function AccountSecurityContainer({
   renderLink,
 }: AccountSecurityContainerProps) {
   const queryClient = useQueryClient()
+  const confirm = useReauth()
+  // A refused change (SESSION_NOT_FRESH) asks the person to confirm it's them, then runs once more.
+  const guard = <T,>(action: () => Promise<T>) => withReauth(action, confirm)
   const profile = useQuery({ queryKey: accountKeys.profile(), queryFn: () => api.getProfile() })
   const summary = useQuery({
     queryKey: accountKeys.securitySummary(),
@@ -126,7 +131,7 @@ export function AccountSecurityContainer({
       sessions={sessionRows}
       sessionsNeedSignIn={sessionsNeedSignIn}
       onAddPasskey={async (name) => {
-        await api.addPasskey(name)
+        await guard(() => api.addPasskey(name))
         refresh(accountKeys.passkeys())
       }}
       onRenamePasskey={async (id, name) => {
@@ -134,21 +139,21 @@ export function AccountSecurityContainer({
         refresh(accountKeys.passkeys())
       }}
       onRemovePasskey={async (id) => {
-        await api.deletePasskey(id)
+        await guard(() => api.deletePasskey(id))
         refresh(accountKeys.passkeys())
       }}
-      onEnableTwoFactor={(password) => api.enableTwoFactor(password)}
+      onEnableTwoFactor={(password) => guard(() => api.enableTwoFactor(password))}
       onConfirmTwoFactor={async (code) => {
         await api.confirmTwoFactor(code)
         refresh(accountKeys.securitySummary())
       }}
       onDisableTwoFactor={async (password) => {
-        await api.disableTwoFactor(password)
+        await guard(() => api.disableTwoFactor(password))
         refresh(accountKeys.securitySummary())
       }}
       onNewBackupCodes={(password) => api.newBackupCodes(password)}
       onChangePassword={async (input) => {
-        await api.changePassword({ ...input, revokeOtherSessions: false })
+        await guard(() => api.changePassword({ ...input, revokeOtherSessions: false }))
         refresh(accountKeys.securitySummary())
       }}
       onConnect={async (provider) => {
@@ -156,15 +161,15 @@ export function AccountSecurityContainer({
         if (url) navigateTo(url)
       }}
       onDisconnect={async (accountId) => {
-        await api.unlinkAccount(accountId)
+        await guard(() => api.unlinkAccount(accountId))
         refresh(accountKeys.accounts())
       }}
       onRevokeSession={async (token) => {
-        await api.revokeSession(token)
+        await guard(() => api.revokeSession(token))
         refresh(accountKeys.sessions())
       }}
       onRevokeOtherSessions={async () => {
-        await api.revokeOtherSessions()
+        await guard(() => api.revokeOtherSessions())
         refresh(accountKeys.sessions())
       }}
     />

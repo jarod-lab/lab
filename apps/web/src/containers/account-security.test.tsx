@@ -3,9 +3,11 @@ import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
-import { AccountError, type AccountApi } from "../lib/account-api"
+import { ReauthProvider } from "../components/reauth-dialog"
+import { AccountError, type AccountApi, SessionNotFreshError } from "../lib/account-api"
 import { renderWithClient } from "../test/render"
 import { PASSWORD_ONLY_METHODS } from "../lib/web-auth"
+import type { ReauthAuth } from "../lib/reauth"
 import { AccountSecurityContainer } from "./account-security"
 
 // The server offers both social providers; the connect row for Google comes from that list.
@@ -114,5 +116,40 @@ describe("AccountSecurityContainer", () => {
     const row = google.closest("div")?.parentElement as HTMLElement
     await user.click(within(row).getByRole("button", { name: "Connect" }))
     expect(linkSocial).toHaveBeenCalledWith("google", "/account/security")
+  })
+
+  it("asks the person to confirm it's them when a sign-out is refused as not fresh, then signs that session out", async () => {
+    const user = userEvent.setup()
+    const revokeSession = vi
+      .fn<(token: string) => Promise<void>>()
+      .mockRejectedValueOnce(new SessionNotFreshError(403))
+      .mockResolvedValueOnce(undefined)
+    const api = fakeAccountApi({ revokeSession })
+    // A re-sign-in replaces the session: the token changes, the person stays the same.
+    let token = "t-now"
+    const auth: ReauthAuth = {
+      session: vi.fn(async () => ({ userId: "user-1", token, activeOrganizationId: null })),
+      signInWithPassword: vi.fn(async () => {
+        token = "t-new"
+        return "done" as const
+      }),
+      signInWithPasskey: vi.fn(async () => undefined),
+      verifyCode: vi.fn(async () => undefined),
+      verifyBackupCode: vi.fn(async () => undefined),
+      signOut: vi.fn(async () => undefined),
+      setActiveOrganization: vi.fn(async () => undefined),
+    }
+    renderWithClient(
+      <ReauthProvider auth={auth} api={api} reload={vi.fn()}>
+        <AccountSecurityContainer api={api} />
+      </ReauthProvider>,
+    )
+    await user.click(await screen.findByRole("button", { name: "Sign out Safari on iPhone" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "correct horse")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(revokeSession).toHaveBeenCalledTimes(2))
+    expect(revokeSession.mock.calls).toEqual([["t-2"], ["t-2"]])
+    expect(auth.signInWithPassword).toHaveBeenCalledWith("ada@example.com", "correct horse")
   })
 })

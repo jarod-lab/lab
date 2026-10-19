@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
 
-import { AccountError, accountErrorMessage, createAccountApi, totpSecretOf } from "./account-api"
+import {
+  AccountError,
+  SessionNotFreshError,
+  accountErrorMessage,
+  createAccountApi,
+  totpSecretOf,
+} from "./account-api"
+import { isSessionNotFresh } from "./reauth"
 
 const BASE = "https://app.example.com"
 
@@ -261,5 +268,55 @@ describe("accountErrorMessage", () => {
   it("falls back for anything it does not know", () => {
     expect(accountErrorMessage(new Error("boom"))).toBe("boom")
     expect(accountErrorMessage("nope")).toBe("Something went wrong. Try again.")
+  })
+})
+
+describe("createAccountApi: a refusal for a stale session", () => {
+  it("surfaces SESSION_NOT_FRESH as its own error, with the person's copy, on every guarded call", async () => {
+    const refusal = {
+      "/api/auth/revoke-session": {
+        status: 403,
+        body: { code: "SESSION_NOT_FRESH", message: "Session is not fresh" },
+      },
+      "/api/auth/change-password": {
+        status: 403,
+        body: { code: "SESSION_NOT_FRESH", message: "Session is not fresh" },
+      },
+      "/api/auth/revoke-other-sessions": {
+        status: 403,
+        body: { code: "SESSION_NOT_FRESH", message: "Session is not fresh" },
+      },
+    }
+    const { fetchImpl } = stubFetch(refusal)
+    const api = createAccountApi(BASE, fetchImpl)
+    const attempts = [
+      api.revokeSession("t-2"),
+      api.changePassword({ currentPassword: "a", newPassword: "b", revokeOtherSessions: false }),
+      api.revokeOtherSessions(),
+    ]
+    for (const attempt of attempts) {
+      const caught = await attempt.catch((error: unknown) => error)
+      expect(caught).toBeInstanceOf(SessionNotFreshError)
+      expect(caught).toBeInstanceOf(AccountError)
+      expect(isSessionNotFresh(caught)).toBe(true)
+      expect(accountErrorMessage(caught)).toBe(
+        "Sign in again to continue. Changes like this need a recent sign-in.",
+      )
+    }
+  })
+
+  it("keeps the server's message for a refusal that is not about freshness", async () => {
+    const { fetchImpl } = stubFetch({
+      "/api/auth/revoke-session": {
+        status: 400,
+        body: { code: "SOMETHING_ELSE", message: "Nope" },
+      },
+    })
+    const caught = await createAccountApi(BASE, fetchImpl)
+      .revokeSession("t-2")
+      .catch((error: unknown) => error)
+    expect(caught).toBeInstanceOf(AccountError)
+    expect(caught).not.toBeInstanceOf(SessionNotFreshError)
+    expect(isSessionNotFresh(caught)).toBe(false)
   })
 })

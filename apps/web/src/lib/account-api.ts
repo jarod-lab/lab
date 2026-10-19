@@ -6,6 +6,7 @@ import {
   PASSWORD_COMPROMISED_MESSAGE,
 } from "@starter/auth/client"
 
+import { SESSION_NOT_FRESH_CODE } from "./reauth"
 import { makeAuthClient, WebError } from "./web-auth"
 
 // The person's own account calls (profile, security): their name and email, sign-in methods, passkeys,
@@ -66,6 +67,22 @@ export class AccountError extends WebError {
   }
 }
 
+/**
+ * A call refused because the session is older than the fresh window (the server's SESSION_NOT_FRESH).
+ * Its message is the person's copy, not the server's; `withReauth` (lib/reauth.ts) retries it after
+ * a re-sign-in.
+ */
+export class SessionNotFreshError extends AccountError {
+  constructor(status: number) {
+    super(
+      "Sign in again to continue. Changes like this need a recent sign-in.",
+      status,
+      SESSION_NOT_FRESH_CODE,
+    )
+    this.name = "SessionNotFreshError"
+  }
+}
+
 /** The secret the authenticator app needs, from the otpauth URI's `secret` parameter. */
 export function totpSecretOf(totpURI: string): string {
   try {
@@ -80,6 +97,9 @@ type Result<T> = { data: T | null; error: Failure | null }
 
 function unwrap<T>(result: Result<T>, fallback: string): T {
   if (result.error) {
+    if (result.error.code === SESSION_NOT_FRESH_CODE) {
+      throw new SessionNotFreshError(result.error.status ?? 0)
+    }
     throw new AccountError(
       result.error.message || fallback,
       result.error.status ?? 0,

@@ -1,5 +1,12 @@
 {
   "mcpServers": {
-    "storybook": { "type": "http", "url": "http://localhost:6006/mcp" }
+    "storybook": {
+      "type": "http",
+      "url": "http://localhost:6006/mcp"
+    },
+    "tanstack": {
+      "type": "http",
+      "url": "https://tanstack.com/api/mcp"
+    }
   }
 }

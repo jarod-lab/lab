@@ -4,6 +4,12 @@
   registered in `.mcp.json`. It only responds while Storybook is running. Use its docs tools
   (`docs-list`, `docs-show`) for component props instead of reading source. `pnpm build` runs
   `storybook build`.
+- **TanStack MCP** (`https://tanstack.com/api/mcp`, in `.mcp.json`; OAuth on first use) searches
+  and fetches the docs of every TanStack library by version. Check Router, Query, Form and Start
+  APIs there rather than from memory.
+- **TanStack lint**: Oxlint loads `@tanstack/eslint-plugin-query` and `@tanstack/eslint-plugin-router`
+  as `jsPlugins` (`.oxlintrc.json`), every recommended rule as an error. `exhaustive-deps`
+  allowlists the `BillingAdapter` type: a service whose `mode` stands for it in query keys.
 - **portless**: `pnpm dev` runs the apps' dev scripts on stable `*.localhost` URLs (`app.starter`,
   `api.starter`; `portless.json`). `"turbo": false` is set because portless's turbo mode runs the
   root `dev` script, which is portless itself.

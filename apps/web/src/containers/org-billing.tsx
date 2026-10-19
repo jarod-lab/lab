@@ -53,10 +53,13 @@ export function OrgBillingContainer({
     staleTime: Number.POSITIVE_INFINITY,
     enabled: adapterProp === undefined,
   })
-  const adapter = adapterProp ?? modeQuery.data
+  // A service, not data: the lint allowlists the type, and its `mode` stands for it in query keys.
+  const adapter: BillingAdapter | undefined = adapterProp ?? modeQuery.data
 
+  // The mode in the key keeps the fixture's data apart from Stripe's; invalidating the snapshot
+  // prefix still reaches both queries.
   const snapshot = useQuery({
-    queryKey: billingKeys.snapshot(organizationId),
+    queryKey: [...billingKeys.snapshot(organizationId), adapter?.mode],
     queryFn: () => {
       if (!adapter) throw new Error("Billing is not ready.")
       return adapter.load(organizationId)
@@ -65,7 +68,7 @@ export function OrgBillingContainer({
   })
 
   const usage = useQuery({
-    queryKey: billingKeys.usage(organizationId),
+    queryKey: [...billingKeys.usage(organizationId), adapter?.mode],
     queryFn: () => {
       if (!adapter) throw new Error("Billing is not ready.")
       return adapter.usage(organizationId)

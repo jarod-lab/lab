@@ -34,11 +34,14 @@ export function OrgRunsContainer({
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
 
-  const listStatus = filter === "all" ? undefined : filter
   const list = useInfiniteQuery({
     queryKey: runKeys.list(organizationId, filter),
     queryFn: ({ pageParam }) =>
-      api.list(organizationId, { status: listStatus, cursor: pageParam, limit: PAGE_SIZE }),
+      api.list(organizationId, {
+        status: filter === "all" ? undefined : filter,
+        cursor: pageParam,
+        limit: PAGE_SIZE,
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: role.isSuccess,

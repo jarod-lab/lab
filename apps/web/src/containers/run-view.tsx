@@ -69,9 +69,10 @@ export function RunViewContainer({
   // the run has finished. Until the first answer, the run counts as live; a run that is not found or
   // failed to load is not polled (every refetch is metered), and Try again refetches it.
   const polling = run.data ? isLiveStatus(run.data.status) : !run.isError
+  const { refetch } = run
   const refetchRun = useCallback(() => {
-    void run.refetch()
-  }, [run])
+    void refetch()
+  }, [refetch])
   useRunPolling({ live: polling, refresh: refetchRun })
 
   const [actionError, setActionError] = useState<string | null>(null)

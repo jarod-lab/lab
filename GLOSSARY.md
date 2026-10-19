@@ -108,6 +108,9 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 
 ## The web app
 
+- **App** — the signed-in product (`apps/app`, `@starter/app`) at `app.` on the product domain.
+- **Site** — the public website at the apex domain: marketing, pricing, docs, changelog and `llms.txt`.
+  It will live in `apps/site` (`@starter/site`), which does not exist yet. Not the **app**.
 - **D+** — the design system: warm paper and ink, the `solar` "needs you" accent, 8px radius, 2px ink
   borders. Lives in `packages/ui/src/styles.css` and `src/dplus`.
 - **Board** — a design board in `docs/build-app/boards`; each page follows its board's journey, and the

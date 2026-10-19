@@ -22,7 +22,7 @@ that need you.
     org event needs the caller's `OrganizationId` proof:
     `inCallerOrg(caller, (org, proof) => notifier.inOrg(org, proof, event))`.
 - `packages/ui/src/dplus/shell/notifications-menu.tsx` is the bell and panel (presentational).
-  `apps/web/src/containers/notifications.tsx` wires it to better-inbox's `useInbox`. It polls the
+  `apps/app/src/containers/notifications.tsx` wires it to better-inbox's `useInbox`. It polls the
   unread count every 30 s, paused while the tab is hidden, and refreshes the list whenever the
   bell opens.
 

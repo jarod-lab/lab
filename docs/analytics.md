@@ -25,7 +25,7 @@ Every **analytics event** is in one catalog, `AnalyticsEvent` in
 | `operation.called` | the invoke hooks (`apps/api/src/hooks.ts`) | every operation call, REST or MCP, with `operation`, `outcome` (`ok` or the error code), `via` and the OAuth client |
 | `account.created` | createAuth's `onSignUp` (`apps/api/src/analytics.ts`) | a new account, by every sign-up path (email, social, passkey, provisional), in its new personal organization |
 | `auth.*` | `onAuthEvent` (`apps/api/src/analytics.ts`) | the successful auth events in `TRACKED_AUTH_EVENTS`: passkey sign-up started, sign-in, sign-out, 2FA on, passkey added, API key created, account deleted |
-| `page.viewed` | the web app (`usePageViews`, `apps/web/src/lib/analytics.ts`) | each new path a signed-in person settles on, by route template |
+| `page.viewed` | the web app (`usePageViews`, `apps/app/src/lib/analytics.ts`) | each new path a signed-in person settles on, by route template |
 
 - Each event names its **actor**, a user id or `api_key:<id>`, and its organization. PostHog
   groups events by organization (group type `organization`), so usage rolls up per tenant, agents

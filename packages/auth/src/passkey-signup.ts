@@ -18,7 +18,7 @@ import { signupLimitBreach } from "./signup"
 
 export const PASSKEY_SIGNUP_START_PATH = "/passkey-signup/start"
 export const PASSKEY_SIGNUP_VERIFY_PATH = "/passkey-signup/verify"
-/** The web page a refused link lands on (apps/web routes/sign-up_.passkey.tsx), with ?error=<code>. */
+/** The web page a refused link lands on (apps/app routes/sign-up_.passkey.tsx), with ?error=<code>. */
 export const PASSKEY_SIGNUP_LANDING_PATH = "/sign-up/passkey"
 /** The error code a refused link carries: invalid, expired, already used, or never issued. */
 export const PASSKEY_SIGNUP_LINK_ERROR = "PASSKEY_SIGNUP_EXPIRED"

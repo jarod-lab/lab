@@ -11,10 +11,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createTestApp } from "./app.test.helpers"
 import { contentSecurityPolicy, inlineScriptHashes, mountWeb } from "./static"
 
-// apps/web's generated route tree: every route it declares must be served an app page. Read as text,
+// apps/app's generated route tree: every route it declares must be served an app page. Read as text,
 // since this package has no React or TanStack dependencies to import it with.
 const routeTreeSource = readFileSync(
-  new URL("../../web/src/routeTree.gen.ts", import.meta.url),
+  new URL("../../app/src/routeTree.gen.ts", import.meta.url),
   "utf8",
 )
 
@@ -127,7 +127,7 @@ describe("web app serving", () => {
   })
 
   it("serves index.html for every route the web app declares (except /, which is the API's)", async () => {
-    // Derived from apps/web's route tree, so a new route can't ship unserved.
+    // Derived from apps/app's route tree, so a new route can't ship unserved.
     expect(declaredRoutes).toContain("/$org/settings/agents")
     for (const path of declaredRoutes.filter((route) => route !== "/")) {
       const res = await t.req(concretePath(path))

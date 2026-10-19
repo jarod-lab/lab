@@ -29,7 +29,7 @@ docker compose up -d db           # local Postgres (tests don't need it)
 | `packages/ui` | shadcn/ui components, `cn`, Tailwind v4 theme, Storybook (+ MCP at `/mcp`), axe test helper |
 | `packages/db` | Drizzle ORM, committed migrations, `@starter/db/testing` (in-process PGlite) |
 | `apps/api` | Reference API ([Hono](https://hono.dev) on Node): REST, `/mcp`, `/openapi.json`, `/llms.txt`, OAuth discovery, the registry record |
-| `apps/web` | TanStack Start SPA: sign-in, sign-up, consent, device login, agent settings. Built to `apps/web/dist` and served by `apps/api` |
+| `apps/app` | TanStack Start SPA: sign-in, sign-up, consent, device login, agent settings. Built to `apps/app/dist` and served by `apps/api` |
 | `packages/api` | Operation registry: `defineOperation` once → REST, MCP, OpenAPI 3.1, `llms.txt` / `llms-full.txt`; `invoke` with before/after hooks and pagination helpers |
 | `packages/mcp` | Stateless MCP server (Streamable HTTP) from the registry; RFC 9728 resource metadata |
 | `packages/auth` | better-auth + Wraps, organizations + roles from one permission catalog, org API keys, OAuth 2.1 (MCP clients register themselves; tokens bound to an org), device grant, provisional signup |
@@ -50,7 +50,7 @@ pnpm test:coverage               # thresholds only go up
 pnpm baseline                    # bans/ratchets (code-baseline)
 pnpm storybook                   # http://localhost:6006
 pnpm --filter @starter/api-app dev     # API on BETTER_AUTH_URL (default http://localhost:3000)
-pnpm --filter @starter/web dev         # web app dev server (proxies the API; API_URL sets its target)
+pnpm --filter @starter/app dev         # web app dev server (proxies the API; API_URL sets its target)
 pnpm --filter @starter/auth generate   # regenerate auth tables after changing auth plugins
 pnpm --filter @starter/db db:generate  # new migration after schema changes
 pnpm --filter @starter/sdk generate    # regenerate the SDK types after changing openapi.json
@@ -110,7 +110,7 @@ shows up in review, and contract tests run every documented example over REST an
    this as its `migrate` service; a platform's release command can run it too.
 3. Set the environment (see `.env.example`):
    - required: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (the public origin, no trailing slash), `EMAIL_FROM`.
-   - `WEB_DIST_DIR`: the image sets `/app/apps/web/dist`; set it only to serve another build.
+   - `WEB_DIST_DIR`: the image sets `/app/apps/app/dist`; set it only to serve another build.
    - `TRUST_PROXY=true` only behind a proxy that overwrites `X-Forwarded-For` (signup limits use the client IP).
    - `ORG_DAILY_REQUEST_LIMIT` (default 10000) and `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (default 500): requests per
      organization per UTC day, the second while its owner's email is unverified.

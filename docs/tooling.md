@@ -13,12 +13,12 @@
 - **portless**: `pnpm dev` runs the apps' dev scripts on stable `*.localhost` URLs (`app.starter`,
   `api.starter`; `portless.json`). `"turbo": false` is set because portless's turbo mode runs the
   root `dev` script, which is portless itself.
-- **Web and CLI builds**: `pnpm --filter @starter/web build` writes `apps/web/dist`, which
+- **Web and CLI builds**: `pnpm --filter @starter/app build` writes `apps/app/dist`, which
   `WEB_DIST_DIR` needs. `pnpm --filter @starter/cli build` writes `dist/bin.js`.
 - **baseline** (`code-baseline`): bans, ratchets and design-system rules in `baseline.toml`.
   Warnings don't fail the run (localhost `http://`, inline styles, the React and a11y advice in
-  `apps/web`); errors do. Presets: `shadcn-strict`, `dependency-hygiene`, `security` and
-  `ai-codegen` everywhere; `react` and `accessibility` scoped to `apps/web` (minus the
+  `apps/app`); errors do. Presets: `shadcn-strict`, `dependency-hygiene`, `security` and
+  `ai-codegen` everywhere; `react` and `accessibility` scoped to `apps/app` (minus the
   size/useReducer/DOM-query opinions and `no-array-index-key`, see the comment there) and
   `accessibility` on `packages/ui/src/dplus`. Generated files (`*.gen.ts`), `scripts/`, `docs/` and
   the shadcn demos are excluded.
@@ -27,7 +27,7 @@
   or other kits outside `packages/ui`), `use-starter-env` (no `process.env` outside `packages/env`),
   `no-type-any` (type positions only; `operation.ts` is the one exception), `no-new-function`
   (outside tests), `no-server-imports-in-client` (no `@starter/db`, `env`, `auth-proofs` or
-  `observability` from `apps/web`, `packages/ui`, `sdk` or `cli`), `use-app-error` (no bare
+  `observability` from `apps/app`, `packages/ui`, `sdk` or `cli`), `use-app-error` (no bare
   `new Error` in `apps/api`), `no-focused-tests`, `no-sleep-in-e2e`, `e2e-test-import`, the two
   `ui-css-*-import` rules (`styles.css` must keep its `shadcn/tailwind.css` and `tw-animate-css`
   imports), `required-files`, and `api-queries-in-data-layer` plus `api-tables-in-data-layer` (no
@@ -77,11 +77,11 @@
 
 `turbo.jsonc` holds the task graph. The `transit` task carries the workspace dependency graph into
 each test task's hash. Without it, a test hash sees only its own package: editing
-`packages/auth/src/access.ts` left `@starter/web#test` unchanged. Migrations, vitest config and
+`packages/auth/src/access.ts` left `@starter/app#test` unchanged. Migrations, vitest config and
 every other file a dependency's tests read are inputs through the package graph.
 
 Some test inputs no workspace dependency reaches are listed per task:
-`apps/web/src/routeTree.gen.ts`, `server.json` and `skills/starter/SKILL.md` for the api-app tests;
+`apps/app/src/routeTree.gen.ts`, `server.json` and `skills/starter/SKILL.md` for the api-app tests;
 the CLI and SDK sources that `apps/api/src/onboarding.test.ts` runs as a process;
 `packages/api/src/headers.ts` for the web tests; and `apps/api/openapi.json` for the SDK tests. Add
 an input there when a test reads a file no dependency reaches.
@@ -95,7 +95,7 @@ an input there when a test reads a file no dependency reaches.
   git history, `baseline`, `lint`, `typecheck`, `build`, the generated-files drift step,
   `test:coverage` and `format:check`.
 - **Generated files are current**: runs the SDK and auth generators and `pnpm stories`, then formats
-  and fails on any diff in `apps/web/src/routeTree.gen.ts`, `packages/db/src/auth-schema.ts`,
+  and fails on any diff in `apps/app/src/routeTree.gen.ts`, `packages/db/src/auth-schema.ts`,
   `packages/sdk/src/schema.gen.ts` and `packages/ui/src/components`. It also fails on untracked
   files under `packages/ui/src/components`.
 - **OpenAPI breaking changes** (pull requests): oasdiff compares `apps/api/openapi.json` with the

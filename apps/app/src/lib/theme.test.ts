@@ -108,7 +108,7 @@ describe("theme choice", () => {
 
 describe("src/theme-boot.js", () => {
   // The pre-paint script must read the same key and rule as the app (lib/theme.ts).
-  // Vitest runs from the package root (apps/web).
+  // Vitest runs from the package root (apps/app).
   const script = readFileSync(resolve("src/theme-boot.js"), "utf8")
   // Runs the file as the browser would, against this page's window and document.
   const boot = () => runInNewContext(script, { window, document })

@@ -67,7 +67,7 @@ export interface AppOptions {
    * a proxy overwrites that header; otherwise the socket address is used.
    */
   trustProxy?: boolean
-  /** The built web app to serve from this origin (apps/web/dist). */
+  /** The built web app to serve from this origin (apps/app/dist). */
   webDistDir?: string
   /** The MCP registry's name and description for this server (server.json). */
   registry?: RegistryMeta

@@ -27,7 +27,7 @@ Email first, so no credential or session is issued for an address until its mail
   create hook) and emails a single-use link valid for `PASSKEY_SIGNUP_TTL_MS` (30 minutes). It
   returns no token and sets no cookie.
 - `GET /passkey-signup/verify` (the link) marks the address verified, consumes the token and signs
-  the person in. The landing page `/sign-up/passkey` (`apps/web/src/routes/sign-up_.passkey.tsx`)
+  the person in. The landing page `/sign-up/passkey` (`apps/app/src/routes/sign-up_.passkey.tsx`)
   then adds the passkey as a normal session-bound registration.
 - A refused link redirects to `/sign-up/passkey?error=PASSKEY_SIGNUP_EXPIRED`, not to a JSON body.
   A mail scanner that prefetches the GET consumes the link, as it does a magic link.
@@ -103,8 +103,8 @@ Code: `packages/auth/src/passkey-signup.ts`.
 - Operations marked `fresh: true` get the same refusal (`assertFreshSession` in
   `apps/api/src/hooks.ts`): `create_api_key`, `revoke_agent_access`, `reset_member_two_factor`,
   `decide_approval`, `undo_approval` and `revoke_scim_token`. API keys and OAuth tokens are exempt.
-- The web app's `ReauthProvider` (`apps/web/src/components/reauth-dialog.tsx`, mounted in
-  `routes/__root.tsx`) runs `withReauth` (`apps/web/src/lib/reauth.ts`). On `SESSION_NOT_FRESH` it asks
+- The web app's `ReauthProvider` (`apps/app/src/components/reauth-dialog.tsx`, mounted in
+  `routes/__root.tsx`) runs `withReauth` (`apps/app/src/lib/reauth.ts`). On `SESSION_NOT_FRESH` it asks
   the person to sign in again, then retries once. The session it replaces is revoked
   (`retireReplacedSession`), so no stale duplicate stays valid.
 

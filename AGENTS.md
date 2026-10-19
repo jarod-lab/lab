@@ -33,7 +33,7 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   discovery, `/api/auth/*` and OFREP (`/ofrep/v1/*`, a protocol route like `/api/auth/*`). Operations are in `src/operations/`, invoke hooks in `src/hooks.ts`,
   tenant helpers in `src/tenant.ts`, tenant data in `src/data/`. `apps/api/src/server.ts` only wires
   env, DB and listener.
-- `apps/web` — `@starter/web`, TanStack Start in SPA mode (the D+ app). See `docs/web-app.md`.
+- `apps/app` — `@starter/app`, TanStack Start in SPA mode (the D+ app). See `docs/web-app.md`.
 - `packages/api` — operation registry (`defineOperation`, `defineRegistry`, `invoke`), OpenAPI,
   llms.txt, server.json, pagination. Framework-agnostic.
 - `packages/sdk` — `@starter/sdk`, the typed client generated from `apps/api/openapi.json`.
@@ -164,7 +164,7 @@ Details: `docs/web-app.md`.
 - Forms use `useAppForm` and the fields in `components/form.tsx`, with Zod. Query keys come from
   `lib/query-keys.ts`; role checks from `lib/roles.ts`.
 - Never put un-hashed files under `/assets` (served immutable). `apps/api/src/static.ts` serves
-  `PAGE_PATHS`, which must match `apps/web/src/routes`.
+  `PAGE_PATHS`, which must match `apps/app/src/routes`.
 
 ## Advisor checkpoints
 

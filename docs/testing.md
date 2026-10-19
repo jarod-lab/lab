@@ -18,7 +18,7 @@
   package. Turbo runs every package's tests at once, and vitest's default of a worker per core
   starved the PGlite instances past their timeouts (auth's signup test went from 40-47 seconds to
   about 11). Don't raise it back to the default.
-- Web tests (`apps/web`) use jsdom and Testing Library. `packages/ui` tests render with
+- Web tests (`apps/app`) use jsdom and Testing Library. `packages/ui` tests render with
   `react-dom/server`, and its a11y checks run under jsdom.
 
 ## Auth flows

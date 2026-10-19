@@ -1,7 +1,7 @@
 # Web app
 
-`apps/web` (`@starter/web`) is TanStack Start in SPA mode, the D+ app. `vite build` writes
-`apps/web/dist`, which `apps/api` serves from its origin. Dev: `vite dev` proxies `/api`, `/v1`,
+`apps/app` (`@starter/app`) is TanStack Start in SPA mode, the D+ app. `vite build` writes
+`apps/app/dist`, which `apps/api` serves from its origin. Dev: `vite dev` proxies `/api`, `/v1`,
 `/mcp`, `/.well-known` and `/ofrep` to `API_URL`.
 
 ## Routes
@@ -17,7 +17,7 @@
 
 Org slugs can't take a reserved first segment (`RESERVED_ORG_SLUGS`, enforced server-side).
 `apps/api/src/static.ts` serves every route; `apps/api/src/static.test.ts` derives the
-list from `apps/web/src/routeTree.gen.ts`, and turbo hashes that file for api-app tests.
+list from `apps/app/src/routeTree.gen.ts`, and turbo hashes that file for api-app tests.
 
 ## Shape
 

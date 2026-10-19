@@ -12,7 +12,7 @@ exclude = ["scripts/**", "packages/ui/src/components/examples/**", "**/*.gen.ts"
 # theme.test.ts runs the pre-paint script with it.
 [[baseline.scoped]]
 preset = ["react", "accessibility"]
-path = "apps/web"
+path = "apps/app"
 exclude_rules = ["max-component-size", "prefer-use-reducer", "no-direct-document-query", "no-array-index-key", "no-new-function"]
 
 [[baseline.scoped]]
@@ -145,9 +145,9 @@ type = "banned-pattern"
 severity = "warning"
 glob = "**/*.{tsx,jsx}"
 exclude_glob = [
-  "apps/web/src/pages/admin-page.tsx",
-  "apps/web/src/pages/members-page.tsx",
-  "apps/web/src/pages/org-home-page.tsx",
+  "apps/app/src/pages/admin-page.tsx",
+  "apps/app/src/pages/members-page.tsx",
+  "apps/app/src/pages/org-home-page.tsx",
   "packages/ui/src/dplus/pages/**",
 ]
 pattern = "style={{"
@@ -188,7 +188,7 @@ message = "packages/ui/src/styles.css must keep @import \"tw-animate-css\""
 id = "no-server-imports-in-client"
 type = "banned-import"
 severity = "error"
-glob = "{apps/web,packages/ui,packages/sdk,packages/cli}/**/*.{ts,tsx}"
+glob = "{apps/app,packages/ui,packages/sdk,packages/cli}/**/*.{ts,tsx}"
 packages = ["@starter/db", "@starter/env", "@starter/auth-proofs", "@starter/observability"]
 message = "Server-only package imported from client code"
 suggest = "Go through the API (@starter/sdk) or move the shared piece to a package both sides can use"
@@ -250,7 +250,7 @@ glob = "{apps,packages}/**/*.{ts,tsx}"
 regex = true
 pattern = "from \"(\\.\\./)+(apps|packages)/"
 message = "Import another package through its name, not a relative path into its src"
-suggest = "Export it from the package (apps/web gets the auth catalog from @starter/auth/client)"
+suggest = "Export it from the package (apps/app gets the auth catalog from @starter/auth/client)"
 
 [[rule]]
 id = "ratchet-as-unknown-as"

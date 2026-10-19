@@ -6,7 +6,7 @@ import { gateway } from "ai"
 // running `pnpm dev` (portless, https) is not reused; portless serves https://app.starter.localhost
 // and the runner needs plain http on its own port.
 // One app process for every target: targets that declare the same app.command share it.
-// The app is the web dev server (apps/web, Vite) and the API (apps/api), started by scripts/e2e-stack.mjs.
+// The app is the web dev server (apps/app, Vite) and the API (apps/api), started by scripts/e2e-stack.mjs.
 // The API needs Postgres with the migrations applied (DATABASE_URL, from the runner's environment or
 // .env). The journeys sign up, so they need the dev mail sink (DEV_MAIL_SINK) as well.
 // Only what the stack needs is passed on: the child inherits nothing else from the runner.

@@ -1,4 +1,4 @@
-// The built web app (apps/web/dist), served from the API origin so the auth cookies apply to its pages.
+// The built web app (apps/app/dist), served from the API origin so the auth cookies apply to its pages.
 // Only the app's page paths get index.html (the client router takes over); unknown paths stay 404.
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
@@ -9,8 +9,8 @@ import { isReservedOrgSlug } from "@starter/auth/client"
 import type { Env, Hono } from "hono"
 
 /**
- * The pages the single-page app serves. Keep in step with apps/web's routes (static.test.ts derives
- * every path from apps/web's route tree and fails when one is missing here).
+ * The pages the single-page app serves. Keep in step with apps/app's routes (static.test.ts derives
+ * every path from apps/app's route tree and fails when one is missing here).
  */
 export const PAGE_PATHS = [
   "/sign-in",

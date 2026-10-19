@@ -18,7 +18,7 @@ Agents follow the lifecycle in `.claude/skills/feature-flags/SKILL.md`; words ar
 | The operator operations (`list`, `get`, `update`, `target`, `untarget`, `reclaim`, `delete` `_feature_flag`) | `apps/api/src/operations/feature-flags.ts` |
 | Evaluation for a caller: cache, targets, exposures, errors | `apps/api/src/flags.ts` (`FlagService`, `deps.flags`) |
 | OFREP | `apps/api/src/ofrep.ts` |
-| The web app's OpenFeature provider and `useFlag` | `apps/web` (see `docs/web-app.md`) |
+| The web app's OpenFeature provider and `useFlag` | `apps/app` (see `docs/web-app.md`) |
 | `pnpm flags refs [key]`, `pnpm flags stale [--check]` | `scripts/flags.mjs` |
 
 ## Who manages flags

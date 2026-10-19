@@ -6,7 +6,7 @@ where you stop. Keep going until every node's check passes. Do not stop at a pla
 
 ## Goal
 
-Build the real web app in `apps/web` (TanStack Start, SPA mode) so that every board in the D+ design
+Build the real web app in `apps/app` (TanStack Start, SPA mode) so that every board in the D+ design
 canvas is a working page on real data, using the `@starter/ui` components we already restyled. Where
 the boards need a component that doesn't exist yet, add it. Verify every page with the `e2e` tester.
 
@@ -48,7 +48,7 @@ Every page ships light and dark from the same tokens and works at phone width.
   `pages/app-shell.tsx` is story-only scaffolding for AppSidebar, OrgPicker, UserMenu, Topbar and
   SettingsHeader. Treat it as the visual spec for the real components, then delete it once the
   stories use the real ones.
-- `apps/web`: TanStack Start in SPA mode. It already has `/sign-in`, `/sign-up`, `/consent`,
+- `apps/app`: TanStack Start in SPA mode. It already has `/sign-in`, `/sign-up`, `/consent`,
   `/device`, `/select-organization`, `/accept-invitation/:id`, `/reset-password`, `/claim` and
   `/settings/agents`. Their behaviour is tested (`auth-flows.test.ts`, `oauth-flow.test.ts`,
   `onboarding.test.ts`), so keep those flows and URLs working while you restyle and extend them.
@@ -82,7 +82,7 @@ Every page ships light and dark from the same tokens and works at phone width.
    - a Variants story, and the D+/Pages stories switched over to it;
    - a11y tests with `expectNoA11yViolations`;
    - unit tests that meet the coverage thresholds.
-4. **Containers in `apps/web`.** They feed those components real data: the session, the organization
+4. **Containers in `apps/app`.** They feed those components real data: the session, the organization
    list and active org (`organization/set-active`), members, invitations, API keys, sessions, sign-out,
    and the theme (Light/Dark/System, persisted).
 5. **Data.** Use real backends wherever they exist:

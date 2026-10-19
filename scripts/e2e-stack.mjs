@@ -111,10 +111,10 @@ if (adminEmail && adminPassword && process.env.DATABASE_URL) {
 }
 
 start(
-  "web",
+  "app",
   [
     "--filter",
-    "@starter/web",
+    "@starter/app",
     "exec",
     "vite",
     "dev",

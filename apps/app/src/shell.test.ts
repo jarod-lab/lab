@@ -12,7 +12,7 @@ const shellPath = fileURLToPath(new URL("../dist/index.html", import.meta.url))
 
 describe("prerendered shell (dist/index.html)", () => {
   if (!existsSync(shellPath)) {
-    throw new Error("dist/index.html is absent: run `pnpm --filter @starter/web build` first")
+    throw new Error("dist/index.html is absent: run `pnpm --filter @starter/app build` first")
   }
   const html = readFileSync(shellPath, "utf8")
 

@@ -287,9 +287,9 @@ The product's own agents (the org's workers) are the `agent` resource; the conne
 - **CORS** (`apps/api/src/cors.ts`) is on bearer surfaces only: `/mcp`, `/.well-known/*`,
   `/openapi.json`, `/llms*.txt`, `/v1/*`. `origin: *`, no credentials. Never `/api/auth/*` or the
   web pages. `apps/api/src/cors.test.ts` asserts both.
-- **Web pages** (`apps/web`, TanStack Start SPA) are served by `apps/api` from `WEB_DIST_DIR`
+- **Web pages** (`apps/app`, TanStack Start SPA) are served by `apps/api` from `WEB_DIST_DIR`
   (`apps/api/src/static.ts`), on the API origin so the auth cookies apply. Only the listed page
-  paths get `index.html` (`PAGE_PATHS`; keep in step with `apps/web/src/routes`). Pages carry CSP,
+  paths get `index.html` (`PAGE_PATHS`; keep in step with `apps/app/src/routes`). Pages carry CSP,
   `X-Frame-Options: DENY`; assets are hashed and cached forever.
 - **`POST /api/events`** (the web app's analytics) is a hand route, not an operation: agents never
   use it, and the invoke hooks would meter and audit every page view. Session only, trusted origin,

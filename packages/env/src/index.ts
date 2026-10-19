@@ -60,7 +60,7 @@ export const env = createEnv({
         "aws,Cloudflare=https://www.cloudflarestatus.com,Vercel=https://www.vercel-status.com," +
           "Neon=statusio:6878fc85709daa75be6c7e3c,PlanetScale=https://www.planetscalestatus.com",
       ),
-    /** Directory of the built web app (apps/web/dist). When set, apps/api serves its pages and assets. */
+    /** Directory of the built web app (apps/app/dist). When set, apps/api serves its pages and assets. */
     WEB_DIST_DIR: z.string().min(1).optional(),
     /**
      * Origins the web app runs on when it is not apps/api's own origin (`pnpm dev`, or a separate vite
@@ -77,7 +77,7 @@ export const env = createEnv({
       .transform((value) =>
         value === undefined ? [] : value.split(",").map((origin) => new URL(origin.trim()).origin),
       ),
-    /** Dev only: the API that apps/web's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
+    /** Dev only: the API that apps/app's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
     API_URL: z.url().optional(),
     /** e2e only: the model credential the e2e tester (`pnpm e2e`) uses for its agent steps. */
     AI_GATEWAY_API_KEY: z.string().min(1).optional(),

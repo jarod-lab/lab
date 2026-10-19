@@ -259,7 +259,7 @@ function lstatExists(path) {
 function portlessUrl(path) {
   try {
     const config = JSON.parse(readFileSync(join(root, "portless.json"), "utf8"))
-    const name = config.apps?.["apps/web"]?.name
+    const name = config.apps?.["apps/app"]?.name
     if (!name) return null
     return execFileSync(join(root, "node_modules", ".bin", "portless"), ["get", name], {
       cwd: path,

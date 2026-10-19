@@ -16,7 +16,7 @@ import { OrgMark } from "../org-mark"
 import { type LinkProps, type RenderLink, useRenderLink } from "./link"
 import { Shortcut } from "./shortcut"
 
-/** A role as the picker names it. Labels only: the role catalog lives in apps/web, not here. */
+/** A role as the picker names it. Labels only: the role catalog lives in apps/app, not here. */
 export type OrgRole = "Owner" | "Admin" | "Member" | "Viewer" | "Approver" | "Operator" | "Billing"
 
 export type OrgSummary = {

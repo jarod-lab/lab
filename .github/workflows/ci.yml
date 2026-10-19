@@ -63,7 +63,7 @@ jobs:
           pnpm stories
           pnpm biome format --write packages/db/src/auth-schema.ts packages/ui/src/components
           git add --intent-to-add packages/db
-          git diff --exit-code -- apps/web/src/routeTree.gen.ts packages/db packages/sdk/src/schema.gen.ts packages/ui/src/components
+          git diff --exit-code -- apps/app/src/routeTree.gen.ts packages/db packages/sdk/src/schema.gen.ts packages/ui/src/components
           test -z "$(git ls-files --others --exclude-standard -- packages/ui/src/components)"
       - run: pnpm test:coverage
       - run: pnpm format:check

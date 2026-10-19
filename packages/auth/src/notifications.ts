@@ -208,7 +208,7 @@ const orgHref = (org: OrgRef, path = "") => `/${org.slug}${path}`
 
 /**
  * The title, body and link for an event. Titles are short and sentence case; the product word for a
- * workspace agent is "agent". Hrefs are web-app paths (see apps/web/src/routes).
+ * workspace agent is "agent". Hrefs are web-app paths (see apps/app/src/routes).
  */
 export function renderNotification(event: NotificationEvent): RenderedNotification {
   const type = event.type

@@ -29,6 +29,7 @@ import { Route as AccountProfileRouteImport } from './routes/account/profile'
 import { Route as AccountSecurityRouteImport } from './routes/account/security'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as SettingsAgentsRouteImport } from './routes/settings/agents'
+import { Route as SignUpPasskeyRouteImport } from './routes/sign-up_.passkey'
 import { Route as OrgRunsRunIdRouteImport } from './routes/$org/runs/$runId'
 import { Route as OrgSettingsIndexRouteImport } from './routes/$org/settings/index'
 import { Route as OrgSettingsAgentsRouteImport } from './routes/$org/settings/agents'
@@ -139,6 +140,11 @@ const SettingsAgentsRoute = SettingsAgentsRouteImport.update({
   path: '/settings/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignUpPasskeyRoute = SignUpPasskeyRouteImport.update({
+  id: '/sign-up_/passkey',
+  path: '/sign-up/passkey',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrgRunsRunIdRoute = OrgRunsRunIdRouteImport.update({
   id: '/runs/$runId',
   path: '/runs/$runId',
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/sign-up/passkey': typeof SignUpPasskeyRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/sign-up/passkey': typeof SignUpPasskeyRoute
   '/$org': typeof OrgIndexRoute
   '/account': typeof AccountIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/account/security': typeof AccountSecurityRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
+  '/sign-up_/passkey': typeof SignUpPasskeyRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
+    | '/sign-up/passkey'
     | '/$org/'
     | '/account/'
     | '/$org/runs/$runId'
@@ -318,6 +328,7 @@ export interface FileRouteTypes {
     | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
+    | '/sign-up/passkey'
     | '/$org'
     | '/account'
     | '/$org/runs/$runId'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
     | '/account/security'
     | '/invite/$invitationId'
     | '/settings/agents'
+    | '/sign-up_/passkey'
     | '/$org/'
     | '/account/'
     | '/$org/runs/$runId'
@@ -377,6 +389,7 @@ export interface RootRouteChildren {
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   SettingsAgentsRoute: typeof SettingsAgentsRoute
+  SignUpPasskeyRoute: typeof SignUpPasskeyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -521,6 +534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sign-up_/passkey': {
+      id: '/sign-up_/passkey'
+      path: '/sign-up/passkey'
+      fullPath: '/sign-up/passkey'
+      preLoaderRoute: typeof SignUpPasskeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$org/runs/$runId': {
       id: '/$org/runs/$runId'
       path: '/runs/$runId'
@@ -638,6 +658,7 @@ const rootRouteChildren: RootRouteChildren = {
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,
   SettingsAgentsRoute: SettingsAgentsRoute,
+  SignUpPasskeyRoute: SignUpPasskeyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

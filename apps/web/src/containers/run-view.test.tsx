@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -8,7 +8,7 @@ import { WebError } from "../lib/web-auth"
 import type { RunDetail, RunsApi } from "../lib/runs-api"
 import { useRunPolling } from "../lib/use-run-polling"
 import { fakeAuth } from "../test/fake-auth"
-import { renderWithClient } from "../test/render"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { RunViewContainer } from "./run-view"
 
 // The poller is wrapped, not replaced: the tests read the `live` flag the container gives it.
@@ -119,7 +119,7 @@ function fakeApi(overrides: Partial<RunsApi> = {}): RunsApi {
 }
 
 function renderRun(api: RunsApi, { role = "owner" as string } = {}) {
-  renderWithClient(
+  return renderWithReauth(
     <RunViewContainer
       auth={fakeAuth({ memberRole: vi.fn(async () => role) })}
       api={api}
@@ -174,6 +174,22 @@ describe("RunViewContainer", () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole("button", { name: "Approve" }))
     await waitFor(() => expect(api.decide).toHaveBeenCalledWith("org-a", "ap1", "approve"))
+  })
+
+  it("asks the person to confirm it's them when a decision is refused as not fresh, then decides once", async () => {
+    const api = fakeApi({
+      decide: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    const { reauth } = renderRun(api)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Approve" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(api.decide).toHaveBeenCalledTimes(2))
+    expect(api.decide).toHaveBeenNthCalledWith(2, "org-a", "ap1", "approve")
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("alert")).toBeNull()
   })
 
   it("shows a refused undo as the server's answer", async () => {

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 
+import { useReauthGuard } from "../components/reauth-dialog"
 import { messageOf } from "../lib/messages"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { runKeys } from "../lib/run-keys"
@@ -42,6 +43,8 @@ export function RunViewContainer({
 }: RunViewContainerProps) {
   const queryClient = useQueryClient()
   const organizationId = organization.id
+  // Deciding and undoing an approval need a recent sign-in (SESSION_NOT_FRESH otherwise).
+  const guard = useReauthGuard()
   const role = useQuery(memberRoleQuery(auth, organizationId))
   const session = useSessionQuery(auth)
   const roleText = role.data ?? ""
@@ -76,14 +79,14 @@ export function RunViewContainer({
 
   const decide = useMutation({
     mutationFn: (input: { approvalId: string; decision: "approve" | "deny" }) =>
-      api.decide(organizationId, input.approvalId, input.decision),
+      guard(() => api.decide(organizationId, input.approvalId, input.decision)),
     onMutate: () => setActionError(null),
     onError: onActionError,
     onSettled: refresh,
   })
 
   const undo = useMutation({
-    mutationFn: (approvalId: string) => api.undo(organizationId, approvalId),
+    mutationFn: (approvalId: string) => guard(() => api.undo(organizationId, approvalId)),
     onMutate: () => setActionError(null),
     // A refused undo means the window has passed: the decision stands, so show the server's answer.
     onError: onActionError,

@@ -18,8 +18,6 @@ import { AccountSecurityPage } from "../pages/account-security-page"
 
 export interface AccountSecurityContainerProps {
   api: AccountApi
-  /** Where the sessions list sends a person whose sign-in is too old to read it. */
-  signInHref?: string
   renderLink?: RenderLink
 }
 
@@ -30,11 +28,7 @@ const NEEDS_RECENT_SIGN_IN = new Set(["SESSION_NOT_FRESH", "SESSION_EXPIRED"])
  * Data and mutations for the security page. Each list is its own query so one failing (for example
  * the sessions list, which needs a recent sign-in) leaves the rest of the page working.
  */
-export function AccountSecurityContainer({
-  api,
-  signInHref = "/sign-in?next=/account/security",
-  renderLink,
-}: AccountSecurityContainerProps) {
+export function AccountSecurityContainer({ api, renderLink }: AccountSecurityContainerProps) {
   const queryClient = useQueryClient()
   const confirm = useReauth()
   // A refused change (SESSION_NOT_FRESH) asks the person to confirm it's them, then runs once more.
@@ -117,7 +111,6 @@ export function AccountSecurityContainer({
       name={profile.data?.name ?? ""}
       email={profile.data?.email ?? ""}
       renderLink={renderLink}
-      signInHref={signInHref}
       summary={{
         hasPassword,
         passwordChangedAt: summary.data.passwordChangedAt,
@@ -163,6 +156,10 @@ export function AccountSecurityContainer({
       onDisconnect={async (accountId) => {
         await guard(() => api.unlinkAccount(accountId))
         refresh(accountKeys.accounts())
+      }}
+      // A confirmed re-sign-in invalidates the account lists (ReauthProvider), so the sessions reload.
+      onSignInAgain={async () => {
+        await confirm()
       }}
       onRevokeSession={async (token) => {
         await guard(() => api.revokeSession(token))

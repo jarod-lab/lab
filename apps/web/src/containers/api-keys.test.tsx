@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { ApiKeysApi } from "../lib/api-keys-api"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { fakeAuth } from "../test/fake-auth"
-import { renderWithClient } from "../test/render"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { ApiKeysContainer } from "./api-keys"
 
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
@@ -71,7 +71,8 @@ function fakeKeysApi(overrides: Partial<ApiKeysApi> = {}): ApiKeysApi {
 function setup(options: { role?: string; api?: ApiKeysApi } = {}) {
   const auth = fakeAuth({ memberRole: vi.fn(async () => options.role ?? "owner") })
   const api = options.api ?? fakeKeysApi()
-  const rendered = renderWithClient(
+  // Under a ReauthProvider, so a refused create or revoke can ask for a re-sign-in.
+  const rendered = renderWithReauth(
     <ApiKeysContainer auth={auth} api={api} settings={settings} organization={acme} />,
   )
   return { api, ...rendered }
@@ -174,5 +175,46 @@ describe("ApiKeysContainer", () => {
     })
     expect(await screen.findByRole("alert")).toBeTruthy()
     expect(screen.getByRole("alert").textContent).toContain("Server is busy")
+  })
+
+  it("asks the person to confirm it's them when a key is refused as not fresh, then creates it once", async () => {
+    const user = userEvent.setup()
+    const api = fakeKeysApi()
+    api.createKey = vi
+      .fn()
+      .mockRejectedValueOnce(notFresh())
+      .mockResolvedValueOnce({ id: "key_2", name: "Support bot", key: "sk_test_once" })
+    const { reauth } = setup({ api })
+    await screen.findByText("CI deploy")
+    await user.click(screen.getByRole("button", { name: "Create API key" }))
+    const form = await screen.findByRole("dialog")
+    await user.type(within(form).getByRole("textbox", { name: "Name" }), "Support bot")
+    await user.click(within(form).getByRole("button", { name: "Create key" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(api.createKey).toHaveBeenCalledTimes(2))
+    expect(api.createKey).toHaveBeenNthCalledWith(2, "org-a", {
+      name: "Support bot",
+      permissions: { project: ["read"] },
+      expiresInDays: undefined,
+    })
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+  })
+
+  it("asks the person to confirm it's them when a revoke is refused as not fresh, then revokes once", async () => {
+    const user = userEvent.setup()
+    const api = fakeKeysApi()
+    api.revokeKey = vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined)
+    setup({ api })
+    await screen.findByText("CI deploy")
+    await user.click(screen.getByRole("button", { name: "Revoke CI deploy" }))
+    const alert = await screen.findByRole("alertdialog")
+    await user.click(within(alert).getByRole("button", { name: "Revoke key" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(api.revokeKey).toHaveBeenCalledTimes(2))
+    expect(api.revokeKey).toHaveBeenLastCalledWith("org-a", "key_1")
   })
 })

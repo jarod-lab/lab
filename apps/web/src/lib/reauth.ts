@@ -69,6 +69,8 @@ export interface ReauthAuth {
   signOut(): Promise<void>
   /** Makes an organization the session's active one again (the sign-in picks the first). */
   setActiveOrganization(organizationId: string): Promise<void>
+  /** Revokes one of the person's sessions by its token (the one a re-sign-in replaced). */
+  revokeSession(token: string): Promise<void>
 }
 
 /**
@@ -84,6 +86,21 @@ export function checkReauthed(
   if (before && after.userId !== before.userId) return "other-account"
   if (before && after.token === before.token) return "not-replaced"
   return "ok"
+}
+
+/**
+ * Signs out the session that a confirmed re-sign-in replaced. Best effort: the new session is in
+ * place already, so a failure here only leaves the old row listed, and must not stop the retry.
+ */
+export async function retireReplacedSession(
+  auth: ReauthAuth,
+  replaced: ReauthSession,
+): Promise<void> {
+  try {
+    await auth.revokeSession(replaced.token)
+  } catch {
+    // The old row stays listed; the person can revoke it from the sessions list.
+  }
 }
 
 /** Where "Sign out and sign in again" sends the person: back to `returnTo` after signing in. */
@@ -148,6 +165,9 @@ export function createReauthAuth(baseURL?: string, fetchImpl?: typeof fetch): Re
     },
     async signOut() {
       unwrap(await client.signOut(), "Could not sign out")
+    },
+    async revokeSession(token) {
+      unwrap(await client.revokeSession({ token }), "Could not sign out that session")
     },
     async setActiveOrganization(organizationId) {
       // $fetch, not client.organization: this client has no organization plugin, only the session calls.

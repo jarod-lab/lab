@@ -40,11 +40,18 @@ export interface OrgSettingsApi {
   roleAllows(role: string, permissions: Record<string, string[]>): boolean
 }
 
-type Result<T> = { data: T | null; error: { message?: string; status?: number } | null }
+type Result<T> = {
+  data: T | null
+  error: { message?: string; status?: number; code?: string } | null
+}
 
 function unwrap<T>(result: Result<T>, fallback: string): T {
   if (result.error) {
-    throw new WebError(result.error.message || fallback, result.error.status ?? 0)
+    throw new WebError(
+      result.error.message || fallback,
+      result.error.status ?? 0,
+      result.error.code,
+    )
   }
   return result.data as T
 }

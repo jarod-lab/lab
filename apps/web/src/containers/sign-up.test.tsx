@@ -51,7 +51,11 @@ describe("SignUpContainer passkey sign-up", () => {
     expect(await screen.findByText(/We sent a link to ada@example.com/)).toBeTruthy()
     expect($fetch).toHaveBeenCalledWith("/passkey-signup/start", {
       method: "POST",
-      body: { name: "Ada", email: "ada@example.com" },
+      body: {
+        name: "Ada",
+        email: "ada@example.com",
+        callbackURL: "/sign-up/passkey?next=%2Fconsent",
+      },
     })
     expect(addPasskey).not.toHaveBeenCalled()
     expect(auth.signUp).not.toHaveBeenCalled()

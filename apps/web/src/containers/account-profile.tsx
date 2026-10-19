@@ -6,6 +6,7 @@ import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import type { AccountApi } from "../lib/account-api"
 import { isOwnerRole, personalSlugOf } from "../lib/account-format"
 import { accountKeys } from "../lib/account-keys"
+import { useReauthGuard } from "../components/reauth-dialog"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
 import type { WebAuth } from "../lib/web-auth"
@@ -36,6 +37,8 @@ export function AccountProfileContainer({
   renderLink,
 }: AccountProfileContainerProps) {
   const queryClient = useQueryClient()
+  // Changing the email and deleting the account need a recent sign-in (SESSION_NOT_FRESH otherwise).
+  const guard = useReauthGuard()
   const profile = useQuery({
     queryKey: accountKeys.profile(),
     queryFn: () => api.getProfile(),
@@ -90,12 +93,12 @@ export function AccountProfileContainer({
         refreshAccount()
       }}
       onChangeEmail={async (newEmail) => {
-        await api.changeEmail(newEmail, "/account/profile")
+        await guard(() => api.changeEmail(newEmail, "/account/profile"))
         setPendingEmail(newEmail)
       }}
       onResendChange={async () => {
         if (!pendingEmail) return
-        await api.changeEmail(pendingEmail, "/account/profile")
+        await guard(() => api.changeEmail(pendingEmail, "/account/profile"))
       }}
       onCancelChange={() => setPendingEmail(null)}
       onLeave={async (organizationId) => {
@@ -106,7 +109,7 @@ export function AccountProfileContainer({
         void invalidateSession(queryClient)
       }}
       onRequestDelete={async () => {
-        await api.requestAccountDeletion("/account/profile")
+        await guard(() => api.requestAccountDeletion("/account/profile"))
         setDeleteRequestedTo(me.email)
       }}
     />

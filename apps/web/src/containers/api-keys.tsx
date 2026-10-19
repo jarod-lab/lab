@@ -3,6 +3,7 @@ import { useCallback, useState } from "react"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
+import { useReauthGuard } from "../components/reauth-dialog"
 import { permissionOptions } from "../lib/api-keys"
 import type { ApiKeysApi, CreateApiKeyInput } from "../lib/api-keys-api"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
@@ -41,6 +42,8 @@ export function ApiKeysContainer({
 }: ApiKeysContainerProps) {
   const queryClient = useQueryClient()
   const organizationId = organization.id
+  // Creating and revoking keys need a recent sign-in (SESSION_NOT_FRESH otherwise).
+  const guard = useReauthGuard()
   const role = useQuery(memberRoleQuery(auth, organizationId))
   const roleText = role.data ?? ""
   const canList = role.isSuccess && settings.roleAllows(roleText, LIST)
@@ -65,19 +68,19 @@ export function ApiKeysContainer({
 
   const onCreate = useCallback(
     async (input: CreateApiKeyInput) => {
-      const created = await api.createKey(organizationId, input)
+      const created = await guard(() => api.createKey(organizationId, input))
       setSecret({ name: input.name, key: created.key })
       refreshKeys()
     },
-    [api, organizationId, refreshKeys],
+    [api, guard, organizationId, refreshKeys],
   )
 
   const onRevoke = useCallback(
     async (key: { id: string }) => {
-      await api.revokeKey(organizationId, key.id)
+      await guard(() => api.revokeKey(organizationId, key.id))
       refreshKeys()
     },
-    [api, organizationId, refreshKeys],
+    [api, guard, organizationId, refreshKeys],
   )
 
   if (role.isError) {

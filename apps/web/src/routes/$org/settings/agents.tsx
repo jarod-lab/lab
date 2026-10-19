@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { useMemo } from "react"
 
+import { useReauthGuard } from "../../../components/reauth-dialog"
 import { RouterLink } from "../../../containers/router-link"
 import { useOrganizationsQuery } from "../../../containers/shell-data"
 import { WorkspaceAgentsContainer } from "../../../containers/workspace-agents"
@@ -28,6 +29,8 @@ function OrgAgentsRoute() {
   const auth = getWebAuth()
   const organizations = useOrganizationsQuery(auth)
   const organization = organizations.data?.find((org) => org.slug === slug)
+  // Revoking a connected agent needs a recent sign-in (the connected-agents view takes the guard).
+  const guard = useReauthGuard()
   // The connected-agents view's API is created once per organization, like the page's effects need.
   const connectedApi = useMemo(
     () => (organization ? createOrganizationAgentsApi(organization.id) : null),
@@ -48,7 +51,7 @@ function OrgAgentsRoute() {
           replace: true,
         })
       }
-      connected={(pills) => <AgentsPage api={connectedApi} pills={pills} />}
+      connected={(pills) => <AgentsPage api={connectedApi} pills={pills} guard={guard} />}
       renderLink={RouterLink}
     />
   )

@@ -23,7 +23,9 @@ import {
   type ReauthSession,
   checkReauthed,
   getReauthAuth,
+  retireReplacedSession,
   signInAgainPath,
+  withReauth,
 } from "../lib/reauth"
 import { FormError, useAppForm } from "./form"
 
@@ -125,6 +127,8 @@ export function ReauthBody({
       // or the product calls would be refused for acting in another organization.
       const was = before?.activeOrganizationId
       if (was && after.activeOrganizationId !== was) await auth.setActiveOrganization(was)
+      // The old session is still a valid row: retire it, so the list doesn't keep a duplicate.
+      if (before) await retireReplacedSession(auth, before)
       onConfirmed()
     } catch (caught) {
       setError(messageOf(caught))
@@ -342,6 +346,15 @@ const ReauthContext = createContext<ReauthConfirm>(() => Promise.resolve(false))
  */
 export function useReauth(): ReauthConfirm {
   return useContext(ReauthContext)
+}
+
+/**
+ * `withReauth` bound to the provider's confirm: `guard(() => call)` runs the call, and if it is
+ * refused as not fresh, asks the person to confirm it's them and runs it once more.
+ */
+export function useReauthGuard(): <T>(action: () => Promise<T>) => Promise<T> {
+  const confirm = useReauth()
+  return useCallback(<T,>(action: () => Promise<T>) => withReauth(action, confirm), [confirm])
 }
 
 export interface ReauthProviderProps {

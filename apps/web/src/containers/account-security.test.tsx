@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ReauthProvider } from "../components/reauth-dialog"
 import { AccountError, type AccountApi, SessionNotFreshError } from "../lib/account-api"
 import { renderWithClient } from "../test/render"
+import { renderWithReauth } from "../test/reauth"
 import { PASSWORD_ONLY_METHODS } from "../lib/web-auth"
 import type { ReauthAuth } from "../lib/reauth"
 import { AccountSecurityContainer } from "./account-security"
@@ -89,14 +90,14 @@ describe("AccountSecurityContainer", () => {
     expect(screen.getByText("This device")).toBeTruthy()
   })
 
-  it("tells the person to sign in again when the sessions list is refused as not fresh, and keeps the rest", async () => {
+  it("offers a sign-in button when the sessions list is refused as not fresh, and keeps the rest", async () => {
     const api = fakeAccountApi({
       listSessions: vi.fn(async () => {
         throw new AccountError("Session is not fresh", 403, "SESSION_NOT_FRESH")
       }),
     })
     renderWithClient(<AccountSecurityContainer api={api} />)
-    expect(await screen.findByRole("link", { name: "Sign in again" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Sign in again" })).toBeTruthy()
     expect(screen.getByText("1 passkey")).toBeTruthy()
   })
 
@@ -138,6 +139,7 @@ describe("AccountSecurityContainer", () => {
       verifyBackupCode: vi.fn(async () => undefined),
       signOut: vi.fn(async () => undefined),
       setActiveOrganization: vi.fn(async () => undefined),
+      revokeSession: vi.fn(async () => undefined),
     }
     renderWithClient(
       <ReauthProvider auth={auth} api={api} reload={vi.fn()}>
@@ -151,5 +153,25 @@ describe("AccountSecurityContainer", () => {
     await waitFor(() => expect(revokeSession).toHaveBeenCalledTimes(2))
     expect(revokeSession.mock.calls).toEqual([["t-2"], ["t-2"]])
     expect(auth.signInWithPassword).toHaveBeenCalledWith("ada@example.com", "correct horse")
+  })
+
+  it("offers a sign-in button where the sessions list needs a recent sign-in, and reloads the list once it is confirmed", async () => {
+    const user = userEvent.setup()
+    const listSessions = fakeAccountApi().listSessions
+    const api = fakeAccountApi({
+      listSessions: vi
+        .fn()
+        .mockRejectedValueOnce(new SessionNotFreshError(403))
+        .mockImplementation(listSessions),
+    })
+    const { reauth } = renderWithReauth(<AccountSecurityContainer api={api} />)
+    await user.click(await screen.findByRole("button", { name: "Sign in again" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(api.listSessions).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole("button", { name: "Sign out Safari on iPhone" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull()
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
   })
 })

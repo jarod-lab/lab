@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-import { sendPasskeySignUpLink } from "../lib/passkey-signup"
+import { passkeyLandingPath, sendPasskeySignUpLink } from "../lib/passkey-signup"
 import { type AuthClient, makeAuthClient, type WebAuth } from "../lib/web-auth"
 import { SignUpPage } from "../pages/auth-pages"
 
@@ -25,7 +25,12 @@ export function SignUpContainer({
       auth={auth}
       next={next}
       signInHref={signInHref}
-      onPasskeySignUp={(values) => sendPasskeySignUpLink(authClient, values)}
+      onPasskeySignUp={(values) =>
+        sendPasskeySignUpLink(authClient, {
+          ...values,
+          callbackURL: passkeyLandingPath(next),
+        })
+      }
     />
   )
 }

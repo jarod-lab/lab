@@ -33,10 +33,19 @@ export interface MembersApi {
   removeMember(organizationId: string, memberIdOrEmail: string): Promise<void>
 }
 
-type Result<T> = { data: T | null; error: { message?: string; status?: number } | null }
+type Result<T> = {
+  data: T | null
+  error: { message?: string; status?: number; code?: string } | null
+}
 
 function unwrap<T>(result: Result<T>, fallback: string): T {
-  if (result.error) throw new WebError(result.error.message || fallback, result.error.status ?? 0)
+  if (result.error) {
+    throw new WebError(
+      result.error.message || fallback,
+      result.error.status ?? 0,
+      result.error.code,
+    )
+  }
   return result.data as T
 }
 

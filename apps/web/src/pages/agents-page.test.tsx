@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import type { AgentsApi, AuditEvent, ConnectedAgent } from "../lib/agents-api"
-import { AgentsPage } from "./agents-page"
+import { SESSION_NOT_FRESH_CODE, withReauth } from "../lib/reauth"
+import { WebError } from "../lib/web-auth"
+import { type CallGuard, AgentsPage } from "./agents-page"
 
 const agent: ConnectedAgent = {
   id: "agent-1",
@@ -66,6 +68,29 @@ describe("AgentsPage", () => {
 
     await waitFor(() => expect(api.revokeAgent).toHaveBeenCalledWith("agent-1"))
     await waitFor(() => expect(screen.getByText("No agents are connected.")).toBeTruthy())
+  })
+
+  it("runs the revoke through the guard, and retries it once after a re-sign-in", async () => {
+    const api = fakeApi({
+      revokeAgent: vi
+        .fn()
+        .mockRejectedValueOnce(new WebError("Sign in again", 403, SESSION_NOT_FRESH_CODE))
+        .mockResolvedValueOnce(undefined),
+    })
+    // The guard the route passes: the real withReauth, with a person who confirms.
+    const guarded: string[] = []
+    const guard: CallGuard = (action) => {
+      guarded.push("revoke")
+      return withReauth(action, async () => true)
+    }
+    render(<AgentsPage api={api} guard={guard} />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "Revoke access" }))
+    const dialog = await screen.findByRole("alertdialog")
+    await user.click(within(dialog).getByRole("button", { name: "Revoke access" }))
+    await waitFor(() => expect(screen.getByText("No agents are connected.")).toBeTruthy())
+    expect(guarded).toEqual(["revoke"])
+    expect(api.revokeAgent).toHaveBeenCalledTimes(2)
   })
 
   it("revokes once when the confirm is clicked twice", async () => {

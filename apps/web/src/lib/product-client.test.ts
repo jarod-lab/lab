@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest"
 
+import { isSessionNotFresh } from "./reauth"
 import { payload, productClient, toWebError } from "./product-client"
 import { WebError } from "./web-auth"
 
@@ -96,6 +97,22 @@ describe("body and toWebError", () => {
     ).catch((caught: unknown) => caught)
     expect((error as WebError).status).toBe(0)
     expect((error as WebError).message).toMatch(/^Could not reach .+ Check the base URL/)
+  })
+
+  it("carries the server's code, so a refused call reads as not fresh", async () => {
+    const fetchImpl = fetchStub(() =>
+      json(
+        { error: { code: "SESSION_NOT_FRESH", message: "Session is not fresh" } },
+        { status: 403 },
+      ),
+    )
+    const error = await payload(
+      productClient("org-a", fetchImpl as unknown as typeof fetch).DELETE("/v1/agents/{id}", {
+        params: { path: { id: "key_1" } },
+      }),
+    ).catch((caught: unknown) => caught)
+    expect((error as WebError).code).toBe("SESSION_NOT_FRESH")
+    expect(isSessionNotFresh(error)).toBe(true)
   })
 
   it("passes other errors through unchanged", () => {

@@ -4,6 +4,7 @@ import { useState } from "react"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
+import { useReauthGuard } from "../components/reauth-dialog"
 import type { AdminApi } from "../lib/admin-api"
 import { adminKeys } from "../lib/admin-keys"
 import { messageOf } from "../lib/messages"
@@ -24,6 +25,8 @@ export interface AdminContainerProps {
  */
 export function AdminContainer({ api, onNavigate, renderLink }: AdminContainerProps) {
   const queryClient = useQueryClient()
+  // Impersonating and changing a role need a recent sign-in; the other actions are guarded alike.
+  const guard = useReauthGuard()
   const session = useQuery(adminSessionQuery(api))
   const [search, setSearch] = useState("")
   const [offset, setOffset] = useState(0)
@@ -39,7 +42,7 @@ export function AdminContainer({ api, onNavigate, renderLink }: AdminContainerPr
   })
 
   const act = useMutation({
-    mutationFn: (action: AdminAction) => runAdminAction(api, action),
+    mutationFn: (action: AdminAction) => guard(() => runAdminAction(api, action)),
     onSuccess: (_result, action) => {
       // Impersonating changes who the session is: nothing cached can be kept. Stopping does the same
       // in the banner. Everything else only changes the list.

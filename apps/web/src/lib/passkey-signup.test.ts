@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { addSignUpPasskey, sendPasskeySignUpLink } from "./passkey-signup"
+import { addSignUpPasskey, passkeyLandingPath, sendPasskeySignUpLink } from "./passkey-signup"
 import { type AuthClient, WebError } from "./web-auth"
 
 function fakeClient(start: unknown = { data: { sent: true }, error: null }, added?: unknown) {
@@ -14,6 +14,23 @@ function fakeClient(start: unknown = { data: { sent: true }, error: null }, adde
 }
 
 describe("sendPasskeySignUpLink", () => {
+  it("sends the landing page as the callback, so the link ends on the passkey step", async () => {
+    const { client, $fetch } = fakeClient()
+    await sendPasskeySignUpLink(client, {
+      name: "Ada",
+      email: "ada@example.com",
+      callbackURL: passkeyLandingPath("/consent"),
+    })
+    expect($fetch).toHaveBeenCalledWith("/passkey-signup/start", {
+      method: "POST",
+      body: {
+        name: "Ada",
+        email: "ada@example.com",
+        callbackURL: "/sign-up/passkey?next=%2Fconsent",
+      },
+    })
+  })
+
   it("asks the server to email the link, and passes no session or credential", async () => {
     const { client, $fetch, addPasskey } = fakeClient()
     await sendPasskeySignUpLink(client, { name: "Ada", email: "ada@example.com" })

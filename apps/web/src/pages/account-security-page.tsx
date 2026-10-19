@@ -30,7 +30,8 @@ export interface AccountSecurityPageProps {
   connected: ConnectedRow[]
   sessions: SessionRow[]
   sessionsNeedSignIn: boolean
-  signInHref: string
+  /** Confirms it's the person (a re-sign-in), then reloads the sessions list. */
+  onSignInAgain: () => Promise<void>
   onAddPasskey: (name: string) => Promise<void>
   onRenamePasskey: (id: string, name: string) => Promise<void>
   onRemovePasskey: (id: string) => Promise<void>
@@ -56,7 +57,6 @@ export function AccountSecurityPage({
   connected,
   sessions,
   sessionsNeedSignIn,
-  signInHref,
   renderLink = anchorLink,
   ...actions
 }: AccountSecurityPageProps) {
@@ -109,10 +109,9 @@ export function AccountSecurityPage({
         <SessionsSection
           sessions={sessions}
           needsSignIn={sessionsNeedSignIn}
-          signInHref={signInHref}
+          onSignInAgain={actions.onSignInAgain}
           onRevoke={actions.onRevokeSession}
           onRevokeOthers={actions.onRevokeOtherSessions}
-          renderLink={renderLink}
         />
       </div>
     </div>

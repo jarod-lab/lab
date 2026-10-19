@@ -7,6 +7,7 @@ import type { AccountApi } from "../lib/account-api"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { fakeAuth } from "../test/fake-auth"
 import { renderWithClient } from "../test/render"
+import { fakeReauthAuth, notFresh, renderWithReauth } from "../test/reauth"
 import { AccountProfileContainer } from "./account-profile"
 
 function fakeAccountApi(overrides: Partial<AccountApi> = {}): AccountApi {
@@ -106,5 +107,45 @@ describe("AccountProfileContainer", () => {
       await within(confirm).findByText("You own Acme. Transfer or delete it first."),
     ).toBeTruthy()
     expect(api.requestAccountDeletion).toHaveBeenCalledWith("/account/profile")
+  })
+
+  it("asks the person to confirm it's them when a change is refused as not fresh, then retries it once", async () => {
+    const user = userEvent.setup()
+    const api = fakeAccountApi({
+      changeEmail: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    const auth = fakeReauthAuth()
+    const webAuth = fakeAuth({ memberRole: vi.fn(async () => "member") })
+    renderWithReauth(<AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} />, auth)
+    await user.click(await screen.findByRole("button", { name: "Change email" }))
+    const form = await screen.findByRole("dialog")
+    await user.type(within(form).getByLabelText("New email"), "ada@northwind.io")
+    await user.click(within(form).getByRole("button", { name: "Send confirmation link" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(api.changeEmail).toHaveBeenCalledTimes(2))
+    expect(api.changeEmail).toHaveBeenNthCalledWith(2, "ada@northwind.io", "/account/profile")
+    expect(auth.signInWithPassword).toHaveBeenCalledWith("ada@example.com", "pw")
+  })
+
+  it("does not retry a refused deletion when the person cancels the confirm", async () => {
+    const user = userEvent.setup()
+    const api = fakeAccountApi({
+      requestAccountDeletion: vi.fn().mockRejectedValue(notFresh()),
+    })
+    const auth = fakeReauthAuth()
+    const webAuth = fakeAuth({ memberRole: vi.fn(async () => "member") })
+    renderWithReauth(<AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} />, auth)
+    await user.click(await screen.findByRole("button", { name: "Delete my account" }))
+    const confirm = await screen.findByRole("alertdialog")
+    await user.click(within(confirm).getByRole("button", { name: "Email me the link" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Confirm it's you" })).toBeNull(),
+    )
+    expect(api.requestAccountDeletion).toHaveBeenCalledTimes(1)
+    expect(auth.signInWithPassword).not.toHaveBeenCalled()
   })
 })

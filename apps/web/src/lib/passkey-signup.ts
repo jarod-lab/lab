@@ -1,8 +1,18 @@
 import { type AuthClient, WebError } from "./web-auth"
 
+/** The page the emailed link lands on: it adds the passkey (routes/sign-up_.passkey.tsx). */
+export const PASSKEY_LANDING_PATH = "/sign-up/passkey"
+
+/** The landing page's address for a sign-up that goes on to `next` once the passkey step is over. */
+export function passkeyLandingPath(next: string): string {
+  return `${PASSKEY_LANDING_PATH}?next=${encodeURIComponent(next)}`
+}
+
 export interface PasskeySignUpInput {
   name: string
   email: string
+  /** Where the link goes after it signs the person in (a path on this site). */
+  callbackURL?: string
 }
 
 /**
@@ -16,7 +26,11 @@ export async function sendPasskeySignUpLink(
 ): Promise<void> {
   const started = await client.$fetch("/passkey-signup/start", {
     method: "POST",
-    body: { name: input.name, email: input.email },
+    body: {
+      name: input.name,
+      email: input.email,
+      ...(input.callbackURL ? { callbackURL: input.callbackURL } : {}),
+    },
   })
   if (started.error) throw failure(started.error, "Could not send the sign-up link")
 }

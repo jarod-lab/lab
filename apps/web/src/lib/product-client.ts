@@ -58,7 +58,7 @@ export function toWebError(caught: unknown): unknown {
   if (!(caught instanceof StarterError)) return caught
   const message = caught.code.startsWith("HTTP_") ? undefined : caught.message
   const text = [message, caught.hint].filter(Boolean).join(" ")
-  return new WebError(text || "Something went wrong", caught.status)
+  return new WebError(text || "Something went wrong", caught.status, caught.code)
 }
 
 /**

@@ -1,7 +1,6 @@
 import { useId, useRef, useState } from "react"
 
 import { Button } from "@starter/ui/components/ui/button"
-import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
 import { accountErrorMessage } from "../../lib/account-api"
 import { ConfirmDialog } from "../../components/confirm-dialog"
@@ -26,28 +25,41 @@ export interface SessionsSectionProps {
   sessions: SessionRow[]
   /** The list needs a recent sign-in before it can be read. */
   needsSignIn: boolean
-  signInHref: string
+  /** Asks the person to confirm it's them, then reloads the list. Resolves when that is done. */
+  onSignInAgain: () => Promise<void>
   onRevoke: (token: string) => Promise<void>
   onRevokeOthers: () => Promise<void>
-  renderLink: RenderLink
 }
 
 export function SessionsSection({
   sessions,
   needsSignIn,
-  signInHref,
+  onSignInAgain,
   onRevoke,
   onRevokeOthers,
-  renderLink,
 }: SessionsSectionProps) {
   const headingId = useId()
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
   // The session being signed out: its button waits, so a second click doesn't send a second revoke.
   const [revoking, setRevoking] = useState<string | null>(null)
   const revokingRef = useRef<string | null>(null)
   const others = sessions.filter((session) => !session.current)
+
+  async function signInAgain() {
+    setSigningIn(true)
+    setError(null)
+    try {
+      await onSignInAgain()
+    } catch (caught) {
+      setError(accountErrorMessage(caught))
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   const revoke = async (token: string) => {
     if (revokingRef.current !== null) return
     revokingRef.current = token
@@ -89,14 +101,14 @@ export function SessionsSection({
       </div>
       <FormError message={error} />
       {needsSignIn ? (
-        <p className="border-t border-border py-2.5 text-sm">
-          Sign in again to see your sessions. Listing them needs a recent sign-in.{" "}
-          {renderLink({
-            href: signInHref,
-            className: "underline underline-offset-4",
-            children: "Sign in again",
-          })}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 border-t border-border py-2.5 text-sm">
+          <p className="flex-1">
+            Sign in again to see your sessions. Listing them needs a recent sign-in.
+          </p>
+          <Button variant="outline" disabled={signingIn} onClick={() => void signInAgain()}>
+            Sign in again
+          </Button>
+        </div>
       ) : null}
       {sessions.map((session) => (
         <div key={session.token} className={ROW}>

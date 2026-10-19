@@ -43,6 +43,7 @@ function fakeReauth(overrides: Partial<ReauthAuth> = {}): ReauthAuth {
     setActiveOrganization: vi.fn(async (organizationId: string) => {
       activeOrganizationId = organizationId
     }),
+    revokeSession: vi.fn(async () => undefined),
     ...overrides,
   }
 }
@@ -132,6 +133,39 @@ describe("ReauthDialog", () => {
     await user.click(screen.getByRole("button", { name: "Confirm" }))
     await waitFor(() => expect(handlers.onConfirmed).toHaveBeenCalledTimes(1))
     expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-b")
+  })
+
+  it("revokes the session the re-sign-in replaced, so no duplicate row stays valid", async () => {
+    const user = userEvent.setup()
+    const auth = fakeReauth()
+    const { handlers } = renderDialog({ auth })
+    await user.type(screen.getByLabelText("Password"), "pw")
+    await user.click(screen.getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(handlers.onConfirmed).toHaveBeenCalledTimes(1))
+    expect(auth.revokeSession).toHaveBeenCalledWith("t-old")
+  })
+
+  it("still confirms when revoking the replaced session fails", async () => {
+    const user = userEvent.setup()
+    const auth = fakeReauth({
+      revokeSession: vi.fn(async () => {
+        throw new WebError("Could not sign out that session", 500)
+      }),
+    })
+    const { handlers } = renderDialog({ auth })
+    await user.type(screen.getByLabelText("Password"), "pw")
+    await user.click(screen.getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(handlers.onConfirmed).toHaveBeenCalledTimes(1))
+  })
+
+  it("does not revoke anything when the sign-in leaves the old session in place", async () => {
+    const user = userEvent.setup()
+    const auth = fakeReauth({ signInWithPassword: vi.fn(async () => "done" as const) })
+    renderDialog({ auth })
+    await user.type(screen.getByLabelText("Password"), "pw")
+    await user.click(screen.getByRole("button", { name: "Confirm" }))
+    await screen.findByRole("alert")
+    expect(auth.revokeSession).not.toHaveBeenCalled()
   })
 
   it("does not confirm when the sign-in leaves the old session in place", async () => {

@@ -3,6 +3,7 @@ import { useMemo } from "react"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
+import { useReauthGuard } from "../components/reauth-dialog"
 import { messageOf } from "../lib/messages"
 
 import {
@@ -56,6 +57,8 @@ export function MembersContainer({
   now,
 }: MembersContainerProps) {
   const queryClient = useQueryClient()
+  // Changing a role, removing a member and resetting two-factor need a recent sign-in.
+  const guard = useReauthGuard()
   const organizationId = organization.id
   const session = useSessionQuery(auth)
   const role = useQuery(memberRoleQuery(auth, organizationId))
@@ -118,7 +121,7 @@ export function MembersContainer({
 
   const changeRole = useMutation({
     mutationFn: async (input: { member: MemberView; role: InviteRole }) => {
-      await api.updateMemberRole(organizationId, input.member.id, input.role)
+      await guard(() => api.updateMemberRole(organizationId, input.member.id, input.role))
     },
     onSuccess: (_data, input) => {
       refreshMembers()
@@ -131,12 +134,14 @@ export function MembersContainer({
   })
 
   const remove = useMutation({
-    mutationFn: (member: MemberView) => membersApi.removeMember(organizationId, member.id),
+    mutationFn: (member: MemberView) =>
+      guard(() => membersApi.removeMember(organizationId, member.id)),
     onSuccess: () => refreshMembers(),
   })
 
   const resetTwoFactor = useMutation({
-    mutationFn: (member: MemberView) => membersApi.resetTwoFactor(organizationId, member.userId),
+    mutationFn: (member: MemberView) =>
+      guard(() => membersApi.resetTwoFactor(organizationId, member.userId)),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: qk.org(organizationId).membersSecurity(),

@@ -2,6 +2,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router"
 import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
 
+import { ReauthProvider } from "../components/reauth-dialog"
 import { ImpersonationBanner } from "../containers/impersonation-banner"
 import { getAdminApi } from "../lib/admin-api"
 import { useThemeSync } from "../lib/theme"
@@ -38,14 +39,17 @@ function RootOutlet() {
   const { queryClient } = Route.useRouteContext()
   return (
     <QueryClientProvider client={queryClient}>
-      {/* While an admin acts as someone else, every page shows the strip with Stop. */}
-      <ImpersonationBanner api={getAdminApi()} />
-      <Outlet />
-      {DevtoolsPanel ? (
-        <Suspense fallback={null}>
-          <DevtoolsPanel />
-        </Suspense>
-      ) : null}
+      {/* One "Confirm it's you" dialog for every page's refused sensitive action (lib/reauth.ts). */}
+      <ReauthProvider>
+        {/* While an admin acts as someone else, every page shows the strip with Stop. */}
+        <ImpersonationBanner api={getAdminApi()} />
+        <Outlet />
+        {DevtoolsPanel ? (
+          <Suspense fallback={null}>
+            <DevtoolsPanel />
+          </Suspense>
+        ) : null}
+      </ReauthProvider>
     </QueryClientProvider>
   )
 }

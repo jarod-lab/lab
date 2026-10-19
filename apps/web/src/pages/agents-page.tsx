@@ -22,8 +22,25 @@ const AGENT_TYPE_LABEL: Record<ConnectedAgent["type"], string> = {
 
 const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : "Never")
 
+/**
+ * Runs a call that may need a recent sign-in first (the route passes `useReauthGuard()`). Without one,
+ * the call runs as it is.
+ */
+export type CallGuard = <T>(action: () => Promise<T>) => Promise<T>
+
+const unguarded: CallGuard = (action) => action()
+
 /** The agents connected to the active organization, with revoke, and the audit trail. */
-export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }) {
+export function AgentsPage({
+  api,
+  pills,
+  guard = unguarded,
+}: {
+  api: AgentsApi
+  pills?: ReactNode
+  /** Wraps the revoke, which needs a recent sign-in (revoke_agent_access). */
+  guard?: CallGuard
+}) {
   const [agents, setAgents] = useState<ConnectedAgent[] | null>(null)
   const [events, setEvents] = useState<AuditEvent[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -57,7 +74,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
     setBusy(true)
     setError(null)
     try {
-      await api.revokeAgent(agent.id)
+      await guard(() => api.revokeAgent(agent.id))
       setAgents((current) => (current ?? []).filter((item) => item.id !== agent.id))
     } catch (caught) {
       setError(messageOf(caught))

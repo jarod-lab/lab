@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { AdminApi, AdminSession, AdminUser } from "../lib/admin-api"
 import { WebError } from "../lib/web-auth"
-import { renderWithClient } from "../test/render"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { AdminContainer } from "./admin"
 
 const admin: AdminSession = {
@@ -46,7 +46,7 @@ function fakeApi(
 }
 
 const renderAdmin = (api: AdminApi, onNavigate = vi.fn()) =>
-  renderWithClient(
+  renderWithReauth(
     <AdminContainer
       api={api}
       onNavigate={onNavigate}
@@ -145,5 +145,28 @@ describe("AdminContainer", () => {
     await waitFor(() =>
       expect(vi.mocked(api.listUsers).mock.calls.length).toBeGreaterThan(listCalls),
     )
+  })
+
+  it("asks the person to confirm it's them when an impersonation is refused as not fresh, then impersonates once", async () => {
+    const api = fakeApi({
+      impersonateUser: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    const onNavigate = vi.fn()
+    const user = userEvent.setup()
+    const { reauth } = renderAdmin(api, onNavigate)
+    await screen.findByRole("row", { name: /Grace Hopper/ })
+    await user.click(screen.getByRole("button", { name: "Actions for Grace Hopper" }))
+    await user.click(await screen.findByRole("menuitem", { name: "Impersonate" }))
+    await user.click(
+      within(await screen.findByRole("dialog", { name: /Impersonate/ })).getByRole("button", {
+        name: "Impersonate",
+      }),
+    )
+    const confirm = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(confirm).getByLabelText("Password"), "pw")
+    await user.click(within(confirm).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith("/"))
+    expect(api.impersonateUser).toHaveBeenCalledTimes(2)
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
   })
 })

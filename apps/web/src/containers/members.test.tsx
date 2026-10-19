@@ -9,7 +9,7 @@ import type { MembersApi, MemberSecurity, OrgInvitation } from "../lib/members-a
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
 import { fakeAuth } from "../test/fake-auth"
-import { renderWithClient } from "../test/render"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { MembersContainer } from "./members"
 
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
@@ -97,13 +97,15 @@ function fakeMembersApi(overrides: Partial<MembersApi> = {}): MembersApi {
   }
 }
 
-function setup(options: { role?: string; membersApi?: MembersApi } = {}) {
+function setup(
+  options: { role?: string; membersApi?: MembersApi; settingsApi?: typeof settings } = {},
+) {
   const auth = fakeAuth({ memberRole: vi.fn(async () => options.role ?? "owner") })
   const membersApi = options.membersApi ?? fakeMembersApi()
-  const rendered = renderWithClient(
+  const rendered = renderWithReauth(
     <MembersContainer
       auth={auth}
-      api={settings}
+      api={options.settingsApi ?? settings}
       membersApi={membersApi}
       organization={acme}
       now={NOW}
@@ -215,5 +217,43 @@ describe("MembersContainer as member or viewer", () => {
     expect(screen.queryByRole("columnheader", { name: "Two-factor" })).toBeNull()
     expect(membersApi.listSecurity).not.toHaveBeenCalled()
     expect(membersApi.listInvitations).not.toHaveBeenCalled()
+  })
+
+  it("asks the person to confirm it's them when a role change is refused as not fresh, then retries it once", async () => {
+    const user = userEvent.setup()
+    const roleSettings = {
+      ...settings,
+      updateMemberRole: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    }
+    const { reauth, membersApi } = setup({ settingsApi: roleSettings })
+    await screen.findByText("Cy")
+    await user.click(screen.getByRole("button", { name: "Role for Cy: Member" }))
+    await user.click(await screen.findByRole("menuitemradio", { name: "Viewer" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(roleSettings.updateMemberRole).toHaveBeenCalledTimes(2))
+    expect(roleSettings.updateMemberRole).toHaveBeenLastCalledWith("org-a", "m-cy", "viewer")
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+    expect(membersApi.resetTwoFactor).not.toHaveBeenCalled()
+  })
+
+  it("asks the person to confirm it's them when a two-factor reset is refused as not fresh, then retries it once", async () => {
+    const user = userEvent.setup()
+    const membersApi = fakeMembersApi({
+      resetTwoFactor: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    const { reauth } = setup({ membersApi })
+    await screen.findByText("Cy")
+    await user.click(screen.getByRole("button", { name: "More actions for Cy" }))
+    await user.click(await screen.findByRole("menuitem", { name: "Reset two-factor" }))
+    const alert = await screen.findByRole("alertdialog")
+    await user.click(within(alert).getByRole("button", { name: "Reset two-factor" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(membersApi.resetTwoFactor).toHaveBeenCalledTimes(2))
+    expect(membersApi.resetTwoFactor).toHaveBeenLastCalledWith("org-a", "user-3")
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
   })
 })

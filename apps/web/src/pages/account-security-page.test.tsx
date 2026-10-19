@@ -51,7 +51,7 @@ function props(overrides: Partial<AccountSecurityPageProps> = {}): AccountSecuri
       },
     ],
     sessionsNeedSignIn: false,
-    signInHref: "/sign-in?next=/account/security",
+    onSignInAgain: vi.fn(async () => undefined),
     onAddPasskey: vi.fn(async () => undefined),
     onRenamePasskey: vi.fn(async () => undefined),
     onRemovePasskey: vi.fn(async () => undefined),
@@ -280,11 +280,11 @@ describe("AccountSecurityPage", () => {
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
   })
 
-  it("asks for a recent sign-in when the session list is too old to read", () => {
-    render(<AccountSecurityPage {...props({ sessions: [], sessionsNeedSignIn: true })} />)
-    expect(screen.getByRole("link", { name: "Sign in again" }).getAttribute("href")).toBe(
-      "/sign-in?next=/account/security",
-    )
+  it("asks for a recent sign-in when the session list is too old to read", async () => {
+    const page = props({ sessions: [], sessionsNeedSignIn: true })
+    render(<AccountSecurityPage {...page} />)
+    await userEvent.click(screen.getByRole("button", { name: "Sign in again" }))
+    await waitFor(() => expect(page.onSignInAgain).toHaveBeenCalledOnce())
   })
 
   it("has no axe violations", async () => {

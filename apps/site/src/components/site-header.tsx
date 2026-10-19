@@ -17,14 +17,16 @@ export function SiteHeader({
   return (
     <>
       {announcement && (
-        <a
-          href={announcement.href}
-          className="flex min-h-9 flex-wrap items-center justify-center gap-2.5 bg-solar px-4 py-1 text-center text-sm text-solar-foreground"
-        >
-          <strong className="font-extrabold">{announcement.label}</strong>
-          <span>{announcement.text}</span>
-          <span className="font-semibold underline underline-offset-3">{announcement.cta}</span>
-        </a>
+        <aside aria-label="Announcement">
+          <a
+            href={announcement.href}
+            className="flex min-h-9 flex-wrap items-center justify-center gap-2.5 bg-solar px-4 py-1 text-center text-sm text-solar-foreground"
+          >
+            <strong className="font-extrabold">{announcement.label}</strong>
+            <span>{announcement.text}</span>
+            <span className="font-semibold underline underline-offset-3">{announcement.cta}</span>
+          </a>
+        </aside>
       )}
       <header className="border-b">
         <div className="mx-auto flex max-w-300 flex-wrap items-center gap-x-7 gap-y-2 px-6 py-3.5">

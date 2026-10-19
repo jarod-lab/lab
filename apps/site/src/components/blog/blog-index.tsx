@@ -52,13 +52,16 @@ export function BlogIndex({
 
       {featured && <FeaturedPost post={featured} />}
 
-      <section
-        aria-label="Posts"
-        className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-6"
-      >
-        {posts.map((post) => (
-          <PostCard key={post.slug} post={post} />
-        ))}
+      <section aria-labelledby="posts-h">
+        {/* Keeps the outline h1 → h2 → h3 when there is no featured post (category pages). */}
+        <h2 id="posts-h" className="sr-only">
+          {featured ? "More posts" : "Posts"}
+        </h2>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(320px,100%),1fr))] gap-6">
+          {posts.map((post) => (
+            <PostCard key={post.slug} post={post} />
+          ))}
+        </div>
       </section>
 
       {page && page.last > 1 && (

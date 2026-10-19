@@ -7,6 +7,7 @@ import { sso } from "@better-auth/sso"
 import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
+import { createLogger } from "@starter/logger"
 import { wraps } from "@wraps.dev/better-auth"
 import Stripe from "stripe"
 import {
@@ -92,6 +93,9 @@ export { PASSWORD_COMPROMISED_CODE, PASSWORD_COMPROMISED_MESSAGE } from "./const
 
 /** Every API key starts with this, so a bearer token can be routed without a lookup. */
 export const API_KEY_PREFIX = "sk_"
+
+// Warnings from auth hooks that have no request to answer (SCIM deprovisioning kept an owner).
+const logger = createLogger({ name: "auth" })
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
 
@@ -250,6 +254,40 @@ const signOutSession = {
     ],
   },
 } satisfies BetterAuthPlugin
+
+/**
+ * Composite indexes for the grant check (grantStands in principal.ts), declared on the
+ * oauth-provider plugin's tables. better-auth reads a plugin's table `indexes` when it builds the
+ * schema, so `auth:generate` carries them into auth-schema.ts, and drizzle-kit into the migration.
+ * Equality columns come first; the refresh-token index ends with `revoked`, then the range column.
+ */
+function withGrantIndexes(
+  plugin: ReturnType<typeof oauthProvider>,
+): ReturnType<typeof oauthProvider> {
+  // Kept out of the object literal below: the plugin's schema type has no `indexes` field.
+  const grantIndexes = {
+    oauthConsent: {
+      indexes: [{ name: "oauthConsent_grant_idx", fields: ["clientId", "referenceId", "userId"] }],
+    },
+    oauthRefreshToken: {
+      indexes: [
+        {
+          name: "oauthRefreshToken_grant_idx",
+          fields: ["clientId", "referenceId", "userId", "revoked", "expiresAt"],
+        },
+      ],
+    },
+  }
+  const schema = plugin.schema ?? {}
+  return {
+    ...plugin,
+    schema: {
+      ...schema,
+      oauthConsent: { ...schema.oauthConsent, ...grantIndexes.oauthConsent },
+      oauthRefreshToken: { ...schema.oauthRefreshToken, ...grantIndexes.oauthRefreshToken },
+    },
+  }
+}
 
 export function createAuth(opts: AuthOptions) {
   if (opts.stripe && !opts.stripe.secretKey.startsWith("sk_test_")) {
@@ -490,7 +528,7 @@ export function createAuth(opts: AuthOptions) {
         connections: [],
         managedConnections: { credentialHashSecret: scimCredentialHashSecret(opts.secret) },
         // Provisioned users become members of the token's organization (scim-projection.ts).
-        projection: scimProjection(endAccessIn),
+        projection: scimProjection(endAccessIn, logger),
       }),
       scimTokenPlugin({
         connect: async (input) => {
@@ -543,39 +581,41 @@ export function createAuth(opts: AuthOptions) {
       // Signs OAuth access tokens. No `set-auth-jwt` on /get-session: a session JWT must never pass
       // as an OAuth token (resolvePrincipal also requires a client claim and the OAuth issuer).
       jwt({ disableSettingJwtHeader: true }),
-      oauthProvider({
-        loginPage: opts.oauthPages?.login ?? "/sign-in",
-        consentPage: opts.oauthPages?.consent ?? "/consent",
-        scopes: ["openid", "profile", "email", "offline_access", ...OAUTH_SCOPES],
-        // MCP clients (Claude, ChatGPT, Cursor) register themselves (RFC 7591); PKCE stays required.
-        allowDynamicClientRegistration: true,
-        allowUnauthenticatedClientRegistration: true,
-        clientRegistrationDefaultScopes: ["openid", "offline_access", ...OAUTH_SCOPES],
-        resources: opts.oauthResources,
-        // Self-registered MCP clients must be able to ask for these resources, or authorize fails
-        // with invalid_target (per-client resource links are enforced by default, RFC 8707 §3).
-        clientRegistrationDefaultResources: opts.oauthResources,
-        // A token acts in exactly one organization: the session's active one when the user consents.
-        // The consent page should show it and offer a switcher (set-active, then accept). The
-        // select-organization page is only shown when the session has no valid active org; it sets
-        // one and POSTs /oauth2/continue with { postLogin: true }.
-        postLogin: {
-          page: opts.oauthPages?.selectOrganization ?? "/select-organization",
-          shouldRedirect: async ({ user, session }): Promise<boolean> => {
-            const orgId = session.activeOrganizationId
-            if (typeof orgId !== "string") return true
-            return !(await findMember(await adapter(), user.id, orgId))
+      withGrantIndexes(
+        oauthProvider({
+          loginPage: opts.oauthPages?.login ?? "/sign-in",
+          consentPage: opts.oauthPages?.consent ?? "/consent",
+          scopes: ["openid", "profile", "email", "offline_access", ...OAUTH_SCOPES],
+          // MCP clients (Claude, ChatGPT, Cursor) register themselves (RFC 7591); PKCE stays required.
+          allowDynamicClientRegistration: true,
+          allowUnauthenticatedClientRegistration: true,
+          clientRegistrationDefaultScopes: ["openid", "offline_access", ...OAUTH_SCOPES],
+          resources: opts.oauthResources,
+          // Self-registered MCP clients must be able to ask for these resources, or authorize fails
+          // with invalid_target (per-client resource links are enforced by default, RFC 8707 §3).
+          clientRegistrationDefaultResources: opts.oauthResources,
+          // A token acts in exactly one organization: the session's active one when the user consents.
+          // The consent page should show it and offer a switcher (set-active, then accept). The
+          // select-organization page is only shown when the session has no valid active org; it sets
+          // one and POSTs /oauth2/continue with { postLogin: true }.
+          postLogin: {
+            page: opts.oauthPages?.selectOrganization ?? "/select-organization",
+            shouldRedirect: async ({ user, session }): Promise<boolean> => {
+              const orgId = session.activeOrganizationId
+              if (typeof orgId !== "string") return true
+              return !(await findMember(await adapter(), user.id, orgId))
+            },
+            consentReferenceId: async ({ user, session }): Promise<string> => {
+              const orgId = session.activeOrganizationId
+              const member =
+                typeof orgId === "string" ? await findMember(await adapter(), user.id, orgId) : null
+              if (!member) throw new Error("No organization selected for this authorization")
+              return member.organizationId
+            },
           },
-          consentReferenceId: async ({ user, session }): Promise<string> => {
-            const orgId = session.activeOrganizationId
-            const member =
-              typeof orgId === "string" ? await findMember(await adapter(), user.id, orgId) : null
-            if (!member) throw new Error("No organization selected for this authorization")
-            return member.organizationId
-          },
-        },
-        customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
-      }),
+          customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
+        }),
+      ),
       // A pending OAuth authorization survives the emailed link (see resume.ts). After oauthProvider,
       // so its signature check has already run on the sign-in request.
       resumeMagicLinkAuthorization({

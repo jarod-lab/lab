@@ -1681,6 +1681,45 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(await memberOf(address, org)).toBeNull()
     })
 
+    it("a directory that deactivates an owner leaves them an owner, and the SCIM token still works", async () => {
+      const { owner, org, scim } = await ownerWithScim("Owner kept")
+      // Provisioned as a member first, then promoted: a directory cannot link an existing account.
+      const address = email()
+      const created = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: address,
+          emails: [{ value: address, primary: true }],
+          active: true,
+        }),
+      )
+      expect(created.status).toBe(201)
+      const { id: scimId } = (await created.json()) as { id: string }
+      const [row] = await t.db
+        .select({ id: member.id })
+        .from(member)
+        .innerJoin(userTable, eq(userTable.id, member.userId))
+        .where(and(eq(userTable.email, address), eq(member.organizationId, org)))
+      const promoted = await owner.b.request(
+        "/api/auth/organization/update-member-role",
+        json({ memberId: row?.id, role: "owner", organizationId: org }),
+      )
+      expect(promoted.status).toBe(200)
+      expect(await memberOf(address, org)).toEqual({ role: "owner" })
+
+      const off = await scim(
+        `/Users/${scimId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(off.status).toBe(200)
+      expect(await memberOf(address, org)).toEqual({ role: "owner" })
+      expect((await scim("/Users")).status).toBe(200)
+    })
+
     it("lists the organization's tokens without secrets, and revoking one stops it at once", async () => {
       const { owner, token, connectionId, scim } = await ownerWithScim("Revoke")
       const listed = await owner.b.request("/v1/scim/tokens")

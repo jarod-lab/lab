@@ -587,6 +587,13 @@ export const oauthRefreshToken = pgTable(
     scopes: text("scopes").array().notNull(),
   },
   (table) => [
+    index("oauthRefreshToken_grant_idx").on(
+      table.clientId,
+      table.referenceId,
+      table.userId,
+      table.revoked,
+      table.expiresAt,
+    ),
     index("oauthRefreshToken_clientId_idx").on(table.clientId),
     index("oauthRefreshToken_sessionId_idx").on(table.sessionId),
     index("oauthRefreshToken_userId_idx").on(table.userId),
@@ -644,6 +651,7 @@ export const oauthConsent = pgTable(
     updatedAt: timestamp("updated_at").notNull(),
   },
   (table) => [
+    index("oauthConsent_grant_idx").on(table.clientId, table.referenceId, table.userId),
     index("oauthConsent_clientId_idx").on(table.clientId),
     index("oauthConsent_userId_idx").on(table.userId),
   ],

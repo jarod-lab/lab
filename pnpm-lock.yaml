@@ -404,6 +404,9 @@ importers:
       '@starter/errors':
         specifier: workspace:*
         version: link:../errors
+      '@starter/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@wraps.dev/better-auth':
         specifier: ^0.3.0
         version: 0.3.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))

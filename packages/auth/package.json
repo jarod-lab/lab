@@ -26,6 +26,7 @@
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
+    "@starter/logger": "workspace:*",
     "@wraps.dev/better-auth": "^0.3.0",
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "catalog:",

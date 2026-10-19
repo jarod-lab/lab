@@ -1,0 +1,2 @@
+CREATE INDEX "oauthConsent_grant_idx" ON "oauth_consent" USING btree ("client_id","reference_id","user_id");--> statement-breakpoint
+CREATE INDEX "oauthRefreshToken_grant_idx" ON "oauth_refresh_token" USING btree ("client_id","reference_id","user_id","revoked","expires_at");

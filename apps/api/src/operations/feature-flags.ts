@@ -240,7 +240,7 @@ export function featureFlagOperations({
       ),
     }),
     hints: { readOnly: true, idempotent: true },
-    examples: [{ input: { key: "whats-new-card" } }],
+    examples: [{ input: { key: "new-checkout" }, error: "NOT_FOUND" }],
     handler: ({ key }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
         const at = now()
@@ -294,7 +294,7 @@ export function featureFlagOperations({
     }),
     output: flagOutput,
     hints: { idempotent: true },
-    examples: [{ input: { key: "whats-new-card", percentage: 5 } }],
+    examples: [{ input: { key: "new-checkout", percentage: 5 }, error: "NOT_FOUND" }],
     handler: ({ key, percentage, enabled }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
         if (!catalog[key]) throw notDeclared(key)
@@ -330,7 +330,7 @@ export function featureFlagOperations({
     output: flagOutput,
     hints: { idempotent: true },
     examples: [
-      { input: { key: "whats-new-card", organizations: ["no-such-org"] }, error: "BAD_REQUEST" },
+      { input: { key: "new-checkout", organizations: ["acme"], value: true }, error: "NOT_FOUND" },
     ],
     handler: ({ key, organizations, value }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
@@ -363,7 +363,7 @@ export function featureFlagOperations({
     }),
     output: flagOutput.extend({ removed: z.boolean() }),
     hints: { idempotent: true, destructive: true },
-    examples: [{ input: { key: "not-declared", organization: "no-such-org" }, error: "NOT_FOUND" }],
+    examples: [{ input: { key: "new-checkout", organization: "acme" }, error: "NOT_FOUND" }],
     handler: ({ key, organization }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
         const rollout = await getRollout(db, key, org, proof)
@@ -398,7 +398,7 @@ export function featureFlagOperations({
     }),
     output: flagOutput,
     hints: { destructive: true },
-    examples: [{ input: { key: "not-declared", value: true }, error: "NOT_FOUND" }],
+    examples: [{ input: { key: "new-checkout", value: true }, error: "NOT_FOUND" }],
     handler: ({ key, value }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
         if (!catalog[key]) throw notDeclared(key)
@@ -435,7 +435,7 @@ export function featureFlagOperations({
     input: z.object({ key: keyInput }),
     output: z.object({ deleted: z.literal(true) }),
     hints: { destructive: true },
-    examples: [{ input: { key: "whats-new-card" }, error: "CONFLICT" }],
+    examples: [{ input: { key: "new-checkout" }, error: "NOT_FOUND" }],
     handler: ({ key }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
         if (catalog[key]) {

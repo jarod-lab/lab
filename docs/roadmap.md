@@ -26,3 +26,8 @@
   files bigger than an avatar. Resizing on upload. R2 buckets in an EU or US jurisdiction (an
   `R2_JURISDICTION` for the `<account>.eu.` endpoint), and Vercel Blob through OIDC alone (no
   read-write token). (`docs/storage.md`)
+- Feature flags (`docs/feature-flags.md`): multi-variant flags and experiments (string and number
+  values, sticky assignment, metrics per variant); targeting by attribute (plan, region) beyond
+  organizations; metering OFREP calls; counting MCP tool failures and browser errors against the
+  flag values they saw (today only REST 5xx are); clearing other API instances' rollout cache on a
+  write (today they catch up within 5 seconds); a rollout history (the audit trail has who did what).

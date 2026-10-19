@@ -6957,8 +6957,9 @@
               },
               "example": {
                 "organizations": [
-                  "no-such-org"
-                ]
+                  "acme"
+                ],
+                "value": true
               }
             }
           }

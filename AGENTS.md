@@ -30,7 +30,7 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
 
 - `apps/api` — Hono on Node (`@hono/node-server`), run with `tsx`. `createApp`
   (`apps/api/src/app.ts`) serves REST, `/mcp`, OpenAPI, llms.txt, `/health`, `/status`, OAuth
-  discovery and `/api/auth/*`. Operations are in `src/operations/`, invoke hooks in `src/hooks.ts`,
+  discovery, `/api/auth/*` and OFREP (`/ofrep/v1/*`, a protocol route like `/api/auth/*`). Operations are in `src/operations/`, invoke hooks in `src/hooks.ts`,
   tenant helpers in `src/tenant.ts`, tenant data in `src/data/`. `apps/api/src/server.ts` only wires
   env, DB and listener.
 - `apps/web` — `@starter/web`, TanStack Start in SPA mode (the D+ app). See `docs/web-app.md`.
@@ -51,13 +51,15 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
 - `packages/logger`, `packages/errors` — pino with redaction; `AppError`, `ErrorCode`,
   `reportError`.
 - `packages/observability` — `observe`, health and status handlers. See `docs/observability.md`.
+- `packages/flags` — `@starter/flags`: the feature flag catalog (`src/catalog.ts`), evaluator and
+  stale signals; browser-safe. See `docs/feature-flags.md`.
 - `packages/storage` — `@starter/storage`, the file store uploads go to (S3, R2, Vercel Blob or a
   local directory, by `STORAGE_DRIVER`) and image checks. See `docs/storage.md`.
 - `packages/env` — the only place env vars are read (Zod). `packages/config` — shared tsconfig and
   Vitest base.
 - `scripts/` — `scripts/worktree.mjs` (`pnpm wt`), `scripts/init-project.mjs`,
   `scripts/generate-stories.mjs`, `scripts/release.mjs` (applies migrations),
-  `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`.
+  `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`, `scripts/flags.mjs` (`pnpm flags`).
 - `Dockerfile`, `docker-compose.yml` — the API image; compose's `migrate` runs `scripts/release.mjs`
   first.
 - `skills/starter` — the template skill for customers' agents; `server.json` — the MCP registry
@@ -110,7 +112,8 @@ fixes formatting.
   (`base-sera`). Add with `npx shadcn@latest add`, never by hand, then restyle to the D+ system.
   Details and stories: `docs/ui.md`.
 - **Vendored skills** in `.claude/skills` are third-party; don't edit them. Refresh with
-  `npx skills update`. `.claude/skills/agent-api` is ours; keep it current.
+  `npx skills update`. `.claude/skills/agent-api` and `.claude/skills/feature-flags` are ours; keep
+  them current.
 
 ## Agent-native API
 
@@ -136,6 +139,14 @@ tables, `apps/api`, `packages/api`, `packages/mcp`, `packages/auth-proofs`, `pac
   uses `auth: "person"`: session only, REST only.
 - **Person-only actions** (`PERSON_ONLY_ACTIONS`, the owner-only resources, `subscription`) are
   never granted to API keys or OAuth tokens.
+- **Operator operations** (`audience: "operator"`, the feature flag rollouts) answer only to the
+  operator organization (`OPERATOR_ORGANIZATION_ID`): data behind `inOperatorOrg` and the
+  `OperatorOrg` proof.
+
+## Feature flags
+
+Ship a risky or gradual change behind a flag: load the `feature-flags` skill. It covers declaring,
+gating, targeting, ramping, reclaiming and removing a flag, and `pnpm flags stale`.
 
 ## Web app
 
@@ -183,7 +194,7 @@ Details: `docs/database.md`.
   `scripts/release.mjs` in a deploy. The exception is `pnpm wt`: it migrates only a worktree's own
   `*_wt_*` database, and agents run it themselves.
 <!-- template:start -->
-- Migrations `0001_agent_auth` through `0011_auth_hardening`; 0003 onward are not applied
+- Migrations `0001_agent_auth` through `0012_feature_flags`; 0003 onward are not applied
   yet.
 <!-- template:end -->
 
@@ -217,7 +228,7 @@ failure is reported, not looped on.
 ## Skills (this repo)
 
 gdp-ts, shadcn, turborepo, portless and better-auth (best-practices, create-auth,
-email-and-password), pinned in `skills-lock.json`. Ours: `agent-api`.
+email-and-password), pinned in `skills-lock.json`. Ours: `agent-api`, `feature-flags`.
 
 ## Not yet
 

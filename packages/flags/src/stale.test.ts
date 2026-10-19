@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 
-import { flags } from "./catalog"
 import { dayBefore, type ExposureDay, staleSignals } from "./stale"
 
 const now = new Date("2026-10-19T12:00:00Z")
@@ -47,11 +46,5 @@ describe("staleSignals", () => {
       "single-value",
       "reclaimed-in-code",
     ])
-  })
-})
-
-describe("the catalog", () => {
-  it("has the example flag, off by default", () => {
-    expect(flags["whats-new-card"].default).toBe(false)
   })
 })

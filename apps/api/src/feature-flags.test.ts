@@ -4,7 +4,6 @@
 // deleted only once the code no longer declares it). acme is the operator organization.
 import { defineOperation } from "@starter/api"
 import { featureFlag } from "@starter/db"
-import { flags as productFlags } from "@starter/flags"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
 
@@ -13,8 +12,9 @@ import type { FlagService } from "./flags"
 
 type Json = Record<string, unknown>
 
+// Its own catalog, so the product's flags can come and go without touching this test.
 const catalog = {
-  ...productFlags,
+  "new-checkout": { description: "Checkout v2", owner: "payments", default: false },
   "beta-search": { description: "Search v2", owner: "search", default: false },
 }
 
@@ -30,7 +30,8 @@ const flaky = defineOperation({
   input: z.object({}),
   output: z.object({}),
   handler: async (_input, { caller }) => {
-    await service?.isEnabled(caller, "whats-new-card")
+    // A key of this test's catalog, not the product's FlagKey.
+    await service?.isEnabled(caller, "new-checkout" as never)
     throw new Error("search backend down")
   },
 })
@@ -72,7 +73,7 @@ describe("feature flags", () => {
     const { status, body } = await owner("/v1/feature-flags")
     expect(status).toBe(200)
     const flags = body.flags as Json[]
-    expect(flags.map((f) => f.key)).toEqual(["whats-new-card", "beta-search"])
+    expect(flags.map((f) => f.key)).toEqual(["new-checkout", "beta-search"])
     expect(flags[1]).toMatchObject({
       status: "off",
       inCatalog: true,
@@ -147,10 +148,7 @@ describe("feature flags", () => {
   it("serves OFREP in bulk with an ETag, and 404s an undeclared key", async () => {
     const first = await send(t.other.cookie, "/ofrep/v1/evaluate/flags", "POST", { context: {} })
     expect(first.status).toBe(200)
-    expect((first.body.flags as Json[]).map((f) => f.key)).toEqual([
-      "whats-new-card",
-      "beta-search",
-    ])
+    expect((first.body.flags as Json[]).map((f) => f.key)).toEqual(["new-checkout", "beta-search"])
     const etag = first.headers.get("etag") ?? ""
     expect(etag).toMatch(/^W\/"[0-9a-f]+"$/)
     const again = await t.req(
@@ -167,11 +165,11 @@ describe("feature flags", () => {
 
   it("counts evaluations, and the 5xx errors that followed them, per value", async () => {
     await t.flags.flush()
-    const before = (await owner("/v1/feature-flags/whats-new-card")).body.exposures as Json
+    const before = (await owner("/v1/feature-flags/new-checkout")).body.exposures as Json
     const failed = await t.req("/v1/flaky-search", t.as(t.other.cookie))
     expect(failed.status).toBe(500)
     await t.flags.flush()
-    const after = (await owner("/v1/feature-flags/whats-new-card")).body as Json
+    const after = (await owner("/v1/feature-flags/new-checkout")).body as Json
     expect(after.exposures).toEqual({
       ...before,
       off: (before.off as number) + 1,
@@ -245,11 +243,11 @@ describe("feature flags", () => {
 
 describe("feature flags with no operator organization", () => {
   it("refuses every operator operation, and still evaluates", async () => {
-    const t = await createTestApp([], { operator: false })
+    const t = await createTestApp([], { operator: false, flagCatalog: catalog })
     try {
       expect((await t.req("/v1/feature-flags", t.as(t.owner.cookie))).status).toBe(403)
       const res = await t.req(
-        "/ofrep/v1/evaluate/flags/whats-new-card",
+        "/ofrep/v1/evaluate/flags/new-checkout",
         t.as(t.owner.cookie, { method: "POST", body: "{}" }),
       )
       expect(await res.json()).toMatchObject({ value: false, reason: "DISABLED" })

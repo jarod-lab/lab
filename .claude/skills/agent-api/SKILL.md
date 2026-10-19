@@ -88,6 +88,13 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
    with the session cookie as its only security and "web app only" in llms.txt. List it in
    `PUBLIC` in `authorization.test.ts` when its permissions are `{}`. Use `requirePerson` in the
    handler for the user id.
+   Operator operations: `audience: "operator"` is for what only the operator organization does
+   (`OPERATOR_ORGANIZATION_ID`; the feature flag rollouts). `invoke` refuses any other caller with
+   FORBIDDEN before permissions (`InvokeOptions.isOperator`, from `createApiHooks({ operator })`);
+   MCP lists the tool only in that organization; llms.txt leaves it out and OpenAPI tags it
+   `x-audience: operator`. Its data functions take the `OperatorOrg` proof, from
+   `inOperatorOrg(caller, operator, ...)` in `apps/api/src/tenant.ts`. The test app makes acme the
+   operator.
 5. Update the contract and review it: `pnpm --filter @starter/api-app test -u`, then read the
    `apps/api/openapi.json` diff as a public API change. Adding is safe. Removing, renaming, making a
    field required, narrowing a type or requiring more permissions breaks deployed agents: add a new

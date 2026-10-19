@@ -3382,8 +3382,9 @@ export interface operations {
                 /**
                  * @example {
                  *       "organizations": [
-                 *         "no-such-org"
-                 *       ]
+                 *         "acme"
+                 *       ],
+                 *       "value": true
                  *     }
                  */
                 "application/json": {

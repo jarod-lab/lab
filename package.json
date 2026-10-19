@@ -17,7 +17,8 @@
     "prepare": "lefthook install",
     "storybook": "pnpm --filter @starter/ui storybook",
     "stories": "node scripts/generate-stories.mjs",
-    "wt": "node scripts/worktree.mjs"
+    "wt": "node scripts/worktree.mjs",
+    "flags": "pnpm --filter @starter/api-app exec tsx ../../scripts/flags.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

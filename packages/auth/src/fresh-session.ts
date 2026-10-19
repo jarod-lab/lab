@@ -11,29 +11,57 @@ import type { BetterAuthPlugin } from "better-auth"
 export const FRESH_AGE_SECONDS = 60 * 60
 
 /**
- * better-auth endpoints the plugin guards: each adds or removes a credential, or changes who is in an
- * organization or what they may do. Verified against better-auth 1.7.7 (none is guarded upstream).
+ * better-auth endpoints the plugin guards: each adds or removes a credential, changes who may act, or
+ * changes security config. Checked against better-auth 1.7.7 and the plugins' dists: the ones it guards
+ * itself (passkey registration by default, unlink-account, delete-user, ...) are listed anyway, so the
+ * window is one rule.
  */
 export const FRESH_SESSION_PATHS = [
   // Passkeys: start a registration, finish one, delete one.
   "/passkey/generate-register-options",
   "/passkey/verify-registration",
   "/passkey/delete-passkey",
-  // Two-factor enrolment (disable is guarded by better-auth itself).
+  // Two-factor enrolment and new backup codes (disable is guarded by better-auth itself).
   "/two-factor/enable",
+  "/two-factor/generate-backup-codes",
+  // Sign-in methods: link an external account to this user.
+  "/link-social",
+  // SCIM token mint (scim-token.ts wraps the plugin's connection; the token is returned once).
+  "/scim/generate-token",
   // Organization API keys.
   "/api-key/create",
   "/api-key/update",
-  // Single sign-on provider registration.
+  "/api-key/delete",
+  // Single sign-on: register, change, remove a provider, and prove its domain (routes sign-in).
   "/sso/register",
+  "/sso/update-provider",
+  "/sso/delete-provider",
+  "/sso/verify-domain",
   // Organization members and roles.
+  "/organization/invite-member",
   "/organization/update-member-role",
   "/organization/remove-member",
   "/organization/delete",
   "/organization/create-role",
   "/organization/update-role",
   "/organization/delete-role",
-  // Platform admin: change someone's role, or act as them.
+  // OAuth clients and the grants a person gives them (consent issues the tokens; device approve
+  // issues them to a CLI). Client secrets are minted by create and rotate-secret.
+  "/oauth2/create-client",
+  "/oauth2/update-client",
+  "/oauth2/client/rotate-secret",
+  "/oauth2/delete-client",
+  "/oauth2/consent",
+  "/oauth2/update-consent",
+  "/device/approve",
+  // Platform admin: create or change users, their passwords and bans, remove them, change a role,
+  // or act as someone.
+  "/admin/create-user",
+  "/admin/set-user-password",
+  "/admin/ban-user",
+  "/admin/unban-user",
+  "/admin/remove-user",
+  "/admin/update-user",
   "/admin/set-role",
   "/admin/impersonate-user",
 ] as const

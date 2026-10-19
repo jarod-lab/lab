@@ -8,6 +8,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { twoFactor } from "better-auth/plugins"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { FRESH_AGE_SECONDS, FRESH_SESSION_PATHS, freshSessionGuard, isFresh } from "./fresh-session"
+import { createTestAuth } from "./auth.test.helpers"
 
 const BASE = "http://localhost:3000"
 const PASSWORD = "correct-horse-battery"
@@ -102,5 +103,82 @@ describe("freshSessionGuard", () => {
 
   it("lists each sensitive path once", () => {
     expect(new Set(FRESH_SESSION_PATHS).size).toBe(FRESH_SESSION_PATHS.length)
+  })
+})
+
+// The paths the guard added on top of better-auth's own, against the full auth config (createAuth),
+// so each one's plugin is mounted. A stale session is refused before the endpoint runs; a fresh one
+// reaches the endpoint, which refuses the empty body with its own error, never SESSION_NOT_FRESH.
+describe("freshSessionGuard on the added paths", () => {
+  let t: Awaited<ReturnType<typeof createTestAuth>>
+
+  beforeAll(async () => {
+    t = await createTestAuth()
+    await t.auth.$context
+  })
+  afterAll(() => t.close())
+
+  /** Sign up, then backdate the session's createdAt by `ageSeconds`. Returns its headers. */
+  async function sessionHeaders(ageSeconds: number) {
+    const { cookie, userId } = await t.signUp("Person")
+    const adapter = (await t.auth.$context).adapter
+    await adapter.update({
+      model: "session",
+      where: [{ field: "userId", value: userId }],
+      update: { createdAt: new Date(Date.now() - ageSeconds * 1000) },
+    })
+    return new Headers({ cookie })
+  }
+
+  const ADDED: readonly [path: string, endpoint: string][] = [
+    ["/two-factor/generate-backup-codes", "generateBackupCodes"],
+    ["/link-social", "linkSocialAccount"],
+    ["/scim/generate-token", "generateScimToken"],
+    ["/api-key/delete", "deleteApiKey"],
+    ["/sso/update-provider", "updateSSOProvider"],
+    ["/sso/delete-provider", "deleteSSOProvider"],
+    ["/sso/verify-domain", "verifyDomain"],
+    ["/organization/invite-member", "createInvitation"],
+    ["/oauth2/create-client", "createOAuthClient"],
+    ["/oauth2/update-client", "updateOAuthClient"],
+    ["/oauth2/client/rotate-secret", "rotateClientSecret"],
+    ["/oauth2/delete-client", "deleteOAuthClient"],
+    ["/oauth2/consent", "oauth2Consent"],
+    ["/oauth2/update-consent", "updateOAuthConsent"],
+    ["/device/approve", "deviceApprove"],
+    ["/admin/create-user", "createUser"],
+    ["/admin/set-user-password", "setUserPassword"],
+    ["/admin/ban-user", "banUser"],
+    ["/admin/unban-user", "unbanUser"],
+    ["/admin/remove-user", "removeUser"],
+    ["/admin/update-user", "adminUpdateUser"],
+  ]
+
+  type Call = (args: { headers?: Headers; body: Record<string, unknown> }) => Promise<unknown>
+
+  const codeOfCall = async (promise: Promise<unknown>) => {
+    try {
+      await promise
+      return null
+    } catch (e) {
+      return (e as { body?: { code?: string } }).body?.code ?? null
+    }
+  }
+
+  it("covers every added path", () => {
+    for (const [path] of ADDED) expect(FRESH_SESSION_PATHS).toContain(path)
+  })
+
+  it.each(ADDED)("%s refuses a stale session with SESSION_NOT_FRESH", async (_path, endpoint) => {
+    const headers = await sessionHeaders(FRESH_AGE_SECONDS + 60)
+    const call = (t.auth.api as unknown as Record<string, Call>)[endpoint]
+    expect(call).toBeTypeOf("function")
+    expect(await codeOfCall(call!({ headers, body: {} }))).toBe("SESSION_NOT_FRESH")
+  })
+
+  it.each(ADDED)("%s lets a fresh session through to the endpoint", async (_path, endpoint) => {
+    const headers = await sessionHeaders(60)
+    const call = (t.auth.api as unknown as Record<string, Call>)[endpoint]
+    expect(await codeOfCall(call!({ headers, body: {} }))).not.toBe("SESSION_NOT_FRESH")
   })
 })

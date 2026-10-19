@@ -174,4 +174,92 @@ describe("AccountSecurityContainer", () => {
     expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull()
     expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
   })
+
+  describe("AccountSecurityContainer when the session is not fresh", () => {
+    async function openNewCodes(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole("button", { name: "Make new codes" }))
+      const codes = await screen.findByRole("dialog", { name: "Make new backup codes" })
+      await user.type(within(codes).getByLabelText("Password"), "correct horse")
+      await user.click(within(codes).getByRole("button", { name: "Make new codes" }))
+      return codes
+    }
+
+    it("asks the person to confirm it's them when new backup codes are refused, then makes them once more", async () => {
+      const user = userEvent.setup()
+      const api = fakeAccountApi({
+        newBackupCodes: vi
+          .fn<(password: string) => Promise<string[]>>()
+          .mockRejectedValueOnce(new SessionNotFreshError(403))
+          .mockResolvedValueOnce(["aaaa-1111"]),
+      })
+      const { reauth } = renderWithReauth(<AccountSecurityContainer api={api} />)
+      await openNewCodes(user)
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      expect(await screen.findByRole("heading", { name: "Your new backup codes" })).toBeTruthy()
+      expect(api.newBackupCodes).toHaveBeenCalledTimes(2)
+      expect(api.newBackupCodes).toHaveBeenLastCalledWith("correct horse")
+      expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+    })
+
+    it("cancelled: shows the refusal and makes no new codes", async () => {
+      const user = userEvent.setup()
+      const api = fakeAccountApi({
+        newBackupCodes: vi.fn(async () => {
+          throw new SessionNotFreshError(403)
+        }),
+      })
+      renderWithReauth(<AccountSecurityContainer api={api} />)
+      const codes = await openNewCodes(user)
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+      expect(
+        await within(codes).findByText(
+          "Sign in again to continue. Changes like this need a recent sign-in.",
+        ),
+      ).toBeTruthy()
+      expect(api.newBackupCodes).toHaveBeenCalledTimes(1)
+    })
+
+    it("asks the person to confirm it's them when a connect is refused, then connects once more", async () => {
+      const user = userEvent.setup()
+      const linkSocial = vi
+        .fn<(provider: string, callbackURL: string) => Promise<string | undefined>>()
+        .mockRejectedValueOnce(new SessionNotFreshError(403))
+        .mockResolvedValueOnce(undefined)
+      renderWithReauth(<AccountSecurityContainer api={fakeAccountApi({ linkSocial })} />)
+      const google = await screen.findByText("Not connected")
+      const row = google.closest("div")?.parentElement as HTMLElement
+      await user.click(within(row).getByRole("button", { name: "Connect" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(linkSocial).toHaveBeenCalledTimes(2))
+      expect(linkSocial).toHaveBeenLastCalledWith("google", "/account/security")
+    })
+
+    it("cancelled connect: shows the refusal and does not start the provider sign-in again", async () => {
+      const user = userEvent.setup()
+      const linkSocial = vi.fn(async () => {
+        throw new SessionNotFreshError(403)
+      })
+      renderWithReauth(<AccountSecurityContainer api={fakeAccountApi({ linkSocial })} />)
+      const google = await screen.findByText("Not connected")
+      const row = google.closest("div")?.parentElement as HTMLElement
+      await user.click(within(row).getByRole("button", { name: "Connect" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+      expect(
+        await screen.findByText(
+          "Sign in again to continue. Changes like this need a recent sign-in.",
+        ),
+      ).toBeTruthy()
+      expect(linkSocial).toHaveBeenCalledTimes(1)
+    })
+  })
 })

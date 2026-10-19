@@ -7,6 +7,7 @@ import { Button } from "@starter/ui/components/ui/button"
 import { FieldDescription } from "@starter/ui/components/ui/field"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
+import { useReauthGuard } from "../components/reauth-dialog"
 import { OrganizationSwitcher } from "../components/organization-switcher"
 import { describeScope, splitScopes } from "../lib/scopes"
 import { messageOf } from "../lib/messages"
@@ -153,6 +154,8 @@ function ConsentForm({
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The consent call is refused when the session is older than the fresh window: confirm, then retry.
+  const guard = useReauthGuard()
 
   const form = useForm({
     defaultValues: { organizationId: initialId },
@@ -169,7 +172,7 @@ function ConsentForm({
       // Always, not only on a change: another tab may have switched the active org since load,
       // and consent grants whichever org is active on the server.
       if (accept) await auth.setActiveOrganization(organizationId)
-      const url = await auth.consent(accept)
+      const url = await guard(() => auth.consent(accept))
       if (url) navigateTo(url)
       else setPending(false)
     } catch (caught) {

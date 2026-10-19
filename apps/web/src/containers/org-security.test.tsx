@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { OrgSecurityApi, SsoProvider } from "../lib/org-security-api"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { fakeAuth } from "../test/fake-auth"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { renderWithClient } from "../test/render"
 import { OrgSecurityContainer } from "./org-security"
 
@@ -196,5 +197,131 @@ describe("OrgSecurityContainer", () => {
   it("shows a loading state until the role is known", () => {
     setup()
     expect(screen.getByText("Loading…")).toBeTruthy()
+  })
+})
+
+describe("OrgSecurityContainer when the session is not fresh", () => {
+  const SNF = "Sign in again to continue"
+
+  function setupWithReauth(securityApi: OrgSecurityApi) {
+    const auth = fakeAuth({ memberRole: vi.fn(async () => "owner") })
+    return renderWithReauth(
+      <OrgSecurityContainer
+        auth={auth}
+        api={fakeOrgApi()}
+        securityApi={securityApi}
+        organization={acme}
+        origin="https://app.example.com"
+      />,
+    )
+  }
+
+  async function confirmWithPassword(user: ReturnType<typeof userEvent.setup>) {
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.type(within(dialog).getByLabelText("Password"), "pw")
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+  }
+
+  it("registers a provider once more after a confirmed re-sign-in", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      listSsoProviders: vi.fn(async () => []),
+      registerSsoProvider: vi
+        .fn()
+        .mockRejectedValueOnce(notFresh())
+        .mockResolvedValueOnce(undefined),
+    })
+    const { reauth } = setupWithReauth(securityApi)
+    await screen.findByText(/No providers yet/)
+    await user.click(screen.getByRole("button", { name: "Add a provider" }))
+    await user.type(screen.getByLabelText("Email domain"), "globex.io")
+    await user.type(screen.getByLabelText("Issuer URL"), "https://login.globex.io")
+    await user.type(screen.getByLabelText("Client ID"), "client-123")
+    await user.type(screen.getByLabelText("Client secret"), "s3cret")
+    await user.click(screen.getByRole("button", { name: "Add provider" }))
+    await confirmWithPassword(user)
+
+    await waitFor(() => expect(securityApi.registerSsoProvider).toHaveBeenCalledTimes(2))
+    const [first, second] = vi.mocked(securityApi.registerSsoProvider).mock.calls
+    expect(second?.[1]).toBe(first?.[1])
+    expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+  })
+
+  it("deletes a provider once more after a confirmed re-sign-in", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      deleteSsoProvider: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    setupWithReauth(securityApi)
+    const row = await screen.findByRole("listitem", { name: "acme.com" })
+    await user.click(within(row).getByRole("button", { name: "Delete provider" }))
+    const alert = await screen.findByRole("alertdialog")
+    await user.click(within(alert).getByRole("button", { name: "Delete provider" }))
+    await confirmWithPassword(user)
+
+    await waitFor(() => expect(securityApi.deleteSsoProvider).toHaveBeenCalledTimes(2))
+    expect(securityApi.deleteSsoProvider).toHaveBeenLastCalledWith("org-a", "acme-com-1")
+  })
+
+  it("deleting, cancelled: shows the refusal and does not delete again", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      deleteSsoProvider: vi.fn().mockRejectedValue(notFresh()),
+    })
+    setupWithReauth(securityApi)
+    const row = await screen.findByRole("listitem", { name: "acme.com" })
+    await user.click(within(row).getByRole("button", { name: "Delete provider" }))
+    const alert = await screen.findByRole("alertdialog")
+    await user.click(within(alert).getByRole("button", { name: "Delete provider" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+    expect(await screen.findByText(new RegExp(SNF))).toBeTruthy()
+    expect(securityApi.deleteSsoProvider).toHaveBeenCalledTimes(1)
+  })
+
+  it("checks a domain once more after a confirmed re-sign-in", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      verifyDomain: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+    })
+    setupWithReauth(securityApi)
+    const row = await screen.findByRole("listitem", { name: "acme.com" })
+    await user.click(within(row).getByRole("button", { name: "Verify domain" }))
+    await user.click(await screen.findByRole("button", { name: "Check now" }))
+    await confirmWithPassword(user)
+
+    await waitFor(() => expect(securityApi.verifyDomain).toHaveBeenCalledTimes(2))
+    expect(securityApi.verifyDomain).toHaveBeenLastCalledWith("org-a", "acme-com-1")
+  })
+
+  it("generates a SCIM token once more after a confirmed re-sign-in", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      generateScimToken: vi
+        .fn()
+        .mockRejectedValueOnce(notFresh())
+        .mockResolvedValueOnce({ token: "scim_tok_1", expiresInDays: 365 }),
+    })
+    setupWithReauth(securityApi)
+    await user.click(await screen.findByRole("button", { name: "Generate SCIM token" }))
+    await confirmWithPassword(user)
+
+    await waitFor(() => expect(securityApi.generateScimToken).toHaveBeenCalledTimes(2))
+    expect(securityApi.generateScimToken).toHaveBeenLastCalledWith("org-a")
+  })
+
+  it("SCIM, cancelled: shows the refusal and mints no token", async () => {
+    const user = userEvent.setup()
+    const securityApi = fakeSecurityApi({
+      generateScimToken: vi.fn().mockRejectedValue(notFresh()),
+    })
+    setupWithReauth(securityApi)
+    await user.click(await screen.findByRole("button", { name: "Generate SCIM token" }))
+    const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+    expect(await screen.findByText(new RegExp(SNF))).toBeTruthy()
+    expect(securityApi.generateScimToken).toHaveBeenCalledTimes(1)
   })
 })

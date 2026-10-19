@@ -144,13 +144,13 @@ export function AccountSecurityContainer({ api, renderLink }: AccountSecurityCon
         await guard(() => api.disableTwoFactor(password))
         refresh(accountKeys.securitySummary())
       }}
-      onNewBackupCodes={(password) => api.newBackupCodes(password)}
+      onNewBackupCodes={(password) => guard(() => api.newBackupCodes(password))}
       onChangePassword={async (input) => {
         await guard(() => api.changePassword({ ...input, revokeOtherSessions: false }))
         refresh(accountKeys.securitySummary())
       }}
       onConnect={async (provider) => {
-        const url = await api.linkSocial(provider, "/account/security")
+        const url = await guard(() => api.linkSocial(provider, "/account/security"))
         if (url) navigateTo(url)
       }}
       onDisconnect={async (accountId) => {

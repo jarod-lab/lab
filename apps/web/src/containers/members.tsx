@@ -58,7 +58,7 @@ export function MembersContainer({
   now,
 }: MembersContainerProps) {
   const queryClient = useQueryClient()
-  // Changing a role, removing a member and resetting two-factor need a recent sign-in.
+  // Inviting, changing a role, removing a member and resetting two-factor need a recent sign-in.
   const guard = useReauthGuard()
   const organizationId = organization.id
   const session = useSessionQuery(auth)
@@ -108,7 +108,7 @@ export function MembersContainer({
       // One call per address: better-auth invites one email at a time.
       for (const email of input.emails) {
         try {
-          await membersApi.invite(organizationId, { email, role: input.role })
+          await guard(() => membersApi.invite(organizationId, { email, role: input.role }))
         } catch (caught) {
           failed.push({ email, message: caught instanceof Error ? caught.message : "Failed" })
         }
@@ -152,11 +152,13 @@ export function MembersContainer({
 
   const resend = useMutation({
     mutationFn: (invitation: InvitationView) =>
-      membersApi.invite(organizationId, {
-        email: invitation.email,
-        role: invitation.role,
-        resend: true,
-      }),
+      guard(() =>
+        membersApi.invite(organizationId, {
+          email: invitation.email,
+          role: invitation.role,
+          resend: true,
+        }),
+      ),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: qk.org(organizationId).invitations() })
     },

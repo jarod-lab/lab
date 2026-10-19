@@ -291,4 +291,61 @@ describe("MembersContainer as member or viewer", () => {
     expect(membersApi.resetTwoFactor).toHaveBeenLastCalledWith("org-a", "user-3")
     expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
   })
+
+  describe("MembersContainer when the session is not fresh", () => {
+    it("asks the person to confirm it's them when an invite is refused, then sends it once more", async () => {
+      const user = userEvent.setup()
+      const membersApi = fakeMembersApi({
+        invite: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+      })
+      const { reauth } = setup({ membersApi })
+      await screen.findByText("Cy")
+      await user.type(screen.getByLabelText("Invite by email"), "x@acme.dev")
+      await user.click(screen.getByRole("button", { name: "Send invites" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(membersApi.invite).toHaveBeenCalledTimes(2))
+      expect(membersApi.invite).toHaveBeenLastCalledWith("org-a", {
+        email: "x@acme.dev",
+        role: "viewer",
+      })
+      expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+    })
+
+    it("cancelled invite: shows the refusal for that address and does not send again", async () => {
+      const user = userEvent.setup()
+      const membersApi = fakeMembersApi({ invite: vi.fn().mockRejectedValue(notFresh()) })
+      setup({ membersApi })
+      await screen.findByText("Cy")
+      await user.type(screen.getByLabelText("Invite by email"), "x@acme.dev")
+      await user.click(screen.getByRole("button", { name: "Send invites" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+      expect(await screen.findByText(/Sign in again to continue/)).toBeTruthy()
+      expect(membersApi.invite).toHaveBeenCalledTimes(1)
+    })
+
+    it("asks the person to confirm it's them when a resend is refused, then resends once more", async () => {
+      const user = userEvent.setup()
+      const membersApi = fakeMembersApi({
+        invite: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+      })
+      setup({ membersApi })
+      await screen.findByText("lee@acme.dev · Member")
+      await user.click(screen.getByRole("button", { name: "Resend" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(membersApi.invite).toHaveBeenCalledTimes(2))
+      expect(membersApi.invite).toHaveBeenLastCalledWith("org-a", {
+        email: "lee@acme.dev",
+        role: "member",
+        resend: true,
+      })
+    })
+  })
 })

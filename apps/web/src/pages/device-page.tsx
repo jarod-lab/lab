@@ -5,6 +5,7 @@ import { Field, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
+import { useReauthGuard } from "../components/reauth-dialog"
 import { NotYou } from "../components/not-you"
 import { OrganizationSwitcher } from "../components/organization-switcher"
 import { SignInOrUp } from "../components/sign-in-or-up"
@@ -36,6 +37,8 @@ function initialOrganizationId(organizations: WebOrganization[], activeId: strin
  */
 export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUserCode?: string }) {
   const codeId = useId()
+  // Approving issues the agent a token: it needs a recent sign-in. Denying does not.
+  const guard = useReauthGuard()
   const [context, setContext] = useState<Context | null | undefined>(undefined)
   const [reloads, setReloads] = useState(0)
   const [code, setCode] = useState(initialUserCode ?? "")
@@ -117,7 +120,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
         // Always, not only on a change: another tab may have switched the active org since load,
         // and approval records whichever org is active on the server.
         if (context) await auth.setActiveOrganization(selected)
-        await auth.device.approve(request.userCode)
+        await guard(() => auth.device.approve(request.userCode))
       } else {
         await auth.device.deny(request.userCode)
       }

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { fakeAuth } from "../test/fake-auth"
+import { notFresh, renderWithReauth } from "../test/reauth"
 import { DevicePage } from "./device-page"
 
 describe("DevicePage", () => {
@@ -183,5 +184,53 @@ describe("DevicePage approval without an organization", () => {
 
     expect(await screen.findByRole("heading", { name: "Approved" })).toBeTruthy()
     expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+  })
+
+  describe("DevicePage when the session is not fresh", () => {
+    it("asks the person to confirm it's them, then approves once more", async () => {
+      const user = userEvent.setup()
+      const auth = fakeAuth({
+        device: {
+          lookup: vi.fn(async () => ({ status: "pending", clientId: "cli", scope: "openid" })),
+          approve: vi.fn().mockRejectedValueOnce(notFresh()).mockResolvedValueOnce(undefined),
+          deny: vi.fn(async () => undefined),
+        },
+      })
+      const { reauth } = renderWithReauth(<DevicePage auth={auth} initialUserCode="ABCD-1234" />)
+      await user.click(await screen.findByRole("button", { name: "Find request" }))
+      await user.click(await screen.findByRole("button", { name: "Approve" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      expect(await screen.findByRole("heading", { name: "Approved" })).toBeTruthy()
+      expect(auth.device.approve).toHaveBeenCalledTimes(2)
+      expect(auth.device.approve).toHaveBeenLastCalledWith("ABCD-1234")
+      expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+    })
+
+    it("cancelled: shows the refusal and does not approve again", async () => {
+      const user = userEvent.setup()
+      const auth = fakeAuth({
+        device: {
+          lookup: vi.fn(async () => ({ status: "pending", clientId: "cli", scope: "openid" })),
+          approve: vi.fn().mockRejectedValue(notFresh()),
+          deny: vi.fn(async () => undefined),
+        },
+      })
+      renderWithReauth(<DevicePage auth={auth} initialUserCode="ABCD-1234" />)
+      await user.click(await screen.findByRole("button", { name: "Find request" }))
+      await user.click(await screen.findByRole("button", { name: "Approve" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+      expect(
+        await screen.findByText(
+          "Sign in again to continue. Changes like this need a recent sign-in.",
+        ),
+      ).toBeTruthy()
+      expect(auth.device.approve).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole("heading", { name: "Approved" })).toBeNull()
+    })
   })
 })

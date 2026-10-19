@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { navigateTo } from "../lib/navigation"
 import { fakeAuth } from "../test/fake-auth"
+import { fakeReauthAuth, notFresh, renderWithReauth } from "../test/reauth"
 import { ConsentPage, SelectOrganizationPage } from "./oauth-pages"
 
 vi.mock("../lib/navigation", async (importOriginal) => ({
@@ -231,5 +232,114 @@ describe("organization choice when the active organization is not listed", () =>
 
     await waitFor(() => expect(auth.continueOAuth).toHaveBeenCalled())
     expect(auth.setActiveOrganization).toHaveBeenCalledWith("org-a")
+  })
+
+  describe("ConsentPage when the session is not fresh", () => {
+    const consentUrl = "/consent?client_id=client-1&scope=openid+read&sig=abc%2Bdef&exp=1"
+
+    afterEach(() => {
+      window.history.replaceState(null, "", "/")
+    })
+
+    it("asks the person to confirm it's them, then allows once more", async () => {
+      window.history.replaceState(null, "", consentUrl)
+      const auth = fakeAuth({
+        consent: vi
+          .fn()
+          .mockRejectedValueOnce(notFresh())
+          .mockResolvedValueOnce("https://auth.example.com/done"),
+      })
+      const { reauth } = renderWithReauth(<ConsentPage auth={auth} {...consentProps} />)
+      const user = userEvent.setup()
+      await user.click(await screen.findByRole("button", { name: "Allow" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("https://auth.example.com/done"))
+      expect(auth.consent).toHaveBeenCalledTimes(2)
+      expect(auth.consent).toHaveBeenLastCalledWith(true)
+      expect(reauth.signInWithPassword).toHaveBeenCalledTimes(1)
+      // The page's own URL, and so its signed OAuth query, is untouched by the re-sign-in.
+      expect(window.location.pathname + window.location.search).toBe(consentUrl)
+    })
+
+    it("keeps the organization it was set to through the retry", async () => {
+      const user = userEvent.setup()
+      // The page's organization choice lands on the session the reauth client reads, as on the server.
+      const reauth = fakeReauthAuth()
+      const auth = fakeAuth({
+        setActiveOrganization: vi.fn(async (organizationId: string) =>
+          reauth.setActiveOrganization(organizationId),
+        ),
+        consent: vi
+          .fn()
+          .mockRejectedValueOnce(notFresh())
+          .mockResolvedValueOnce("https://auth.example.com/done"),
+      })
+      renderWithReauth(<ConsentPage auth={auth} {...consentProps} />, reauth)
+      await user.selectOptions(
+        await screen.findByRole("combobox", { name: "Organization" }),
+        "org-b",
+      )
+      await user.click(screen.getByRole("button", { name: "Allow" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("https://auth.example.com/done"))
+      expect(reauth.setActiveOrganization).toHaveBeenLastCalledWith("org-b")
+    })
+
+    it("cancelled: shows the refusal and does not allow again", async () => {
+      const user = userEvent.setup()
+      const auth = fakeAuth({ consent: vi.fn().mockRejectedValue(notFresh()) })
+      renderWithReauth(<ConsentPage auth={auth} {...consentProps} />)
+      await user.click(await screen.findByRole("button", { name: "Allow" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+
+      expect(
+        await screen.findByText(
+          "Sign in again to continue. Changes like this need a recent sign-in.",
+        ),
+      ).toBeTruthy()
+      expect(auth.consent).toHaveBeenCalledTimes(1)
+      expect(navigate).not.toHaveBeenCalled()
+    })
+
+    it("sign out and sign in again returns to the consent URL with its query", async () => {
+      window.history.replaceState(null, "", consentUrl)
+      const user = userEvent.setup()
+      const auth = fakeAuth({ consent: vi.fn().mockRejectedValue(notFresh()) })
+      const { reauth } = renderWithReauth(<ConsentPage auth={auth} {...consentProps} />)
+      await user.click(await screen.findByRole("button", { name: "Allow" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.click(within(dialog).getByRole("button", { name: "Sign out and sign in again" }))
+
+      await waitFor(() =>
+        expect(navigate).toHaveBeenCalledWith(`/sign-in?next=${encodeURIComponent(consentUrl)}`),
+      )
+      expect(reauth.signOut).toHaveBeenCalledTimes(1)
+      expect(auth.consent).toHaveBeenCalledTimes(1)
+    })
+
+    it("refuses a deny the same way, and retries it once", async () => {
+      const user = userEvent.setup()
+      const auth = fakeAuth({
+        consent: vi
+          .fn()
+          .mockRejectedValueOnce(notFresh())
+          .mockResolvedValueOnce("https://auth.example.com/denied"),
+      })
+      renderWithReauth(<ConsentPage auth={auth} {...consentProps} />)
+      await user.click(await screen.findByRole("button", { name: "Deny" }))
+      const dialog = await screen.findByRole("dialog", { name: "Confirm it's you" })
+      await user.type(within(dialog).getByLabelText("Password"), "pw")
+      await user.click(within(dialog).getByRole("button", { name: "Confirm" }))
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("https://auth.example.com/denied"))
+      expect(auth.consent).toHaveBeenLastCalledWith(false)
+    })
   })
 })

@@ -287,6 +287,17 @@ export async function drainAuthEvents(): Promise<void> {
   while (pending.size > 0) await Promise.all(pending)
 }
 
+/** The body fields mapAuthEvent reads (see bodyString). Nothing else is kept until the write lands. */
+const BODY_FIELDS = ["email", "organizationId", "userId", "token"] as const
+
+function pickBody(body: unknown): Record<string, unknown> | undefined {
+  if (!body || typeof body !== "object") return undefined
+  const source = body as Record<string, unknown>
+  const kept: Record<string, unknown> = {}
+  for (const key of BODY_FIELDS) if (key in source) kept[key] = source[key]
+  return kept
+}
+
 /** The better-auth plugin: one after hook, matched on the mapped paths. */
 export function authEvents(opts: AuthEventsOptions): BetterAuthPlugin {
   const ipHeader = opts.ipHeader ?? AUTH_EVENT_IP_HEADER
@@ -300,7 +311,8 @@ export function authEvents(opts: AuthEventsOptions): BetterAuthPlugin {
             // Snapshot what the mapper reads now: the response is already on its way.
             const call = {
               path: ctx.path,
-              body: ctx.body as Record<string, unknown> | undefined,
+              // Only the fields the mapper reads: the body can hold a plaintext password.
+              body: pickBody(ctx.body),
               session: ctx.context.session as AuthSession | null | undefined,
               newSession: ctx.context.newSession as AuthSession | null | undefined,
               returned: ctx.context.returned,

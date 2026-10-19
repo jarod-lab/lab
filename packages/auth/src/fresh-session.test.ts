@@ -131,6 +131,8 @@ describe("freshSessionGuard on the added paths", () => {
   }
 
   const ADDED: readonly [path: string, endpoint: string][] = [
+    ["/change-email", "changeEmail"],
+    ["/delete-user", "deleteUser"],
     ["/two-factor/generate-backup-codes", "generateBackupCodes"],
     ["/link-social", "linkSocialAccount"],
     ["/scim/generate-token", "generateScimToken"],

@@ -90,12 +90,13 @@ Code: `packages/auth/src/passkey-signup.ts`.
 ## Fresh sessions
 
 - A session signed in over `FRESH_AGE_SECONDS` (one hour) ago may not do sensitive actions.
-  `session.freshAge` is the same value, so better-auth's own guarded endpoints (delete user, change
-  password and email, two-factor disable, unlink account, session listing and revocation) agree
-  (`packages/auth/src/fresh-session.ts`).
+  `session.freshAge` is the same value, so better-auth's own age checks (session listing, unlink
+  account) agree (`packages/auth/src/fresh-session.ts`). Change password and two-factor disable ask
+  for the current password instead; session revocation is left open so an old session can still sign
+  an intruder out.
 - `freshSessionGuard` refuses `FRESH_SESSION_PATHS` with `SESSION_NOT_FRESH`: every endpoint that adds
-  a credential, changes who can act, or removes security config and isn't guarded upstream. That is
-  passkeys, two-factor enable and backup codes, social linking, API keys, SCIM token minting, SSO
+  a credential, changes who can act, or removes security config and isn't age-checked upstream. That
+  is the sign-in email, account deletion, passkeys, two-factor enable and backup codes, social linking, API keys, SCIM token minting, SSO
   providers and domain verification, invitations, member roles and removal, org roles and delete,
   OAuth clients and consent, device approval, and the platform admin actions. A request with no session passes through to the
   endpoint's own `UNAUTHORIZED`.

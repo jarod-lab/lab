@@ -1,6 +1,8 @@
-// Sensitive actions need a recent sign-in, not just a session. better-auth guards a handful of its
-// own endpoints with its freshness check (delete-user, change-password, two-factor/disable, ...), but
-// not the ones that add a credential or change an organization's people. This plugin refuses those
+// Sensitive actions need a recent sign-in, not just a session. In better-auth 1.7.7 only
+// list-sessions and unlink-account check session age (freshSessionMiddleware); change-email,
+// delete-user, change-password and two-factor/disable only check that a session exists. The last two
+// ask for the current password, which is itself a fresh proof, so they are left alone; session
+// revocation stays open so a person with an old session can still sign an intruder out. This plugin refuses those
 // when the session is older than FRESH_AGE_SECONDS, with better-auth's own code SESSION_NOT_FRESH.
 // The same window is set as `session.freshAge`, so better-auth's guarded endpoints agree with it.
 // A request with no session passes through: the endpoint itself answers UNAUTHORIZED.
@@ -12,11 +14,14 @@ export const FRESH_AGE_SECONDS = 60 * 60
 
 /**
  * better-auth endpoints the plugin guards: each adds or removes a credential, changes who may act, or
- * changes security config. Checked against better-auth 1.7.7 and the plugins' dists: the ones it guards
- * itself (passkey registration by default, unlink-account, delete-user, ...) are listed anyway, so the
- * window is one rule.
+ * changes security config, and isn't age-checked upstream (passkey registration is listed anyway, so the
+ * window is one rule). Checked against better-auth 1.7.7 and the plugins' dists.
  */
 export const FRESH_SESSION_PATHS = [
+  // The sign-in address: a new address can reset the password, so this is an account takeover step.
+  "/change-email",
+  // Account deletion (it also needs the emailed confirmation).
+  "/delete-user",
   // Passkeys: start a registration, finish one, delete one.
   "/passkey/generate-register-options",
   "/passkey/verify-registration",

@@ -146,7 +146,7 @@ describe("renderNotification", () => {
 
   it("lists every catalog event in docs/notifications.md", () => {
     const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
-    const documented = [...doc.matchAll(/^\| `([a-z_.]+)` \|/gm)].map((m) => m[1]).sort()
+    const documented = [...doc.matchAll(/^\| `([a-z_.]+)` \|/gm)].map((m) => m[1] ?? "").sort()
     expect(documented).toEqual(CATALOG_TYPES)
   })
 

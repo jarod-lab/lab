@@ -17,6 +17,8 @@ import {
 import { type Credentials, credentialsPath, loadCredentials, saveCredentials } from "./config"
 import { buildRequest, findOperation, listOperations, type OpenApiDocument } from "./spec"
 
+// The local-dev fallback; STARTER_URL or --base-url point at a deployment.
+// baseline:allow-next-line no-http-links
 export const DEFAULT_BASE_URL = "http://localhost:3000"
 
 export interface Io {

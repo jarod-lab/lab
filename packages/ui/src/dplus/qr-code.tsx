@@ -12,6 +12,8 @@ export function qrCodeSvg(value: string): string {
       if (dark) d += `M${x} ${y}h1v1h-1z`
     })
   })
+  // The SVG namespace is an identifier, not a link: it is always http://.
+  // baseline:allow-next-line no-http-links
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${qr.size} ${qr.size}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fafaf7"/><path d="${d}" fill="#111111"/></svg>`
 }
 

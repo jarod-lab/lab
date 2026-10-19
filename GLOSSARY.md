@@ -7,7 +7,9 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 
 - **Organization** — the tenant. Every request acts in exactly one; every customer-data table has
   `organizationId`. A signup creates a **personal organization** for the new user.
-- **Member** — a user's place in an organization, with a **role**: `owner`, `admin`, `member` or `viewer`.
+- **Member** — a user's place in an organization, with a **role**: `owner`, `admin`, `member` or `viewer`,
+  or a **capability role** (`approver`, `operator`, `billing`): a fixed role that bundles the permissions for
+  one job. Roles are fixed in `packages/auth/src/access.ts`; a member may hold several.
 - **Catalog** — the one list of resources and actions (`statements` in `packages/auth/src/access.ts`) that
   roles, API-key permissions, OAuth scopes and operations are all expressed in.
 - **Permission** — one `resource: [actions]` entry from the catalog, e.g. `project: ["read"]`.

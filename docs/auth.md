@@ -69,11 +69,21 @@ Code: `packages/auth/src/passkey-signup.ts`.
 - Counts live in the `rate_limit` table (see `docs/database.md`), keyed by client IP and path, so every
   instance shares them.
 - `STRICT_RULES` covers sign-in, magic link, 2FA codes, password reset, verification mail, sign-up,
-  passkey verification, SSO sign-in, and change email and password. Other auth endpoints share the
-  global limit (120 requests per 60 seconds).
+  passkey verification, SSO sign-in, and change email and password. Other writes share the global
+  limit (120 requests per 60 seconds).
+- GET requests are not limited and write no `rate_limit` row (the last rule, `"/**"`, skips a GET
+  that only the global limit covers), so session reads, listings and discovery cost nothing. A GET
+  that carries a code or a single-use token is limited: the emailed links (`/verify-email`,
+  `/reset-password/:token`, `/magic-link/verify`, `/passkey-signup/verify`, `/delete-user/callback`)
+  and the social and SSO callbacks. `GET /device` (the short user code) keeps the device plugin's own
+  rule, 5 tries per code lifetime. SCIM GETs are not limited: they authenticate with a bearer token in
+  the header. A new GET that takes a secret in its query needs a `STRICT_RULES` entry.
 - `apps/api/src/app.ts` sets the client IP into `CLIENT_IP_HEADER`, which better-auth reads through
-  `authIpAddress`. Any copy the client sent is dropped. The address is the socket's, or the last
+  `authIpAddress`. Any copy the client sent is dropped. The address is the socket's, or the rightmost
   `X-Forwarded-For` hop when `TRUST_PROXY` is on.
+- Set `TRUST_PROXY=true` behind a reverse proxy only if the proxy overwrites `X-Forwarded-For`. With it
+  off, every request is keyed on the proxy's address, so one client can lock out everyone; the server
+  logs a warning once per process when `X-Forwarded-For` arrives without `TRUST_PROXY`.
 - Test helpers pass `rateLimit: false`. One flow test in `apps/api/src/auth-flows.test.ts` opts in and
   expects a 429.
 
@@ -81,10 +91,13 @@ Code: `packages/auth/src/passkey-signup.ts`.
 
 - A session signed in over `FRESH_AGE_SECONDS` (one hour) ago may not do sensitive actions.
   `session.freshAge` is the same value, so better-auth's own guarded endpoints (delete user, change
-  password, two-factor disable) agree (`packages/auth/src/fresh-session.ts`).
-- `freshSessionGuard` refuses `FRESH_SESSION_PATHS` (passkey register and delete, two-factor enable,
-  API key create and update, SSO register, member role and removal, org role and delete, admin
-  set-role and impersonate) with `SESSION_NOT_FRESH`. A request with no session passes through to the
+  password and email, two-factor disable, unlink account, session listing and revocation) agree
+  (`packages/auth/src/fresh-session.ts`).
+- `freshSessionGuard` refuses `FRESH_SESSION_PATHS` with `SESSION_NOT_FRESH`: every endpoint that adds
+  a credential, changes who can act, or removes security config and isn't guarded upstream. That is
+  passkeys, two-factor enable and backup codes, social linking, API keys, SCIM token minting, SSO
+  providers and domain verification, invitations, member roles and removal, org roles and delete,
+  OAuth clients and consent, device approval, and the platform admin actions. A request with no session passes through to the
   endpoint's own `UNAUTHORIZED`.
 - Operations marked `fresh: true` get the same refusal (`assertFreshSession` in
   `apps/api/src/hooks.ts`): `create_api_key`, `revoke_agent_access`, `reset_member_two_factor`,
@@ -97,9 +110,12 @@ Code: `packages/auth/src/passkey-signup.ts`.
 ## Auth audit events
 
 - `authEvents` (`packages/auth/src/auth-events.ts`) maps better-auth endpoints to `AUTH_EVENT_NAMES`
-  and calls `onAuthEvent`. `apps/api/src/server.ts` passes `recordAuthEvent`
+  and calls `onAuthEvent` after the response is sent, so the lookup and the write never change how long
+  a request takes (a failed sign-in can't reveal whether the address has an account). Tests await
+  `drainAuthEvents()` or poll for the row. `apps/api/src/server.ts` passes `recordAuthEvent`
   (`apps/api/src/data/audit.ts`), which writes an `audit_event` row.
-- A refused call is an event whose outcome is its error code. Failed social and SSO callbacks are not
+- A refused call, including a validation failure (`isAPIError`), is an event whose outcome is its
+  error code. Failed social and SSO callbacks are not
   recorded.
 - The row goes to the event's organization, else the account's personal organization, and only when
   the person is a member there. An event with no account (an unknown email, a signed-out password
@@ -111,6 +127,15 @@ Code: `packages/auth/src/passkey-signup.ts`.
 
 Every step that resumes an authorization carries `oauth_query`. The magic link callbackURL holds it
 (`packages/auth/src/resume.ts`).
+
+## Roles
+
+- Fixed roles are `owner`, `admin`, `member` and `viewer`, plus three capability roles for people:
+  `approver` (reads runs and approves them), `operator` (reads, runs and steers, no approvals or agent
+  changes) and `billing` (the subscription only), all in `packages/auth/src/access.ts`.
+- A member may hold several (`viewer,approver`); a request is allowed when one role covers all of it.
+  Owners and admins assign them. Keys and OAuth tokens never hold `run: approve` or `subscription`.
+- Per-organization custom roles are on the roadmap (`docs/roadmap.md`).
 
 ## admin
 
@@ -128,9 +153,10 @@ Every step that resumes an authorization carries `oauth_query`. The magic link c
   `OAUTH_EXCLUDED` (`packages/auth/src/owner-only.ts`, `packages/auth/src/scim-token.ts`).
 - Provisioned users join as `member` (`SCIM_MEMBER_ROLE`); a role given later is kept while they stay
   active (`packages/auth/src/scim-projection.ts`).
-- Deprovisioning (active false, or the SCIM user deleted) removes the membership and ends the user's
-  grants and SCIM tokens in that org. Known issue: it also removes a membership added by hand, not
-  through SCIM.
+- Deprovisioning (active false, or the SCIM user deleted) removes only a membership the directory
+  created (`member.source = "scim"`) and ends the user's grants and SCIM tokens in that org. A member
+  added by hand or invited stays (logged as `scim.deprovision.hand_made_kept`). An owner is never
+  removed (`scim.deprovision.owner_kept`): change the role first. Admins are removed.
 - `list_scim_tokens` and `revoke_scim_token` are owner-only (`scim` resource). Revoking keeps the
   users provisioned by the token.
 - A token ends (its credential is revoked, users kept) when its creator is removed, leaves, is demoted

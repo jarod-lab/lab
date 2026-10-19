@@ -8,6 +8,7 @@ import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { inbox } from "better-inbox"
 import { wraps } from "@wraps.dev/better-auth"
+import { reportError } from "@starter/errors"
 import Stripe from "stripe"
 import { type DBTransactionAdapter, betterAuth, getCurrentAdapter } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
@@ -40,6 +41,8 @@ import {
 } from "./account-plugin"
 import { type LoginContext, signInOf } from "./login-method"
 import { createNotices } from "./notices"
+import { type NotificationType, type NotifyFn, createNotifier } from "./notifications"
+import { type NotificationHooks, notificationHooks } from "./notify-hooks"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
 import { canManageBilling, ownerOnlyGuard } from "./owner-only"
@@ -151,6 +154,15 @@ export interface AuthOptions {
    * (price ids from the Stripe test dashboard); none are invented. No plans means no subscriptions.
    */
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
+  /**
+   * Called when a notification could not be recorded (the flow that caused it still succeeds).
+   * Defaults to reportError, which reports only 5xx and unexposed errors.
+   */
+  onNotificationError?: (error: unknown, type: NotificationType) => void
+}
+
+const defaultNotificationError = (error: unknown, type: NotificationType) => {
+  reportError(error, { notification: type })
 }
 
 /**
@@ -245,6 +257,23 @@ export function createAuth(opts: AuthOptions) {
     return (await getCurrentAdapter(outer)) as Adapter
   }
 
+  // Notifications go through the inbox plugin's `notify` endpoint (auth.api.notify, server-only). That
+  // exists once betterAuth has returned, so the notifier reads it through a ref set below, as scimApi does.
+  const notifyRef: { notify?: NotifyFn } = {}
+  const onNotificationError = opts.onNotificationError ?? defaultNotificationError
+  const notifier = createNotifier({
+    notify: (body) => {
+      if (!notifyRef.notify) throw new Error("auth is not initialised")
+      return notifyRef.notify(body)
+    },
+    onError: (error, event) => onNotificationError(error, event.type),
+  })
+  const notifications = notificationHooks({
+    notifier,
+    adapter,
+    onError: (error, type) => onNotificationError(error, type),
+  })
+
   // Auth emails go through the user's own SES via Wraps. The plugin fills in better-auth's top-level
   // senders (verification, reset, password changed); the invitation sender belongs to the
   // organization plugin, so it comes from `wrapsPlugin.emails` below and shares the SES client.
@@ -283,6 +312,12 @@ export function createAuth(opts: AuthOptions) {
         }
         return wrapsPlugin.emails.verification(data)
       },
+      // The change-of-address link has been used: the account's address is the new one now.
+      afterEmailVerification: async (user, request) => {
+        const token = request ? new URL(request.url).searchParams.get("token") : null
+        if (!token || !changeRequestOf(token)) return
+        await notifications.personal({ type: "account.email_changed", userId: user.id })
+      },
     },
     // A reset means the password may be compromised: sign out every session, not just future ones.
     emailAndPassword: {
@@ -298,6 +333,7 @@ export function createAuth(opts: AuthOptions) {
         await setUserFields(db, user.id, { emailVerified: true })
         await endProvisionalKeys(db, user.id)
         await wrapsPlugin.emails.passwordChanged({ user })
+        await notifications.personal({ type: "account.password_changed", userId: user.id })
       },
     },
     // better-auth turns its origin/CSRF checks off under a test runner. Keep them on, so tests
@@ -364,10 +400,13 @@ export function createAuth(opts: AuthOptions) {
             if (user.emailVerified) await endProvisionalKeys(db, user.id)
             // The date two-factor was switched on: stamped once, cleared when it is switched off.
             const stamped = (user as { twoFactorEnabledAt?: Date | null }).twoFactorEnabledAt
+            // Stamped once per switch-on, so the stamp marks each transition: the notice goes out with it.
             if (user.twoFactorEnabled && !stamped) {
               await setUserFields(db, user.id, { twoFactorEnabledAt: new Date() })
+              await notifications.personal({ type: "account.two_factor_enabled", userId: user.id })
             } else if (!user.twoFactorEnabled && stamped) {
               await setUserFields(db, user.id, { twoFactorEnabledAt: null })
+              await notifications.personal({ type: "account.two_factor_disabled", userId: user.id })
             }
           },
         },
@@ -407,6 +446,8 @@ export function createAuth(opts: AuthOptions) {
       magicLink({ sendMagicLink: wrapsPlugin.emails.magicLink }),
       // Unlinking, deletion and email-change rules, and the security summary the page reads.
       accountPlugin({ notices, adapter, billing: !!opts.stripe }),
+      // Notices for account, organization, API key and passkey events (see notify-hooks.ts).
+      notifications.plugin,
       securitySummaryPlugin(),
       // Which sign-in methods the sign-in page offers (sign-in-methods.ts).
       signInMethodsPlugin(signInMethodsOf(opts)),
@@ -447,10 +488,37 @@ export function createAuth(opts: AuthOptions) {
             })
             refuseReservedSlug(organization.slug, current?.slug)
           },
-          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`).
-          afterRemoveMember: async ({ member, organization }) => {
+          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`), and
+          // drops their notifications for this organization. The removed person is told (not themselves).
+          afterRemoveMember: async ({ member, user, organization }) => {
             await revokeMemberGrants(opts.db, member.userId, organization.id)
             await endScim(member.userId, organization.id)
+            await notifications.dropOrgNotices(user.id, organization.id)
+            await notifications.memberRemoved({
+              userId: user.id,
+              organizationId: organization.id,
+              organizationName: organization.name,
+            })
+          },
+          // A new member, by invitation or added directly. A new organization's creator is its only
+          // member, so the fan-out (managers minus the new member) reaches nobody.
+          afterAcceptInvitation: async ({ member, user, organization }) => {
+            await notifications.inOrg(organization.id, {
+              type: "member.joined",
+              memberUserId: member.userId,
+              memberName: user.name,
+            })
+          },
+          // Its notifications go with it (no organization is left for them to point at).
+          afterDeleteOrganization: async ({ organization }) => {
+            await notifications.dropAllOrgNotices(organization.id)
+          },
+          afterAddMember: async ({ member, user, organization }) => {
+            await notifications.inOrg(organization.id, {
+              type: "member.joined",
+              memberUserId: member.userId,
+              memberName: user.name,
+            })
           },
         },
       }),
@@ -512,9 +580,10 @@ export function createAuth(opts: AuthOptions) {
       deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
       // In-app notifications (better-inbox): the bell. Written by the server only (auth.api.notify).
       inbox(),
-      ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
+      ...(opts.stripe ? [stripeBilling(opts.stripe, adapter, notifications)] : []),
     ],
   })
+  notifyRef.notify = (body) => auth.api.notify(body)
   scimApi.connect = (input) => auth.api.createSCIMManagedConnection(input)
   scimApi.management = {
     list: (provisioningDomainId) =>
@@ -530,11 +599,22 @@ export function createAuth(opts: AuthOptions) {
 function stripeBilling(
   config: NonNullable<AuthOptions["stripe"]>,
   adapter: () => Promise<Adapter>,
+  notifications: NotificationHooks,
 ) {
   const plans = config.plans ?? []
   return stripe({
     stripeClient: new Stripe(config.secretKey, { typescript: true }),
     stripeWebhookSecret: config.webhookSecret,
+    // Payment failures and cancellations reach the organization's billing managers (its owners).
+    onEvent: async (event) => {
+      const customer = (event.data.object as { customer?: unknown }).customer
+      if (typeof customer !== "string") return
+      if (event.type === "invoice.payment_failed")
+        await notifications.billing(customer, "payment_failed")
+      if (event.type === "customer.subscription.deleted") {
+        await notifications.billing(customer, "subscription_canceled")
+      }
+    },
     // Customers are made when an organization subscribes, not when a person signs up.
     createCustomerOnSignUp: false,
     organization: { enabled: true },

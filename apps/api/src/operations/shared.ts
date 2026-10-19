@@ -1,19 +1,38 @@
 import { type Caller, decodeCursor, encodeCursor, operationsFor } from "@starter/api"
 import type { Auth, Catalog } from "@starter/auth"
 import type { Database } from "@starter/db"
-import { AppError } from "@starter/errors"
+import { AppError, reportError } from "@starter/errors"
 import { z } from "zod"
 
 import type { Meter } from "../meter"
+import type { ApiNotifier } from "../notifications"
 
-/** What the operation files draw on: the auth instance, the database, metering and the clock. */
+/** What the operation files draw on: the auth instance, the database, metering, notices and the clock. */
 export interface OperationDeps {
   auth: Auth
   db: Database
   meter: Meter
+  /** Sends the in-app notifications an operation's event causes (see ../notifications.ts). */
+  notifier: ApiNotifier
   /** The clock: approval windows and timestamps read it, so tests can move time. */
   now: () => Date
 }
+
+/**
+ * Runs a notification after the operation's work is done. A notice never changes the response, so a
+ * lookup or send that throws is reported and dropped here.
+ */
+export async function notifySafely(task: () => Promise<void>): Promise<void> {
+  try {
+    await task()
+  } catch (error) {
+    reportError(error, { phase: "notify" })
+  }
+}
+
+/** The signed-in person behind a request, for "minus the actor" rules. Keys and agents have none. */
+export const personUserId = (caller: Caller): string | undefined =>
+  caller.actor.type === "user" ? caller.actor.userId : undefined
 
 // Example operations. Each one is a REST route, an MCP tool, and an entry in openapi.json and
 // llms.txt. Replace them with your product's; keep descriptions written for an agent reader.

@@ -1,8 +1,8 @@
 import { paginated, paginationInput } from "@starter/api"
+import type { OrgEventInput } from "@starter/auth"
 import { AgentId, agentInOrg, name, RunId, runInOrg } from "@starter/auth-proofs"
 import { AppError } from "@starter/errors"
 import { z } from "zod"
-
 import {
   appendRunStep,
   approvalView,
@@ -12,6 +12,7 @@ import {
   RUN_STATUSES,
   type Run,
   type RunStep,
+  runNotice,
   STEP_STATUSES,
   startRun,
   steerRun,
@@ -26,6 +27,7 @@ import {
   approvalOutputSchema,
   cut,
   defineOperation,
+  notifySafely,
   type OperationDeps,
   readCursor,
   runRef,
@@ -93,6 +95,21 @@ const messageOutput = z.object({
   createdAt: z.string(),
 })
 
+/** The notice for a run that finished: the starter hears it, or owners and admins when a key started it. */
+const finishedEvent = (
+  status: "done" | "failed",
+  runId: string,
+  facts: { agentName: string; starterUserId: string | null },
+): OrgEventInput =>
+  status === "done"
+    ? { type: "run.done", agentName: facts.agentName, runId, runStarterUserId: facts.starterUserId }
+    : {
+        type: "run.failed",
+        agentName: facts.agentName,
+        runId,
+        runStarterUserId: facts.starterUserId,
+      }
+
 const durationMs = (start: Date | null, end: Date | null, at: Date): number | null =>
   start ? (end ?? at).getTime() - start.getTime() : null
 
@@ -135,7 +152,11 @@ const runDetailOutput = runSummaryOutput.extend({
   messages: z.array(messageOutput),
 })
 
-export function runOperations({ db, now }: Pick<OperationDeps, "db" | "now">) {
+export function runOperations({
+  db,
+  now,
+  notifier,
+}: Pick<OperationDeps, "db" | "now" | "notifier">) {
   const start_run = defineOperation({
     name: "start_run",
     method: "POST",
@@ -272,10 +293,19 @@ export function runOperations({ db, now }: Pick<OperationDeps, "db" | "now">) {
       },
     ],
     handler: ({ id, ...patch }, { caller }) =>
-      inCallerOrg(caller, (org) =>
+      inCallerOrg(caller, (org, proof) =>
         name(RunId(id), async (runId) => {
           const inOrg = await requireInOrg(runInOrg, db, runId, org, "Run")
           const row = orNotFound(await updateRun(db, runId, org, inOrg, patch, now()), "Run")
+          // updateRun refuses writes to a finished run, so a run reaches done or failed exactly once.
+          if (row.status === "done" || row.status === "failed") {
+            const finishedAs = row.status
+            await notifySafely(async () => {
+              const facts = await runNotice(db, row.id, org, proof)
+              if (!facts) return
+              await notifier.inOrg(org, proof, finishedEvent(finishedAs, row.id, facts))
+            })
+          }
           return runSummary(row, now())
         }),
       ),

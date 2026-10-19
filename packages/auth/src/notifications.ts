@@ -62,7 +62,7 @@ export type NotificationEvent =
   | { type: "member.removed"; userId: string; organizationName: string }
   | ({ type: "api_key.created"; keyName: string; actorUserId: string } & InOrg)
   | ({ type: "api_key.revoked"; keyName: string; actorUserId: string } & InOrg)
-  | ({ type: "agent_access.revoked"; clientName: string; actorUserId: string } & InOrg)
+  | ({ type: "agent_access.revoked"; clientName: string; actorUserId?: string } & InOrg)
   | ({ type: "security.two_factor_reset"; memberUserId: string; actorUserId?: string } & InOrg)
   | ({ type: "billing.payment_failed" } & InOrg)
   | ({ type: "billing.subscription_canceled" } & InOrg)
@@ -216,8 +216,10 @@ export function renderNotification(event: NotificationEvent): RenderedNotificati
     case "approval.decided":
       return {
         type,
-        title: event.decision === "approved" ? "Approved" : "Denied",
-        body: `${event.action}.`,
+        // Sent when the person decides; the decision takes effect 30 seconds later and can be undone
+        // until then, so the copy names the decision, not its outcome.
+        title: event.decision === "approved" ? "Action approved" : "Action denied",
+        body: `${event.action}. It takes effect 30 seconds after the decision unless it is undone.`,
         href: orgHref(event.org, `/runs/${event.runId}`),
         data: { runId: event.runId, decision: event.decision },
       }

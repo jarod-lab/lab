@@ -7,6 +7,7 @@ import {
   countPendingApprovals,
   decideApproval,
   requestApproval,
+  runNotice,
   undoApproval,
 } from "../data/runs"
 import { inCallerOrg, orNotFound, requireInOrg } from "../tenant"
@@ -14,12 +15,17 @@ import {
   approvalOutputSchema,
   approvalRef,
   defineOperation,
+  notifySafely,
   type OperationDeps,
   requirePerson,
   runRef,
 } from "./shared"
 
-export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now">) {
+export function approvalOperations({
+  db,
+  now,
+  notifier,
+}: Pick<OperationDeps, "db" | "now" | "notifier">) {
   const request_approval = defineOperation({
     name: "request_approval",
     method: "POST",
@@ -59,13 +65,30 @@ export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now"
       },
     ],
     handler: ({ id, ...request }, { caller }) =>
-      inCallerOrg(caller, (org) =>
+      inCallerOrg(caller, (org, proof) =>
         name(RunId(id), async (runId) => {
           const inOrg = await requireInOrg(runInOrg, db, runId, org, "Run")
           const row = orNotFound(
             await requestApproval(db, runId, org, inOrg, request, now()),
             "Run or step",
           )
+          // Everyone who can approve hears it, except a person who asked (they can't approve their own
+          // request as a notice). Only a signed-in person is excluded; a key is nobody's member.
+          const requesterUserId =
+            caller.via === "session" && caller.actor.type === "user"
+              ? caller.actor.userId
+              : undefined
+          await notifySafely(async () => {
+            const facts = await runNotice(db, row.runId, org, proof)
+            if (!facts) return
+            await notifier.inOrg(org, proof, {
+              type: "approval.requested",
+              agentName: facts.agentName,
+              action: row.action,
+              runId: row.runId,
+              requesterUserId,
+            })
+          })
           return approvalView(row, now(), "agent")
         }),
       ),
@@ -93,11 +116,26 @@ export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now"
       },
     ],
     handler: ({ id, decision }, { caller }) =>
-      inCallerOrg(caller, (org) =>
+      inCallerOrg(caller, (org, proof) =>
         name(ApprovalId(id), async (approvalId) => {
           const userId = requirePerson(caller)
           const inOrg = await requireInOrg(approvalInOrg, db, approvalId, org, "Approval")
           const row = await decideApproval(db, approvalId, org, inOrg, decision, userId, now())
+          // Sent at decision time. The decision can still be undone for 30 seconds (undo_approval sends
+          // nothing); the starter's notice then stands until a decision is made again.
+          const decidedAs = row.status === "approved" ? "approved" : "denied"
+          await notifySafely(async () => {
+            const facts = await runNotice(db, row.runId, org, proof)
+            if (!facts) return
+            await notifier.inOrg(org, proof, {
+              type: "approval.decided",
+              decision: decidedAs,
+              action: row.action,
+              runId: row.runId,
+              deciderUserId: userId,
+              runStarterUserId: facts.starterUserId,
+            })
+          })
           return approvalView(row, now(), "person")
         }),
       ),

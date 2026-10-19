@@ -143,11 +143,12 @@ describe("renderNotification", () => {
       data: { runId: "run_1" },
     })
     expect(renderNotification(samples["approval.decided"])).toMatchObject({
-      title: "Approved",
+      title: "Action approved",
+      body: expect.stringContaining("unless it is undone"),
       href: "/acme/runs/run_1",
     })
     expect(renderNotification({ ...samples["approval.decided"], decision: "denied" }).title).toBe(
-      "Denied",
+      "Action denied",
     )
     expect(renderNotification(samples["api_key.created"]).href).toBe("/acme/settings/api-keys")
     expect(renderNotification(samples["billing.payment_failed"]).href).toBe(

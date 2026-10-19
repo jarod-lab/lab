@@ -12,7 +12,9 @@ export interface SentMail {
   link: string
 }
 
-export async function createTestAuth(options: { stripe?: AuthOptions["stripe"] } = {}) {
+export async function createTestAuth(
+  options: Pick<AuthOptions, "stripe" | "onNotificationError"> = {},
+) {
   const t = await createTestDb()
   // Stands in for SES: records who each auth email is for and the first link in it.
   const outbox: SentMail[] = []
@@ -33,6 +35,7 @@ export async function createTestAuth(options: { stripe?: AuthOptions["stripe"] }
     oauthResources: [BASE, AUDIENCE],
     ses: { client: ses },
     stripe: options.stripe,
+    onNotificationError: options.onNotificationError,
   })
   let n = 0
 

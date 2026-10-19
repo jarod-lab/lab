@@ -26,7 +26,9 @@ import {
   releaseIdempotencyKey,
   reserveIdempotencyKey,
 } from "./data/idempotency"
+import { claimNotice } from "./data/usage"
 import { type Meter, type MeterLimits, secondsUntilReset } from "./meter"
+import type { ApiNotifier } from "./notifications"
 import { inCallerOrg } from "./tenant"
 
 export interface ApiHooks {
@@ -82,11 +84,14 @@ export function createApiHooks({
   db,
   meter,
   secret,
+  notifier,
 }: {
   db: Database
   meter: Meter
   /** The server secret (BETTER_AUTH_SECRET): idempotency records are keyed and sealed with it. */
   secret: string
+  /** Sends usage.limit_reached. Without it the limit is enforced but nobody is told. */
+  notifier?: ApiNotifier
 }): ApiHooks {
   const readings = new WeakMap<OperationContext, Reading>()
   // Keys this call reserved; completed or released in `after`.
@@ -112,6 +117,23 @@ export function createApiHooks({
     }
   }
 
+  /**
+   * Tells the organization's billing managers that today's limit was reached: once per organization per
+   * UTC day. The first refused call claims the day's notice marker (a conflict-free insert, see
+   * claimNotice), so concurrent refusals send one notice between them. Never fails the refusal.
+   */
+  async function noticeLimitReached(caller: Caller, limit: number, day: string): Promise<void> {
+    if (!notifier) return
+    try {
+      await inCallerOrg(caller, async (org, proof) => {
+        if (!(await claimNotice(db, org, proof, "usage.limit_reached", day))) return
+        await notifier.inOrg(org, proof, { type: "usage.limit_reached", limit })
+      })
+    } catch (error) {
+      reportError(error, { phase: "notify", notification: "usage.limit_reached" })
+    }
+  }
+
   /** Counts the call against the organization's day, refusing it over the limit. */
   async function consume(op: AnyOperation, ctx: OperationContext): Promise<void> {
     const now = new Date()
@@ -119,6 +141,7 @@ export function createApiHooks({
     const resetIn = secondsUntilReset(now)
     readings.set(ctx, { limit, total, claimed, resetIn })
     if (total > limit) {
+      await noticeLimitReached(ctx.caller, limit, day)
       throw new AppError(
         "RATE_LIMITED",
         `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,

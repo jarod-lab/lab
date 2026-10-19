@@ -1,12 +1,12 @@
-import { name, memberInOrg, UserId } from "@starter/auth-proofs"
+import { memberInOrg, name, UserId } from "@starter/auth-proofs"
 import { AppError } from "@starter/errors"
 import { z } from "zod"
 
 import { listMemberSecurity, resetMemberTwoFactor } from "../data/members"
 import { inCallerOrg, requireInOrg } from "../tenant"
-import { defineOperation, type OperationDeps } from "./shared"
+import { defineOperation, notifySafely, type OperationDeps, personUserId } from "./shared"
 
-export function memberOperations({ db }: Pick<OperationDeps, "db">) {
+export function memberOperations({ db, notifier }: Pick<OperationDeps, "db" | "notifier">) {
   const list_member_security = defineOperation({
     name: "list_member_security",
     method: "GET",
@@ -73,6 +73,13 @@ export function memberOperations({ db }: Pick<OperationDeps, "db">) {
           }
           const inOrg = await requireInOrg(memberInOrg, db, user, org, "Member")
           await resetMemberTwoFactor(db, user, org, { member: inOrg, actor: proof })
+          await notifySafely(() =>
+            notifier.inOrg(org, proof, {
+              type: "security.two_factor_reset",
+              memberUserId: userId,
+              actorUserId: personUserId(caller),
+            }),
+          )
           return { reset: true as const }
         }),
       ),

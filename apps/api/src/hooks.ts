@@ -3,6 +3,7 @@
 //   - idempotency: a non-readOnly call with an Idempotency-Key runs once; retries replay its response
 //   - audit: every non-readOnly call is recorded with its outcome (including refusals made here)
 //   - permission hints: a FORBIDDEN names the OAuth scope or API key permission that would allow it
+//   - fresh sessions: a `fresh` operation refuses a session that signed in over an hour ago
 import { createHash } from "node:crypto"
 
 import {
@@ -16,7 +17,7 @@ import {
   type OperationContext,
   type PermissionSet,
 } from "@starter/api"
-import { OAUTH_SCOPE_GRANTS, OAUTH_SCOPES } from "@starter/auth"
+import { isFresh, OAUTH_SCOPE_GRANTS, OAUTH_SCOPES } from "@starter/auth"
 import type { Database } from "@starter/db"
 import { AppError, type ErrorCode, reportError } from "@starter/errors"
 
@@ -76,6 +77,21 @@ export function permissionHint(missing: PermissionSet): string {
       ? `an OAuth token with scope ${scopes.map((s) => `\`${s}\``).join(" or ")}, or an API key with ${needed}`
       : `an API key with ${needed} (no OAuth scope grants it)`
   return `Needs ${needed}. Use ${via}.`
+}
+
+/**
+ * A `fresh` operation needs a session that signed in recently (`isFresh`, one hour). Only a session
+ * caller is checked: an API key or OAuth token has no sign-in age, so it passes. A session whose age
+ * is unknown counts as stale. Runs before metering and idempotency, so a refusal costs nothing and a
+ * stored response is not replayed to a stale session.
+ */
+export function assertFreshSession(op: AnyOperation, caller: Caller, now: Date = new Date()): void {
+  if (op.fresh !== true || caller.via !== "session") return
+  if (caller.sessionCreatedAt && isFresh(caller.sessionCreatedAt, now.getTime())) return
+  throw new AppError("SESSION_NOT_FRESH", "This action needs a recent sign-in", {
+    hint: "Sign in again to confirm it's you, then retry. The sign-in must be under an hour old.",
+    context: { operation: op.name },
+  })
 }
 
 export function createApiHooks({
@@ -139,6 +155,7 @@ export function createApiHooks({
     const { op, input, ctx } = e
     const mutating = isMutating(op)
     try {
+      assertFreshSession(op, ctx.caller)
       // A person's reads in the web app aren't metered: its polling (inbox, running count, live
       // runs) would spend the agents' daily budget otherwise. Writes count for every caller, so a
       // session cookie can't script around the limit.
@@ -178,7 +195,7 @@ export function createApiHooks({
       if (
         mutating &&
         err instanceof AppError &&
-        (err.code === "RATE_LIMITED" || err.code === "CONFLICT")
+        (err.code === "RATE_LIMITED" || err.code === "CONFLICT" || err.code === "SESSION_NOT_FRESH")
       ) {
         await audit(op, ctx, err.code)
       }

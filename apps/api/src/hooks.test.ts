@@ -1,5 +1,5 @@
 // Metering, idempotency, audit and permission hints, through the real REST and MCP surfaces.
-import { defineOperation } from "@starter/api"
+import { type Caller, defineOperation } from "@starter/api"
 import { idempotencyKey, user, auditEvent } from "@starter/db"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -7,7 +7,7 @@ import { z } from "zod"
 
 import { createTestApp, SECRET } from "./app.test.helpers"
 import { idempotencyLookup } from "./data/idempotency"
-import { permissionHint, requestHash } from "./hooks"
+import { assertFreshSession, permissionHint, requestHash } from "./hooks"
 
 // Fails on its first call only, so a retry after a failure can be checked.
 let flakyCalls = 0
@@ -323,5 +323,120 @@ describe("metering the web app", () => {
       t.as(t.owner.cookie, { method: "POST", body: JSON.stringify({ name: "Over" }) }),
     )
     expect(res.status).toBe(429)
+  })
+})
+
+// Sensitive and ordinary writes, to compare a stale session on each.
+const enrol = defineOperation({
+  name: "enrol_thing",
+  method: "POST",
+  path: "/v1/things/enrol",
+  summary: "Enrol a sensitive thing",
+  description: "A sensitive write: needs a recent sign-in.",
+  permissions: { project: ["create"] },
+  fresh: true,
+  input: z.object({}),
+  output: z.object({ ok: z.boolean() }),
+  examples: [{ input: {} }],
+  handler: () => ({ ok: true }),
+})
+const plain = defineOperation({
+  ...enrol,
+  name: "plain_thing",
+  path: "/v1/things/plain",
+  summary: "An ordinary write",
+  description: "An ordinary write.",
+  fresh: undefined,
+})
+
+describe("fresh sessions (assertFreshSession)", () => {
+  const now = new Date("2026-10-18T12:00:00Z")
+  const caller = (over: Partial<Caller>): Caller => ({
+    organizationId: "org1",
+    actor: { type: "user", userId: "u1" },
+    grants: [{ project: ["create"] }],
+    via: "session",
+    sessionCreatedAt: new Date(now.getTime() - 60_000),
+    ...over,
+  })
+  const at = (seconds: number) => new Date(now.getTime() - seconds * 1000)
+
+  it("passes a fresh session and refuses one an hour or more old", () => {
+    expect(() => assertFreshSession(enrol, caller({}), now)).not.toThrow()
+    expect(() => assertFreshSession(enrol, caller({ sessionCreatedAt: at(3600) }), now)).toThrow(
+      expect.objectContaining({ code: "SESSION_NOT_FRESH", status: 403 }),
+    )
+  })
+
+  it("refuses a session whose age is unknown", () => {
+    expect(() => assertFreshSession(enrol, caller({ sessionCreatedAt: undefined }), now)).toThrow(
+      expect.objectContaining({ code: "SESSION_NOT_FRESH" }),
+    )
+  })
+
+  it("exempts API keys and OAuth tokens, which have no sign-in age", () => {
+    const key = caller({
+      via: "api-key",
+      actor: { type: "apiKey", keyId: "k1" },
+      sessionCreatedAt: undefined,
+    })
+    const oauth = caller({ via: "oauth", clientId: "c1", sessionCreatedAt: undefined })
+    expect(() => assertFreshSession(enrol, key, now)).not.toThrow()
+    expect(() => assertFreshSession(enrol, oauth, now)).not.toThrow()
+  })
+
+  it("leaves operations that are not marked fresh alone", () => {
+    expect(() =>
+      assertFreshSession(plain, caller({ sessionCreatedAt: at(7200) }), now),
+    ).not.toThrow()
+  })
+})
+
+describe("fresh sessions over REST (real Postgres via PGlite)", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp([enrol, plain])
+  })
+  afterAll(() => t.close())
+
+  /** Make the owner's session look two hours old. */
+  const ageOwnerSession = async (seconds: number) =>
+    (await t.auth.$context).adapter.update({
+      model: "session",
+      where: [{ field: "userId", value: t.owner.userId }],
+      update: { createdAt: new Date(Date.now() - seconds * 1000) },
+    })
+
+  it("runs a fresh operation for a fresh session", async () => {
+    const res = await t.req(
+      "/v1/things/enrol",
+      t.as(t.owner.cookie, { method: "POST", body: "{}" }),
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it("refuses a fresh operation for a stale session with SESSION_NOT_FRESH", async () => {
+    await ageOwnerSession(2 * 60 * 60)
+    const res = await t.req(
+      "/v1/things/enrol",
+      t.as(t.owner.cookie, { method: "POST", body: "{}" }),
+    )
+    const body = await res.json()
+    expect(res.status).toBe(403)
+    expect(body.error.code).toBe("SESSION_NOT_FRESH")
+    expect(body.error.hint).toMatch(/Sign in again/)
+  })
+
+  it("still runs an ordinary write for the same stale session", async () => {
+    const res = await t.req(
+      "/v1/things/plain",
+      t.as(t.owner.cookie, { method: "POST", body: "{}" }),
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it("runs a fresh operation with an API key, which has no sign-in age", async () => {
+    const res = await t.req("/v1/things/enrol", t.as(t.fullKey, { method: "POST", body: "{}" }))
+    expect(res.status).toBe(200)
   })
 })

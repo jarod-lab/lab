@@ -14,6 +14,8 @@ export interface Caller {
   grants: readonly PermissionSet[]
   via: string
   clientId?: string
+  /** When a session caller's session was created. Absent for API keys and OAuth tokens. */
+  sessionCreatedAt?: Date
 }
 
 /** The context of an operation that needs a credential (the default): the caller acts in its org. */
@@ -115,6 +117,12 @@ export interface OperationSpec<
   output: O
   /** Hints for agents (MCP tool annotations). */
   hints?: { readOnly?: boolean; destructive?: boolean; idempotent?: boolean }
+  /**
+   * A sensitive action: a session caller must have signed in recently (FRESH_AGE_SECONDS in
+   * `@starter/auth`), or the call is refused with SESSION_NOT_FRESH. API keys and OAuth tokens have no
+   * sign-in age, so they are not checked. Enforced by the invoke hooks in apps/api.
+   */
+  fresh?: true
   /**
    * Shown in llms-full.txt; the first becomes the OpenAPI example. Contract tests run each one as an
    * organization owner: `output` must validate, and `error` documents an expected failure instead.

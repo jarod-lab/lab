@@ -14,6 +14,15 @@ describe("AppError", () => {
     expect(new AppError("INTERNAL", "db password wrong").toPublic().message).toBe("Internal error")
     expect(new AppError("INTERNAL", "ok", { expose: true }).toPublic().message).toBe("ok")
   })
+
+  it("maps SESSION_NOT_FRESH to 403 and exposes it", () => {
+    const e = new AppError("SESSION_NOT_FRESH", "Sign in again to confirm it's you")
+    expect(e.status).toBe(403)
+    expect(e.toPublic()).toEqual({
+      code: "SESSION_NOT_FRESH",
+      message: "Sign in again to confirm it's you",
+    })
+  })
 })
 
 describe("toAppError", () => {

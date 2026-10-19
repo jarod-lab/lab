@@ -60,6 +60,14 @@ describe("defineOperation", () => {
   })
 })
 
+describe("fresh", () => {
+  it("is kept on the operation as declared", () => {
+    const op = defineOperation({ ...getNote, fresh: true })
+    expect(op.fresh).toBe(true)
+    expect(getNote.fresh).toBeUndefined()
+  })
+})
+
 describe("defineRegistry", () => {
   it("rejects duplicate names and colliding routes", () => {
     expect(() => defineRegistry([getNote, getNote])).toThrow(/Duplicate operation name/)

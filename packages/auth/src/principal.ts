@@ -21,6 +21,8 @@ export interface Principal {
   grants: PermissionSet[]
   /** OAuth client id, or the API key id. */
   clientId?: string
+  /** When a session principal's session was created: its sign-in age, for `fresh` operations. */
+  sessionCreatedAt?: Date
 }
 
 export interface ResolveOptions {
@@ -84,6 +86,7 @@ async function fromSession(auth: Auth, headers: Headers): Promise<Principal | nu
     organizationId: orgId,
     actor: { type: "user", userId: session.user.id },
     via: "session",
+    sessionCreatedAt: new Date(session.session.createdAt),
     // An admin impersonating this user gets read-only access, whatever the user's role allows.
     grants: isImpersonated(session) ? narrow(roles, IMPERSONATION_GRANTS as PermissionSet) : roles,
   }

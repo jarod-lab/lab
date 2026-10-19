@@ -44,6 +44,25 @@ describe("resolvePrincipal (real Postgres via PGlite)", () => {
       expect(allowed(p?.grants ?? [], { organization: ["delete"] })).toBe(true)
     })
 
+    it("carry when the session was created, for a fresh-session check", async () => {
+      const before = Date.now()
+      const p = await resolve({ cookie: owner.cookie })
+      expect(p?.sessionCreatedAt).toBeInstanceOf(Date)
+      expect(p?.sessionCreatedAt?.getTime()).toBeLessThanOrEqual(before)
+    })
+
+    it("show an old session's real age, not the time of the request", async () => {
+      const u = await t.signUp("Old")
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      await (await t.auth.$context).adapter.update({
+        model: "session",
+        where: [{ field: "userId", value: u.userId }],
+        update: { createdAt: twoHoursAgo },
+      })
+      const p = await resolve({ cookie: u.cookie })
+      expect(p?.sessionCreatedAt?.getTime()).toBe(twoHoursAgo.getTime())
+    })
+
     it("follow a switch of active organization, with that org's role", async () => {
       await t.setActive(viewer.cookie, owner.orgId)
       const p = await resolve({ cookie: viewer.cookie })
@@ -66,6 +85,11 @@ describe("resolvePrincipal (real Postgres via PGlite)", () => {
   })
 
   describe("organization API keys", () => {
+    it("have no sign-in age: a key principal carries no sessionCreatedAt", async () => {
+      const key = await orgKey({ project: ["read"] })
+      expect((await resolve({ "x-api-key": key.key }))?.sessionCreatedAt).toBeUndefined()
+    })
+
     it("act for the org with exactly the permissions they were given", async () => {
       const key = await orgKey({ project: ["read"] })
       expect(key.key.startsWith("sk_")).toBe(true)

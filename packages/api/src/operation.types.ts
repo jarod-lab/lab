@@ -16,5 +16,8 @@ const getNote = {
 } as const
 
 define({ ...getNote, permissions: { note: ["write"] } })
+define({ ...getNote, permissions: { note: ["write"] }, fresh: true })
+// @ts-expect-error: fresh is a flag, not a string
+define({ ...getNote, permissions: { note: ["write"] }, fresh: "yes" })
 // @ts-expect-error: "delete" is not a note action in the catalog
 define({ ...getNote, permissions: { note: ["delete"] } })

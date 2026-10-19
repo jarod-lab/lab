@@ -42,6 +42,23 @@ describe("AppShellContainer", () => {
     expect(await screen.findByRole("menuitem", { name: /Babbage Labs/ })).toBeTruthy()
   })
 
+  it("puts the notifications bell in the top bar when the auth client has an inbox", async () => {
+    renderShell({
+      auth: fakeAuth({
+        notifications: {
+          inbox: {
+            list: vi.fn(async () => ({ data: { notifications: [], hasMore: false }, error: null })),
+            unreadCount: vi.fn(async () => ({ data: { count: 1 }, error: null })),
+            markRead: vi.fn(async () => ({ data: null, error: null })),
+            markAllRead: vi.fn(async () => ({ data: null, error: null })),
+          },
+        },
+      }),
+    })
+    await loaded()
+    expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeTruthy()
+  })
+
   it("has no accessibility violations", async () => {
     renderShell()
     await loaded()

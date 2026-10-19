@@ -1,5 +1,6 @@
 import { TWO_FACTOR_PATH, createClient } from "@starter/auth/client"
 import type { SignInMethods, SocialProvider } from "@starter/auth/client"
+import type { InboxFetchClient } from "better-inbox/react"
 
 import { rawSearch } from "./navigation"
 
@@ -99,6 +100,11 @@ export interface WebAuth {
    * The page never says whether the address has an account, so this resolves the same either way.
    */
   requestPasswordReset?(input: { email: string; redirectTo: string }): Promise<void>
+  /**
+   * The person's notifications and unread count (better-inbox's `inbox.*` endpoints), for the bell in
+   * the top bar. Optional so pages and tests without it show no bell.
+   */
+  notifications?: InboxFetchClient
   device: {
     lookup(userCode: string): Promise<DeviceLookup>
     approve(userCode: string): Promise<void>
@@ -142,6 +148,21 @@ export function makeAuthClient(baseURL?: string, fetchImpl?: typeof fetch): Auth
 }
 
 /**
+ * better-inbox's hook takes its own client shape. This adapts the better-auth client's inbox
+ * actions to it, so the page never needs a cast.
+ */
+function inboxFetchClient(inbox: AuthClient["inbox"]): InboxFetchClient {
+  return {
+    inbox: {
+      list: ({ query }) => inbox.list({ query }),
+      unreadCount: (input) => inbox.unreadCount(input),
+      markRead: ({ id }) => inbox.markRead({ id }),
+      markAllRead: (input) => inbox.markAllRead(input),
+    },
+  }
+}
+
+/**
  * The browser implementation. Same-origin: the API serves these pages, so `baseURL` is the page's
  * origin and session cookies go with every request. The client's OAuth fetch plugin adds the page's
  * signed query to sign-in, sign-up, consent and continue, which is how those requests resume the flow.
@@ -150,6 +171,7 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
   const client = makeAuthClient(baseURL, fetchImpl)
 
   return {
+    notifications: inboxFetchClient(client.inbox),
     async getSession() {
       const result = await client.getSession()
       if (!result.data) return null

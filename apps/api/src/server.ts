@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server"
 import { createAuth, parseStripePlans } from "@starter/auth"
 import { createDb } from "@starter/db"
 import { env } from "@starter/env"
+import { reportError } from "@starter/errors"
 import { createLogger } from "@starter/logger"
 import { parseStatusProviders } from "@starter/observability"
 
@@ -10,6 +11,7 @@ import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
+import { createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
 
 const logger = createLogger({ name: "api" })
@@ -54,6 +56,8 @@ const auth = createAuth({
   onAuthEvent: async (event) => {
     await recordAuthEvent(db, event)
   },
+  // A notification that could not be recorded never fails the request; it is reported here.
+  onNotificationError: (error, type) => reportError(error, { notification: type }),
 })
 
 const meter = createMeter({
@@ -64,16 +68,19 @@ const meter = createMeter({
   },
 })
 
+// One notifier for operations and the invoke hooks (usage.limit_reached).
+const notifier = createApiNotifier({ auth, db })
+
 const app = createApp({
   devMail,
   auth,
-  operations: createOperations({ auth, db, meter }),
+  operations: createOperations({ auth, db, meter, notifier }),
   baseURL,
   name: "Starter API",
   version: "0.0.0",
   description: "The Starter API. Replace this with one sentence about what your product does.",
   logger,
-  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET }),
+  hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET, notifier }),
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
   // Parsed here so a malformed list stops startup instead of showing nothing.

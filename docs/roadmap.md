@@ -16,6 +16,9 @@
 - Drop the single-column `clientId` indexes on `oauth_consent` and `oauth_refresh_token`, now covered
   by the 0011 composite indexes.
 - Audit for FORBIDDEN and BAD_REQUEST attempts.
+- Notifications for agents: an operation (`list_notifications`) so an OAuth client acting for a
+  person can read their notifications. Email or push delivery, per-person preferences and digests.
+  Today they are in-app only (`docs/notifications.md`).
 - Verifying the Cursor and VS Code install snippets. Their shapes are inferred from docs.
 - The e2e job in CI (see `docs/tooling.md`) and `llms.txt` on a marketing domain (there is no
   marketing app here).

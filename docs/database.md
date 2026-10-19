@@ -19,17 +19,25 @@
 - `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs`
   (agent, run, run_step, approval, steer_message; tenant tables), `0007_session_login_method`,
   `0008_sso_domain_verification` and `0009_steer_message_org_index`.
-- `0010_auth_hardening` adds `rate_limit`, the counts for the auth rate limits
-  (`packages/auth/src/rate-limit.ts`).
-- `0011_grant_check_indexes` adds composite indexes for the OAuth grant check (`oauth_consent` and
-  `oauth_refresh_token`, by client, organization and user; `grantStands` in
-  `packages/auth/src/principal.ts`). They are declared in `withGrantIndexes()` in
-  `packages/auth/src/index.ts`, so `auth generate` keeps them. A plain `CREATE INDEX` blocks writes
-  while it builds; on a large table, run `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand before
-  applying 0011. The single-column `clientId` indexes on those tables are now redundant.
-- `0012_member_source` adds `member.source`: `"scim"` for a membership the directory created, else
-  null. SCIM deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).
-- Migrations `0003` through `0012` are not applied until the user runs them.
+- `0010_notifications` adds better-inbox's `notification` table. The table is generated into
+  `auth-schema.ts`, and the migration appends two custom statements: the
+  `(user_id, organization_id, created_at)` index, and a cascading foreign key from
+  `organization_id` to `organization`. better-inbox's schema option can't declare either. Neither
+  is in the Drizzle snapshot, so `db:generate` leaves them alone; `drizzle-kit push` would drop
+  them. `organization_id` is nullable: a personal notice (account security, removal from an org)
+  belongs to the user, not to a tenant. It is the one customer-data column allowed to be null. See
+  `docs/notifications.md`.
+- `0011_auth_hardening` adds:
+  - `rate_limit`, the counts for the auth rate limits (`packages/auth/src/rate-limit.ts`);
+  - composite indexes for the OAuth grant check (`oauth_consent` and `oauth_refresh_token`, by
+    client, organization and user; `grantStands` in `packages/auth/src/principal.ts`), declared in
+    `withGrantIndexes()` in `packages/auth/src/index.ts` so `auth generate` keeps them. A plain
+    `CREATE INDEX` blocks writes while it builds; on a large table, run
+    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand before applying 0011. The single-column
+    `clientId` indexes on those tables are now redundant;
+  - `member.source`: `"scim"` for a membership the directory created, else null. SCIM
+    deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).
+- Migrations `0003` through `0011` are not applied until the user runs them.
 
 ## Cleanup
 

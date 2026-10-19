@@ -2,7 +2,7 @@ import { z } from "zod"
 
 import { listConnectedAgents, revokeAgentAccess } from "../data/connected-agents"
 import { inCallerOrg, orNotFound } from "../tenant"
-import { defineOperation, type OperationDeps } from "./shared"
+import { defineOperation, notifySafely, type OperationDeps, personUserId } from "./shared"
 
 const agentOutput = z.object({
   id: z.string(),
@@ -18,7 +18,7 @@ const agentOutput = z.object({
   access: z.array(z.string()),
 })
 
-export function connectedAgentOperations({ db }: Pick<OperationDeps, "db">) {
+export function connectedAgentOperations({ db, notifier }: Pick<OperationDeps, "db" | "notifier">) {
   const list_connected_agents = defineOperation({
     name: "list_connected_agents",
     method: "GET",
@@ -59,7 +59,22 @@ export function connectedAgentOperations({ db }: Pick<OperationDeps, "db">) {
     examples: [{ input: { id: "key_00000000" }, error: "NOT_FOUND" }],
     handler: ({ id }, { caller }) =>
       inCallerOrg(caller, async (org, proof) => {
+        // The notice names what was revoked, so read its name before the row is gone. Only the notice
+        // depends on this read: if it fails, the notice falls back to the id.
+        let clientName = id
+        await notifySafely(async () => {
+          const known = await listConnectedAgents(db, org, proof, new Date())
+          clientName = known.find((a) => a.id === id)?.name ?? id
+        })
         orNotFound(await revokeAgentAccess(db, org, proof, id, new Date()), "Agent")
+        await notifySafely(() =>
+          notifier.inOrg(org, proof, {
+            type: "agent_access.revoked",
+            clientName,
+            // A key with apiKey:delete revokes too; it has no person to leave out.
+            actorUserId: personUserId(caller),
+          }),
+        )
         return { revoked: true as const }
       }),
   })

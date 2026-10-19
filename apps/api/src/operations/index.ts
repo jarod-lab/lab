@@ -1,5 +1,6 @@
 import { defineRegistry } from "@starter/api"
 
+import { type ApiNotifier, createApiNotifier } from "../notifications"
 import { accountOperations } from "./account"
 import { apiKeyOperations } from "./api-keys"
 import { approvalOperations } from "./approvals"
@@ -7,9 +8,9 @@ import { auditOperations } from "./audit"
 import { connectedAgentOperations } from "./connected-agents"
 import { memberOperations } from "./members"
 import { projectOperations } from "./projects"
-import type { OperationDeps } from "./shared"
 import { runOperations } from "./runs"
 import { scimOperations } from "./scim"
+import type { OperationDeps } from "./shared"
 import { workspaceAgentOperations } from "./workspace-agents"
 
 export { signupInput } from "./account"
@@ -23,11 +24,14 @@ export function createOperations({
   db,
   meter,
   now = () => new Date(),
-}: Omit<OperationDeps, "now"> & {
+  notifier = createApiNotifier({ auth, db }),
+}: Omit<OperationDeps, "now" | "notifier"> & {
   /** The clock: approval windows and timestamps read it, so tests can move time. */
   now?: () => Date
+  /** Defaults to the notifier over `auth` and `db`; tests pass one that fails, or reports elsewhere. */
+  notifier?: ApiNotifier
 }) {
-  const deps: OperationDeps = { auth, db, meter, now }
+  const deps: OperationDeps = { auth, db, meter, now, notifier }
   const account = accountOperations(deps)
   const projects = projectOperations(deps)
   const apiKeys = apiKeyOperations(deps)

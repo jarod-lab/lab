@@ -6,12 +6,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { AnyOperation } from "@starter/api"
 import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
-import { type Logger, createLogger } from "@starter/logger"
+import { createLogger, type Logger } from "@starter/logger"
 import { type AppOptions, createApp } from "./app"
-import { createApiHooks } from "./hooks"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
-import { type MeterLimits, createMeter } from "./meter"
+import { createApiHooks } from "./hooks"
+import { createMeter, type MeterLimits } from "./meter"
+import { type ApiNotifier, createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
 
 export const BASE = "http://localhost:3000"
@@ -65,6 +66,8 @@ export interface TestAppOptions {
   google?: { clientId: string; clientSecret: string }
   /** Mount GET /api/dev/mail, with auth emails going to the dev mail sink instead of the fake SES. */
   devMail?: boolean
+  /** The notifier the operations and hooks send through. Defaults to the real one; tests pass a failing one. */
+  notifier?: ApiNotifier
   /** Stripe test mode, with these plans (see auth's stripe option). Unset, billing is not mounted. */
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
   /** Auth rate limits. Off unless a test opts in (auth-flows: the limiter test), so flows don't 429. */
@@ -121,9 +124,13 @@ export async function createTestApp(
     db: t.db,
     limits: { claimed: 10_000, unclaimed: 500, ...options.limits },
   })
-  const operations = [...createOperations({ auth, db: t.db, meter, now: options.now }), ...extra]
+  const notifier = options.notifier ?? createApiNotifier({ auth, db: t.db })
+  const operations = [
+    ...createOperations({ auth, db: t.db, meter, now: options.now, notifier }),
+    ...extra,
+  ]
   const app = createApp({
-    hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),
+    hooks: createApiHooks({ db: t.db, meter, secret: SECRET, notifier }),
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
     status: options.status,

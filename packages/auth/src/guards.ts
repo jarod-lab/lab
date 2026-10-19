@@ -27,6 +27,8 @@ export const IMPERSONATION_READ_GET_PATHS = [
   "/api-key/list",
   "/error",
   "/get-session",
+  "/inbox/list",
+  "/inbox/unread-count",
   "/jwks",
   "/list-accounts",
   "/list-sessions",

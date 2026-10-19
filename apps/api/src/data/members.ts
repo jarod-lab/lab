@@ -101,6 +101,10 @@ export async function resetMemberTwoFactor<U, O>(
       })
     }
     await tx.delete(twoFactor).where(eq(twoFactor.userId, userId.value))
-    await tx.update(user).set({ twoFactorEnabled: false }).where(eq(user.id, userId.value))
+    // Clear the enabled-at stamp too, or a later re-enable looks like no change (no notice, stale date).
+    await tx
+      .update(user)
+      .set({ twoFactorEnabled: false, twoFactorEnabledAt: null })
+      .where(eq(user.id, userId.value))
   })
 }

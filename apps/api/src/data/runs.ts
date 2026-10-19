@@ -607,3 +607,30 @@ export function approvalView(a: Approval, now: Date, viewer: "person" | "agent")
       : null,
   }
 }
+
+/**
+ * What a notice says about a run: the agent's name, and the person who started the run (null when a
+ * key started it, which is not a person to notify). Undefined when the run is not in this organization.
+ */
+export async function runNotice<O>(
+  db: Database,
+  runId: string,
+  org: Named<O, OrganizationId>,
+  _proof: CallerActsFor<O>,
+): Promise<{ agentName: string; starterUserId: string | null } | undefined> {
+  const [row] = await db
+    .select({
+      agentName: agent.name,
+      startedByType: run.startedByType,
+      startedById: run.startedById,
+    })
+    .from(run)
+    .innerJoin(agent, and(eq(agent.id, run.agentId), eq(agent.organizationId, org.value)))
+    .where(and(eq(run.id, runId), eq(run.organizationId, org.value)))
+    .limit(1)
+  if (!row) return undefined
+  return {
+    agentName: row.agentName,
+    starterUserId: row.startedByType === "user" ? row.startedById : null,
+  }
+}

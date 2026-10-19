@@ -2442,6 +2442,81 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("notifications (better-inbox)", () => {
+    it("lists a notification, marks it read and the unread count drops; another user can't see or mark it", async () => {
+      const ada = await signedUp("Ada notices")
+      const bob = await signedUp("Bob notices")
+      const adaOrg = (await whoami(ada.b)).body.organizationId ?? ""
+      // Seeding is setup, not the step under test: the server writes the row the way a feature would.
+      const seeded = await t.auth.api.notify({
+        body: {
+          userId: ada.userId,
+          organizationId: adaOrg,
+          type: "approval.requested",
+          title: "A run wants to send an email",
+          href: "/runs",
+        },
+      })
+      const id = seeded.notifications[0]?.id ?? ""
+      expect(id).toBeTruthy()
+
+      const listed = await ada.b.client.inbox.list({ query: { filter: "unread" } })
+      expect(listed.error).toBeNull()
+      expect(listed.data?.notifications).toEqual([
+        expect.objectContaining({ id, userId: ada.userId, organizationId: adaOrg, read: false }),
+      ])
+
+      const before = await ada.b.client.inbox.unreadCount()
+      expect(before.data?.count).toBe(1)
+
+      const marked = await ada.b.client.inbox.markRead({ id })
+      expect(marked.error).toBeNull()
+      expect(marked.data?.notification).toMatchObject({ id, read: true })
+
+      expect((await ada.b.client.inbox.unreadCount()).data?.count).toBe(0)
+      expect(
+        (await ada.b.client.inbox.list({ query: { filter: "unread" } })).data?.notifications,
+      ).toEqual([])
+
+      // Bob sees nothing of Ada's, and cannot mark Ada's row (NOT_FOUND, as for a missing row).
+      expect((await bob.b.client.inbox.list()).data?.notifications).toEqual([])
+      expect((await bob.b.client.inbox.unreadCount()).data?.count).toBe(0)
+      const bobMark = await bob.b.client.inbox.markRead({ id })
+      expect(bobMark.error).toMatchObject({ status: 404 })
+      expect((await ada.b.client.inbox.unreadCount()).data?.count).toBe(0)
+    })
+
+    it("an impersonated session can read notifications but not mark them", async () => {
+      const root = await signedUp("Root notices")
+      const victim = await signedUp("Victim notices")
+      const ctx = await t.auth.$context
+      await ctx.adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: root.userId }],
+        update: { role: "admin" },
+      })
+      await t.auth.api.notify({
+        body: { userId: victim.userId, type: "test.ping", title: "For the victim" },
+      })
+      expect(
+        (await root.b.client.admin.impersonateUser({ userId: victim.userId })).error,
+      ).toBeNull()
+
+      const list = await root.b.request("/api/auth/inbox/list")
+      expect(list.status).toBe(200)
+      const id = ((await list.json()) as { notifications: { id: string }[] }).notifications[0]?.id
+      expect(id).toBeTruthy()
+
+      const mark = await root.b.request("/api/auth/inbox/mark-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      expect(mark.status).toBe(403)
+      expect(await mark.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+    })
+  })
+
   describe("security summary", () => {
     it("reports the password change, when two-factor went on, and the backup codes left", async () => {
       const { b, email: address } = await signedUp()
@@ -2708,5 +2783,414 @@ describe("auth rate limit over HTTP (opted in, behind a trusted proxy)", () => {
     // Nor does a spoofed header alone on a fresh address start a new bucket for the limited one.
     const other = await signIn("198.51.100.8", { "x-starter-client-ip": "203.0.113.10" })
     expect(other.status).toBe(401)
+  })
+})
+
+// The notices the auth layer sends (packages/auth/src/notify-hooks.ts, index.ts): each event reaches
+// the people it is about, and not the actor. Read through the recipient's own session, as the bell does.
+describe("notices from the auth flows (better-inbox)", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  const STRIPE_WEBHOOK_SECRET = "whsec_placeholder_for_tests" // gitleaks:allow
+  beforeAll(async () => {
+    t = await createTestApp([], {
+      stripe: {
+        secretKey: "sk_test_placeholder_for_tests", // gitleaks:allow
+        webhookSecret: STRIPE_WEBHOOK_SECRET,
+        plans: [{ name: "pro", priceId: "price_placeholder_for_tests" }], // gitleaks:allow
+      },
+    })
+  })
+  afterAll(() => t.close())
+
+  const open = () => browser((url, init) => t.app.request(url, init))
+  let n = 0
+
+  /** A signed-up person and their browser. */
+  async function person(name: string) {
+    const b = open()
+    const email = `notice${++n}@example.com`
+    const { data, error } = await b.client.signUp.email({ email, password: PASSWORD, name })
+    if (error || !data) throw new Error(`sign-up failed: ${JSON.stringify(error)}`)
+    return { b, email, userId: data.user.id }
+  }
+
+  /** Everything in a person's inbox, as the bell lists it (all organizations and personal notices). */
+  const inboxOf = async (p: { b: ReturnType<typeof open> }) =>
+    (await p.b.client.inbox.list({ query: { filter: "all", limit: 100 } })).data?.notifications ??
+    []
+
+  /**
+   * An organization with an owner (the actor), an admin (a manager, so they hear of key and member
+   * events) and a viewer (not a manager, so they hear of none of them).
+   */
+  async function team() {
+    const owner = await person("Owner")
+    const { data: org } = await owner.b.client.organization.create({
+      name: `Team ${n}`,
+      slug: `team-${n}`,
+    })
+    if (!org) throw new Error("no organization")
+    const admin = await person("Admin")
+    const viewer = await person("Viewer")
+    await t.auth.api.addMember({
+      body: { organizationId: org.id, userId: admin.userId, role: "admin" },
+    })
+    await t.auth.api.addMember({
+      body: { organizationId: org.id, userId: viewer.userId, role: "viewer" },
+    })
+    const memberOf = async (userId: string) => {
+      const { data } = await owner.b.client.organization.getFullOrganization({
+        query: { organizationId: org.id },
+      })
+      return data?.members.find((m) => m.userId === userId)?.id ?? ""
+    }
+    return { org, owner, admin, viewer, memberOf }
+  }
+
+  const ofType = <R extends { type: string }>(rows: R[], type: string) =>
+    rows.filter((r) => r.type === type)
+
+  it("tells nobody when a person creates an organization (they are its only member)", async () => {
+    const owner = await person("Creator")
+    const { data: org } = await owner.b.client.organization.create({
+      name: "Solo",
+      slug: `solo-${n}`,
+    })
+    expect(org).toBeTruthy()
+    expect(ofType(await inboxOf(owner), "member.joined")).toEqual([])
+  })
+
+  it("tells a person who already has an account that they were invited, with a link to accept", async () => {
+    const { org, owner } = await team()
+    const invitee = await person("Invitee")
+    const invite = await owner.b.client.organization.inviteMember({
+      email: invitee.email,
+      role: "member",
+      organizationId: org.id,
+    })
+    expect(invite.error).toBeNull()
+    const invitationId = invite.data?.id ?? ""
+    expect(ofType(await inboxOf(invitee), "invitation.received")).toEqual([
+      expect.objectContaining({
+        organizationId: null,
+        title: "Invitation to join",
+        body: `Owner invited you to join ${org.name}.`,
+        href: `/accept-invitation/${invitationId}`,
+      }),
+    ])
+    expect(ofType(await inboxOf(owner), "invitation.received")).toEqual([])
+  })
+
+  it("tells the managers when an invitee joins, and not the invitee or a viewer", async () => {
+    const { org, owner, admin, viewer } = await team()
+    const invitee = `joiner-${++n}@example.com`
+    const invite = await owner.b.client.organization.inviteMember({
+      email: invitee,
+      role: "member",
+      organizationId: org.id,
+    })
+    expect(invite.error).toBeNull()
+    const [mail] = await vi.waitFor(() => {
+      const found = t.outbox.filter((m) => m.to === invitee)
+      if (found.length === 0) throw new Error("waiting for the invitation")
+      return found
+    })
+    const invitationId = new URL(mail?.link ?? "").pathname.split("/").pop() ?? ""
+    const joiner = open()
+    await joiner.client.signUp.email({ email: invitee, password: PASSWORD, name: "Jo Joiner" })
+    expect((await joiner.client.organization.acceptInvitation({ invitationId })).error).toBeNull()
+
+    // The managers hear of everyone who joined after them (the admin and viewer were added above too).
+    const aboutJo = (rows: { type: string; body?: string | null }[]) =>
+      ofType(rows, "member.joined").filter((r) => r.body === `Jo Joiner joined ${org.name}.`)
+    expect(aboutJo(await inboxOf(owner))).toEqual([
+      expect.objectContaining({ organizationId: org.id, title: "New member", read: false }),
+    ])
+    expect(aboutJo(await inboxOf(admin))).toHaveLength(1)
+    expect(aboutJo(await inboxOf(viewer))).toEqual([])
+    expect(ofType(await inboxOf({ b: joiner }), "member.joined")).toEqual([])
+    expect(ofType(await inboxOf(viewer), "member.joined")).toEqual([])
+  })
+
+  it("tells a member their new role, not the person who changed it", async () => {
+    const { org, owner, viewer, memberOf } = await team()
+    const updated = await owner.b.client.organization.updateMemberRole({
+      memberId: await memberOf(viewer.userId),
+      role: "admin",
+      organizationId: org.id,
+    })
+    expect(updated.error).toBeNull()
+
+    const toViewer = ofType(await inboxOf(viewer), "member.role_changed")
+    expect(toViewer).toEqual([
+      expect.objectContaining({
+        organizationId: org.id,
+        title: "Your role changed",
+        href: expect.stringMatching(/^\//),
+      }),
+    ])
+    expect(toViewer[0]?.body).toMatch(/^You're now admin in Team /)
+
+    // Changing your own role is not news to you.
+    const self = await owner.b.client.organization.updateMemberRole({
+      memberId: await memberOf(owner.userId),
+      role: "owner",
+      organizationId: org.id,
+    })
+    expect(self.error).toBeNull()
+    expect(ofType(await inboxOf(owner), "member.role_changed")).toEqual([])
+  })
+
+  it("tells a removed person (no link into the organization) and drops their notices for it", async () => {
+    const { org, owner, viewer, memberOf } = await team()
+    // A notice the viewer holds for this organization: the role change they hear about first.
+    await owner.b.client.organization.updateMemberRole({
+      memberId: await memberOf(viewer.userId),
+      role: "admin",
+      organizationId: org.id,
+    })
+    expect(
+      (await inboxOf(viewer)).filter((r) => r.organizationId === org.id).length,
+    ).toBeGreaterThan(0)
+
+    const removed = await owner.b.client.organization.removeMember({
+      memberIdOrEmail: await memberOf(viewer.userId),
+      organizationId: org.id,
+    })
+    expect(removed.error).toBeNull()
+
+    const rows = await inboxOf(viewer)
+    expect(rows.filter((r) => r.organizationId === org.id)).toEqual([])
+    expect(ofType(rows, "member.removed")).toEqual([
+      expect.objectContaining({
+        organizationId: null,
+        title: "Access removed",
+        body: `You were removed from ${org.name} and no longer have access to it.`,
+      }),
+    ])
+    expect(ofType(await inboxOf(owner), "member.removed")).toEqual([])
+  })
+
+  it("a member who leaves keeps no notices for the organization, and gets no removal notice", async () => {
+    const { org, owner, viewer, memberOf } = await team()
+    await owner.b.client.organization.updateMemberRole({
+      memberId: await memberOf(viewer.userId),
+      role: "admin",
+      organizationId: org.id,
+    })
+    const left = await viewer.b.client.organization.leave({ organizationId: org.id })
+    expect(left.error).toBeNull()
+
+    const rows = await inboxOf(viewer)
+    expect(rows.filter((r) => r.organizationId === org.id)).toEqual([])
+    expect(ofType(rows, "member.removed")).toEqual([])
+  })
+
+  it("a person who removes themselves is not told they were removed", async () => {
+    const { org, owner, admin, memberOf } = await team()
+    const removed = await admin.b.client.organization.removeMember({
+      memberIdOrEmail: await memberOf(admin.userId),
+      organizationId: org.id,
+    })
+    expect(removed.error).toBeNull()
+    expect(ofType(await inboxOf(admin), "member.removed")).toEqual([])
+    expect(ofType(await inboxOf(owner), "member.removed")).toEqual([])
+  })
+
+  it("tells the managers when a key is created, not the person who made it", async () => {
+    const { org, owner, admin, viewer } = await team()
+    const created = await owner.b.request("/api/auth/api-key/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Build bot", organizationId: org.id }),
+    })
+    expect(created.status).toBe(200)
+
+    const toAdmin = ofType(await inboxOf(admin), "api_key.created")
+    expect(toAdmin).toEqual([
+      expect.objectContaining({
+        organizationId: org.id,
+        title: "API key created",
+        body: `Build bot can act in ${org.name} with the permissions it was given.`,
+      }),
+    ])
+    expect(ofType(await inboxOf(owner), "api_key.created")).toEqual([])
+    expect(ofType(await inboxOf(viewer), "api_key.created")).toEqual([])
+  })
+
+  it("tells the managers when a key is deleted, and not the person who deleted it", async () => {
+    const { org, owner, admin, viewer } = await team()
+    const created = await owner.b.request("/api/auth/api-key/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Old bot", organizationId: org.id }),
+    })
+    const keyId = ((await created.json()) as { id: string }).id
+    const deleted = await owner.b.request("/api/auth/api-key/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ keyId }),
+    })
+    expect(deleted.status).toBe(200)
+
+    expect(ofType(await inboxOf(admin), "api_key.revoked")).toEqual([
+      expect.objectContaining({
+        organizationId: org.id,
+        title: "API key revoked",
+        body: `Old bot can no longer act in ${org.name}.`,
+      }),
+    ])
+    expect(ofType(await inboxOf(owner), "api_key.revoked")).toEqual([])
+    expect(ofType(await inboxOf(viewer), "api_key.revoked")).toEqual([])
+  })
+
+  it("tells the person whose password changed, and nobody else", async () => {
+    const changer = await person("Changer")
+    const other = await person("Other")
+    const changed = await changer.b.client.changePassword({
+      currentPassword: PASSWORD,
+      newPassword: "a-new-passphrase",
+    })
+    expect(changed.error).toBeNull()
+
+    expect(ofType(await inboxOf(changer), "account.password_changed")).toEqual([
+      expect.objectContaining({
+        organizationId: null,
+        title: "Password changed",
+        href: "/account/security",
+      }),
+    ])
+    expect(ofType(await inboxOf(other), "account.password_changed")).toEqual([])
+  })
+
+  it("tells the person when two-factor is switched on and when it is switched off", async () => {
+    const { b } = await person("Factor")
+    const other = await person("Bystander")
+    const enabling = await b.client.twoFactor.enable({ password: PASSWORD })
+    const secret =
+      new URL((enabling.data as { totpURI?: string } | null)?.totpURI ?? "").searchParams.get(
+        "secret",
+      ) ?? ""
+    expect((await b.client.twoFactor.verifyTotp({ code: totp(secret) })).error).toBeNull()
+    expect(ofType(await inboxOf({ b }), "account.two_factor_enabled")).toHaveLength(1)
+
+    expect((await b.client.twoFactor.disable({ password: PASSWORD })).error).toBeNull()
+    expect(ofType(await inboxOf({ b }), "account.two_factor_disabled")).toHaveLength(1)
+    expect(ofType(await inboxOf(other), "account.two_factor_enabled")).toEqual([])
+  })
+
+  it("tells the person once their sign-in email has changed", async () => {
+    const { b } = await person("Mover")
+    const other = await person("Stayer")
+    const next = `moved-notice-${++n}@example.com`
+    expect((await b.client.changeEmail({ newEmail: next })).error).toBeNull()
+    const confirm = await vi.waitFor(() => {
+      const mail = t.outbox.find((m) => m.to === next)
+      if (!mail) throw new Error("waiting for the confirmation")
+      return mail
+    })
+    expect((await b.request(confirm.link)).status).toBe(302)
+
+    expect(ofType(await inboxOf({ b }), "account.email_changed")).toEqual([
+      expect.objectContaining({ organizationId: null, title: "Sign-in email changed" }),
+    ])
+    expect(ofType(await inboxOf(other), "account.email_changed")).toEqual([])
+  })
+
+  it("tells the organization's billing managers when a payment fails, and nobody else", async () => {
+    const { org, owner, viewer } = await team()
+    const customer = `cus_notice_${++n}`
+    await t.auth.$context.then((ctx) =>
+      ctx.adapter.updateMany({
+        model: "organization",
+        where: [{ field: "id", value: org.id }],
+        update: { stripeCustomerId: customer },
+      }),
+    )
+    const payload = JSON.stringify({
+      id: `evt_notice_${n}`,
+      object: "event",
+      type: "invoice.payment_failed",
+      data: { object: { id: `in_${n}`, object: "invoice", customer } },
+    })
+    const timestamp = Math.floor(Date.now() / 1000)
+    const signature = createHmac("sha256", STRIPE_WEBHOOK_SECRET)
+      .update(`${timestamp}.${payload}`)
+      .digest("hex")
+    const res = await t.req("/api/auth/stripe/webhook", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": `t=${timestamp},v1=${signature}`,
+      },
+      body: payload,
+    })
+    expect(res.status).toBe(200)
+
+    expect(ofType(await inboxOf(owner), "billing.payment_failed")).toEqual([
+      expect.objectContaining({
+        organizationId: org.id,
+        title: "Payment failed",
+        href: expect.stringMatching(/\/settings\/billing$/),
+      }),
+    ])
+    expect(ofType(await inboxOf(viewer), "billing.payment_failed")).toEqual([])
+  })
+
+  it("tells the billing managers when a subscription ends", async () => {
+    const { org, owner, viewer } = await team()
+    const customer = `cus_ended_${++n}`
+    await t.auth.$context.then((ctx) =>
+      ctx.adapter.updateMany({
+        model: "organization",
+        where: [{ field: "id", value: org.id }],
+        update: { stripeCustomerId: customer },
+      }),
+    )
+    const payload = JSON.stringify({
+      id: `evt_ended_${n}`,
+      object: "event",
+      type: "customer.subscription.deleted",
+      data: { object: { id: `sub_${n}`, object: "subscription", customer, status: "canceled" } },
+    })
+    const timestamp = Math.floor(Date.now() / 1000)
+    const signature = createHmac("sha256", STRIPE_WEBHOOK_SECRET)
+      .update(`${timestamp}.${payload}`)
+      .digest("hex")
+    const res = await t.req("/api/auth/stripe/webhook", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": `t=${timestamp},v1=${signature}`,
+      },
+      body: payload,
+    })
+    expect(res.status).toBe(200)
+
+    expect(ofType(await inboxOf(owner), "billing.subscription_canceled")).toEqual([
+      expect.objectContaining({ organizationId: org.id, title: "Subscription canceled" }),
+    ])
+    expect(ofType(await inboxOf(viewer), "billing.subscription_canceled")).toEqual([])
+  })
+
+  it("a notice that fails to send does not fail the change it is about", async () => {
+    const changer = await person("Resilient")
+    const spy = vi.spyOn(t.auth.api, "notify").mockRejectedValue(new Error("the inbox is down"))
+    try {
+      const changed = await changer.b.client.changePassword({
+        currentPassword: PASSWORD,
+        newPassword: "yet-another-passphrase",
+      })
+      expect(changed.error).toBeNull()
+      expect(spy).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+    // The change took effect: the new password signs in.
+    const again = await open().client.signIn.email({
+      email: changer.email,
+      password: "yet-another-passphrase",
+    })
+    expect(again.error).toBeNull()
   })
 })

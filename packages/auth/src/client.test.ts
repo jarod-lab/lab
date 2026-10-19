@@ -30,6 +30,26 @@ describe("createClient", () => {
     expect(calls).toEqual(["http://localhost:3000/api/auth/sign-in-methods"])
   })
 
+  it("calls the notifications endpoints with their methods", async () => {
+    const calls: string[] = []
+    const client = createClient("http://localhost:3000", {
+      customFetchImpl: async (url, init) => {
+        calls.push(`${init?.method ?? "GET"} ${String(url)}`)
+        return new Response("{}", { headers: { "content-type": "application/json" } })
+      },
+    })
+    await client.inbox.list({ query: { filter: "unread" } })
+    await client.inbox.unreadCount()
+    await client.inbox.markRead({ id: "n1" })
+    await client.inbox.markAllRead({})
+    expect(calls).toEqual([
+      "GET http://localhost:3000/api/auth/inbox/list?filter=unread",
+      "GET http://localhost:3000/api/auth/inbox/unread-count",
+      "POST http://localhost:3000/api/auth/inbox/mark-read",
+      "POST http://localhost:3000/api/auth/inbox/mark-all-read",
+    ])
+  })
+
   it("re-exports the personal organization slug rule", () => {
     expect(personalSlug("u1")).toBe("personal-u1")
   })
@@ -37,7 +57,7 @@ describe("createClient", () => {
   // The client ships to browsers: no server code (@starter/api, the DB, ./permissions) may reach it.
   it("imports only browser-safe modules", () => {
     const browserSafe =
-      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
+      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|better-inbox\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
     const imports = [...importsOf("./client.ts"), ...importsOf("./access.ts")]
     expect(imports.filter((i) => !browserSafe.test(i ?? ""))).toEqual([])
   })

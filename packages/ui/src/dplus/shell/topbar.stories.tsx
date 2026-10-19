@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { SidebarProvider } from "../../components/ui/sidebar"
 import { withDark } from "../pages/story-kit"
+import { NotificationsMenu } from "./notifications-menu"
 import { Topbar, type TopbarProps } from "./topbar"
 
 const crumbs = [
@@ -31,4 +32,19 @@ export const Default: Story = {}
 export const WithMenuButton: Story = { args: { showMenuButton: true } }
 export const EmptyInbox: Story = { args: { inbox: { count: 0 } } }
 export const SingleCrumb: Story = { args: { crumbs: [{ label: "Organizations" }] } }
+export const WithNotifications: Story = {
+  args: {
+    notifications: (
+      <NotificationsMenu
+        items={[]}
+        unreadCount={2}
+        tab="unread"
+        onTabChange={() => {}}
+        onSelect={() => {}}
+        onMarkAllRead={() => {}}
+        open={false}
+      />
+    ),
+  },
+}
 export const Dark: Story = { decorators: [withDark] }

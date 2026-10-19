@@ -95,8 +95,11 @@ function withClientIp(req: Request, ip: string): Request {
   return new Request(req, { headers })
 }
 
+/** Set once the proxy warning is logged: one line per process, not per request. */
+let forwardedForWarned = false
+
 /** The client's address for signup limits. X-Forwarded-For only when the proxy is trusted. */
-function clientIp(c: Context, trustProxy: boolean): string {
+function clientIp(c: Context, trustProxy: boolean, logger: Logger): string {
   if (trustProxy) {
     const forwarded = (c.req.header("x-forwarded-for") ?? "")
       .split(",")
@@ -104,6 +107,12 @@ function clientIp(c: Context, trustProxy: boolean): string {
       .filter(Boolean)
     const ours = forwarded.at(-1)
     if (ours) return ours
+  } else if (!forwardedForWarned && c.req.header("x-forwarded-for") !== undefined) {
+    // Behind a proxy that is not trusted, every client shares the proxy's address and so one bucket.
+    forwardedForWarned = true
+    logger.warn(
+      "X-Forwarded-For is set but TRUST_PROXY is off: rate limits are keyed on the proxy address, so every client shares one bucket. Set TRUST_PROXY=true behind a proxy that sets X-Forwarded-For.",
+    )
   }
   try {
     return getConnInfo(c).remote.address ?? "unknown"
@@ -232,7 +241,7 @@ export function createApp(opts: AppOptions) {
   // address we trust, so a client's own copy is dropped and replaced. SCIM (RFC 7644) also uses PUT,
   // PATCH and DELETE: an identity provider deprovisions with them.
   app.on(["GET", "POST", "PUT", "PATCH", "DELETE"], `${AUTH_BASE_PATH}/*`, (c) =>
-    auth.handler(withClientIp(c.req.raw, clientIp(c, trustProxy))),
+    auth.handler(withClientIp(c.req.raw, clientIp(c, trustProxy, logger))),
   )
   for (const suffix of ["", AUTH_BASE_PATH]) {
     app.get(`/.well-known/oauth-authorization-server${suffix}`, (c) => asMetadata(c.req.raw))
@@ -309,7 +318,7 @@ export function createApp(opts: AppOptions) {
       // without hooks, so it is metered, keyed and audited by nothing, and gets no rate-limit headers.
       if (op.auth === "none") {
         const context: PublicContext = {
-          public: { ip: clientIp(c, trustProxy) },
+          public: { ip: clientIp(c, trustProxy, logger) },
           requestId: c.get("requestId"),
         }
         return c.json(await invoke(op, await inputOf(c, op), context))

@@ -1989,6 +1989,81 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("notifications (better-inbox)", () => {
+    it("lists a notification, marks it read and the unread count drops; another user can't see or mark it", async () => {
+      const ada = await signedUp("Ada notices")
+      const bob = await signedUp("Bob notices")
+      const adaOrg = (await whoami(ada.b)).body.organizationId ?? ""
+      // Seeding is setup, not the step under test: the server writes the row the way a feature would.
+      const seeded = await t.auth.api.notify({
+        body: {
+          userId: ada.userId,
+          organizationId: adaOrg,
+          type: "approval.requested",
+          title: "A run wants to send an email",
+          href: "/runs",
+        },
+      })
+      const id = seeded.notifications[0]?.id ?? ""
+      expect(id).toBeTruthy()
+
+      const listed = await ada.b.client.inbox.list({ query: { filter: "unread" } })
+      expect(listed.error).toBeNull()
+      expect(listed.data?.notifications).toEqual([
+        expect.objectContaining({ id, userId: ada.userId, organizationId: adaOrg, read: false }),
+      ])
+
+      const before = await ada.b.client.inbox.unreadCount()
+      expect(before.data?.count).toBe(1)
+
+      const marked = await ada.b.client.inbox.markRead({ id })
+      expect(marked.error).toBeNull()
+      expect(marked.data?.notification).toMatchObject({ id, read: true })
+
+      expect((await ada.b.client.inbox.unreadCount()).data?.count).toBe(0)
+      expect(
+        (await ada.b.client.inbox.list({ query: { filter: "unread" } })).data?.notifications,
+      ).toEqual([])
+
+      // Bob sees nothing of Ada's, and cannot mark Ada's row (NOT_FOUND, as for a missing row).
+      expect((await bob.b.client.inbox.list()).data?.notifications).toEqual([])
+      expect((await bob.b.client.inbox.unreadCount()).data?.count).toBe(0)
+      const bobMark = await bob.b.client.inbox.markRead({ id })
+      expect(bobMark.error).toMatchObject({ status: 404 })
+      expect((await ada.b.client.inbox.unreadCount()).data?.count).toBe(0)
+    })
+
+    it("an impersonated session can read notifications but not mark them", async () => {
+      const root = await signedUp("Root notices")
+      const victim = await signedUp("Victim notices")
+      const ctx = await t.auth.$context
+      await ctx.adapter.updateMany({
+        model: "user",
+        where: [{ field: "id", value: root.userId }],
+        update: { role: "admin" },
+      })
+      await t.auth.api.notify({
+        body: { userId: victim.userId, type: "test.ping", title: "For the victim" },
+      })
+      expect(
+        (await root.b.client.admin.impersonateUser({ userId: victim.userId })).error,
+      ).toBeNull()
+
+      const list = await root.b.request("/api/auth/inbox/list")
+      expect(list.status).toBe(200)
+      const id = ((await list.json()) as { notifications: { id: string }[] }).notifications[0]?.id
+      expect(id).toBeTruthy()
+
+      const mark = await root.b.request("/api/auth/inbox/mark-read", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      expect(mark.status).toBe(403)
+      expect(await mark.json()).toMatchObject({ code: "IMPERSONATED_SESSION_NOT_ALLOWED" })
+    })
+  })
+
   describe("security summary", () => {
     it("reports the password change, when two-factor went on, and the backup codes left", async () => {
       const { b, email: address } = await signedUp()

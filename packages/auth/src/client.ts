@@ -5,6 +5,7 @@ import {
 import { passkeyClient } from "@better-auth/passkey/client"
 import { ssoClient } from "@better-auth/sso/client"
 import { stripeClient } from "@better-auth/stripe/client"
+import { inboxClient } from "better-inbox/client"
 import { wrapsClient } from "@wraps.dev/better-auth/client"
 import type { BetterAuthClientOptions, BetterAuthClientPlugin } from "better-auth/client"
 import { createAuthClient } from "better-auth/client"
@@ -84,6 +85,7 @@ export const createClient = (
       // Billing answers only when the server has Stripe configured (test mode); see index.ts.
       stripeClient({ subscription: true }),
       securitySummaryClient(),
+      inboxClient(),
       signInMethodsClient(),
       twoFactorClient({
         // The page keeps its query: a pending OAuth authorization rides on it into the code entry.

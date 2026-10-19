@@ -6,6 +6,7 @@ import { sso } from "@better-auth/sso"
 import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
+import { inbox } from "better-inbox"
 import { wraps } from "@wraps.dev/better-auth"
 import Stripe from "stripe"
 import { type DBTransactionAdapter, betterAuth, getCurrentAdapter } from "better-auth"
@@ -509,6 +510,8 @@ export function createAuth(opts: AuthOptions) {
       }),
       // RFC 8628 device grant on the same token endpoint (see device.ts).
       deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
+      // In-app notifications (better-inbox): the bell. Written by the server only (auth.api.notify).
+      inbox(),
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
     ],
   })

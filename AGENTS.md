@@ -164,7 +164,7 @@ Details: `docs/database.md`.
   change: `pnpm --filter @starter/auth generate`, then `pnpm format`.
 - Applying migrations (`db:migrate`, `drizzle-kit push`) is denied for agents. Ask the user, or use
   `scripts/release.mjs` in a deploy.
-- Migrations `0001_agent_auth` through `0009_steer_message_org_index`; 0003 onward are not applied
+- Migrations `0001_agent_auth` through `0010_notifications`; 0003 onward are not applied
   yet.
 
 ## Tooling

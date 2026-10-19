@@ -258,6 +258,9 @@ importers:
       better-auth:
         specifier: 'catalog:'
         version: 1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)
+      better-inbox:
+        specifier: ^0.5.0
+        version: 0.5.0(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)
       cn:
         specifier: 'catalog:'
         version: 0.4.0
@@ -413,6 +416,9 @@ importers:
       better-auth:
         specifier: 'catalog:'
         version: 1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)
+      better-inbox:
+        specifier: ^0.5.0
+        version: 0.5.0(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9)
@@ -4303,6 +4309,15 @@ packages:
       zod: ^4.0.0
     peerDependenciesMeta:
       zod:
+        optional: true
+
+  better-inbox@0.5.0:
+    resolution: {integrity: sha512-j3AtPY7LmUZOAvQsIpYud5Ehac6vpn7+4w99ict3mlZ0EeHv/K/MXgaLEPQzQdqIt3mZK2A7cXSlv8h0Lycw0w==}
+    peerDependencies:
+      better-auth: ^1.6.23
+      react: '>=18'
+    peerDependenciesMeta:
+      react:
         optional: true
 
   bidi-js@1.1.0:
@@ -10583,6 +10598,13 @@ snapshots:
       set-cookie-parser: 3.1.2
     optionalDependencies:
       zod: 4.6.5
+
+  better-inbox@0.5.0(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0):
+    dependencies:
+      better-auth: 1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)
+      zod: 4.6.5
+    optionalDependencies:
+      react: 19.3.0
 
   bidi-js@1.1.0:
     dependencies:

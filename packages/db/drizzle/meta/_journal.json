@@ -71,6 +71,13 @@
       "when": 1792199585505,
       "tag": "0009_steer_message_org_index",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792372686750,
+      "tag": "0010_notifications",
+      "breakpoints": true
     }
   ]
 }

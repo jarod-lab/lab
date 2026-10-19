@@ -206,13 +206,13 @@ describe("OrgGeneralContainer", () => {
           logo,
         ),
       )
-      expect(screen.getByRole("button", { name: "Remove logo" })).toBeTruthy()
+      expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy()
     })
 
     it("offers no upload to a member, and does not ask about limits", async () => {
       const { uploads } = setup({ role: "member" })
       await screen.findByText(/Owners and admins can upload one/)
-      expect(screen.queryByRole("button", { name: "Upload logo" })).toBeNull()
+      expect(screen.queryByRole("button", { name: "Upload" })).toBeNull()
       expect(uploads.limits).not.toHaveBeenCalled()
     })
   })

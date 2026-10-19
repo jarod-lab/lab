@@ -199,29 +199,30 @@ export function OrgGeneralPage({
             </form.Field>
           </div>
 
-          <div className="flex items-start gap-3.5">
+          <div className="flex items-center gap-3.5">
             <OrgMark name={organization.name} logo={organization.logo} size="lg" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <span className="text-sm font-semibold">Logo</span>
-              {canEdit ? (
-                <ImageUpload
-                  uploadLabel="Upload logo"
-                  removeLabel="Remove logo"
-                  hasImage={Boolean(organization.logo)}
-                  limits={logoUpload?.limits ?? null}
-                  offReason="Logo upload is off on this server, so the first letter is shown."
-                  guidance="Square, at least 128px."
-                  onUpload={(file) => logoUpload?.onUpload(file) ?? Promise.resolve()}
-                  onRemove={() => logoUpload?.onRemove() ?? Promise.resolve()}
-                />
-              ) : (
+            {canEdit ? (
+              <ImageUpload
+                label="Logo"
+                uploadLabel="Upload"
+                removeLabel="Remove"
+                hasImage={Boolean(organization.logo)}
+                limits={logoUpload?.limits ?? null}
+                offReason="Logo upload is off on this server, so the first letter is shown."
+                guidance="Square, at least 128px."
+                onUpload={(file) => logoUpload?.onUpload(file) ?? Promise.resolve()}
+                onRemove={() => logoUpload?.onRemove() ?? Promise.resolve()}
+              />
+            ) : (
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="text-sm font-semibold">Logo</span>
                 <span className="text-[13.5px] text-muted-foreground">
                   {organization.logo
                     ? "Owners and admins can change it."
                     : "None yet, so the first letter is shown. Owners and admins can upload one."}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

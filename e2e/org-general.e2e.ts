@@ -143,18 +143,18 @@ test("an owner uploads a logo, sees it render, and removes it back to the letter
 
   await app.open(`/${slug}/settings/general`)
   await expect(screen.getByRole("heading", "Organization settings")).toBeVisible()
-  await expect(screen.getByRole("button", "Remove logo")).toBeHidden()
+  await expect(screen.getByRole("button", "Remove")).toBeHidden()
   await expect(browser.locator(MARK)).toHaveText("L")
 
-  // Upload logo opens a hidden file input; the 128px square is set on the input itself.
+  // Upload opens a hidden file input; the 128px square is set on the input itself.
   await browser.locator('input[type="file"]').setInputFiles("e2e/fixtures/logo.png")
   await expect(browser.locator(MARK_LOGO)).toBeVisible()
   await expect.poll(loadedWidth).toBe(128)
-  await expect(screen.getByRole("button", "Remove logo")).toBeVisible()
+  await expect(screen.getByRole("button", "Remove")).toBeVisible()
 
-  // Remove logo takes the image away and the first letter comes back.
-  await screen.getByRole("button", "Remove logo").tap()
+  // Remove takes the image away and the first letter comes back.
+  await screen.getByRole("button", "Remove").tap()
   await expect(browser.locator(MARK_LOGO)).toBeHidden()
   await expect(browser.locator(MARK)).toHaveText("L")
-  await expect(screen.getByRole("button", "Upload logo")).toBeVisible()
+  await expect(screen.getByRole("button", "Upload")).toBeVisible()
 })

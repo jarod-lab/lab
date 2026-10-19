@@ -15,15 +15,17 @@ const tracked: ReadonlySet<string> = new Set(TRACKED_AUTH_EVENTS satisfies reado
 const isTracked = (name: AuthEventName): name is TrackedAuthEventName => tracked.has(name)
 
 export interface AnalyticsEnv {
-  ANALYTICS_PROVIDER?: "log" | "posthog"
+  NODE_ENV?: "development" | "test" | "production"
+  ANALYTICS_PROVIDER?: "none" | "log" | "posthog"
   POSTHOG_API_KEY?: string
   POSTHOG_HOST?: string
 }
 
-/** The analytics the environment names. Unset is nowhere. */
+/** The analytics the environment names. Unset is the log in development, and nowhere otherwise. */
 export function analyticsFromEnv(env: AnalyticsEnv, logger: Logger): Analytics {
-  switch (env.ANALYTICS_PROVIDER) {
-    case undefined:
+  const provider = env.ANALYTICS_PROVIDER ?? (env.NODE_ENV === "development" ? "log" : "none")
+  switch (provider) {
+    case "none":
       return createAnalyticsFor({ provider: "none" })
     case "log":
       return createAnalyticsFor({ provider: "log", logger })

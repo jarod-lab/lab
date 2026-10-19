@@ -14,8 +14,24 @@
 - `observe` reports only 5xx responses (thrown or returned) and non-exposed errors. 4xx are logged.
 - Server-error logs include only the allowlisted request headers (`safeHeaders`), never the full
   set.
-- No error-tracking SDK is installed yet. Until an app registers one with `setErrorReporter`,
-  reported errors go nowhere, only to the logs.
+- No error-tracking SDK is installed yet. `apps/api/src/server.ts` registers a reporter that logs
+  each reported error once, from REST, MCP tools, the invoke hooks and analytics alike. Add an
+  error tracker in that reporter, and keep the log line. An app that registers none reports nowhere.
+
+## The API's access log
+
+`apps/api` writes one `request` line per request: `requestId`, `method`, `path`, `status`, `ms`
+and `agent`, plus what the request learned on the way:
+
+- `operation`: the REST route's operation, or the MCP tool called (the last one, if a request
+  carries several).
+- `outcome`: `ok`, or the error code. An MCP tool that fails still answers 200, so only `outcome`
+  says it failed.
+- `organizationId`, `actorType` (`user` or `apiKey`), `actorId`, `via` (`session`, `api-key`,
+  `oauth`) and `oauthClientId`: the caller, as ids, the same ones the audit trail keeps.
+
+A request with no credential has no caller fields. Paths with a token in them are redacted
+(`loggedPath`).
 
 ## Logging and errors
 

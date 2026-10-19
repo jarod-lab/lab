@@ -4,9 +4,13 @@ Product analytics go to the **analytics provider** (GLOSSARY) that `ANALYTICS_PR
 
 | `ANALYTICS_PROVIDER` | Where events go |
 |---|---|
-| unset | nowhere: nothing is captured |
-| `log` | the API's log, one `analytics <name>` line per event (for dev) |
+| unset | `log` when `NODE_ENV=development`, `none` otherwise |
+| `none` | nowhere: nothing is captured |
+| `log` | the API's log, one `analytics <name>` line per event |
 | `posthog` | PostHog, over its capture API (`POSTHOG_API_KEY`, `POSTHOG_HOST`) |
+
+With no provider, the API's access log still names each request's operation, caller and outcome
+(`docs/observability.md`), so usage is readable from the logs alone.
 
 Change the provider by changing the env. No code changes. `@starter/env` refuses to start with
 `posthog` and no `POSTHOG_API_KEY`. `.env.example` lists the variables.

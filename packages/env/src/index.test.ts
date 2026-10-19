@@ -289,12 +289,14 @@ describe("env", () => {
   })
 
   describe("analytics", () => {
-    it("is off when unset, and log needs nothing more", async () => {
+    it("is unset by default, and none and log need nothing more", async () => {
       base()
       expect((await import("./index")).env.ANALYTICS_PROVIDER).toBeUndefined()
-      base()
-      vi.stubEnv("ANALYTICS_PROVIDER", "log")
-      expect((await import("./index")).env.ANALYTICS_PROVIDER).toBe("log")
+      for (const provider of ["none", "log"]) {
+        base()
+        vi.stubEnv("ANALYTICS_PROVIDER", provider)
+        expect((await import("./index")).env.ANALYTICS_PROVIDER).toBe(provider)
+      }
     })
 
     it("refuses posthog without its key", async () => {

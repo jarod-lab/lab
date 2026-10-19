@@ -181,8 +181,13 @@ describe("captureAuthEvent", () => {
 describe("analyticsFromEnv", () => {
   const logger = createLogger({ level: "silent" })
 
-  it("is nowhere when unset", () => {
+  it("is nowhere when unset or none, except unset in development, which logs", () => {
     expect(analyticsFromEnv({}, logger)).toBe(noopAnalytics)
+    expect(analyticsFromEnv({ NODE_ENV: "production" }, logger)).toBe(noopAnalytics)
+    expect(analyticsFromEnv({ NODE_ENV: "development" }, logger)).not.toBe(noopAnalytics)
+    expect(analyticsFromEnv({ NODE_ENV: "development", ANALYTICS_PROVIDER: "none" }, logger)).toBe(
+      noopAnalytics,
+    )
   })
 
   it("builds log and posthog", () => {

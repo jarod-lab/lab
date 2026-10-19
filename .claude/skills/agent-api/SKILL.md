@@ -320,7 +320,12 @@ The product's own agents (the org's workers) are the `agent` resource; the conne
   (`permissionHint`). MCP tool failures return `isError` results with the same text, so the model
   can retry with better arguments. Calling a hidden tool (one the caller lacks permissions for) by
   name also gets FORBIDDEN with the hint.
-- Report (`reportError`) only 5xx or non-exposed errors.
+- Report (`reportError`) only 5xx or non-exposed errors. `server.ts` registers the reporter, which
+  logs each one once (REST, MCP tools, hooks); an error tracker goes in it beside the log line.
+- The access log line names the operation, the outcome and the caller (ids). REST routes fill it in
+  `createApp`; MCP tools through the handler's per-request `onToolCall`
+  (`mcp(req, { requestId, onToolCall })`), since a failed tool is still a 200. See
+  `docs/observability.md`.
 
 ## Errors
 

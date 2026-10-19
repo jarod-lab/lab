@@ -21,7 +21,7 @@ import {
   type InvokeOptions,
   outputSchema,
 } from "@starter/api"
-import { AppError, reportError, toAppError } from "@starter/errors"
+import { AppError, type ErrorCode as AppErrorCode, reportError, toAppError } from "@starter/errors"
 import { z } from "zod"
 
 export interface McpHandlerOptions {
@@ -39,6 +39,20 @@ export interface McpHandlerOptions {
    * operations (auth "none") are left out of the tools entirely.
    */
   invokeOptions?: InvokeOptions
+}
+
+/** One tools/call as it ended: which operation, who called it, and "ok" or the error code. */
+export interface ToolCall {
+  operation: string
+  caller: Caller
+  outcome: "ok" | AppErrorCode
+}
+
+/** Per request: the request id for logs, and who hears of each tool call (the access log). */
+export interface McpRequestContext {
+  requestId?: string
+  /** Called once per tools/call. A tool's failure is a 200 with `isError`, so the status can't say. */
+  onToolCall?: (call: ToolCall) => void
 }
 
 const canCall = (op: AnyOperation, caller: Caller) => allowed(caller.grants, op.permissions)
@@ -117,8 +131,15 @@ async function callTool(
   op: AnyOperation,
   args: unknown,
   caller: Caller,
-  opts: { requestId?: string; invokeOptions?: InvokeOptions } = {},
+  opts: McpRequestContext & { invokeOptions?: InvokeOptions } = {},
 ): Promise<CallToolResult> {
+  const ended = (outcome: ToolCall["outcome"]) => {
+    try {
+      opts.onToolCall?.({ operation: op.name, caller, outcome })
+    } catch (e) {
+      reportError(e, { operation: op.name, phase: "onToolCall" })
+    }
+  }
   try {
     // Audience and permission first, as over REST, so a bad idempotencyKey can't mask FORBIDDEN.
     assertAudience(op, caller, opts.invokeOptions)
@@ -132,12 +153,14 @@ async function callTool(
     )
     const text = JSON.stringify(result, null, 2)
     const structured = result !== null && typeof result === "object" && !Array.isArray(result)
+    ended("ok")
     return {
       content: [{ type: "text", text }],
       ...(structured && { structuredContent: result as Record<string, unknown> }),
     }
   } catch (e) {
     const error = toAppError(e)
+    ended(error.code)
     // A model sending bad arguments is expected; only report what we'd want to be paged for.
     if (error.status >= 500 || !error.expose) {
       reportError(error, { operation: op.name, requestId: opts.requestId })
@@ -147,7 +170,7 @@ async function callTool(
   }
 }
 
-function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string): Server {
+function buildServer(opts: McpHandlerOptions, caller: Caller, request: McpRequestContext): Server {
   const server = new Server(
     { name: opts.name, version: opts.version },
     { capabilities: { tools: {} }, instructions: opts.instructions },
@@ -171,7 +194,7 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
     // A name that is no operation at all is a protocol error, as the MCP spec has it.
     if (!op) throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${req.params.name}`)
     return callTool(op, req.params.arguments, caller, {
-      requestId,
+      ...request,
       invokeOptions: opts.invokeOptions,
     })
   })
@@ -184,7 +207,7 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
  * points MCP clients at the OAuth metadata, so they can sign the user in.
  */
 export function createMcpHandler(opts: McpHandlerOptions) {
-  return async (request: Request, ctx: { requestId?: string } = {}): Promise<Response> => {
+  return async (request: Request, ctx: McpRequestContext = {}): Promise<Response> => {
     const unauthorized = (error: AppError) =>
       Response.json(
         { error: error.toPublic() },
@@ -207,7 +230,7 @@ export function createMcpHandler(opts: McpHandlerOptions) {
     if (!caller) {
       return unauthorized(new AppError("UNAUTHORIZED", "Sign in or send an organization API key"))
     }
-    const server = buildServer(opts, caller, ctx.requestId)
+    const server = buildServer(opts, caller, ctx)
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

@@ -107,6 +107,30 @@ export interface AppOptions {
  */
 export const MAX_BODY_BYTES = 2 * 1024 * 1024
 
+/**
+ * What the access log line says about a request beyond its method, path and status: the operation
+ * (REST route or MCP tool), who called it, and how it ended. Filled in as the request learns them.
+ */
+interface RequestLog {
+  operation?: string
+  /** "ok", or the error code. An MCP tool's failure is a 200, so only this says it failed. */
+  outcome?: string
+  organizationId?: string
+  actorType?: Caller["actor"]["type"]
+  actorId?: string
+  via?: string
+  oauthClientId?: string
+}
+
+/** The caller, as the access log names it: ids only, the same ones the audit trail keeps. */
+const callerFields = (caller: Caller): RequestLog => ({
+  organizationId: caller.organizationId,
+  actorType: caller.actor.type,
+  actorId: caller.actor.type === "user" ? caller.actor.userId : caller.actor.keyId,
+  via: caller.via,
+  ...(caller.via === "oauth" && caller.clientId && { oauthClientId: caller.clientId }),
+})
+
 /** Idempotency-Key: 1 to 255 characters, or absent. */
 function idempotencyKeyOf(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
@@ -232,7 +256,7 @@ export function createApp(opts: AppOptions) {
   const asMetadata = oauthProviderAuthServerMetadata(auth)
   const oidcMetadata = oauthProviderOpenIdConfigMetadata(auth)
 
-  const app = new Hono<{ Variables: { requestId: string } }>()
+  const app = new Hono<{ Variables: { requestId: string; log: RequestLog } }>()
 
   // The flags a request evaluates are remembered for it: a 5xx counts against each value it saw.
   const flags = opts.flags
@@ -249,6 +273,8 @@ export function createApp(opts: AppOptions) {
     // An incoming id goes into every log line and back out in a header: short, plain ones only.
     const requestId = requestIdFrom(c.req.raw.headers)
     c.set("requestId", requestId)
+    const log: RequestLog = {}
+    c.set("log", log)
     const start = performance.now()
     await next()
     c.header("x-request-id", requestId)
@@ -260,6 +286,7 @@ export function createApp(opts: AppOptions) {
         status: c.res.status,
         ms: Math.round(performance.now() - start),
         agent: c.req.header("user-agent"),
+        ...log,
       },
       "request",
     )
@@ -271,14 +298,15 @@ export function createApp(opts: AppOptions) {
 
   app.onError((e, c) => {
     const error = toAppError(e)
-    // Agents sending bad requests is normal traffic; only report what we'd want to be paged for.
+    c.get("log").outcome = error.code
+    // Agents sending bad requests is normal traffic; only report what we'd want to be paged for. The
+    // reporter logs it (server.ts), so it is logged once whether it came from REST, MCP or a hook.
     if (error.status >= 500 || !error.expose) {
       reportError(error, {
         requestId: c.get("requestId"),
         path: loggedPath(c.req.path),
         flags: flags?.seen(),
       })
-      logger.error({ err: error, requestId: c.get("requestId") }, error.message)
     }
     for (const [name, value] of Object.entries(errorHeaders(error))) c.header(name, value)
     return c.json({ error: error.toPublic() }, error.status as 400)
@@ -378,6 +406,7 @@ export function createApp(opts: AppOptions) {
   app.post(ANALYTICS_EVENTS_PATH, eventsLimit, async (c) => {
     const caller = await authenticate(c.req.raw)
     if (!caller) throw new AppError("UNAUTHORIZED", "Sign in to send analytics events")
+    Object.assign(c.get("log"), callerFields(caller))
     if (caller.via !== "session") {
       throw new AppError("FORBIDDEN", "Analytics events come from the web app only", {
         hint: "Operation calls are counted on their own; agents don't send analytics events.",
@@ -394,7 +423,14 @@ export function createApp(opts: AppOptions) {
   })
 
   // MCP (Streamable HTTP, stateless).
-  app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))
+  app.all("/mcp", (c) =>
+    mcp(c.req.raw, {
+      requestId: c.get("requestId"),
+      // A request normally carries one tools/call; the log line names the last.
+      onToolCall: ({ operation, outcome, caller }) =>
+        Object.assign(c.get("log"), { operation, outcome, ...callerFields(caller) }),
+    }),
+  )
 
   /**
    * The browser sends the session cookie with any request to this origin, including a form another
@@ -433,6 +469,8 @@ export function createApp(opts: AppOptions) {
   // REST: one route per operation.
   for (const op of operations) {
     app.on(op.method, op.path, async (c) => {
+      const log = c.get("log")
+      log.operation = op.name
       // A public operation (signup) reads no credential: one sent with it is ignored. It runs
       // without hooks, so it is metered, keyed and audited by nothing, and gets no rate-limit headers.
       if (op.auth === "none") {
@@ -440,10 +478,13 @@ export function createApp(opts: AppOptions) {
           public: { ip: clientIp(c, trustProxy, logger) },
           requestId: c.get("requestId"),
         }
-        return c.json(await invoke(op, await inputOf(c, op), context))
+        const result = await invoke(op, await inputOf(c, op), context)
+        log.outcome = "ok"
+        return c.json(result)
       }
       const caller = await authenticate(c.req.raw)
       if (!caller) throw new AppError("UNAUTHORIZED", "Send an API key or OAuth access token")
+      Object.assign(log, callerFields(caller))
       if (caller.via === "session" && op.method !== "GET") await assertTrustedOrigin(c.req.raw)
       const input = await inputOf(c, op)
       const ctx: OperationContext = {
@@ -453,6 +494,7 @@ export function createApp(opts: AppOptions) {
       }
       try {
         const result = await invoke(op, input, ctx, hooks.invokeOptions)
+        log.outcome = "ok"
         for (const [name, value] of Object.entries(hooks.rateLimitHeaders(ctx)))
           c.header(name, value)
         return c.json(result)

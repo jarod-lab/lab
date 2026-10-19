@@ -137,10 +137,10 @@ export const env = createEnv({
     /** vercel-blob: the store's read-write token. Vercel sets it when the store is connected. */
     BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
     /**
-     * Where product analytics go: `log` (the API's log, for dev) or `posthog`. Unset, nothing is
-     * captured (docs/analytics.md).
+     * Where product analytics go: `log` (the API's log), `posthog`, or `none`. Unset, it is `log`
+     * when NODE_ENV is development and `none` otherwise (docs/analytics.md).
      */
-    ANALYTICS_PROVIDER: z.enum(["log", "posthog"]).optional(),
+    ANALYTICS_PROVIDER: z.enum(["none", "log", "posthog"]).optional(),
     /** posthog: the project API key (`phc_...`). */
     POSTHOG_API_KEY: z.string().min(1).optional(),
     /** posthog: the ingestion host. Default https://us.i.posthog.com; EU is https://eu.i.posthog.com. */

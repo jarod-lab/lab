@@ -4,7 +4,13 @@ import { type Caller, defineOperation } from "@starter/api"
 import { AppError, setErrorReporter } from "@starter/errors"
 import { afterEach, describe, expect, it, onTestFinished } from "vitest"
 import { z } from "zod"
-import { createMcpHandler, protectedResourceMetadata, toTool } from "./index"
+import {
+  createMcpHandler,
+  type McpRequestContext,
+  protectedResourceMetadata,
+  type ToolCall,
+  toTool,
+} from "./index"
 
 const whoami = defineOperation({
   name: "whoami",
@@ -95,11 +101,11 @@ function setup(caller: Caller | null) {
   return handler
 }
 
-async function connect(caller: Caller) {
+async function connect(caller: Caller, ctx: McpRequestContext = {}) {
   const handler = setup(caller)
   const client = new Client({ name: "test-client", version: "1.0.0" })
   const transport = new StreamableHTTPClientTransport(new URL(URL_), {
-    fetch: (url, init) => handler(new Request(url, init)),
+    fetch: (url, init) => handler(new Request(url, init), ctx),
   })
   await client.connect(transport)
   clients.push(client)
@@ -114,6 +120,30 @@ const full: Caller = {
 }
 
 describe("createMcpHandler", () => {
+  it("tells onToolCall how each tool call ended, including the ones that fail", async () => {
+    const calls: ToolCall[] = []
+    const onToolCall = (call: ToolCall) => calls.push(call)
+    const client = await connect(full, { onToolCall })
+    await client.callTool({ name: "shout", arguments: { text: "hi" } })
+    await client.callTool({ name: "shout", arguments: {} })
+    await client.callTool({ name: "shout", arguments: { text: "hi", fail: "internal" } })
+    expect(calls).toEqual([
+      { operation: "shout", caller: full, outcome: "ok" },
+      { operation: "shout", caller: full, outcome: "BAD_REQUEST" },
+      { operation: "shout", caller: full, outcome: "INTERNAL" },
+    ])
+  })
+
+  it("never lets a throwing onToolCall change the result", async () => {
+    const client = await connect(full, {
+      onToolCall: () => {
+        throw new Error("log down")
+      },
+    })
+    const res = await client.callTool({ name: "shout", arguments: { text: "hi" } })
+    expect(res.isError).toBeUndefined()
+  })
+
   it("answers 401 with resource metadata when unauthenticated", async () => {
     const res = await setup(null)(new Request(URL_, { method: "POST", body: "{}" }))
     expect(res.status).toBe(401)

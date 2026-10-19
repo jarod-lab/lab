@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server"
 import { createAuth, parseStripePlans } from "@starter/auth"
 import { createDb } from "@starter/db"
 import { env } from "@starter/env"
-import { reportError } from "@starter/errors"
+import { reportError, setErrorReporter } from "@starter/errors"
 import { createLogger } from "@starter/logger"
 import { parseStatusProviders } from "@starter/observability"
 import { createFileStore, type FileStore } from "@starter/storage"
@@ -18,6 +18,11 @@ import { createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
 
 const logger = createLogger({ name: "api" })
+// Every reported error (5xx and unexposed ones, from REST, MCP tools, the hooks and analytics) is
+// logged here, once. To add an error tracker (Sentry and the like), call it here too and keep the log.
+setErrorReporter((error, context) => {
+  logger.error({ err: error, ...context }, error.message)
+})
 // Under `pnpm dev`, portless serves the app at PORTLESS_URL; OAuth issuer and docs links must match it.
 const baseURL = (env.PORTLESS_URL ?? env.BETTER_AUTH_URL).replace(/\/$/, "")
 

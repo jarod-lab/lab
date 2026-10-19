@@ -19,4 +19,12 @@
 - `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs`
   (agent, run, run_step, approval, steer_message; tenant tables), `0007_session_login_method`,
   `0008_sso_domain_verification` and `0009_steer_message_org_index`.
-- Migrations `0003` through `0009` are not applied until the user runs them.
+- `0010_notifications` adds better-inbox's `notification` table. The table is generated into
+  `auth-schema.ts`, and the migration appends two custom statements: the
+  `(user_id, organization_id, created_at)` index, and a cascading foreign key from
+  `organization_id` to `organization`. better-inbox's schema option can't declare either. Neither
+  is in the Drizzle snapshot, so `db:generate` leaves them alone; `drizzle-kit push` would drop
+  them. `organization_id` is nullable: a personal notice (account security, removal from an org)
+  belongs to the user, not to a tenant. It is the one customer-data column allowed to be null. See
+  `docs/notifications.md`.
+- Migrations `0003` through `0010` are not applied until the user runs them.

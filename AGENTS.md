@@ -34,6 +34,8 @@ docker compose up -d db      # optional local Postgres; tests don't need it
   `docs/database.md`.
 - `packages/auth` — better-auth with organizations, org API keys (`sk_`), OAuth 2.1, device grant.
   `packages/auth/src/access.ts` is the permission catalog (browser-safe). See `docs/auth.md`.
+  In-app notifications (better-inbox): send only through the catalog in
+  `packages/auth/src/notifications.ts`, never `auth.api.notify`. See `docs/notifications.md`.
 - `packages/auth-proofs` — gdp-ts proofs (`lib/ids.ts`, `proofs/`,
   `packages/auth-proofs/src/mistakes.types.ts`).
 - `packages/logger`, `packages/errors` — pino with redaction; `AppError`, `ErrorCode`,

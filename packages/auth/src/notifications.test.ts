@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+
 import { runWithTransaction } from "@better-auth/core/context"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
@@ -132,6 +134,12 @@ describe("renderNotification", () => {
       expect(rendered.title.length).toBeLessThanOrEqual(40)
       if (rendered.href !== undefined) expect(rendered.href.startsWith("/")).toBe(true)
     }
+  })
+
+  it("lists every catalog event in docs/notifications.md", () => {
+    const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
+    const documented = [...doc.matchAll(/^\| `([a-z_.]+)` \|/gm)].map((m) => m[1]).sort()
+    expect(documented).toEqual(CATALOG_TYPES)
   })
 
   it("renders the org-scoped copy and links explicitly", () => {

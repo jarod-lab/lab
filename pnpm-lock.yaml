@@ -414,8 +414,8 @@ importers:
         specifier: workspace:*
         version: link:../logger
       '@wraps.dev/better-auth':
-        specifier: ^0.3.0
-        version: 0.3.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))
+        specifier: ^0.4.0
+        version: 0.4.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))
       '@wraps.dev/email':
         specifier: ^0.15.0
         version: 0.15.0(react@19.3.0)
@@ -4065,8 +4065,8 @@ packages:
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
 
-  '@wraps.dev/better-auth@0.3.0':
-    resolution: {integrity: sha512-Db9v9+T8o8u7zwG/1mqvSYwyKkIvbwYuiQeE0rqswdc5l6nc7Frrd52zKL/rVOGdBrkv6nK0pXyk8i8soOHzlg==}
+  '@wraps.dev/better-auth@0.4.0':
+    resolution: {integrity: sha512-xQ/zJzdfY4wRqHIX0OHk/BaY4eORNR7swvhlWusi383FkFErPtvgKDCeuDHfT8CkfnreH/t3MujRmITAWoi05w==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@wraps.dev/email': '>=0.12.0'
@@ -10372,7 +10372,7 @@ snapshots:
 
   '@workflow/serde@4.1.0': {}
 
-  '@wraps.dev/better-auth@0.3.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))':
+  '@wraps.dev/better-auth@0.4.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))':
     dependencies:
       '@wraps.dev/client': 0.10.1
       better-auth: 1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)

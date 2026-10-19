@@ -83,6 +83,23 @@ function idempotencyKeyOf(value: string | undefined): string | undefined {
   return value
 }
 
+/**
+ * better-auth's rate limiter reads the client address from this header (packages/auth/src/rate-limit.ts,
+ * CLIENT_IP_HEADER). Kept here until @starter/auth exports it.
+ */
+const CLIENT_IP_HEADER = "x-starter-client-ip"
+
+/**
+ * The request for better-auth with the client address set from what we trust. A copy the client sent
+ * is dropped first. With no address (no socket, no trusted proxy header) the header stays absent.
+ */
+function withClientIp(req: Request, ip: string): Request {
+  const headers = new Headers(req.headers)
+  headers.delete(CLIENT_IP_HEADER)
+  if (ip !== "unknown") headers.set(CLIENT_IP_HEADER, ip)
+  return new Request(req, { headers })
+}
+
 /** The client's address for signup limits. X-Forwarded-For only when the proxy is trusted. */
 function clientIp(c: Context, trustProxy: boolean): string {
   if (trustProxy) {
@@ -216,7 +233,11 @@ export function createApp(opts: AppOptions) {
   app.notFound((c) => c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404))
 
   // Auth: better-auth routes, plus OAuth discovery at the root (RFC 8414 path insertion too).
-  app.on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) => auth.handler(c.req.raw))
+  // better-auth rate-limits by CLIENT_IP_HEADER (packages/auth/src/rate-limit.ts). The header is the
+  // address we trust, so a client's own copy is dropped and replaced.
+  app.on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) =>
+    auth.handler(withClientIp(c.req.raw, clientIp(c, trustProxy))),
+  )
   for (const suffix of ["", AUTH_BASE_PATH]) {
     app.get(`/.well-known/oauth-authorization-server${suffix}`, (c) => asMetadata(c.req.raw))
     app.get(`/.well-known/openid-configuration${suffix}`, (c) => oidcMetadata(c.req.raw))

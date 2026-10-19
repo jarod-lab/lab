@@ -57,6 +57,15 @@
       ],
       "outputs": ["coverage/**"]
     },
+    // shell.test.ts reads the prerendered shell (dist/index.html), so the web tests run after the
+    // web build.
+    "@starter/web#test": {
+      "dependsOn": ["transit", "build"]
+    },
+    "@starter/web#test:coverage": {
+      "dependsOn": ["transit", "build"],
+      "outputs": ["coverage/**"]
+    },
     // sdk's schema.test.ts checks the generated client against the API's committed contract. The
     // SDK does not depend on apps/api, so openapi.json is not in its graph.
     "@starter/sdk#test": {

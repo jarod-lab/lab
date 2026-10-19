@@ -2,7 +2,7 @@
 // a notice to the OLD address when a change is requested, and the account-deletion confirmation.
 // They go through the same SES client as the other auth emails. Like the wraps senders, a failure is
 // reported (through `onError`) and never fails the request that caused it.
-import { WrapsEmail } from "@wraps.dev/email"
+import { WrapsEmail, type WrapsEmailConfig } from "@wraps.dev/email"
 import { renderLayout } from "@wraps.dev/better-auth"
 
 export interface NoticeOptions {
@@ -36,9 +36,9 @@ export function createNotices(options: NoticeOptions): Notices {
   let client: WrapsEmail | undefined
   const send = async (to: string, rendered: { subject: string; html: string; text: string }) => {
     try {
-      client ??= new WrapsEmail(
-        (options.ses ?? {}) as unknown as ConstructorParameters<typeof WrapsEmail>[0],
-      )
+      // Loose like the wraps plugin's own `ses` option, so tests and the dev mail sink can pass a client
+      // that only has `send`.
+      client ??= new WrapsEmail(options.ses as WrapsEmailConfig | undefined)
       await client.send({
         from: options.from,
         to,

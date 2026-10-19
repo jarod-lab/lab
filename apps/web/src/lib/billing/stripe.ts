@@ -1,52 +1,9 @@
 import type { createClient } from "@starter/auth/client"
 
 import { fetchBillingUsage } from "./usage"
-import {
-  type BillingAdapter,
-  type BillingRedirect,
-  type BillingSnapshot,
-  type BillingSubscription,
-} from "./adapter"
+import { type BillingAdapter, type BillingSnapshot, type BillingSubscription } from "./adapter"
 
 type Client = ReturnType<typeof createClient>
-
-/** The slice of a better-auth stripe subscription row this page reads (stripe 1.7.7 `Subscription`). */
-export interface StripeSubscriptionRow {
-  plan: string
-  status: string
-  periodEnd?: Date | string | null
-  seats?: number | null
-  cancelAtPeriodEnd?: boolean | null
-}
-
-/** The `subscription` namespace of the stripe client, typed for the calls this adapter makes. */
-export interface StripeSubscriptionApi {
-  list(args: { query: { referenceId: string; customerType: "organization" } }): Promise<{
-    data: StripeSubscriptionRow[] | null
-    error: { message?: string } | null
-  }>
-  upgrade(args: {
-    plan: string
-    referenceId: string
-    customerType: "organization"
-    successUrl: string
-    cancelUrl: string
-    returnUrl: string
-    disableRedirect: true
-  }): Promise<{ data: BillingRedirect | null; error: { message?: string } | null }>
-  cancel(args: {
-    referenceId: string
-    customerType: "organization"
-    returnUrl: string
-    disableRedirect: true
-  }): Promise<{ data: BillingRedirect | null; error: { message?: string } | null }>
-  billingPortal(args: {
-    referenceId: string
-    customerType: "organization"
-    returnUrl: string
-    disableRedirect: true
-  }): Promise<{ data: BillingRedirect | null; error: { message?: string } | null }>
-}
 
 export interface StripeBillingOptions {
   /** The page to return to from the provider (defaults to the current address). */
@@ -89,7 +46,7 @@ export function createStripeBillingAdapter(
   client: Client,
   options: StripeBillingOptions = {},
 ): BillingAdapter {
-  const subscription = client.subscription as unknown as StripeSubscriptionApi
+  const subscription = client.subscription
   const here = options.returnUrl ?? currentPage
   return {
     mode: "stripe",

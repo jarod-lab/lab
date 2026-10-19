@@ -1,3 +1,5 @@
+import { roles } from "@starter/auth/client"
+
 /**
  * The one place that reads a stored role string. The server keeps a member's roles as a
  * comma-separated string ("admin,member"); everything in the web app that asks about a role goes
@@ -20,4 +22,12 @@ export function hasRole(role: string, name: string): boolean {
 /** Whether a stored role string includes the owner role. Owners are fixed in the permission table. */
 export function isOwner(role: string): boolean {
   return hasRole(role, "owner")
+}
+
+/** A role in the catalog (packages/auth/src/access.ts): one name, never a stored list. */
+export type OrgRole = keyof typeof roles
+
+/** Whether `role` is one catalog role, so it can be sent where better-auth takes a role name. */
+export function isOrgRole(role: string): role is OrgRole {
+  return Object.hasOwn(roles, role)
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { hasRole, isOwner, roleParts } from "./roles"
+import { hasRole, isOrgRole, isOwner, roleParts } from "./roles"
 
 describe("roleParts", () => {
   it("splits a stored role string into trimmed, non-empty parts", () => {
@@ -26,5 +26,15 @@ describe("isOwner", () => {
     expect(isOwner("admin, owner")).toBe(true)
     expect(isOwner("admin,member")).toBe(false)
     expect(isOwner("")).toBe(false)
+  })
+})
+
+describe("isOrgRole", () => {
+  it("accepts one catalog role and refuses lists and unknown names", () => {
+    expect(isOrgRole("viewer")).toBe(true)
+    expect(isOrgRole("owner")).toBe(true)
+    expect(isOrgRole("admin,member")).toBe(false)
+    expect(isOrgRole("superuser")).toBe(false)
+    expect(isOrgRole("constructor")).toBe(false)
   })
 })

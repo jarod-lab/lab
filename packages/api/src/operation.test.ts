@@ -47,8 +47,7 @@ describe("defineOperation", () => {
     expect(define({ ...getNote, permissions: { note: ["write"] } }).permissions).toEqual({
       note: ["write"],
     })
-    // @ts-expect-error: "delete" is not a note action in the catalog
-    define({ ...getNote, permissions: { note: ["delete"] } })
+    // A permission outside the catalog is a type error: see operation.types.ts.
   })
 
   it("formats permissions", () => {

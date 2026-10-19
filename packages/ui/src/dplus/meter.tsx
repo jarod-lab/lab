@@ -28,7 +28,6 @@ function Meter({
       <meter className="sr-only" min={0} max={total} value={used} aria-label={label} />
       {Array.from({ length: total }, (_, i) => (
         <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: cells are positional and never reorder
           key={i}
           aria-hidden="true"
           data-slot="meter-cell"

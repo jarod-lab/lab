@@ -512,20 +512,11 @@ export function createAuth(opts: AuthOptions) {
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
     ],
   })
-  const scimEndpoints = auth.api as unknown as {
-    createSCIMManagedConnection: (i: ScimConnectionInput) => Promise<ScimConnection>
-    listSCIMManagedConnections: (i: {
-      body: { provisioningDomainId: string }
-    }) => ReturnType<ScimManagement["list"]>
-    decommissionSCIMManagedConnection: (i: {
-      body: Parameters<ScimManagement["decommission"]>[0]
-    }) => Promise<unknown>
-  }
-  scimApi.connect = (input) => scimEndpoints.createSCIMManagedConnection(input)
+  scimApi.connect = (input) => auth.api.createSCIMManagedConnection(input)
   scimApi.management = {
     list: (provisioningDomainId) =>
-      scimEndpoints.listSCIMManagedConnections({ body: { provisioningDomainId } }),
-    decommission: (input) => scimEndpoints.decommissionSCIMManagedConnection({ body: input }),
+      auth.api.listSCIMManagedConnections({ body: { provisioningDomainId } }),
+    decommission: (input) => auth.api.decommissionSCIMManagedConnection({ body: input }),
   }
   ref.context = auth.$context
   // The app's Drizzle handle, for the tables better-auth doesn't own (signup_attempt, see signup.ts).

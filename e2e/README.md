@@ -29,25 +29,16 @@ The app under test gets only `PATH`, `HOME` and the temp-dir variables from the 
 
 ## Admin account
 
-The `/admin` journey (`e2e/admin.e2e.ts`) signs in as a platform admin. Admin is a database role, and the suite
-can't change the database, so:
+The `/admin` journey (`e2e/admin.e2e.ts`) signs in as a platform admin. Admin is a database role the suite
+can't grant, so the e2e stack (`scripts/e2e-stack.mjs`) does it when it starts: it signs up the `admin`
+credential's account through the API, then sets `role = 'admin'` on it in `DATABASE_URL`.
 
-1. Sign up a normal account (any way: `/sign-up`, or the API).
-2. Promote it once, in the database the e2e stack uses (`DATABASE_URL`):
+- The account is `admin@example.test` with a fixed local password (`e2e.config.ts`). Set `E2E_ADMIN_EMAIL`
+  and `E2E_ADMIN_PASSWORD` to use another one; an account that already exists keeps its password, so pass
+  the one it has.
+- Leave two-factor off on that account, or sign-in stops at `/two-factor` and the journey can't continue.
+- The password is read through a function in `e2e.config.ts` and is never a string in the environment the
+  model sees.
 
-   ```sql
-   update "user" set role = 'admin' where email = 'admin@example.com';
-   ```
-
-3. Leave two-factor off on that account, or sign-in stops at `/two-factor` and the journey can't continue.
-4. Pass its credentials to the run:
-
-   ```bash
-   E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD=... pnpm exec e2e run e2e/admin.e2e.ts
-   ```
-
-   The password is read through a function in `e2e.config.ts` and is never a string in the environment the
-   model sees. Without both variables the admin journey is skipped with a message; the other two `/admin`
-   checks (signed out, and a non-admin gets "Not available") always run.
-
-The runner also accepts `E2E_USER_ADMIN_USERNAME` and `E2E_USER_ADMIN_PASSWORD` (the credential name, uppercased).
+The runner also accepts `E2E_USER_ADMIN_USERNAME` and `E2E_USER_ADMIN_PASSWORD` (the credential name, uppercased);
+the stack only promotes `E2E_ADMIN_EMAIL`, so set both pairs together.

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import { runInNewContext } from "node:vm"
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -94,8 +95,12 @@ describe("theme choice", () => {
   })
 
   it("applyTheme works without matchMedia (embedded webviews)", () => {
-    // @ts-expect-error simulating an environment without matchMedia
-    window.matchMedia = undefined
+    // Simulates an environment without matchMedia.
+    Object.defineProperty(window, "matchMedia", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
     applyTheme("system")
     expect(document.documentElement.classList.contains("dark")).toBe(false)
   })
@@ -105,6 +110,8 @@ describe("src/theme-boot.js", () => {
   // The pre-paint script must read the same key and rule as the app (lib/theme.ts).
   // Vitest runs from the package root (apps/web).
   const script = readFileSync(resolve("src/theme-boot.js"), "utf8")
+  // Runs the file as the browser would, against this page's window and document.
+  const boot = () => runInNewContext(script, { window, document })
 
   it("reads the same storage key", () => {
     expect(script).toContain(`"${THEME_STORAGE_KEY}"`)
@@ -113,12 +120,12 @@ describe("src/theme-boot.js", () => {
   it("applies the choice before paint, following the OS for system", () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, "dark")
     stubSystemDark(false)
-    new Function(script)()
+    boot()
     expect(document.documentElement.classList.contains("dark")).toBe(true)
 
     window.localStorage.setItem(THEME_STORAGE_KEY, "light")
     stubSystemDark(true)
-    new Function(script)()
+    boot()
     expect(document.documentElement.classList.contains("dark")).toBe(false)
   })
 })

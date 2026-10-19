@@ -10,17 +10,20 @@ export const securitySummary = createAuthEndpoint(
   { method: "GET", use: [sessionMiddleware] },
   async (ctx) => {
     const userId = ctx.context.session.user.id
+    const user = await ctx.context.internalAdapter.findUserById(userId)
     // The two-factor fields are the app's and the plugin's user columns, not in better-auth's user type.
-    const user = (await ctx.context.internalAdapter.findUserById(userId)) as unknown as {
-      twoFactorEnabled?: boolean | null
-      twoFactorEnabledAt?: Date | null
-    } | null
+    const twoFactorEnabled =
+      user !== null && "twoFactorEnabled" in user && user.twoFactorEnabled === true
+    const twoFactorEnabledAt =
+      user !== null && "twoFactorEnabledAt" in user && user.twoFactorEnabledAt instanceof Date
+        ? user.twoFactorEnabledAt
+        : null
     const accounts = await ctx.context.internalAdapter.findAccounts(userId)
     // The password is the credential account. Its updatedAt moves when the password is set or changed.
     const credential = accounts.find((a) => a.providerId === "credential")
 
     let backupCodesRemaining: number | null = null
-    if (user?.twoFactorEnabled) {
+    if (twoFactorEnabled) {
       const row = await ctx.context.adapter.findOne<{ backupCodes: string }>({
         model: "twoFactor",
         where: [{ field: "userId", value: userId }],
@@ -41,8 +44,8 @@ export const securitySummary = createAuthEndpoint(
 
     return ctx.json({
       passwordChangedAt: credential ? credential.updatedAt : null,
-      twoFactorEnabled: !!user?.twoFactorEnabled,
-      twoFactorEnabledAt: user?.twoFactorEnabledAt ?? null,
+      twoFactorEnabled,
+      twoFactorEnabledAt,
       backupCodesRemaining,
     })
   },

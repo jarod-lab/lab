@@ -48,7 +48,7 @@
   - Install the browser with `pnpm exec e2e-web install chromium`.
   - The browser can't emulate dark mode (override `matchMedia` in an init script) or WebAuthn. Tests
     compute TOTP codes (`e2e/support/totp.ts`). Screenshots are withheld after a secret fill.
-  - Admin journeys need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` (see `e2e/README.md`).
+  - The e2e stack signs up and promotes the admin journey's account at startup (see `e2e/README.md`).
   - Not in CI yet.
 - Dependabot commits (signed off by `dependabot[bot]`) are exempt from commitlint, since they are
   written "Bump x from a to b".

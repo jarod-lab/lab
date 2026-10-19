@@ -3,7 +3,7 @@ import { createAuth } from "./src/index"
 
 const placeholder = (prefix: string) => `${prefix}_generate_only`
 
-// biome-ignore lint: schema generation never touches the database
+// `db` is a stand-in: schema generation never touches the database.
 export const auth = createAuth({
   db: {} as never,
   secret: "x".repeat(32),

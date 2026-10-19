@@ -130,7 +130,7 @@ export type Operation<
   A extends OperationAuth | undefined = undefined,
 > = OperationSpec<I, O, PermissionSet, A>
 
-// biome-ignore lint: an array of differently-typed operations needs this escape hatch
+// An array of differently-typed operations needs this escape hatch.
 export type AnyOperation = Operation<any, any, OperationAuth | undefined>
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/

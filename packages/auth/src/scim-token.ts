@@ -61,7 +61,7 @@ export interface ScimConnectionInput {
     creationRequestId: string
     provisioningDomainId: string
     actorId: string
-    scopes: readonly string[]
+    scopes: readonly (typeof SCIM_SCOPES)[number][]
     expiresAt: Date
   }
 }

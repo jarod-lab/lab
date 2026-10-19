@@ -1,3 +1,4 @@
+import { isOrgRole, roleParts } from "./roles"
 import { makeAuthClient, WebError } from "./web-auth"
 
 // The organization settings calls, kept apart from WebAuth so the other pages' fakes don't change.
@@ -48,18 +49,24 @@ function unwrap<T>(result: Result<T>, fallback: string): T {
   return result.data as T
 }
 
+const toSettings = (org: {
+  id: string
+  name: string
+  slug: string
+  logo?: string | null
+  metadata?: unknown
+}): OrgSettings => ({
+  id: org.id,
+  name: org.name,
+  slug: org.slug,
+  logo: org.logo ?? null,
+  metadata: org.metadata,
+})
+
 /** The browser implementation, same origin as the page (cookies go with every call). */
 export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch): OrgSettingsApi {
   const client = makeAuthClient(baseURL, fetchImpl)
-  const org = client.organization as unknown as {
-    getFullOrganization: (args: unknown) => Promise<Result<OrgSettings>>
-    listMembers: (args: unknown) => Promise<Result<{ total: number; members: unknown[] }>>
-    update: (args: unknown) => Promise<Result<OrgSettings>>
-    updateMemberRole: (args: unknown) => Promise<Result<unknown>>
-    leave: (args: unknown) => Promise<Result<unknown>>
-    delete: (args: unknown) => Promise<Result<unknown>>
-    checkRolePermission: (args: unknown) => boolean
-  }
+  const org = client.organization
 
   return {
     async getOrganization(organizationId) {
@@ -67,13 +74,7 @@ export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch)
         await org.getFullOrganization({ query: { organizationId } }),
         "Could not load the organization",
       )
-      return {
-        id: found.id,
-        name: found.name,
-        slug: found.slug,
-        logo: found.logo ?? null,
-        metadata: found.metadata,
-      }
+      return toSettings(found)
     },
     async listMembers(organizationId) {
       const listed = unwrap(
@@ -93,9 +94,12 @@ export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch)
       return { total: listed.total, members }
     },
     async updateOrganization(organizationId, data) {
-      return unwrap(await org.update({ organizationId, data }), "Could not save the organization")
+      return toSettings(
+        unwrap(await org.update({ organizationId, data }), "Could not save the organization"),
+      )
     },
     async updateMemberRole(organizationId, memberId, role) {
+      if (!isOrgRole(role)) throw new WebError(`Unknown role: ${role}`, 0)
       unwrap(
         await org.updateMemberRole({ organizationId, memberId, role }),
         "Could not change the role",
@@ -116,7 +120,11 @@ export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch)
       return body.total ?? 0
     },
     roleAllows(role, permissions) {
-      return org.checkRolePermission({ role, permissions }) === true
+      // A stored role may list several ("admin,member"); any one that grants the permissions is enough,
+      // as on the server.
+      return roleParts(role)
+        .filter(isOrgRole)
+        .some((part) => org.checkRolePermission({ role: part, permissions }))
     },
   }
 }

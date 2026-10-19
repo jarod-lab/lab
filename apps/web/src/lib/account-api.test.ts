@@ -45,6 +45,36 @@ describe("createAccountApi", () => {
     })
   })
 
+  it("lists sessions with how each was signed in, marking this browser's", async () => {
+    const { fetchImpl } = stubFetch({
+      "/api/auth/get-session": {
+        status: 200,
+        body: { user: { id: "u1" }, session: { token: "tok-now" } },
+      },
+      "/api/auth/list-sessions": {
+        status: 200,
+        body: [
+          {
+            id: "s1",
+            token: "tok-now",
+            userAgent: "Firefox",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            loginMethod: "passkey",
+            loginTwoFactor: false,
+          },
+          { id: "s2", token: "tok-old", createdAt: "2026-09-01T00:00:00.000Z" },
+        ],
+      },
+    })
+    const api = createAccountApi(BASE, fetchImpl)
+    const sessions = await api.listSessions()
+    expect(sessions).toMatchObject([
+      { token: "tok-now", userAgent: "Firefox", loginMethod: "passkey", loginTwoFactor: false },
+      { token: "tok-old", userAgent: null, loginMethod: null, loginTwoFactor: false },
+    ])
+    expect(sessions.map((session) => session.current)).toEqual([true, false])
+  })
+
   it("sends the new name to update-user", async () => {
     const { calls, fetchImpl } = stubFetch({
       "/api/auth/update-user": { status: 200, body: { status: true } },
@@ -182,7 +212,7 @@ describe("createAccountApi: the call each method makes", () => {
       "/api/auth/get-session": { status: 200, body: SESSION },
       "/api/auth/two-factor/enable": {
         status: 200,
-        body: { totpURI: "otpauth://totp/x?secret=A", backupCodes: [] },
+        body: { method: "totp", totpURI: "otpauth://totp/x?secret=A", backupCodes: [] },
       },
       "/api/auth/two-factor/generate-backup-codes": { status: 200, body: { backupCodes: ["x"] } },
       "/api/auth/passkey/list-user-passkeys": { status: 200, body: [] },

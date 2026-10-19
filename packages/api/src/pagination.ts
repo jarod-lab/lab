@@ -12,12 +12,9 @@ export const paginationInput = z.object({
 
 /** Output for a paginated list: the items under `key`, and the cursor for the next page (null at the end). */
 export function paginated<K extends string, T extends z.ZodType>(key: K, item: T) {
-  return z.object({
-    [key]: z.array(item),
-    nextCursor: z.string().nullable(),
-  }) as unknown as z.ZodObject<
-    { [P in K]: z.ZodArray<T> } & { nextCursor: z.ZodNullable<z.ZodString> }
-  >
+  // A computed key widens to a string index; `key` is exactly K.
+  const items = { [key]: z.array(item) } as { [P in K]: z.ZodArray<T> }
+  return z.object({ ...items, nextCursor: z.string().nullable() })
 }
 
 const toBase64Url = (text: string) =>

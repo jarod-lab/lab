@@ -5,13 +5,8 @@ import { PASSWORD, signUpUi } from "./support/invitations"
 import { uniqueId } from "./support/unique"
 
 // The platform admin page (/admin, not on the boards): who may open it, and the admin's actions on a user.
-// Promotion to admin is a database change the suite can't make, so the admin journey needs an account
-// that already has the role: E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD (see e2e/README.md). Without them that
-// journey is skipped with that message; the access checks below always run.
-
-const ADMIN_READY = Boolean(process.env.E2E_ADMIN_EMAIL && process.env.E2E_ADMIN_PASSWORD)
-const NEEDS_ADMIN =
-  "needs an admin account: set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD (see e2e/README.md, 'Admin account')"
+// Promotion to admin is a database change the suite can't make, so the e2e stack signs up and promotes
+// the `admin` credential's account when it starts (scripts/e2e-stack.mjs, e2e/README.md).
 
 test("signed out, /admin asks for sign-in and comes back to /admin", async ({
   app,
@@ -33,7 +28,6 @@ test("a person who is not an admin sees Not available, not the users", async (ct
 })
 
 test("an admin finds a user, bans and unbans them, and impersonates them", async (ctx) => {
-  test.skip(!ADMIN_READY, NEEDS_ADMIN)
   const { app, screen, browser } = ctx
   const admin = credentials.user("admin")
   const unique = uniqueId()

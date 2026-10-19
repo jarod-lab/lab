@@ -10,6 +10,11 @@ import { gateway } from "ai"
 // The API needs Postgres with the migrations applied (DATABASE_URL, from the runner's environment or
 // .env). The journeys sign up, so they need the dev mail sink (DEV_MAIL_SINK) as well.
 // Only what the stack needs is passed on: the child inherits nothing else from the runner.
+// The platform admin the admin journey (e2e/admin.e2e.ts) signs in as. The stack signs it up and
+// promotes it at startup, so the defaults work against a fresh database; set both to use another account.
+const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "admin@example.test"
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || "e2e admin on the local stack only"
+
 const stackEnv: Record<string, string> = {
   // Unset: each stack picks a free API port (desktop and phone run side by side).
   E2E_API_PORT: process.env.E2E_API_PORT ?? "",
@@ -19,6 +24,8 @@ const stackEnv: Record<string, string> = {
   EMAIL_FROM: process.env.EMAIL_FROM ?? "noreply@example.com",
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
   DATABASE_URL: process.env.DATABASE_URL ?? "",
+  E2E_ADMIN_EMAIL: ADMIN_EMAIL,
+  E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
 }
 for (const [key, value] of Object.entries(stackEnv)) if (value === "") delete stackEnv[key]
 
@@ -33,13 +40,12 @@ const app = {
   },
 }
 
-// The admin journey (e2e/admin.e2e.ts) signs in as a platform admin. Promotion is DB-only, so the account
-// is made outside the suite (see e2e/README.md). The password is a function: a string from an unset
-// variable would fail every command here, `e2e list` included. Override per run with E2E_USER_ADMIN_*.
+// The password is a function so it is never a plain string in the config the model sees. Override per
+// run with E2E_USER_ADMIN_* (the stack still seeds E2E_ADMIN_EMAIL, so set both pairs together).
 const credentials = {
   admin: {
-    username: process.env.E2E_ADMIN_EMAIL || "admin@example.test",
-    password: () => process.env.E2E_ADMIN_PASSWORD ?? "",
+    username: ADMIN_EMAIL,
+    password: () => ADMIN_PASSWORD,
   },
 }
 

@@ -68,10 +68,12 @@ const iso = (value: unknown): string | null => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+const text = (value: unknown): string => (typeof value === "string" ? value : "")
+
 const toUser = (raw: Record<string, unknown>): AdminUser => ({
-  id: String(raw.id),
-  name: String(raw.name ?? ""),
-  email: String(raw.email ?? ""),
+  id: text(raw.id),
+  name: text(raw.name),
+  email: text(raw.email),
   emailVerified: raw.emailVerified === true,
   role: typeof raw.role === "string" ? raw.role : null,
   banned: raw.banned === true,
@@ -88,14 +90,11 @@ export function createAdminApi(baseURL?: string, fetchImpl?: typeof fetch): Admi
     async getSession() {
       const result = await client.getSession()
       if (!result.data) return null
-      const { user, session } = result.data as unknown as {
-        user: Record<string, unknown>
-        session: Record<string, unknown>
-      }
+      const { user, session } = result.data
       return {
-        userId: String(user.id),
-        name: String(user.name ?? ""),
-        email: String(user.email ?? ""),
+        userId: user.id,
+        name: user.name,
+        email: user.email,
         role: typeof user.role === "string" ? user.role : "user",
         impersonatedBy: typeof session.impersonatedBy === "string" ? session.impersonatedBy : null,
       }

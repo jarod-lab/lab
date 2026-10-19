@@ -1,4 +1,5 @@
 import { payload, productClient, type ResponseBody } from "./product-client"
+import { isOrgRole } from "./roles"
 import { makeAuthClient, WebError } from "./web-auth"
 
 /** A member's security state, from list_member_security (member:read). */
@@ -41,12 +42,7 @@ function unwrap<T>(result: Result<T>, fallback: string): T {
 
 /** The browser implementation, same origin as the page. */
 export function createMembersApi(baseURL?: string, fetchImpl?: typeof fetch): MembersApi {
-  const org = makeAuthClient(baseURL, fetchImpl).organization as unknown as {
-    listInvitations: (args: unknown) => Promise<Result<OrgInvitation[]>>
-    inviteMember: (args: unknown) => Promise<Result<unknown>>
-    cancelInvitation: (args: unknown) => Promise<Result<unknown>>
-    removeMember: (args: unknown) => Promise<Result<unknown>>
-  }
+  const org = makeAuthClient(baseURL, fetchImpl).organization
 
   return {
     async listSecurity(organizationId) {
@@ -61,12 +57,22 @@ export function createMembersApi(baseURL?: string, fetchImpl?: typeof fetch): Me
       )
     },
     async listInvitations(organizationId) {
-      return unwrap(
+      const invitations = unwrap(
         await org.listInvitations({ query: { organizationId } }),
         "Could not load the invitations",
       )
+      // The auth client revives dates; the page takes ISO strings.
+      return invitations.map((invitation) => ({
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        status: invitation.status,
+        expiresAt: new Date(invitation.expiresAt).toISOString(),
+        ...(invitation.createdAt && { createdAt: new Date(invitation.createdAt).toISOString() }),
+      }))
     },
     async invite(organizationId, input) {
+      if (!isOrgRole(input.role)) throw new WebError(`Unknown role: ${input.role}`, 0)
       unwrap(
         await org.inviteMember({
           organizationId,

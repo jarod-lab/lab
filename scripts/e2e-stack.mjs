@@ -3,6 +3,7 @@
 // (API_URL), so the browser sees one origin and the session cookies apply. Both children stop when
 // this process gets a signal or either one exits.
 import { spawn } from "node:child_process"
+import { createRequire } from "node:module"
 import { createServer } from "node:net"
 
 const webPort = process.argv[2]
@@ -69,6 +70,30 @@ for (;;) {
     process.exit(1)
   }
   await new Promise((resolve) => setTimeout(resolve, 500))
+}
+
+// The platform admin for e2e/admin.e2e.ts (credentials from e2e.config.ts). Admin is a database role,
+// so: sign the account up through the API (an existing one answers 422 and keeps its password), then
+// promote it. Two-factor stays off on it, or sign-in would stop at /two-factor.
+const adminEmail = process.env.E2E_ADMIN_EMAIL
+const adminPassword = process.env.E2E_ADMIN_PASSWORD
+if (adminEmail && adminPassword && process.env.DATABASE_URL) {
+  const signUp = await fetch(`${apiUrl}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: apiUrl },
+    body: JSON.stringify({ name: "E2E Admin", email: adminEmail, password: adminPassword }),
+  })
+  if (!signUp.ok && signUp.status !== 422) {
+    console.error(`[e2e stack] signing up ${adminEmail} failed: ${signUp.status}`)
+    stop()
+    process.exit(1)
+  }
+  // postgres is packages/db's driver; the root workspace doesn't depend on it.
+  const require = createRequire(new URL("../packages/db/package.json", import.meta.url))
+  const { default: postgres } = await import(require.resolve("postgres"))
+  const sql = postgres(process.env.DATABASE_URL, { max: 1 })
+  await sql`update "user" set role = 'admin' where email = ${adminEmail}`
+  await sql.end()
 }
 
 start(

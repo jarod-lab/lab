@@ -12,11 +12,11 @@ afterEach(() => {
 
 // jsdom has neither; cmdk (the command palette) needs both to lay out its list.
 if (typeof globalThis.ResizeObserver === "undefined") {
-  globalThis.ResizeObserver = class {
+  globalThis.ResizeObserver = class implements ResizeObserver {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver
+  }
 }
 if (typeof Element !== "undefined" && typeof Element.prototype.scrollIntoView !== "function") {
   Element.prototype.scrollIntoView = () => {}

@@ -4,6 +4,7 @@
 // elsewhere (see whoami's `claimed`).
 import { randomBytes, randomUUID } from "node:crypto"
 
+import type { Database } from "@starter/db"
 import { signupAttempt } from "@starter/db/schema"
 import { AppError } from "@starter/errors"
 import { and, count, eq, gte } from "drizzle-orm"
@@ -39,6 +40,48 @@ const rateLimited = (retryAfter: number, message: string) =>
   })
 
 /**
+ * Records one signup attempt, successful or not, and returns the limit it breaks, if any. Provisional
+ * and passkey sign-up share this, so both count against the same IP and domain budgets.
+ */
+export async function signupLimitBreach(
+  db: Database,
+  input: { ip: string; domain: string },
+): Promise<{ retryAfter: number; message: string } | null> {
+  const now = Date.now()
+  await db.insert(signupAttempt).values({
+    id: randomUUID(),
+    ip: input.ip,
+    emailDomain: input.domain,
+    createdAt: new Date(now),
+  })
+  const fromIp = await db
+    .select({ n: count() })
+    .from(signupAttempt)
+    .where(
+      and(eq(signupAttempt.ip, input.ip), gte(signupAttempt.createdAt, new Date(now - HOUR_MS))),
+    )
+  if ((fromIp[0]?.n ?? 0) > SIGNUP_LIMITS.perIpPerHour) {
+    return { retryAfter: 3600, message: "Too many signups from this network. Try again later." }
+  }
+  const fromDomain = await db
+    .select({ n: count() })
+    .from(signupAttempt)
+    .where(
+      and(
+        eq(signupAttempt.emailDomain, input.domain),
+        gte(signupAttempt.createdAt, new Date(now - DAY_MS)),
+      ),
+    )
+  if ((fromDomain[0]?.n ?? 0) > SIGNUP_LIMITS.perDomainPerDay) {
+    return {
+      retryAfter: 86_400,
+      message: "Too many signups for this email domain today. Try again later.",
+    }
+  }
+  return null
+}
+
+/**
  * Create a provisional account and send one claim email (a password reset link to `/claim`).
  * Every attempt is recorded before the checks, so refused and conflicting attempts count toward
  * the limits too. Throws RATE_LIMITED past SIGNUP_LIMITS (`context.retryAfter` holds the seconds to
@@ -59,35 +102,9 @@ export async function provisionalSignup(
   const db = auth.db
   const ctx = await auth.$context
   const adapter = ctx.adapter
-  const now = Date.now()
 
-  await db.insert(signupAttempt).values({
-    id: randomUUID(),
-    ip: input.ip,
-    emailDomain: domain,
-    createdAt: new Date(now),
-  })
-  const fromIp = await db
-    .select({ n: count() })
-    .from(signupAttempt)
-    .where(
-      and(eq(signupAttempt.ip, input.ip), gte(signupAttempt.createdAt, new Date(now - HOUR_MS))),
-    )
-  if ((fromIp[0]?.n ?? 0) > SIGNUP_LIMITS.perIpPerHour) {
-    throw rateLimited(3600, "Too many signups from this network. Try again later.")
-  }
-  const fromDomain = await db
-    .select({ n: count() })
-    .from(signupAttempt)
-    .where(
-      and(
-        eq(signupAttempt.emailDomain, domain),
-        gte(signupAttempt.createdAt, new Date(now - DAY_MS)),
-      ),
-    )
-  if ((fromDomain[0]?.n ?? 0) > SIGNUP_LIMITS.perDomainPerDay) {
-    throw rateLimited(86_400, "Too many signups for this email domain today. Try again later.")
-  }
+  const breach = await signupLimitBreach(db, { ip: input.ip, domain })
+  if (breach) throw rateLimited(breach.retryAfter, breach.message)
 
   const existing = await adapter.findOne({
     model: "user",

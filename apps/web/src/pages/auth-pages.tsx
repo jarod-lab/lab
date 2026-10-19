@@ -443,21 +443,35 @@ const signUpSchema = z.object({
   password: z.string().min(8, "Use at least 8 characters."),
 })
 
-/** Create an account. Signing up also signs the new user in and creates their personal organization. */
+/** The name and email a passkey sign-up needs before the browser's passkey prompt. */
+const passkeyIdentitySchema = z.object({
+  name: z.string().trim().min(1, "Enter your name."),
+  email: z.email("Enter a valid email address."),
+})
+
+/**
+ * Create an account. Signing up also signs the new user in and creates their personal organization.
+ * `onPasskeySignUp` (from the sign-up container) makes the account with a passkey instead of a
+ * password; the button shows only when the server offers passkeys and the callback is given.
+ */
 export function SignUpPage({
   auth,
   next,
   signInHref,
+  onPasskeySignUp,
 }: {
   auth: WebAuth
   next: string
   signInHref: string
+  /** Emails the sign-up link (see lib/passkey-signup.ts). Resolves once the link is sent. */
+  onPasskeySignUp?: (values: { name: string; email: string }) => Promise<void>
 }) {
   const id = useId()
   const [methods, setMethods] = useState<SignInMethods>(PASSWORD_ONLY_METHODS)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [breached, setBreached] = useState(false)
+  const [linkSentTo, setLinkSentTo] = useState<string | null>(null)
 
   /** As the sign-in page's social buttons: pending during the redirect, and any error shown. */
   async function socialSignUp(provider: SocialProvider) {
@@ -509,6 +523,28 @@ export function SignUpPage({
       live = false
     }
   }, [auth])
+
+  /** The passkey button: name and email are checked here (the password isn't asked for), then the prompt. */
+  async function passkeySignUp() {
+    const values = form.state.values
+    const checked = passkeyIdentitySchema.safeParse({ name: values.name, email: values.email })
+    if (!checked.success || !onPasskeySignUp) {
+      setError(checked.error?.issues[0]?.message ?? "Enter your name and email first.")
+      return
+    }
+    setPending(true)
+    setError(null)
+    setBreached(false)
+    try {
+      await onPasskeySignUp(checked.data)
+      // The link is the next step: nothing is signed in until it is opened.
+      setLinkSentTo(checked.data.email)
+      setPending(false)
+    } catch (caught) {
+      setError(messageOf(caught))
+      setPending(false)
+    }
+  }
 
   const passwordHelp = `${id}-password-help`
   const passwordError = `${id}-password-error`
@@ -623,6 +659,22 @@ export function SignUpPage({
           </Button>
         </FieldGroup>
       </form>
+      {methods.passkey && onPasskeySignUp ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-full text-sm"
+          disabled={pending}
+          onClick={() => void passkeySignUp()}
+        >
+          Sign up with a passkey
+        </Button>
+      ) : null}
+      {linkSentTo ? (
+        <output className="block text-sm text-muted-foreground">
+          We sent a link to {linkSentTo}. Open it on this device to create your passkey.
+        </output>
+      ) : null}
       {methods.social.length > 0 ? (
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">

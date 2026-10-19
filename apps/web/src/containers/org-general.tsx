@@ -11,6 +11,7 @@ import { qk } from "../lib/query-keys"
 import type { UploadsApi } from "../lib/uploads-api"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { orgRoleLabel, invalidateSession, memberRoleQuery, useSessionQuery } from "./shell-data"
+import { useIsOperator } from "../lib/operator"
 
 /** The permission checks the page's controls are derived from (the catalog, via the plugin). */
 const EDIT = { organization: ["update"] }
@@ -48,6 +49,7 @@ export function OrgGeneralContainer({
   agentsApi = getWorkspaceAgentsApi(),
   uploads,
 }: OrgGeneralContainerProps) {
+  const operator = useIsOperator()
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const session = useSessionQuery(auth)
@@ -181,6 +183,7 @@ export function OrgGeneralContainer({
 
   return (
     <OrgGeneralPage
+      operator={operator}
       // Remounted when the saved values change, so the form starts again from what the server holds.
       key={`${saved.name}|${saved.slug}|${saved.role}`}
       organization={{ id: organizationId, name: saved.name, slug: saved.slug, logo: current.logo }}

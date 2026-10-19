@@ -10,6 +10,7 @@ import { qk } from "../lib/query-keys"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
 import { OrgBillingPage } from "../pages/org-billing-page"
+import { useIsOperator } from "../lib/operator"
 
 /** Seeing the Billing page: owners and admins (members and viewers have no subscription grant). */
 const VIEW_BILLING = { subscription: ["read"] }
@@ -40,6 +41,7 @@ export function OrgBillingContainer({
   chooseAdapter = getBillingAdapter,
   renderLink,
 }: OrgBillingContainerProps) {
+  const operator = useIsOperator()
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
@@ -123,6 +125,7 @@ export function OrgBillingContainer({
 
   return (
     <OrgBillingPage
+      operator={operator}
       organization={{ name: organization.name, slug: organization.slug }}
       roleLabel={orgRoleLabel(roleText)}
       canChange={canChange}

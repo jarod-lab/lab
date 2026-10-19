@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router"
 import { OrgRunsContainer } from "../../containers/org-runs"
 import { RouterLink } from "../../containers/router-link"
 import { useOrganizationsQuery } from "../../containers/shell-data"
-import { useFlag } from "../../lib/flags"
 import { runFilterOf } from "../../lib/run-view"
 import { getRunsApi } from "../../lib/runs-api"
 import { getWebAuth } from "../../lib/web-auth"
@@ -20,7 +19,6 @@ export const Route = createFileRoute("/$org/")({
 function OrgHomeRoute() {
   const { org: slug } = Route.useParams()
   const { status } = Route.useSearch()
-  const whatsNew = useFlag("whats-new-card")
   const auth = getWebAuth()
   const organizations = useOrganizationsQuery(auth)
   const organization = organizations.data?.find((org) => org.slug === slug)
@@ -32,7 +30,6 @@ function OrgHomeRoute() {
       api={getRunsApi()}
       organization={organization}
       filter={filter}
-      whatsNew={whatsNew}
       renderLink={RouterLink}
     />
   )

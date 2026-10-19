@@ -4,7 +4,6 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
-import { OperatorContext } from "../lib/operator"
 import { detailFixture, flagFixture } from "../test/fake-feature-flags"
 import { FeatureFlagsPage, type FeatureFlagsPageProps } from "./feature-flags-page"
 
@@ -40,11 +39,7 @@ function props(overrides: Partial<FeatureFlagsPageProps> = {}): FeatureFlagsPage
 
 function renderPage(overrides: Partial<FeatureFlagsPageProps> = {}) {
   const p = props(overrides)
-  render(
-    <OperatorContext.Provider value={p.isOperator}>
-      <FeatureFlagsPage {...p} />
-    </OperatorContext.Provider>,
-  )
+  render(<FeatureFlagsPage {...p} />)
   return p
 }
 

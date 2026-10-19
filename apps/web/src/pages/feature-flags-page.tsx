@@ -38,7 +38,7 @@ import {
   targetsSummary,
 } from "../lib/feature-flags"
 import { messageOf } from "../lib/messages"
-import { useSettingsTabs } from "../lib/operator"
+import { settingsTabs } from "../lib/org-settings"
 
 export interface FeatureFlagsPageProps {
   organization: { name: string; slug: string }
@@ -106,7 +106,7 @@ export function FeatureFlagsPage({
   onDelete,
   renderLink = anchorLink,
 }: FeatureFlagsPageProps) {
-  const tabs = useSettingsTabs(organization.slug)
+  const tabs = settingsTabs(organization.slug, isOperator)
   const columns = useMemo(
     () =>
       helper.columns([

@@ -27,8 +27,7 @@ import { OrgMark } from "@starter/ui/dplus/org-mark"
 
 import { ASSIGNABLE_ROLES, type AssignableRole } from "../lib/members"
 import { ROLE_LABEL } from "../lib/roles"
-import { useSettingsTabs } from "../lib/operator"
-import { slugChangeWarning } from "../lib/org-settings"
+import { settingsTabs, slugChangeWarning } from "../lib/org-settings"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ImageUpload, type ImageUploadLimits } from "../components/image-upload"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
@@ -43,6 +42,8 @@ export interface LogoUpload {
 }
 
 export interface OrgGeneralPageProps {
+  /** The operator organization: its settings tabs add Feature flags. */
+  operator?: boolean
   organization: { id: string; name: string; slug: string; logo?: string | null }
   /** Omitted, uploads are shown as off. Only used when `canEdit`. */
   logoUpload?: LogoUpload
@@ -95,6 +96,7 @@ function countNoun(count: number | undefined, one: string, many: string): string
 
 /** The organization settings "General" page (board OrgGeneral). Props in, callbacks out. */
 export function OrgGeneralPage({
+  operator = false,
   organization,
   logoUpload,
   host,
@@ -134,7 +136,7 @@ export function OrgGeneralPage({
     },
   })
 
-  const tabs = useSettingsTabs(organization.slug)
+  const tabs = settingsTabs(organization.slug, operator)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

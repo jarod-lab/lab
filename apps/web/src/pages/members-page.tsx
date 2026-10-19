@@ -45,7 +45,7 @@ import {
 } from "../lib/members"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ROLE_DESCRIPTION, ROLE_LABEL } from "../lib/roles"
-import { useSettingsTabs } from "../lib/operator"
+import { settingsTabs } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
 import { InviteForm } from "./members-invite-form"
 
@@ -87,6 +87,8 @@ export interface InviteOutcome {
 }
 
 export interface MembersPageProps {
+  /** The operator organization: its settings tabs add Feature flags. */
+  operator?: boolean
   organization: { id: string; name: string; slug: string }
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
@@ -124,6 +126,7 @@ type MemberAction = { kind: "remove" | "reset"; member: MemberView }
 
 /** The members page (board OrgMembers). Props in, callbacks out. */
 export function MembersPage({
+  operator = false,
   organization,
   roleLabel,
   canInvite,
@@ -142,7 +145,7 @@ export function MembersPage({
   onCancel,
   renderLink = anchorLink,
 }: MembersPageProps) {
-  const tabs = useSettingsTabs(organization.slug)
+  const tabs = settingsTabs(organization.slug, operator)
   const when = useMemo(() => now ?? new Date(), [now])
   const [showAll, setShowAll] = useState(false)
   const [action, setAction] = useState<MemberAction | null>(null)

@@ -11,6 +11,7 @@ import type { OrgSettingsApi } from "../lib/org-settings-api"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { OrgSecurityPage } from "../pages/org-security-page"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
+import { useIsOperator } from "../lib/operator"
 
 /** Reading providers is the owner's (the catalog's sso:read). */
 const READ = { sso: ["read"] }
@@ -40,6 +41,7 @@ export function OrgSecurityContainer({
   origin,
   renderLink,
 }: OrgSecurityContainerProps) {
+  const operator = useIsOperator()
   const queryClient = useQueryClient()
   // Adding, deleting and verifying a provider, and minting a SCIM token, need a recent sign-in.
   const guard = useReauthGuard()
@@ -87,6 +89,7 @@ export function OrgSecurityContainer({
 
   return (
     <OrgSecurityPage
+      operator={operator}
       organization={{ name: organization.name, slug: organization.slug }}
       origin={origin}
       roleLabel={orgRoleLabel(roleText)}

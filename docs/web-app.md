@@ -75,8 +75,8 @@ down, so pages stay props-in (the org home's `whats-new-card` is the example). T
 `createProvider` an `InMemoryProvider` (`containers/org-features.test.tsx`).
 
 `OrgFeatures` also asks `whoami` whether this is the operator organization (`OperatorContext`,
-`lib/operator.ts`). Settings pages build their tabs with `useSettingsTabs(slug)`, which adds
-Feature flags (`/:org/settings/flags`: rollouts, targets, reclaim, delete) only there. It has no
+`lib/operator.ts`). Settings containers read it with `useIsOperator()` and pass `operator` to their
+page, whose `settingsTabs(slug, operator)` adds Feature flags (`/:org/settings/flags`: rollouts, targets, reclaim, delete) only there. It has no
 board or e2e journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server
 start, which the e2e stack can't know before it creates its organizations.
 

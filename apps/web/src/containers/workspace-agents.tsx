@@ -17,6 +17,7 @@ import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { agentViewOf } from "../lib/workspace-agents"
 import { WorkspaceAgentsPage } from "../pages/workspace-agents-page"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
+import { useIsOperator } from "../lib/operator"
 
 // The permissions the server checks (the catalog in packages/auth/src/access.ts). The page derives its
 // controls from the same catalog, so they agree with the server: members can't delete agents, viewers
@@ -56,6 +57,7 @@ export function WorkspaceAgentsContainer({
   connected,
   renderLink,
 }: WorkspaceAgentsContainerProps) {
+  const operator = useIsOperator()
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))
@@ -135,6 +137,7 @@ export function WorkspaceAgentsContainer({
 
   return (
     <WorkspaceAgentsPage
+      operator={operator}
       organization={organization}
       roleLabel={orgRoleLabel(roleText)}
       view={currentView}

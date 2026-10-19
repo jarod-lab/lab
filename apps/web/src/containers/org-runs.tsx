@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
+import { useFlag } from "../lib/flags"
 import { messageOf } from "../lib/messages"
 import { needsYouFirst } from "../lib/run-view"
 import { runKeys } from "../lib/run-keys"
@@ -19,8 +20,6 @@ export interface OrgRunsContainerProps {
   organization: WebOrganization
   /** The filter from the URL (`?status=`). */
   filter: RunStatus | "all"
-  /** Show the What's new card (the `whats-new-card` feature flag). */
-  whatsNew?: boolean
   renderLink?: RenderLink
 }
 
@@ -30,9 +29,10 @@ export function OrgRunsContainer({
   api,
   organization,
   filter,
-  whatsNew = false,
   renderLink,
 }: OrgRunsContainerProps) {
+  // The example flag (packages/flags): the What's new card, for organizations it is on for.
+  const whatsNew = useFlag("whats-new-card")
   const queryClient = useQueryClient()
   const organizationId = organization.id
   const role = useQuery(memberRoleQuery(auth, organizationId))

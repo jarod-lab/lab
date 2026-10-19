@@ -184,7 +184,8 @@ Details: `docs/tooling.md`.
   `transit` task carries the package graph into test hashes.
 - `pnpm audit` runs in CI. Ignore an advisory only in `auditConfig.ignoreGhsas`
   (`pnpm-workspace.yaml`) with a comment giving the reason; `pnpm audit --ignore` rewrites that file.
-- Dependencies align through the pnpm `catalog:`. Keep TypeScript at `^5.9.3`.
+- Dependencies align through the pnpm `catalog:`. TypeScript is 7; only `openapi-typescript` gets
+  TypeScript 5, through `.pnpmfile.mjs`.
 
 ## Agent permissions
 

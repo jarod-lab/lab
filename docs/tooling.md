@@ -107,7 +107,9 @@ an input there when a test reads a file no dependency reaches.
 ## Catalog and lefthook
 
 - Dependencies are aligned through the pnpm `catalog:` in `pnpm-workspace.yaml`. TypeScript is
-  `^5.9.3` everywhere: TypeScript 7 breaks `openapi-typescript`.
+  `^7.0.2`. `openapi-typescript` (the sdk's schema generator) calls the JS compiler API, which
+  TypeScript 7 does not ship, so `.pnpmfile.mjs` swaps its TypeScript peer for its own `^5.9.3`. Drop
+  the hook once `openapi-typescript` supports 7.
 - lefthook's format step runs Biome over `ts`, `tsx`, `js`, `mjs`, `json` and `css` staged files.
   Markdown is not formatted by Biome in this version.
 

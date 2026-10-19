@@ -25,11 +25,11 @@ export function rawSearch(): string {
 }
 
 const assignLocation = (url: string) => window.location.assign(url)
-let navigator: (url: string) => void = assignLocation
+let leavePage: (url: string) => void = assignLocation
 
 /** Full-page navigation: the next page is served by the API, so it must load from the server. */
 export function navigateTo(url: string): void {
-  navigator(url)
+  leavePage(url)
 }
 
 /**
@@ -37,5 +37,5 @@ export function navigateTo(url: string): void {
  * load another page, so tests record the URL instead.
  */
 export function setNavigator(next: ((url: string) => void) | undefined): void {
-  navigator = next ?? assignLocation
+  leavePage = next ?? assignLocation
 }

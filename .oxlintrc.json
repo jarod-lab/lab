@@ -75,10 +75,16 @@
         "jsx-a11y/role-has-required-aria-props": "off",
         "jsx-a11y/role-supports-aria-props": "off",
         "jsx-a11y/scope": "off",
-        "jsx-a11y/tabindex-no-positive": "off",
-        "typescript/restrict-template-expressions": "off",
-        "no-unused-vars": "off"
+        "jsx-a11y/tabindex-no-positive": "off"
       }
+    },
+    {
+      "files": ["packages/ui/src/components/ui/chart.tsx"],
+      "rules": { "typescript/restrict-template-expressions": "off" }
+    },
+    {
+      "files": ["packages/ui/src/components/examples/**"],
+      "rules": { "no-unused-vars": "off" }
     },
     {
       "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],

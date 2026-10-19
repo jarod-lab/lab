@@ -101,7 +101,7 @@ export function PageTabs({
 export function PageBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex max-w-[960px] flex-col gap-5 px-4 py-6 md:px-9", className)}
+      className={cn("flex max-w-[1200px] flex-col gap-5 px-4 py-6 md:px-9", className)}
       {...props}
     />
   )

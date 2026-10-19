@@ -29,7 +29,7 @@ describe("PageHeader", () => {
 describe("PageBody", () => {
   it("gives every page body the same width, keeping the page's own classes", () => {
     const html = renderToStaticMarkup(<PageBody className="gap-8">x</PageBody>)
-    expect(html).toContain("max-w-[960px]")
+    expect(html).toContain("max-w-[1200px]")
     expect(html).toContain("gap-8")
     expect(html).not.toContain("gap-5")
   })

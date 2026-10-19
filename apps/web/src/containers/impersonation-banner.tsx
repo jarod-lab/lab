@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "@tanstack/react-router"
 
 import { Button } from "@starter/ui/components/ui/button"
 
@@ -11,15 +10,20 @@ import { adminSessionQuery } from "./admin-data"
  * `impersonatedBy`). Renders nothing otherwise, including while signed out. Stop returns the admin to
  * /admin, with a fresh cache so nothing from the impersonated session stays visible.
  */
-export function ImpersonationBanner({ api }: { api: AdminApi }) {
-  const router = useRouter()
+export function ImpersonationBanner({
+  api,
+  onNavigate,
+}: {
+  api: AdminApi
+  onNavigate: (href: string) => void
+}) {
   const queryClient = useQueryClient()
   const session = useQuery(adminSessionQuery(api))
   const stop = useMutation({
     mutationFn: () => api.stopImpersonating(),
     onSuccess: () => {
       queryClient.clear()
-      void router.navigate({ href: "/admin" })
+      onNavigate("/admin")
     },
   })
 

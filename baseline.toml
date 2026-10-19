@@ -124,7 +124,7 @@ forbidden_files = [".env.production", ".env.staging"]
 message = "Deploy env files don't belong in the repo: keep them in the platform's secret store"
 
 # Overrides ai-codegen's no-type-any, whose pattern also matched "any" in prose comments. Type positions
-# only. packages/api/src/operation.ts keeps `Operation<any, any>` on purpose (see its biome-ignore).
+# only. packages/api/src/operation.ts keeps `Operation<any, any>` on purpose (see its comment).
 [[rule]]
 id = "no-type-any"
 type = "banned-pattern"
@@ -241,7 +241,7 @@ severity = "error"
 glob = "{apps,packages}/**/*.{ts,tsx}"
 exclude_glob = ["**/*.test.{ts,tsx}", "**/*.types.ts", "**/test-helpers.ts", "**/*.test.helpers.ts"]
 pattern = "as unknown as"
-max_count = 10
+max_count = 0
 message = "Double casts hide type errors; fix the type at the source"
 
 [[rule]]
@@ -250,7 +250,7 @@ type = "ratchet"
 severity = "error"
 glob = "**/*.test.{ts,tsx}"
 pattern = "vi.mock("
-max_count = 8
+max_count = 0
 message = "Prefer the real module (PGlite, fake SES, in-process app) over vi.mock"
 
 [[rule]]
@@ -260,7 +260,7 @@ severity = "error"
 glob = "{apps,packages,e2e}/**/*.{ts,tsx}"
 regex = true
 pattern = "(oxlint|eslint)-disable|biome-ignore"
-max_count = 3
+max_count = 0
 message = "Fix the lint error instead of disabling the rule"
 
 [[rule]]
@@ -271,7 +271,7 @@ glob = "{apps,packages,e2e}/**/*.{ts,tsx}"
 exclude_glob = ["**/*.types.ts"]
 regex = true
 pattern = "@ts-(ignore|expect-error|nocheck)"
-max_count = 2
+max_count = 0
 message = "Fix the type error (type-level tests in *.types.ts may use @ts-expect-error)"
 
 [[rule]]
@@ -281,7 +281,7 @@ severity = "error"
 glob = "**/*.{test,e2e}.{ts,tsx}"
 regex = true
 pattern = "\\b(it|test|describe)\\.skip\\("
-max_count = 2
+max_count = 0
 message = "A skipped test is a missing test"
 
 # ── Tenant data stays behind proofs ───────────────────────────────────────────────────────────────

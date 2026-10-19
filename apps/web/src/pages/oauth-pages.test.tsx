@@ -2,21 +2,22 @@
 import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { navigateTo } from "../lib/navigation"
+import { setNavigator } from "../lib/navigation"
 import { fakeAuth } from "../test/fake-auth"
 import { ConsentPage, SelectOrganizationPage } from "./oauth-pages"
 
-vi.mock("../lib/navigation", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/navigation")>()),
-  navigateTo: vi.fn(),
-}))
-
-const navigate = vi.mocked(navigateTo)
+// jsdom can't load another page: record where the page sends the browser instead.
+const navigate = vi.fn<(url: string) => void>()
 
 beforeEach(() => {
   navigate.mockReset()
+  setNavigator(navigate)
+})
+
+afterEach(() => {
+  setNavigator(undefined)
 })
 
 const consentProps = { clientId: "client-1", scope: "openid read write" }

@@ -364,3 +364,11 @@ export function getWebAuth(): WebAuth {
   shared ??= createWebAuth(typeof window === "undefined" ? undefined : window.location.origin)
   return shared
 }
+
+/**
+ * Sets the page's auth; undefined makes the next `getWebAuth` create it again. Tests render the real
+ * router with a fake.
+ */
+export function setWebAuth(auth: WebAuth | undefined): void {
+  shared = auth
+}

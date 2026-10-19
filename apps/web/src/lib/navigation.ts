@@ -24,7 +24,18 @@ export function rawSearch(): string {
   return typeof window === "undefined" ? "" : window.location.search
 }
 
+const assignLocation = (url: string) => window.location.assign(url)
+let navigator: (url: string) => void = assignLocation
+
 /** Full-page navigation: the next page is served by the API, so it must load from the server. */
 export function navigateTo(url: string): void {
-  window.location.assign(url)
+  navigator(url)
+}
+
+/**
+ * Replaces how `navigateTo` leaves the page; undefined restores `window.location.assign`. jsdom can't
+ * load another page, so tests record the URL instead.
+ */
+export function setNavigator(next: ((url: string) => void) | undefined): void {
+  navigator = next ?? assignLocation
 }

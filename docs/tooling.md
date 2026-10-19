@@ -29,11 +29,12 @@
   `import type { Database }`). `no-cross-package-relative-imports` bans `../../packages/x/src`
   imports: export the thing from its package instead (the web app gets `roles` and `statements` from
   `@starter/auth/client`, and its tests read `ORGANIZATION_HEADER` from `@starter/api/headers`).
-  Ratchets (ceilings that only go down; lower one with `baseline ratchet down <id>` after removing
-  call sites): `ratchet-as-unknown-as` (10, outside
-  tests and `*.types.ts`), `ratchet-vi-mock` (8), `ratchet-lint-disable` (3),
-  `ratchet-ts-expect-error` (2, outside `*.types.ts`) and `ratchet-skipped-tests` (2). Never raise a
-  ceiling to make room. Rules are regex or import matches, not type-aware; `skip_strings` ignores
+  Ratchets (ceilings that only go down), all at 0: `ratchet-as-unknown-as` (outside tests and
+  `*.types.ts`), `ratchet-vi-mock`, `ratchet-lint-disable`, `ratchet-ts-expect-error` (outside
+  `*.types.ts`) and `ratchet-skipped-tests`. Never raise a ceiling to make room. In place of
+  `vi.mock`, pass the dependency in: a prop (`onNavigate`, `auth`, `chooseAdapter`), or for the web
+  app's page-wide singletons `setWebAuth` and `setNavigator`. `baseline ratchet down` counts without
+  a rule's `exclude_glob`, so it can refuse a ceiling the scan reports as met; lower it by hand then. Rules are regex or import matches, not type-aware; `skip_strings` ignores
   string and template literals (including code inside `${}`), but comments still match.
 - **Stop hook** (`scripts/claude-stop-check.mjs`, wired in `.claude/settings.json`): runs baseline
   and typecheck when an agent tries to end its turn and sends failures back. It steps aside on its

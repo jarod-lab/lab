@@ -5,19 +5,13 @@ import { describe, expect, it, vi } from "vitest"
 
 import { AccountError, type AccountApi } from "../lib/account-api"
 import { renderWithClient } from "../test/render"
-import { PASSWORD_ONLY_METHODS } from "../lib/web-auth"
+import { PASSWORD_ONLY_METHODS, type WebAuth } from "../lib/web-auth"
 import { AccountSecurityContainer } from "./account-security"
 
 // The server offers both social providers; the connect row for Google comes from that list.
-vi.mock("../lib/web-auth", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/web-auth")>()),
-  getWebAuth: () => ({
-    signInMethods: async () => ({
-      ...PASSWORD_ONLY_METHODS,
-      social: ["github", "google"],
-    }),
-  }),
-}))
+const auth: Pick<WebAuth, "signInMethods"> = {
+  signInMethods: async () => ({ ...PASSWORD_ONLY_METHODS, social: ["github", "google"] }),
+}
 
 function fakeAccountApi(overrides: Partial<AccountApi> = {}): AccountApi {
   return {
@@ -80,7 +74,7 @@ function fakeAccountApi(overrides: Partial<AccountApi> = {}): AccountApi {
 
 describe("AccountSecurityContainer", () => {
   it("reads the page from the account calls: connected accounts, the sign-in, and the sessions", async () => {
-    renderWithClient(<AccountSecurityContainer api={fakeAccountApi()} />)
+    renderWithClient(<AccountSecurityContainer auth={auth} api={fakeAccountApi()} />)
     expect(await screen.findByText(/^Passkey · .* · Chrome on macOS$/)).toBeTruthy()
     expect(screen.getByText(/^Connected · Sep [12], 2026$/)).toBeTruthy()
     expect(screen.getByText("Signed in with Google · 2 days ago")).toBeTruthy()
@@ -93,7 +87,7 @@ describe("AccountSecurityContainer", () => {
         throw new AccountError("Session is not fresh", 403, "SESSION_NOT_FRESH")
       }),
     })
-    renderWithClient(<AccountSecurityContainer api={api} />)
+    renderWithClient(<AccountSecurityContainer auth={auth} api={api} />)
     expect(await screen.findByRole("link", { name: "Sign in again" })).toBeTruthy()
     expect(screen.getByText("1 passkey")).toBeTruthy()
   })
@@ -101,7 +95,7 @@ describe("AccountSecurityContainer", () => {
   it("passes a sign-out of another session to the server, then reloads the list", async () => {
     const user = userEvent.setup()
     const api = fakeAccountApi()
-    renderWithClient(<AccountSecurityContainer api={api} />)
+    renderWithClient(<AccountSecurityContainer auth={auth} api={api} />)
     await user.click(await screen.findByRole("button", { name: "Sign out Safari on iPhone" }))
     await waitFor(() => expect(api.revokeSession).toHaveBeenCalledWith("t-2"))
   })
@@ -109,7 +103,7 @@ describe("AccountSecurityContainer", () => {
   it("starts a connect by sending the person to the provider's sign-in", async () => {
     const user = userEvent.setup()
     const linkSocial = vi.fn(async () => undefined)
-    renderWithClient(<AccountSecurityContainer api={fakeAccountApi({ linkSocial })} />)
+    renderWithClient(<AccountSecurityContainer auth={auth} api={fakeAccountApi({ linkSocial })} />)
     const google = await screen.findByText("Not connected")
     const row = google.closest("div")?.parentElement as HTMLElement
     await user.click(within(row).getByRole("button", { name: "Connect" }))

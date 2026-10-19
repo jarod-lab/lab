@@ -1,5 +1,11 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router"
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useRouter,
+} from "@tanstack/react-router"
 import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
 
 import { ImpersonationBanner } from "../containers/impersonation-banner"
@@ -36,10 +42,14 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 /** The query provider wraps the matched page and the devtools; the shell has neither. */
 function RootOutlet() {
   const { queryClient } = Route.useRouteContext()
+  const router = useRouter()
   return (
     <QueryClientProvider client={queryClient}>
       {/* While an admin acts as someone else, every page shows the strip with Stop. */}
-      <ImpersonationBanner api={getAdminApi()} />
+      <ImpersonationBanner
+        api={getAdminApi()}
+        onNavigate={(href) => void router.navigate({ href })}
+      />
       <Outlet />
       {DevtoolsPanel ? (
         <Suspense fallback={null}>

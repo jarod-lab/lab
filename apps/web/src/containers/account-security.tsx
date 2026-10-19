@@ -10,12 +10,14 @@ import {
   signInMethodLabel,
 } from "../lib/account-format"
 import { accountKeys } from "../lib/account-keys"
-import { getWebAuth } from "../lib/web-auth"
+import type { WebAuth } from "../lib/web-auth"
 import { navigateTo } from "../lib/navigation"
 import { AccountSecurityPage } from "../pages/account-security-page"
 
 export interface AccountSecurityContainerProps {
   api: AccountApi
+  /** The server's sign-in methods: which social providers can be connected. */
+  auth: Pick<WebAuth, "signInMethods">
   /** Where the sessions list sends a person whose sign-in is too old to read it. */
   signInHref?: string
   renderLink?: RenderLink
@@ -30,6 +32,7 @@ const NEEDS_RECENT_SIGN_IN = new Set(["SESSION_NOT_FRESH", "SESSION_EXPIRED"])
  */
 export function AccountSecurityContainer({
   api,
+  auth,
   signInHref = "/sign-in?next=/account/security",
   renderLink,
 }: AccountSecurityContainerProps) {
@@ -43,7 +46,7 @@ export function AccountSecurityContainer({
   // Only the providers the server has set up are offered to connect (a linked one always shows).
   const methods = useQuery({
     queryKey: accountKeys.signInMethods(),
-    queryFn: async () => (await getWebAuth().signInMethods?.()) ?? null,
+    queryFn: async () => (await auth.signInMethods?.()) ?? null,
     retry: false,
   })
   const passkeys = useQuery({ queryKey: accountKeys.passkeys(), queryFn: () => api.listPasskeys() })

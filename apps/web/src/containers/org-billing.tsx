@@ -22,6 +22,8 @@ export interface OrgBillingContainerProps {
   organization: WebOrganization
   /** Given by tests. The route leaves it out, and the server's `stripe` flag chooses the adapter. */
   adapter?: BillingAdapter
+  /** How the adapter is chosen when none is given: the page's own (`getBillingAdapter`) by default. */
+  chooseAdapter?: () => Promise<BillingAdapter>
   renderLink?: RenderLink
 }
 
@@ -35,6 +37,7 @@ export function OrgBillingContainer({
   api,
   organization,
   adapter: adapterProp,
+  chooseAdapter = getBillingAdapter,
   renderLink,
 }: OrgBillingContainerProps) {
   const queryClient = useQueryClient()
@@ -46,7 +49,7 @@ export function OrgBillingContainer({
 
   const modeQuery = useQuery({
     queryKey: billingKeys.mode(),
-    queryFn: getBillingAdapter,
+    queryFn: chooseAdapter,
     staleTime: Number.POSITIVE_INFINITY,
     enabled: adapterProp === undefined,
   })

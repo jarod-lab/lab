@@ -4,17 +4,13 @@
 import { RouterProvider } from "@tanstack/react-router"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { setWebAuth } from "./lib/web-auth"
 import { getRouter } from "./router"
 import { fakeAuth } from "./test/fake-auth"
 
-const listOrganizations = vi.hoisted(() => vi.fn())
-
-vi.mock("./lib/web-auth", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./lib/web-auth")>()),
-  getWebAuth: () => fakeAuth({ listOrganizations }),
-}))
+const listOrganizations = vi.fn()
 
 /** Opens an organization's page in the router. The caller is signed in to `analytical`. */
 function open(path: string) {
@@ -25,8 +21,14 @@ function open(path: string) {
   render(<RouterProvider router={router} />)
 }
 
+// The routes read the page's auth through getWebAuth; the fake stands in for it.
 beforeEach(() => {
   listOrganizations.mockReset()
+  setWebAuth(fakeAuth({ listOrganizations }))
+})
+
+afterEach(() => {
+  setWebAuth(undefined)
 })
 
 describe("the organization route, when the organizations list fails", () => {

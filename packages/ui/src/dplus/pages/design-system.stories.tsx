@@ -97,7 +97,7 @@ const navModel: [string, string][] = [
   ],
   ["Sidebar", "Workspace, pinned agents, one dismissible announcement, Support."],
   ["User menu", "Personal settings · Security · Theme · Shortcuts · Sign out."],
-  ["Top bar", "Breadcrumb (where am I), ⌘K (search + ask an agent), inbox (finite, actionable)."],
+  ["Top bar", "Breadcrumb (where am I), ⌘K (search + ask an agent), notifications."],
   [
     "Settings",
     "Level 1 = horizontal tabs with ink underline. Level 2 = pills beside the page title. No third level.",

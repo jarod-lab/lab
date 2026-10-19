@@ -14,7 +14,7 @@ const meta = {
   title: "D+/Shell/Topbar",
   component: Topbar,
   parameters: { layout: "fullscreen" },
-  args: { crumbs, inbox: { count: 3 }, onOpenSearch: () => {} },
+  args: { crumbs, onOpenSearch: () => {} },
   // The menu button reads the sidebar state, so every story sits in a provider.
   render: (args) => (
     <SidebarProvider className="min-h-0 bg-background text-foreground">
@@ -30,7 +30,6 @@ type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
 export const WithMenuButton: Story = { args: { showMenuButton: true } }
-export const EmptyInbox: Story = { args: { inbox: { count: 0 } } }
 export const SingleCrumb: Story = { args: { crumbs: [{ label: "Organizations" }] } }
 export const WithNotifications: Story = {
   args: {

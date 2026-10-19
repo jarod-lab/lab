@@ -159,7 +159,7 @@ export function DemoShell({
           account={{ ...demoAccount, open: menu === "user" }}
         />
       }
-      topbar={<Topbar crumbs={crumbs} showMenuButton inbox={{ count: 3 }} />}
+      topbar={<Topbar crumbs={crumbs} showMenuButton />}
     >
       {children}
     </AppShell>

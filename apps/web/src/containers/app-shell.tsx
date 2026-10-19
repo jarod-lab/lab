@@ -168,10 +168,6 @@ export function AppShellContainer({
       crumbs={crumbs}
       onOpenSearch={() => setPaletteOpen(true)}
       modifierKey={modifierKeyLabel()}
-      inbox={{
-        count: inboxCount,
-        onOpen: currentSlug ? () => onNavigate(`/${currentSlug}?status=needs_you`) : undefined,
-      }}
       notifications={
         auth.notifications ? (
           <NotificationsContainer

@@ -4,7 +4,7 @@ import { runKeys } from "../lib/run-keys"
 import type { RunsApi } from "../lib/runs-api"
 
 /**
- * How many approvals wait for a person in this organization (get_inbox): the sidebar's and top bar's
+ * How many approvals wait for a person in this organization (get_inbox): the sidebar's
  * "needs you" count. Only enabled once the session is on this organization (the server refuses others).
  */
 export function useInboxCount({

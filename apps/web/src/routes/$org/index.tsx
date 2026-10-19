@@ -9,7 +9,7 @@ import { getWebAuth } from "../../lib/web-auth"
 
 type HomeSearch = { status?: string }
 
-// `/:org`: the organization's runs. `?status=` filters them (the top bar's inbox links to needs_you).
+// `/:org`: the organization's runs. `?status=` filters them (e.g. needs_you).
 export const Route = createFileRoute("/$org/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch =>
     typeof search.status === "string" ? { status: search.status } : {},

@@ -1,7 +1,6 @@
 import { cn } from "cn"
 import { Fragment, type ReactNode } from "react"
-import { InboxIcon, SearchIcon } from "lucide-react"
-import { Badge } from "../../components/ui/badge"
+import { SearchIcon } from "lucide-react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -25,9 +24,7 @@ export type TopbarProps = {
   searchLabel?: string
   /** The modifier keycap shown next to K: "⌘" on Apple platforms, "Ctrl" elsewhere. */
   modifierKey?: string
-  /** Items that need you. Zero shows an empty inbox, not a "0" badge. */
-  inbox?: { count: number; onOpen?: () => void }
-  /** The notifications bell (NotificationsMenu), shown just before the inbox button. */
+  /** The notifications bell (NotificationsMenu), shown after the ⌘K trigger. */
   notifications?: ReactNode
   /**
    * Shows the phone-width menu button that opens the sidebar drawer. Needs an AppShell
@@ -71,20 +68,18 @@ function Crumbs({ crumbs, renderLink }: { crumbs: Crumb[]; renderLink: RenderLin
   )
 }
 
-/** Top bar: breadcrumb (where am I), ⌘K trigger, inbox, and the phone menu button. */
+/** Top bar: breadcrumb (where am I), ⌘K trigger, notifications, and the phone menu button. */
 export function Topbar({
   crumbs,
   onOpenSearch,
   searchLabel = "Search or ask an agent",
   modifierKey = "⌘",
-  inbox,
   notifications,
   showMenuButton = false,
   renderLink: renderLinkProp,
   className,
 }: TopbarProps) {
   const renderLink = useRenderLink(renderLinkProp)
-  const count = inbox?.count ?? 0
   return (
     <header
       className={cn(
@@ -117,24 +112,6 @@ export function Topbar({
         </KbdGroup>
       </Button>
       {notifications}
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label={count > 0 ? `Inbox, ${count} need you` : "Inbox, nothing needs you"}
-        onClick={inbox?.onOpen}
-        className="relative size-11 border border-border text-muted-foreground sm:size-10"
-      >
-        <InboxIcon aria-hidden="true" />
-        {count > 0 && (
-          <Badge
-            variant="solar"
-            aria-hidden="true"
-            className="absolute -top-2 -right-2 h-5 min-w-5 rounded-md border-2 border-background px-1 text-[11.5px] font-extrabold"
-          >
-            {count}
-          </Badge>
-        )}
-      </Button>
     </header>
   )
 }

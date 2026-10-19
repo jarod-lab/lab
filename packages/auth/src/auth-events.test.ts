@@ -1,0 +1,303 @@
+import { APIError } from "better-auth/api"
+import { describe, expect, it, vi } from "vitest"
+import {
+  AUTH_EVENT_NAMES,
+  AUTH_EVENT_PATHS,
+  type AuthCallContext,
+  type AuthSession,
+  authEvents,
+  errorCodeOf,
+  mapAuthEvent,
+} from "./auth-events"
+
+const session = (userId: string, activeOrganizationId: string | null = null): AuthSession => ({
+  user: { id: userId },
+  session: { activeOrganizationId },
+})
+
+const call = (path: string, over: Partial<AuthCallContext> = {}): AuthCallContext => ({
+  path,
+  findUserIdByEmail: async () => null,
+  ...over,
+})
+
+const refused = (code: string) => APIError.from("BAD_REQUEST", { code, message: code })
+
+describe("mapAuthEvent", () => {
+  it("records a successful sign-in with the new session's user and no organization", async () => {
+    const event = await mapAuthEvent(
+      call("/sign-in/email", {
+        newSession: session("u_ann"),
+        returned: { user: { id: "u_ann" }, token: "t" },
+        ip: "203.0.113.4",
+      }),
+    )
+    expect(event).toEqual({
+      name: "auth.sign_in",
+      userId: "u_ann",
+      organizationId: null,
+      outcome: "ok",
+      ip: "203.0.113.4",
+      path: "/sign-in/email",
+    })
+  })
+
+  it("records the sign-in when the second factor completes it, not the factor step itself", async () => {
+    expect(
+      await mapAuthEvent(
+        call("/two-factor/verify-totp", { newSession: session("u_ann"), returned: {} }),
+      ),
+    ).toMatchObject({ name: "auth.sign_in", userId: "u_ann" })
+    // A wrong code names no account (the pending factor isn't in the session): logged, not stored.
+    expect(
+      await mapAuthEvent(call("/two-factor/verify-totp", { returned: refused("INVALID_CODE") })),
+    ).toMatchObject({ name: "auth.sign_in_failed", userId: null, outcome: "INVALID_CODE" })
+  })
+
+  it("records nothing for a password sign-in that still needs a second factor", async () => {
+    const event = await mapAuthEvent(
+      call("/sign-in/email", { returned: { twoFactorRedirect: true }, body: { email: "a@x.io" } }),
+    )
+    expect(event).toBeNull()
+  })
+
+  it("records a failed sign-in for a known email as that user, with the error code", async () => {
+    const event = await mapAuthEvent(
+      call("/sign-in/email", {
+        body: { email: "Ann@Example.com" },
+        returned: refused("INVALID_EMAIL_OR_PASSWORD"),
+        findUserIdByEmail: async (email) => (email === "ann@example.com" ? "u_ann" : null),
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.sign_in_failed",
+      userId: "u_ann",
+      outcome: "INVALID_EMAIL_OR_PASSWORD",
+    })
+  })
+
+  it("records a failed sign-in for an unknown email with a null user", async () => {
+    const event = await mapAuthEvent(
+      call("/sign-in/email", {
+        body: { email: "nobody@example.com" },
+        returned: refused("INVALID_EMAIL_OR_PASSWORD"),
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.sign_in_failed",
+      userId: null,
+      outcome: "INVALID_EMAIL_OR_PASSWORD",
+    })
+  })
+
+  it("does not look up an email on a successful sign-in", async () => {
+    const findUserIdByEmail = vi.fn(async () => "u_other")
+    await mapAuthEvent(
+      call("/sign-in/email", {
+        newSession: session("u_ann"),
+        body: { email: "ann@x.io" },
+        findUserIdByEmail,
+      }),
+    )
+    expect(findUserIdByEmail).not.toHaveBeenCalled()
+  })
+
+  it("names an account change for the signed-in person, with no organization", async () => {
+    const event = await mapAuthEvent(
+      call("/change-password", {
+        session: session("u_ann", "org_shared"),
+        returned: { status: true },
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.password_changed",
+      userId: "u_ann",
+      organizationId: null,
+      outcome: "ok",
+    })
+  })
+
+  it("keeps the event name for a refused account change and uses the code as the outcome", async () => {
+    const event = await mapAuthEvent(
+      call("/change-password", {
+        session: session("u_ann"),
+        returned: refused("INVALID_PASSWORD"),
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.password_changed",
+      userId: "u_ann",
+      outcome: "INVALID_PASSWORD",
+    })
+  })
+
+  it("names the organization for member changes from the body, else the active organization", async () => {
+    const fromBody = await mapAuthEvent(
+      call("/organization/update-member-role", {
+        session: session("u_owner", "org_active"),
+        body: { organizationId: "org_body", role: "admin" },
+        returned: { id: "m1" },
+      }),
+    )
+    expect(fromBody).toMatchObject({
+      name: "auth.member_role_changed",
+      organizationId: "org_body",
+      userId: "u_owner",
+    })
+
+    const fromSession = await mapAuthEvent(
+      call("/organization/remove-member", {
+        session: session("u_owner", "org_active"),
+        body: { memberIdOrEmail: "x" },
+        returned: { member: {} },
+      }),
+    )
+    expect(fromSession).toMatchObject({ name: "auth.member_removed", organizationId: "org_active" })
+  })
+
+  it("uses the organization the key was created for as the API key's organization", async () => {
+    const event = await mapAuthEvent(
+      call("/api-key/create", {
+        session: session("u_ann", "org_active"),
+        returned: { id: "key_1", referenceId: "org_key" },
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.api_key_created",
+      organizationId: "org_key",
+      userId: "u_ann",
+    })
+  })
+
+  it("records an impersonation for the admin, with the target as the subject", async () => {
+    const event = await mapAuthEvent(
+      call("/admin/impersonate-user", {
+        session: session("u_admin"),
+        body: { userId: "u_target" },
+        // The result is the target's session; the actor must still be the admin.
+        returned: { session: {}, user: { id: "u_target" } },
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.impersonation_started",
+      userId: "u_admin",
+      subjectUserId: "u_target",
+      organizationId: null,
+    })
+  })
+
+  it("records a passkey registered without a session by the user the result names", async () => {
+    const event = await mapAuthEvent(
+      call("/passkey/verify-registration", {
+        returned: { id: "pk_1", userId: "u_new", user: { id: "u_new" } },
+      }),
+    )
+    expect(event).toMatchObject({ name: "auth.passkey_added", userId: "u_new" })
+  })
+
+  it("records a social callback as a sign-in only with a new session, else as a linked account", async () => {
+    const signedIn = await mapAuthEvent(
+      call("/callback/:id", { newSession: session("u_ann"), returned: {} }),
+    )
+    expect(signedIn?.name).toBe("auth.sign_in")
+
+    const linked = await mapAuthEvent(
+      call("/callback/:id", { session: session("u_ann"), returned: {} }),
+    )
+    expect(linked).toMatchObject({ name: "auth.account_linked", userId: "u_ann" })
+
+    expect(await mapAuthEvent(call("/callback/:id", { returned: {} }))).toBeNull()
+    expect(
+      await mapAuthEvent(
+        call("/callback/:id", { session: session("u_ann"), returned: refused("X") }),
+      ),
+    ).toBeNull()
+  })
+
+  it("records user deletion only once it is confirmed by the emailed token", async () => {
+    expect(
+      await mapAuthEvent(
+        call("/delete-user", { session: session("u_ann"), body: {}, returned: {} }),
+      ),
+    ).toBeNull()
+    expect(
+      await mapAuthEvent(
+        call("/delete-user", {
+          session: session("u_ann"),
+          body: { token: "tok" },
+          returned: { success: true },
+        }),
+      ),
+    ).toMatchObject({ name: "auth.user_deleted", userId: "u_ann" })
+  })
+
+  it("returns null for a path that isn't mapped", async () => {
+    expect(await mapAuthEvent(call("/get-session", { session: session("u_ann") }))).toBeNull()
+  })
+})
+
+describe("errorCodeOf", () => {
+  it("uses better-auth's code, then the status, and INTERNAL for anything else", () => {
+    expect(errorCodeOf(refused("INVALID_PASSWORD"))).toBe("INVALID_PASSWORD")
+    expect(errorCodeOf(new APIError("UNAUTHORIZED", {}))).toBe("UNAUTHORIZED")
+    expect(errorCodeOf(new Error("boom"))).toBe("INTERNAL")
+  })
+})
+
+describe("path coverage", () => {
+  // The paths the product's auth flows reach. Adding one to the mapper means adding it here too.
+  const LISTED = [
+    "/sign-in/email",
+    "/magic-link/verify",
+    "/two-factor/verify-totp",
+    "/two-factor/verify-otp",
+    "/two-factor/verify-backup-code",
+    "/passkey/verify-authentication",
+    "/callback/:id",
+    "/sso/callback/:providerId",
+    "/sign-out",
+    "/change-password",
+    "/reset-password",
+    "/change-email",
+    "/two-factor/enable",
+    "/two-factor/disable",
+    "/passkey/verify-registration",
+    "/passkey/delete-passkey",
+    "/revoke-session",
+    "/revoke-sessions",
+    "/revoke-other-sessions",
+    "/unlink-account",
+    "/api-key/create",
+    "/api-key/delete",
+    "/sso/register",
+    "/organization/update-member-role",
+    "/organization/remove-member",
+    "/admin/impersonate-user",
+    "/admin/stop-impersonating",
+    "/delete-user",
+    "/delete-user/callback",
+  ]
+
+  it("maps every listed endpoint", () => {
+    expect([...AUTH_EVENT_PATHS].sort()).toEqual([...LISTED].sort())
+  })
+
+  it("only names events from the catalogue", () => {
+    const names = new Set<string>(AUTH_EVENT_NAMES)
+    expect(names.size).toBe(AUTH_EVENT_NAMES.length)
+    expect(AUTH_EVENT_NAMES).toContain("auth.user_deleted")
+  })
+})
+
+describe("authEvents plugin", () => {
+  it("is a plugin with one after hook matched on the mapped paths", () => {
+    const plugin = authEvents({ onAuthEvent: () => {} })
+    expect(plugin.id).toBe("starter-auth-events")
+    const [hook] = plugin.hooks?.after ?? []
+    expect(hook).toBeDefined()
+    const matcher = hook?.matcher as (ctx: { path?: string }) => boolean
+    expect(matcher({ path: "/sign-in/email" })).toBe(true)
+    expect(matcher({ path: "/get-session" })).toBe(false)
+    expect(matcher({})).toBe(false)
+  })
+})

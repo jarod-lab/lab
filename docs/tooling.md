@@ -42,9 +42,9 @@
 - **e2e** (tester-army, `pnpm e2e`; docs in `node_modules/e2e/docs`): `e2e.config.ts`, one
   `e2e/<page>.e2e.ts` per page following its board's journey, helpers in `e2e/support/`. Targets
   desktop 1280x720 and phone 390x844.
-  - `scripts/e2e-stack.mjs` starts apps/api (with `DEV_MAIL_SINK=true`) and vite. It needs Postgres
-    with every migration applied, and `DATABASE_URL` and `BETTER_AUTH_SECRET` in the runner's env.
-    `AI_GATEWAY_API_KEY` is only for agent steps.
+  - `scripts/e2e-stack.mjs` starts apps/api (with `DEV_MAIL_SINK=true` and `AUTH_RATE_LIMIT=off`, see
+    `docs/auth.md`) and vite. It needs Postgres with every migration applied, and `DATABASE_URL` and
+    `BETTER_AUTH_SECRET` in the runner's env. `AI_GATEWAY_API_KEY` is only for agent steps.
   - Install the browser with `pnpm exec e2e-web install chromium`.
   - The browser can't emulate dark mode (override `matchMedia` in an init script) or WebAuthn. Tests
     compute TOTP codes (`e2e/support/totp.ts`). Screenshots are withheld after a secret fill.

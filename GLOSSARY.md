@@ -22,6 +22,11 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
   **provisional signup**, the credential-less `POST /v1/signup`) get the smaller daily limit.
 - **Proof** — a gdp-ts value that a fact was checked (`CallerActsFor`, `ProjectInOrg`). Only `proofs/`
   can mint one; every function that touches tenant data takes one.
+- **Fresh session** — a session signed in within the last hour (`FRESH_AGE_SECONDS`). Sensitive actions
+  (`fresh: true` operations, `FRESH_SESSION_PATHS`) need one, or they fail with `SESSION_NOT_FRESH`.
+- **Auth event** — a mapped better-auth call (a sign-in, a failed sign-in, a password change) recorded as an
+  audit row for the person's organization. Not the same as an **audit event**: an auth event with no account
+  is only logged.
 
 ## Credentials and agents
 

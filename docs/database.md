@@ -19,4 +19,14 @@
 - `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs`
   (agent, run, run_step, approval, steer_message; tenant tables), `0007_session_login_method`,
   `0008_sso_domain_verification` and `0009_steer_message_org_index`.
-- Migrations `0003` through `0009` are not applied until the user runs them.
+- `0010_auth_hardening` adds `rate_limit`, the counts for the auth rate limits
+  (`packages/auth/src/rate-limit.ts`).
+- Migrations `0003` through `0010` are not applied until the user runs them.
+
+## Cleanup
+
+`pnpm --filter @starter/api-app cleanup` (`apps/api/src/cleanup.ts`, `apps/api/src/data/cleanup.ts`)
+deletes, in batches of 1000: signup attempts older than 25 hours (the window is coupled by hand to
+`signup.ts`), expired idempotency keys, and expired `device-org:` verification rows. It is
+cross-tenant and takes no proof, and only the entry calls it, never a request. Schedule it hourly;
+it exits 1 on failure.

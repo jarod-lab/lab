@@ -13,6 +13,7 @@
       "Bash(pnpm format:*)",
       "Bash(pnpm build:*)",
       "Bash(pnpm e2e:*)",
+      "Bash(pnpm wt:*)",
       "Bash(pnpm storybook:*)",
       "Bash(pnpm --filter:*)",
       "Bash(pnpm exec:*)",
@@ -52,6 +53,28 @@
     ]
   },
   "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/worktree.mjs\" hook-create",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/worktree.mjs\" hook-remove",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

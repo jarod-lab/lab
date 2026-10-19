@@ -3,7 +3,8 @@
 //
 // Run it once per deploy, before the new version takes traffic: a platform's release step (Fly
 // release_command, Render preDeploy) or the compose `migrate` one-shot. It is the migration path
-// the image ships with. Do not run it against a database from an agent session.
+// the image ships with. Do not run it against a database from an agent session, except a worktree's
+// own *_wt_* database through `pnpm wt` (scripts/worktree.mjs).
 //
 // It delegates to drizzle-kit's `migrate` in packages/db, which applies the same migrations folder
 // with the same bookkeeping table as the app's drizzle migrator. The only env it reads is

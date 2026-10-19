@@ -4,4 +4,5 @@ pnpm = "11"
 gitleaks = "8"
 
 [env]
-_.file = ".env"
+# .env.worktree exists only in a linked worktree (`pnpm wt`, scripts/worktree.mjs) and wins over .env.
+_.file = [".env", ".env.worktree"]

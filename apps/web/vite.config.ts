@@ -10,10 +10,11 @@ import { type ProxyOptions, defineConfig } from "vite"
 // forwards those paths to it and the session cookies and OAuth issuer match what the browser sees.
 // API_URL is read here because this file runs in Node, not in the app (empty counts as unset, as
 // .env.example leaves it). Under `pnpm dev`, portless serves this app as `app.<project>` and the API as
-// `api.<project>` (portless.json), and gives both its CA. Otherwise it defaults to the port apps/api
-// uses when no URL is set.
+// `api.<project>` (portless.json), and gives both its CA; in a git worktree both carry the branch
+// as a prefix (`<branch>.app.<project>`). Otherwise it defaults to the port apps/api uses when no URL
+// is set.
 const portlessUrl = process.env.PORTLESS_URL
-const portlessApi = portlessUrl?.replace("://app.", "://api.")
+const portlessApi = portlessUrl?.replace(/(.*[/.])app\./, "$1api.")
 const apiTarget = process.env.API_URL || portlessApi || "http://localhost:3000"
 
 const apiProxy: ProxyOptions = {

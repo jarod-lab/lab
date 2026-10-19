@@ -14,7 +14,14 @@ pnpm install
 pnpm init-project <name> [owner] [--domain <domain>]
 cp .env.example .env         # mise loads it; BETTER_AUTH_SECRET: openssl rand -base64 32
 docker compose up -d db      # optional local Postgres; tests don't need it
+pnpm wt new <branch>         # a worktree in ../starter.<name> with its own database
 ```
+
+Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` applies),
+`reset-db` (`scripts/worktree.mjs`, `docs/tooling.md`). Each gets `starter_wt_<name>` through
+`.env.worktree`. Agents run these themselves, never the user: make a worktree with `pnpm wt new`
+(or EnterWorktree, whose hook runs it), and after a branch merges or closes, run
+`pnpm wt prune --yes`. Never a bare `git worktree add`.
 
 ## Layout
 
@@ -43,8 +50,9 @@ docker compose up -d db      # optional local Postgres; tests don't need it
 - `packages/observability` — `observe`, health and status handlers. See `docs/observability.md`.
 - `packages/env` — the only place env vars are read (Zod). `packages/config` — shared tsconfig and
   Vitest base.
-- `scripts/` — `scripts/init-project.mjs`, `scripts/generate-stories.mjs`, `scripts/release.mjs`
-  (applies migrations), `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`.
+- `scripts/` — `scripts/worktree.mjs` (`pnpm wt`), `scripts/init-project.mjs`,
+  `scripts/generate-stories.mjs`, `scripts/release.mjs` (applies migrations),
+  `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`.
 - `Dockerfile`, `docker-compose.yml` — the API image; compose's `migrate` runs `scripts/release.mjs`
   first.
 - `skills/starter` — the template skill for customers' agents; `server.json` — the MCP registry
@@ -166,7 +174,8 @@ Details: `docs/database.md`.
 - New migration: `pnpm --filter @starter/db db:generate`, then commit the SQL. Auth option or plugin
   change: `pnpm --filter @starter/auth generate`, then `pnpm format`.
 - Applying migrations (`db:migrate`, `drizzle-kit push`) is denied for agents. Ask the user, or use
-  `scripts/release.mjs` in a deploy.
+  `scripts/release.mjs` in a deploy. The exception is `pnpm wt`: it migrates only a worktree's own
+  `*_wt_*` database, and agents run it themselves.
 - Migrations `0001_agent_auth` through `0011_auth_hardening`; 0003 onward are not applied
   yet.
 
@@ -189,12 +198,13 @@ Details: `docs/tooling.md`.
 
 ## Agent permissions
 
-`.claude/settings.json` pre-approves pnpm, turbo, baseline, gitleaks and local git (status, diff,
-log, add, commit). It denies force-push, `--no-verify`, `git reset --hard`, DB migrations and `.env`
-access. Anything else, such as `git push`, `docker` or installing skills, needs the user. The Stop
-hook (`scripts/claude-stop-check.mjs`) blocks ending a turn while baseline or typecheck fail; it
-steps aside on its second run in a turn (`stop_hook_active`), so an unfixable failure is reported,
-not looped on.
+`.claude/settings.json` pre-approves pnpm (including `pnpm wt`), turbo, baseline, gitleaks and local
+git (status, diff, log, add, commit). It denies force-push, `--no-verify`, `git reset --hard`, DB
+migrations and `.env` access. Its `WorktreeCreate` and `WorktreeRemove` hooks run `pnpm wt`
+(`docs/tooling.md`). Anything else, such as `git push`, `docker` or installing skills,
+needs the user. The Stop hook (`scripts/claude-stop-check.mjs`) blocks ending a turn while baseline
+or typecheck fail; it steps aside on its second run in a turn (`stop_hook_active`), so an unfixable
+failure is reported, not looped on.
 
 ## Skills (this repo)
 

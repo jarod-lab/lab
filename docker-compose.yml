@@ -1,5 +1,7 @@
 # Local Postgres for dev: `docker compose up -d db`, then use the DATABASE_URL from .env.example.
 # Tests don't need this; they use in-process PGlite (@starter/db/testing).
+# The fixed project name makes every worktree share this one database server (`pnpm wt`).
+name: starter
 services:
   db:
     image: postgres:17-alpine

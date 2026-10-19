@@ -7,6 +7,9 @@
   `packages/db/drizzle/`.
 - Applying migrations (`db:migrate`, `drizzle-kit push`) is denied for agents. Ask the user to run
   them, or to run `scripts/release.mjs` in a deploy.
+- Each git worktree made with `pnpm wt` has its own database, `starter_wt_<name>`, with that
+  branch's migrations applied. `pnpm wt reset-db` rebuilds it. Agents run these; the main database
+  stays the user's. See `docs/tooling.md` (Worktrees).
 
 ## Migrations
 

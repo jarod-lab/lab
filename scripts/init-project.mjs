@@ -106,6 +106,8 @@ for (const file of walk(".")) {
     .replace(/(@db:5432\/)starter\b/g, `$1${name}`)
     .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${name}`)
     .replace(/-d starter/g, `-d ${name}`)
+    // compose's project name, which worktrees share.
+    .replace(/^name: starter$/m, `name: ${name}`)
     // Hostnames in comments, docs and env examples (portless.json names them the same way). The
     // bare parent domain is the passkey rpID that auth's tests expect.
     .replace(/\b(app|api)\.starter\b/g, `$1.${name}`)

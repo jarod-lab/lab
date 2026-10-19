@@ -127,6 +127,60 @@ portless and compose hostnames, the display name (for example `Starter API`), th
 and the skill's `name:` and prose (its folder stays `skills/starter`). It skips local `.env` files
 (`.env.example` is still renamed) and the vendored skills in `skills-lock.json`.
 
+## Worktrees
+
+`pnpm wt` (`scripts/worktree.mjs`) gives each git worktree its own database on the compose Postgres,
+so branches with different migrations don't share one schema. Start Postgres from any checkout with
+`docker compose up -d db`: compose's fixed `name:` makes every worktree use the same container.
+
+- `pnpm wt new <branch> [--base <ref>]` checks the branch out in `../starter.<name>` (`<name>` is
+  the branch's last path segment), creating it from the default branch, or tracking
+  `origin/<branch>`, when it does not exist. Then it runs `setup` there.
+- `pnpm wt setup [path]` provisions a worktree made some other way (a bare `git worktree add`, or a
+  Claude worktree whose hook could not finish setup), by default the one you are in. It links `.env`
+  to the main checkout's, writes `.env.worktree`, runs `mise trust`, `mise install` and
+  `pnpm install --frozen-lockfile`, creates `starter_wt_<name>` and applies the worktree's own
+  migrations to it with `scripts/release.mjs`. `--skip-install` skips mise and pnpm. Rerunning it is
+  safe.
+- `.env.worktree` sets `DATABASE_URL` to that database and `WEB_ORIGINS` to the worktree's portless
+  URL (`https://<name>.app.starter.localhost`; portless prefixes worktrees with the branch).
+  `.mise.toml` loads it after `.env`, so it wins. It also blanks `API_URL`, so the vite proxy
+  follows the prefix to `<name>.api.starter`. A branch whose `.mise.toml` predates this doesn't load
+  the file, so `setup` leaves `.env` unlinked there (the app fails env validation rather than run on
+  the main database) until you merge the default branch into it and rerun `setup`.
+- `pnpm wt reset-db [path]` drops, recreates and migrates the worktree's database, for when a branch
+  rewrites a migration it already applied.
+- `pnpm wt ls` lists worktrees with their database, pull request state and uncommitted changes.
+- `pnpm wt rm <branch|path> [--force]` removes the worktree and drops its database. It refuses a
+  worktree with uncommitted changes unless `--force`. It deletes the branch only when that loses
+  nothing: the pull request was merged (squash merges included, via `gh`) or every commit is already
+  in the default branch. Otherwise it prints the `git branch -D` to run.
+- `pnpm wt prune` is the cleanup after merging. It fetches with `--prune`, then plans: remove each
+  worktree whose pull request was merged or closed or whose remote branch is gone (skipping any with
+  uncommitted changes), delete merged branches that have no worktree, and drop `*_wt_*` databases no
+  worktree uses. A branch that was never pushed counts as merged once it is in the default branch
+  and either has commits since it was created (merged locally) or has sat a day without one
+  (unused); both lose nothing. It prints the plan; `pnpm wt prune --yes` applies it. Without a
+  signed-in `gh` it only sees deleted remote branches, so turn on "Automatically delete head
+  branches" on GitHub.
+
+Only databases with `_wt_` in their name are created or dropped; the main database is never touched.
+`setup`, `new` and `reset-db` apply migrations, but only to the worktree's own database, so agents
+run every `pnpm wt` command themselves (`.claude/settings.json` allows it).
+
+Claude Code's own worktrees go through it too. `.claude/settings.json` sets the `WorktreeCreate` and
+`WorktreeRemove` hooks to `scripts/worktree.mjs hook-create` and `hook-remove`, which replace
+Claude's `git worktree add` and removal. So `claude --worktree <name>`, the EnterWorktree tool and a
+subagent's `isolation: "worktree"` get `../starter.<name>` on branch `<name>` with its own database,
+and leaving one (ExitWorktree, or choosing remove at the exit prompt) runs `rm --force`: Claude has
+already asked about uncommitted changes by then. Claude keeps a subagent's worktree when the
+subagent finishes; `pnpm wt prune --yes` removes it once its branch merges, or a day after it was
+created if the subagent committed nothing. If setup fails under the hook (Postgres not running,
+say), Claude still gets the worktree, without its database, and the hook's message says to run `pnpm
+wt setup` there. Each one runs `pnpm install` and the migrations, so isolated subagents start slower
+than with plain `git worktree add`. A `git worktree add` run through Bash bypasses the hooks; run
+`pnpm wt setup` in it.
+
 ## Docker
 
 The API image (`Dockerfile`) runs `apps/api` from source with `tsx src/server.ts`, sets

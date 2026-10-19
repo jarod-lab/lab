@@ -68,6 +68,77 @@ jobs:
       - run: pnpm test:coverage
       - run: pnpm format:check
 
+  # Its own job: a newly published advisory turns it red on any PR, whatever the diff. Ignored
+  # advisories, each with its reason, are `auditConfig.ignoreGhsas` in pnpm-workspace.yaml.
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      # Reads the lockfile only, so no install. A registry outage passes rather than failing the run.
+      - run: pnpm audit --ignore-registry-errors
+
+  # The browser journeys in e2e/ against apps/api and the web dev server (scripts/e2e-stack.mjs) on a
+  # fresh Postgres. The stack signs up and promotes the admin account itself, and no journey has an
+  # agent step, so the job needs no secrets and runs on fork PRs. The `visual` tests are left out:
+  # they save screenshots to compare with the boards by hand.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: starter
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U user -d starter"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://user:pass@localhost:5432/starter
+      E2E_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - name: Resolve the pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Apply the migrations
+        run: node scripts/release.mjs
+      # A throwaway secret per run; the stack refuses to boot without one.
+      - name: Generate BETTER_AUTH_SECRET
+        run: |
+          secret="$(openssl rand -base64 32)"
+          echo "::add-mask::$secret"
+          echo "BETTER_AUTH_SECRET=$secret" >> "$GITHUB_ENV"
+      - run: pnpm exec e2e-web install chromium --with-deps
+      - run: pnpm exec e2e run --exclude-tag visual --reporter list,junit
+      # Uploaded on failure too: the app log is the only evidence when the stack fails to boot.
+      - name: Upload the report and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e
+          path: |
+            .e2e/report.json
+            .e2e/junit.xml
+            .e2e/artifacts
+            .e2e/logs
+          if-no-files-found: warn
+          retention-days: 7
+
   openapi:
     name: OpenAPI breaking changes
     if: github.event_name == 'pull_request'

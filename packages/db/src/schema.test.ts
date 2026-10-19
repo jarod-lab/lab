@@ -6,6 +6,8 @@ import {
   approval,
   auditEvent,
   createDb,
+  featureFlag,
+  featureFlagTarget,
   idempotencyKey,
   organization,
   project,
@@ -33,6 +35,8 @@ describe("db", () => {
     ["run_step", runStep],
     ["approval", approval],
     ["steer_message", steerMessage],
+    ["feature_flag", featureFlag],
+    ["feature_flag_target", featureFlagTarget],
   ])("%s belongs to an organization and cascades when it is deleted", (name, table) => {
     const config = getTableConfig(table)
     expect(config.name).toBe(name)

@@ -8,6 +8,7 @@ export type AgentId = Brand<string, "AgentId">
 export type RunId = Brand<string, "RunId">
 export type ApprovalId = Brand<string, "ApprovalId">
 export type UserId = Brand<string, "UserId">
+export type FeatureFlagKey = Brand<string, "FeatureFlagKey">
 
 export const OrganizationId = (id: string) => id as OrganizationId
 export const ProjectId = (id: string) => id as ProjectId
@@ -15,3 +16,4 @@ export const AgentId = (id: string) => id as AgentId
 export const RunId = (id: string) => id as RunId
 export const ApprovalId = (id: string) => id as ApprovalId
 export const UserId = (id: string) => id as UserId
+export const FeatureFlagKey = (key: string) => key as FeatureFlagKey

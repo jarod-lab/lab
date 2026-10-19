@@ -1,11 +1,21 @@
 // Type-checked, never run: each line is a mistake the compiler must reject. If one stops being an
 // error, `pnpm typecheck` fails on the unused @ts-expect-error. Add the mistake you almost made.
 import type { Named } from "@gdp-ts/core"
-import type { AgentId, ApprovalId, OrganizationId, ProjectId, RunId, UserId } from "./lib/ids"
+import type {
+  AgentId,
+  ApprovalId,
+  FeatureFlagKey,
+  OrganizationId,
+  ProjectId,
+  RunId,
+  UserId,
+} from "./lib/ids"
 import type { AgentInOrg } from "./proofs/agent-in-org"
 import type { ApprovalInOrg } from "./proofs/approval-in-org"
 import type { CallerActsFor } from "./proofs/caller-acts-for"
+import type { FlagInOrg } from "./proofs/flag-in-org"
 import type { MemberInOrg } from "./proofs/member-in-org"
+import type { OperatorOrg } from "./proofs/operator-org"
 import type { ProjectInOrg } from "./proofs/project-in-org"
 import type { RunInOrg } from "./proofs/run-in-org"
 
@@ -50,6 +60,14 @@ declare const runA: Named<"R", RunId>
 declare const runInA: RunInOrg<"R", "A">
 declare const userA: Named<"U", UserId>
 declare const memberInA: MemberInOrg<"U", "A">
+declare function rampIn<K, O>(
+  key: Named<K, FeatureFlagKey>,
+  org: Named<O, OrganizationId>,
+  _p: { inOrg: FlagInOrg<K, O>; operator: OperatorOrg<O> },
+): void
+declare const flagA: Named<"F", FeatureFlagKey>
+declare const flagInA: FlagInOrg<"F", "A">
+declare const operatorA: OperatorOrg<"A">
 
 export function mistakes() {
   // @ts-expect-error: a raw string is not a named organization id
@@ -73,7 +91,12 @@ export function mistakes() {
   resetTwoFactorIn(userA, orgB, { member: memberInA, actor: actsForB })
   // @ts-expect-error: steering a run in B needs B's run proof, not A's
   steerIn(runA, orgB, { inOrg: runInA, actor: actsForB })
+  // @ts-expect-error: acting for the organization is not being the operator organization
+  rampIn(flagA, orgA, { inOrg: flagInA, operator: actsForA })
+  // @ts-expect-error: a flag key is not a project id
+  deleteIn(flagA, orgA, { inOrg: projInA, actor: actsForA })
   // The honest calls compile.
+  rampIn(flagA, orgA, { inOrg: flagInA, operator: operatorA })
   startRunIn(agentA, orgA, { inOrg: agentInA, actor: actsForA })
   decideIn(approvalA, orgA, { inOrg: approvalInA, actor: actsForA })
   resetTwoFactorIn(userA, orgA, { member: memberInA, actor: actsForA })

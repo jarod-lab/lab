@@ -61,6 +61,20 @@ const openSignup = defineOperation({
   handler: () => ({}),
 })
 
+// Only the operator organization ("op") sees or may call it.
+const rampFlag = defineOperation({
+  name: "ramp_flag",
+  method: "PATCH",
+  path: "/v1/flags/:key",
+  summary: "Ramp a flag",
+  description: "Operator only.",
+  audience: "operator",
+  permissions: { note: ["read"] },
+  input: z.object({ key: z.string() }),
+  output: z.object({ key: z.string() }),
+  handler: ({ key }) => ({ key }),
+})
+
 const URL_ = "http://localhost/mcp"
 let clients: Client[] = []
 afterEach(async () => {
@@ -73,8 +87,9 @@ function setup(caller: Caller | null) {
     name: "test",
     version: "1.0.0",
     instructions: "Test server",
-    operations: [whoami, shout, ownAvatar, openSignup],
+    operations: [whoami, shout, ownAvatar, openSignup, rampFlag],
     authenticate: async () => caller,
+    invokeOptions: { isOperator: (c) => c.organizationId === "op" },
     resourceMetadataUrl: "http://localhost/.well-known/oauth-protected-resource/mcp",
   })
   return handler
@@ -136,6 +151,23 @@ describe("createMcpHandler", () => {
     expect(all.tools.map((t) => t.name)).toEqual(["whoami", "shout"])
     const readOnly = await (await connect({ ...full, grants: [{ note: ["read"] }] })).listTools()
     expect(readOnly.tools.map((t) => t.name)).toEqual(["whoami"])
+  })
+
+  it("lists operator tools only in the operator organization, and refuses calls from others", async () => {
+    const operator = await connect({ ...full, organizationId: "op" })
+    expect((await operator.listTools()).tools.map((t) => t.name)).toEqual([
+      "whoami",
+      "shout",
+      "ramp_flag",
+    ])
+    const ok = await operator.callTool({ name: "ramp_flag", arguments: { key: "f" } })
+    expect(ok.structuredContent).toEqual({ key: "f" })
+    const refused = await (await connect(full)).callTool({
+      name: "ramp_flag",
+      arguments: { key: "f" },
+    })
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused.content)).toContain("Only the operator organization")
   })
 
   it("sends server instructions on initialize", async () => {

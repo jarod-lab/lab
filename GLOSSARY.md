@@ -80,6 +80,27 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Upload** — an image a person or agent sends to be kept in the file store: a person's **avatar**
   (`user.image`) or an organization's **logo** (`organization.logo`). The row keeps its public URL.
 
+## Feature flags
+
+- **Operator organization** — the one organization that runs the product (`OPERATOR_ORGANIZATION_ID`).
+  Only it manages feature flags: its members, keys and agents call the **operator operations**
+  (`audience: "operator"`), which other organizations neither see nor may call.
+- **Feature flag** — a boolean release switch declared in code (`defineFlag` in
+  `packages/flags/src/catalog.ts`): key, description, owner, default. Removing it from the catalog
+  makes every call site that still reads it a compile error.
+- **Rollout** — a flag's runtime state (a `feature_flag` row): `enabled`, the organizations it
+  **targets**, and a **percentage** of every other organization. No row means the default everywhere.
+- **Target** — an organization a flag is turned on (allow-list) or off (deny-list) for, whatever the
+  percentage.
+- **Bucket** — an organization's fixed place, 0 to 9999, for one flag (a hash of key and org id).
+  Raising the percentage only adds organizations; it never moves one out.
+- **Evaluation** — the value a flag has for one organization, with its OpenFeature reason (`STATIC`,
+  `TARGETING_MATCH`, `SPLIT`, `DISABLED`). Always for the caller's own organization.
+- **Exposure** — one evaluation, counted per flag, value and UTC day (`feature_flag_exposure_daily`):
+  the evidence for the **stale signals** (inactive, one value only, reclaimed but still in code).
+- **Reclaim** — the decision that ends a rollout: the flag serves one value to everyone and can no
+  longer change. Then its code is removed, and after that deploy its rollout is deleted.
+
 ## The web app
 
 - **D+** — the design system: warm paper and ink, the `solar` "needs you" accent, 8px radius, 2px ink

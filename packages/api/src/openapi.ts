@@ -147,6 +147,8 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
           ],
     "x-required-permissions": formatPermissions(op.permissions).split(", ").filter(Boolean),
     ...(op.hints && { "x-agent-hints": op.hints }),
+    // Only the operator organization may call it (see OperationAudience); others get FORBIDDEN.
+    ...(op.audience && { "x-audience": op.audience }),
   }
 }
 

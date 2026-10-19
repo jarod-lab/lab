@@ -1,5 +1,5 @@
 import { createTestDb } from "@starter/db/testing"
-import { agent, approval, member, organization, project, run, user } from "@starter/db"
+import { agent, approval, featureFlag, member, organization, project, run, user } from "@starter/db"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   agentInOrg,
@@ -7,8 +7,11 @@ import {
   approvalInOrg,
   ApprovalId,
   callerActsFor,
+  FeatureFlagKey,
+  flagInOrg,
   memberInOrg,
   name,
+  operatorOrg,
   OrganizationId,
   ProjectId,
   projectInOrg,
@@ -129,5 +132,50 @@ describe("agent, run, approval and member proofs (real Postgres via PGlite)", ()
       approval: null,
       member: null,
     })
+  })
+})
+
+describe("operatorOrg", () => {
+  it("proves only for the configured operator organization, acted for by the caller", () => {
+    name(OrganizationId("org-op"), (org) => {
+      expect(operatorOrg(caller("org-op"), org, "org-op")?.kind).toBe("OperatorOrg")
+      // Another organization's caller, a different operator, or none configured: nothing.
+      expect(operatorOrg(caller("org-b"), org, "org-op")).toBeNull()
+      expect(operatorOrg(caller("org-op"), org, "org-other")).toBeNull()
+      expect(operatorOrg(caller("org-op"), org, undefined)).toBeNull()
+      expect(operatorOrg(caller("org-op"), org, "")).toBeNull()
+    })
+  })
+})
+
+describe("flagInOrg (real Postgres via PGlite)", () => {
+  let t: Awaited<ReturnType<typeof createTestDb>>
+  beforeAll(async () => {
+    t = await createTestDb()
+    const now = new Date()
+    await t.db.insert(organization).values([
+      { id: "org-op", name: "Op", slug: "op", createdAt: now },
+      { id: "org-b", name: "B", slug: "b", createdAt: now },
+    ])
+    await t.db
+      .insert(featureFlag)
+      .values({ key: "f", organizationId: "org-op", createdAt: now, updatedAt: now })
+  })
+  afterAll(() => t.close())
+
+  const check = (key: string, orgId: string) =>
+    name(
+      FeatureFlagKey(key),
+      OrganizationId(orgId),
+      async (k, o) => (await flagInOrg(t.db, k, o))?.kind ?? null,
+    )
+
+  it("proves a rollout belongs to the organization that manages it", async () => {
+    expect(await check("f", "org-op")).toBe("FlagInOrg")
+  })
+
+  it("refuses another organization, and keys with no rollout", async () => {
+    expect(await check("f", "org-b")).toBeNull()
+    expect(await check("missing", "org-op")).toBeNull()
   })
 })

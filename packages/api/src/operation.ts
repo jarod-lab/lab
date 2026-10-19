@@ -71,6 +71,11 @@ export interface InvokeOptions {
    * Receives the permissions the caller lacks, measured against their closest grant.
    */
   permissionHint?: (missing: PermissionSet) => string
+  /**
+   * Whether the caller acts for the operator organization, for `audience: "operator"` operations.
+   * Omitted, no caller is the operator, so those operations are refused to everyone.
+   */
+  isOperator?: (caller: Caller) => boolean
 }
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
@@ -98,6 +103,17 @@ type AnyObject = z.ZodObject<z.ZodRawShape>
  */
 export type OperationAuth = "none" | "person"
 
+/**
+ * `"operator"` is for what only the operator organization does: the one that runs the product
+ * (managing feature flags). Such an operation:
+ *   - is refused with FORBIDDEN, before its permissions or input are checked, to a caller who does
+ *     not act for the operator organization (`InvokeOptions.isOperator`);
+ *   - is an MCP tool only for callers in the operator organization;
+ *   - is left out of llms.txt and llms-full.txt, which customers' agents read, and documented in
+ *     OpenAPI with `x-audience: operator` (the operator's own CLI and SDK read it there).
+ */
+export type OperationAudience = "operator"
+
 export interface OperationSpec<
   I extends AnyObject,
   O extends z.ZodType,
@@ -117,6 +133,8 @@ export interface OperationSpec<
   permissions: P
   /** Omitted: a credential is required. `"person"`: web app only; `"none"`: public (see `OperationAuth`). */
   auth?: A
+  /** `"operator"`: only the operator organization may call it (see `OperationAudience`). */
+  audience?: OperationAudience
   /**
    * Path params, query and JSON body are merged into one object and validated against this.
    * Query values arrive as strings: use `z.coerce` for numbers and booleans in GET operations.
@@ -162,6 +180,9 @@ export function defineOperation<
   }
   if (spec.auth === "none" && Object.keys(spec.permissions).length > 0) {
     throw new Error(`${spec.name}: a public operation (auth: "none") takes no permissions`)
+  }
+  if (spec.audience === "operator" && spec.auth === "none") {
+    throw new Error(`${spec.name}: an operator operation needs a caller; it can't be public`)
   }
   if (!NAME.test(spec.name)) throw new Error(`Operation name must be snake_case: ${spec.name}`)
   for (const param of pathParams(spec.path)) {
@@ -231,6 +252,26 @@ export function assertPerson(op: AnyOperation, caller: Caller): void {
   })
 }
 
+/** Whether an operation's audience includes the caller (see `OperationAudience`). */
+export const inAudience = (
+  op: AnyOperation,
+  caller: Caller,
+  options: Pick<InvokeOptions, "isOperator"> = {},
+): boolean => op.audience !== "operator" || options.isOperator?.(caller) === true
+
+/** An `audience: "operator"` operation is for the operator organization only. */
+export function assertAudience(
+  op: AnyOperation,
+  caller: Caller,
+  options: Pick<InvokeOptions, "isOperator"> = {},
+): void {
+  if (inAudience(op, caller, options)) return
+  throw new AppError("FORBIDDEN", "Only the operator organization can do this", {
+    context: { operation: op.name, organizationId: caller.organizationId },
+    hint: "This operation runs the product itself. Call it as a member, key or agent of the operator organization.",
+  })
+}
+
 /**
  * Run an operation for a caller: check permissions, validate input, run `before` hooks, call the handler,
  * validate output, then run `after` hooks. Throws AppError (FORBIDDEN, BAD_REQUEST, or whatever a hook
@@ -249,6 +290,7 @@ export async function invoke(
     throw new AppError("INTERNAL", `${op.name} needs a caller`, { context: { operation: op.name } })
   }
   assertPerson(op, ctx.caller)
+  assertAudience(op, ctx.caller, options)
   assertAllowed(op, ctx.caller, options)
   const input = parseInput(op, raw)
   const event: InvokeEvent = { op, input, ctx }

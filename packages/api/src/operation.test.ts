@@ -143,6 +143,54 @@ describe('person-only operations (auth: "person")', () => {
   })
 })
 
+describe('operator operations (audience: "operator")', () => {
+  const rampFlag = defineOperation({
+    name: "ramp_flag",
+    method: "PATCH",
+    path: "/v1/flags/:key",
+    summary: "Ramp a flag",
+    description: "Operator only.",
+    audience: "operator",
+    permissions: { note: ["update"] },
+    input: z.object({ key: z.string() }),
+    output: z.object({ key: z.string() }),
+    handler: (input) => ({ key: input.key }),
+  })
+  const isOperator = (c: { organizationId: string }) => c.organizationId === "op"
+
+  it("runs for the operator organization's callers", async () => {
+    const operator = { ...caller, organizationId: "op", grants: [{ note: ["update"] }] }
+    expect(await invoke(rampFlag, { key: "f" }, { caller: operator }, { isOperator })).toEqual({
+      key: "f",
+    })
+  })
+
+  it("refuses everyone else before permissions and input, and everyone when unconfigured", async () => {
+    // No grants and no input: the audience is checked first, so its hint is what comes back.
+    const outsider = { ...caller, grants: [] }
+    await expect(invoke(rampFlag, {}, { caller: outsider }, { isOperator })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      hint: expect.stringContaining("operator organization"),
+    })
+    const operator = { ...caller, organizationId: "op", grants: [{ note: ["update"] }] }
+    await expect(invoke(rampFlag, { key: "f" }, { caller: operator })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    })
+  })
+
+  it("can't be public", () => {
+    expect(() =>
+      defineOperation({
+        ...rampFlag,
+        auth: "none",
+        permissions: {},
+        name: "open_ramp",
+        handler: (input) => ({ key: input.key }),
+      }),
+    ).toThrow(/operator operation needs a caller/)
+  })
+})
+
 describe('public operations (auth: "none")', () => {
   const signup = defineOperation({
     name: "open_signup",

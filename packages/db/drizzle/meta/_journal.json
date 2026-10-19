@@ -85,6 +85,13 @@
       "when": 1792387401633,
       "tag": "0011_auth_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792437974796,
+      "tag": "0012_feature_flags",
+      "breakpoints": true
     }
   ]
 }

@@ -241,3 +241,60 @@ export const steerMessage = pgTable(
     index("steer_message_run_created_idx").on(t.runId, t.createdAt),
   ],
 )
+
+// Feature flag rollouts. A flag is declared in code (packages/flags); this is its runtime state,
+// managed by the operator organization (OPERATOR_ORGANIZATION_ID) and read for every organization
+// when flags are evaluated. No row means the code default everywhere. Percentage is whole percent
+// of the organizations that are not targets; once reclaimed, `reclaimedValue` is served to all.
+export const featureFlag = pgTable(
+  "feature_flag",
+  {
+    key: text("key").primaryKey(),
+    /** The operator organization that manages it. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    percentage: integer("percentage").notNull().default(0),
+    reclaimedValue: boolean("reclaimed_value"),
+    reclaimedAt: timestamp("reclaimed_at", { precision: 3 }),
+    createdAt: timestamp("created_at", { precision: 3 }).notNull(),
+    updatedAt: timestamp("updated_at", { precision: 3 }).notNull(),
+  },
+  (t) => [index("feature_flag_organizationId_idx").on(t.organizationId)],
+)
+
+// The organizations a flag is turned on (allow-list) or off (deny-list) for, whatever its
+// percentage. `organizationId` is the target, so deleting an organization drops it from every
+// list, and evaluating flags for an organization reads only its own rows.
+export const featureFlagTarget = pgTable(
+  "feature_flag_target",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    flagKey: text("flag_key")
+      .notNull()
+      .references(() => featureFlag.key, { onDelete: "cascade" }),
+    value: boolean("value").notNull(),
+    createdAt: timestamp("created_at", { precision: 3 }).notNull(),
+  },
+  (t) => [
+    unique("feature_flag_target_org_flag_key").on(t.organizationId, t.flagKey),
+    index("feature_flag_target_flagKey_idx").on(t.flagKey),
+  ],
+)
+
+// Evaluations per flag, value and UTC day, across all organizations: the evidence for stale
+// signals (inactive, one value only). Counted in memory and added with an upsert; no foreign key,
+// since a flag with no rollout is still evaluated (to its default).
+export const featureFlagExposureDaily = pgTable(
+  "feature_flag_exposure_daily",
+  {
+    flagKey: text("flag_key").notNull(),
+    day: text("day").notNull(),
+    value: boolean("value").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [unique("feature_flag_exposure_daily_key").on(t.flagKey, t.day, t.value)],
+)

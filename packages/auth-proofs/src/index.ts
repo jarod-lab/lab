@@ -5,6 +5,7 @@ export { name, type Named } from "@gdp-ts/core"
 export {
   AgentId,
   ApprovalId,
+  FeatureFlagKey,
   OrganizationId,
   ProjectId,
   RunId,
@@ -16,3 +17,5 @@ export { type AgentInOrg, agentInOrg } from "./proofs/agent-in-org"
 export { type RunInOrg, runInOrg } from "./proofs/run-in-org"
 export { type ApprovalInOrg, approvalInOrg } from "./proofs/approval-in-org"
 export { type MemberInOrg, memberInOrg } from "./proofs/member-in-org"
+export { type OperatorOrg, operatorOrg } from "./proofs/operator-org"
+export { type FlagInOrg, flagInOrg } from "./proofs/flag-in-org"

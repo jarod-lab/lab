@@ -13,7 +13,9 @@ import {
   allowed,
   type AnyOperation,
   assertAllowed,
+  assertAudience,
   type Caller,
+  inAudience,
   inputSchema,
   invoke,
   type InvokeOptions,
@@ -118,7 +120,8 @@ async function callTool(
   opts: { requestId?: string; invokeOptions?: InvokeOptions } = {},
 ): Promise<CallToolResult> {
   try {
-    // Permission first, as over REST, so a bad idempotencyKey can't mask FORBIDDEN and its hint.
+    // Audience and permission first, as over REST, so a bad idempotencyKey can't mask FORBIDDEN.
+    assertAudience(op, caller, opts.invokeOptions)
     assertAllowed(op, caller, opts.invokeOptions)
     const { input, idempotencyKey } = splitIdempotencyKey(op, args)
     const result = await invoke(
@@ -152,14 +155,18 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
   // Public operations (auth "none") are REST only: they need no caller, so they are never tools.
   // Nor are person-only ones (auth "person"): an MCP client is an agent, never a signed-in person.
   const tools = opts.operations.filter((op) => op.auth === undefined)
-  const visible = tools.filter((op) => canCall(op, caller))
+  // Operator operations are tools only in the operator organization; nobody else learns of them.
+  const visible = tools.filter(
+    (op) => canCall(op, caller) && inAudience(op, caller, opts.invokeOptions),
+  )
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
   server.setRequestHandler(LooseCallToolRequestSchema, (loose) => {
     // The SDK validates the strict schema itself, as invalid params (-32602), before this runs.
     const req = loose as CallToolRequest
     // Hidden tools are still callable by name: invoke refuses them with FORBIDDEN and a hint naming
     // the scope or permission that would allow it, which is more use to an agent than "unknown".
-    // The operation list is public anyway (openapi.json, llms.txt).
+    // The operation list is public anyway (openapi.json, llms.txt). An operator tool called from
+    // another organization is refused by its audience the same way.
     const op = tools.find((o) => o.name === req.params.name)
     // A name that is no operation at all is a protocol error, as the MCP spec has it.
     if (!op) throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${req.params.name}`)

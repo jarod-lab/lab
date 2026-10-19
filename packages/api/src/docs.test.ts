@@ -217,6 +217,20 @@ describe("llms.txt", () => {
     expect(llmsFullTxt(ops, info)).toContain("x-api-key")
   })
 
+  it("tags operator operations in OpenAPI and leaves them out of llms.txt", () => {
+    const operator = defineOperation({ ...updateNote, name: "ramp_note", audience: "operator" })
+    const doc = openApiDocument([getNote, operator], info)
+    expect(doc.paths["/v1/notes/{id}"]?.patch).toHaveProperty("x-audience", "operator")
+    expect(doc.paths["/v1/notes/{id}"]?.get).not.toHaveProperty("x-audience")
+    for (const txt of [
+      llmsTxt([getNote, operator], info),
+      llmsFullTxt([getNote, operator], info),
+    ]) {
+      expect(txt).toContain("get_note")
+      expect(txt).not.toContain("ramp_note")
+    }
+  })
+
   it("documents a person-only operation with the session cookie as its only security", () => {
     const person = defineOperation({ ...updateNote, name: "person_note", auth: "person" })
     const doc = openApiDocument([getNote, person], info)

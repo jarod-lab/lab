@@ -607,6 +607,24 @@ importers:
         specifier: 'catalog:'
         version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/flags:
+    devDependencies:
+      '@starter/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 5.0.3(vitest@5.0.3)
+      oxlint:
+        specifier: 'catalog:'
+        version: 1.87.0(oxlint-tsgolint@7.0.2004)
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/logger:
     dependencies:
       pino:

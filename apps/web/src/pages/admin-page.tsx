@@ -128,7 +128,7 @@ export function AdminPage({
             const user = info.row.original
             if (!user.banned) return <Status state="done">Active</Status>
             const until = user.banExpires
-              ? ` until ${new Date(user.banExpires).toLocaleDateString()}`
+              ? ` until ${new Date(user.banExpires).toLocaleDateString(undefined, { dateStyle: "medium" })}`
               : ""
             return <Status state="failed">{`Banned${until}`}</Status>
           },
@@ -138,7 +138,9 @@ export function AdminPage({
           header: "Created",
           cell: (info) => {
             const value = info.getValue()
-            return value ? new Date(value).toLocaleDateString() : "—"
+            return value
+              ? new Date(value).toLocaleDateString(undefined, { dateStyle: "medium" })
+              : "—"
           },
         }),
         helper.display({

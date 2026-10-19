@@ -37,20 +37,23 @@ export async function chooseBillingAdapter(
   return (await adapterFromServer(client, options)) ?? fixtureBillingAdapter
 }
 
-let shared: Promise<BillingAdapter> | undefined
-
 /**
- * The page's adapter, chosen once per browser session. A failed check is not kept as the fixture: the
- * call rejects, and the next call asks the server again.
+ * The adapter, chosen once per browser session through the client `makeClient` returns. A failed
+ * check is not kept as the fixture: the call rejects, and the next call asks the server again.
  */
-export function getBillingAdapter(): Promise<BillingAdapter> {
-  shared ??= adapterFromServer(
-    createClient(typeof window === "undefined" ? undefined : window.location.origin),
-    {},
-  ).then((adapter) => {
-    if (adapter) return adapter
-    shared = undefined
-    throw new Error("Could not check how billing is set up. Try again.")
-  })
-  return shared
+export function billingAdapterOnce(makeClient: () => Client): () => Promise<BillingAdapter> {
+  let shared: Promise<BillingAdapter> | undefined
+  return () => {
+    shared ??= adapterFromServer(makeClient(), {}).then((adapter) => {
+      if (adapter) return adapter
+      shared = undefined
+      throw new Error("Could not check how billing is set up. Try again.")
+    })
+    return shared
+  }
 }
+
+/** The page's adapter, asked of the page's own origin. */
+export const getBillingAdapter = billingAdapterOnce(() =>
+  createClient(typeof window === "undefined" ? undefined : window.location.origin),
+)

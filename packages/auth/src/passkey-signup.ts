@@ -37,28 +37,6 @@ export interface PasskeySignupDeps {
   sendLink: (input: { email: string; name: string; url: string }) => Promise<void>
 }
 
-/** The internal adapter methods this file calls (better-auth types them loosely). */
-interface Internal {
-  findUserByEmail(email: string): Promise<{ user: { id: string } } | null>
-  createUser(
-    data: { email: string; name: string; emailVerified: boolean },
-    source: { method: string },
-  ): Promise<{ id: string }>
-  createVerificationValue(data: {
-    identifier: string
-    value: string
-    expiresAt: Date
-  }): Promise<unknown>
-  findVerificationValue(identifier: string): Promise<{ value: string; expiresAt: Date } | null>
-  consumeVerificationValue(identifier: string): Promise<{ value: string; expiresAt: Date } | null>
-  findUserById(id: string): Promise<{ id: string; email: string; emailVerified: boolean } | null>
-  updateUser(id: string, data: Record<string, unknown>): Promise<unknown>
-  createSession(
-    userId: string,
-    context?: unknown,
-  ): Promise<{ token: string; userId: string } | null>
-}
-
 /**
  * A refused link is a redirect to the landing page, which explains it and offers a fresh start. The
  * target is a constant path on this site (the same origin success redirects to), so it can't be an
@@ -104,7 +82,7 @@ export function passkeySignupPlugin(deps: PasskeySignupDeps) {
         async (ctx) => {
           const { email, name } = parseStart(ctx.body)
           const body = (ctx.body ?? {}) as { callbackURL?: unknown }
-          const internal = ctx.context.internalAdapter as unknown as Internal
+          const internal = ctx.context.internalAdapter
           const source = ctx.request ?? ctx.headers
           const ip = (source && getIP(source, ctx.context.options)) || "unknown"
           const domain = email.slice(email.lastIndexOf("@") + 1)
@@ -147,7 +125,7 @@ export function passkeySignupPlugin(deps: PasskeySignupDeps) {
           const query = (ctx.query ?? {}) as { token?: unknown; callbackURL?: unknown }
           const token = typeof query.token === "string" ? query.token : ""
           if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw refusedLink(ctx)
-          const internal = ctx.context.internalAdapter as unknown as Internal
+          const internal = ctx.context.internalAdapter
           const identifier = `${TOKEN_PREFIX}${token}`
           const row = await internal.findVerificationValue(identifier)
           if (!row || row.expiresAt.getTime() <= Date.now()) throw refusedLink(ctx)
@@ -158,7 +136,7 @@ export function passkeySignupPlugin(deps: PasskeySignupDeps) {
           if (!(await internal.consumeVerificationValue(identifier))) throw refusedLink(ctx)
 
           await internal.updateUser(user.id, { emailVerified: true })
-          const session = await internal.createSession(user.id, ctx)
+          const session = await internal.createSession(user.id)
           if (!session) {
             throw APIError.from("INTERNAL_SERVER_ERROR", {
               message: "Could not sign in",

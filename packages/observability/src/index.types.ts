@@ -11,17 +11,17 @@ const GET = observe(
   { logger },
 )
 
-void GET(new Request("http://localhost"), { params: Promise.resolve({ id: "1" }) })
+void GET(new Request("https://localhost"), { params: Promise.resolve({ id: "1" }) })
 
 // @ts-expect-error the route argument is required
-void GET(new Request("http://localhost"))
+void GET(new Request("https://localhost"))
 
 // @ts-expect-error the route argument has the wrong shape
-void GET(new Request("http://localhost"), { params: { id: "1" } })
+void GET(new Request("https://localhost"), { params: { id: "1" } })
 
 // A handler with no extra arguments is called with just the request.
 const plain = observe(() => new Response("ok"), { logger })
-void plain(new Request("http://localhost"))
+void plain(new Request("https://localhost"))
 
 // @ts-expect-error no extra arguments expected
-void plain(new Request("http://localhost"), {})
+void plain(new Request("https://localhost"), {})

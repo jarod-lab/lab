@@ -15,7 +15,7 @@ export function isApplePlatform(
 }
 
 export function modifierKeyLabel(
-  nav?: Pick<Navigator, "platform" | "userAgent"> | undefined,
+  nav?: Pick<Navigator, "platform" | "userAgent">,
 ): ModifierKeyLabel {
   return isApplePlatform(nav ?? (typeof navigator === "undefined" ? undefined : navigator))
     ? "⌘"

@@ -1,6 +1,12 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router"
-import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useRouter,
+} from "@tanstack/react-router"
+import { type ReactNode, Suspense, lazy, useSyncExternalStore } from "react"
 
 import { ReauthProvider } from "../components/reauth-dialog"
 import { ImpersonationBanner } from "../containers/impersonation-banner"
@@ -37,12 +43,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 /** The query provider wraps the matched page and the devtools; the shell has neither. */
 function RootOutlet() {
   const { queryClient } = Route.useRouteContext()
+  const router = useRouter()
   return (
     <QueryClientProvider client={queryClient}>
       {/* One "Confirm it's you" dialog for every page's refused sensitive action (lib/reauth.ts). */}
       <ReauthProvider>
         {/* While an admin acts as someone else, every page shows the strip with Stop. */}
-        <ImpersonationBanner api={getAdminApi()} />
+        <ImpersonationBanner
+          api={getAdminApi()}
+          onNavigate={(href) => void router.navigate({ href })}
+        />
         <Outlet />
         {DevtoolsPanel ? (
           <Suspense fallback={null}>
@@ -61,10 +71,15 @@ function RootOutlet() {
  * ever sees the shell for an instant.
  */
 function useHydrated() {
-  const [hydrated, setHydrated] = useState(false)
-  useEffect(() => setHydrated(true), [])
-  return hydrated
+  // The server snapshot (false) is what hydration renders; React then re-renders with the client's.
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  )
 }
+
+const subscribeToNothing = () => () => {}
 
 function RootDocument({ children }: { children: ReactNode }) {
   useThemeSync()

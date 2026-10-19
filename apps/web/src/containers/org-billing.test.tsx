@@ -3,20 +3,16 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expectNoA11yViolations } from "@starter/ui/a11y"
+import type { createClient } from "@starter/auth/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingAdapter, BillingSnapshot, BillingUsage } from "../lib/billing/adapter"
 import { fixtureBillingAdapter, fixtureSnapshot } from "../lib/billing/fixture"
+import { billingAdapterOnce } from "../lib/billing/select"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { fakeAuth } from "../test/fake-auth"
 import { renderWithClient } from "../test/render"
 import { OrgBillingContainer } from "./org-billing"
-
-// The real adapter choice (lib/billing/select) runs; only the client it asks the server through is faked.
-vi.mock("@starter/auth/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@starter/auth/client")>()),
-  createClient: vi.fn(),
-}))
 
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
 const USAGE: BillingUsage = { day: "2026-10-16", total: 3, limit: 500 }
@@ -180,23 +176,30 @@ describe("OrgBillingContainer when the billing mode cannot be checked", () => {
   })
 
   it("shows the error, not the sample plan, and asks again on the next visit", async () => {
-    const { createClient } = await import("@starter/auth/client")
     const signInMethods = vi
       .fn()
       .mockRejectedValueOnce(new Error("network"))
       .mockResolvedValue({ data: { stripe: true }, error: null })
     // The Stripe adapter loads the organization's subscriptions through the client; none is active here.
     const list = vi.fn(async () => ({ data: [], error: null }))
-    vi.mocked(createClient).mockReturnValue({
-      signInMethods,
-      subscription: { list },
-    } as unknown as ReturnType<typeof createClient>)
+    // The real adapter choice (lib/billing/select) runs; only the client it asks the server through is faked.
+    const chooseAdapter = billingAdapterOnce(
+      () =>
+        ({ signInMethods, subscription: { list } }) as unknown as ReturnType<typeof createClient>,
+    )
     // The Stripe adapter's usage is the API's own counter (GET /v1/whoami).
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => Response.json({ usage: USAGE })),
     )
-    const view = <OrgBillingContainer auth={fakeAuth()} api={fakeApi()} organization={acme} />
+    const view = (
+      <OrgBillingContainer
+        auth={fakeAuth()}
+        api={fakeApi()}
+        organization={acme}
+        chooseAdapter={chooseAdapter}
+      />
+    )
 
     const first = renderWithClient(view)
     expect(await screen.findByText("Could not load billing for this organization.")).toBeTruthy()

@@ -12,12 +12,14 @@ import {
 import { accountKeys } from "../lib/account-keys"
 import { withReauth } from "../lib/reauth"
 import { useReauth } from "../components/reauth-dialog"
-import { getWebAuth } from "../lib/web-auth"
+import type { WebAuth } from "../lib/web-auth"
 import { navigateTo } from "../lib/navigation"
 import { AccountSecurityPage } from "../pages/account-security-page"
 
 export interface AccountSecurityContainerProps {
   api: AccountApi
+  /** The server's sign-in methods: which social providers can be connected. */
+  auth: Pick<WebAuth, "signInMethods">
   renderLink?: RenderLink
 }
 
@@ -28,7 +30,7 @@ const NEEDS_RECENT_SIGN_IN = new Set(["SESSION_NOT_FRESH", "SESSION_EXPIRED"])
  * Data and mutations for the security page. Each list is its own query so one failing (for example
  * the sessions list, which needs a recent sign-in) leaves the rest of the page working.
  */
-export function AccountSecurityContainer({ api, renderLink }: AccountSecurityContainerProps) {
+export function AccountSecurityContainer({ api, auth, renderLink }: AccountSecurityContainerProps) {
   const queryClient = useQueryClient()
   const confirm = useReauth()
   // A refused change (SESSION_NOT_FRESH) asks the person to confirm it's them, then runs once more.
@@ -42,7 +44,7 @@ export function AccountSecurityContainer({ api, renderLink }: AccountSecurityCon
   // Only the providers the server has set up are offered to connect (a linked one always shows).
   const methods = useQuery({
     queryKey: accountKeys.signInMethods(),
-    queryFn: async () => (await getWebAuth().signInMethods?.()) ?? null,
+    queryFn: async () => (await auth.signInMethods?.()) ?? null,
     retry: false,
   })
   const passkeys = useQuery({ queryKey: accountKeys.passkeys(), queryFn: () => api.listPasskeys() })

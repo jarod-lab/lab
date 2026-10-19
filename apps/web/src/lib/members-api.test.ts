@@ -62,8 +62,8 @@ describe("better-auth calls for members", () => {
     const calls: { url: string; body: unknown }[] = []
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({
-        url: String(input),
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        url: input instanceof Request ? input.url : String(input),
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
       })
       return json({ id: "inv-1", status: "pending" })
     })
@@ -87,7 +87,7 @@ describe("better-auth calls for members", () => {
   it("lists invitations for the named organization", async () => {
     const calls: string[] = []
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      calls.push(String(input))
+      calls.push(input instanceof Request ? input.url : String(input))
       return json([
         {
           id: "inv-1",

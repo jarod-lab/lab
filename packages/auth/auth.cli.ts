@@ -7,7 +7,7 @@ const placeholder = (prefix: string) => `${prefix}_generate_only`
 export const auth = createAuth({
   db: {} as never,
   secret: "x".repeat(32),
-  baseURL: "http://localhost:3000",
+  baseURL: "https://localhost:3000",
   emailFrom: "Starter <auth@example.com>",
   // Placeholders so the stripe tables are generated. Nothing here reaches Stripe: generation makes no calls.
   stripe: {

@@ -79,6 +79,14 @@
       }
     },
     {
+      "files": ["packages/ui/src/components/ui/chart.tsx"],
+      "rules": { "typescript/restrict-template-expressions": "off" }
+    },
+    {
+      "files": ["packages/ui/src/components/examples/**"],
+      "rules": { "no-unused-vars": "off" }
+    },
+    {
       "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
       "rules": {
         "gdp-ts/no-define-proof": "error",

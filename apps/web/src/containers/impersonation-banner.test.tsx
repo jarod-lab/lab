@@ -8,7 +8,6 @@ import { renderWithClient } from "../test/render"
 import { ImpersonationBanner } from "./impersonation-banner"
 
 const navigate = vi.fn()
-vi.mock("@tanstack/react-router", () => ({ useRouter: () => ({ navigate }) }))
 
 const acting: AdminSession = {
   userId: "u2",
@@ -35,7 +34,7 @@ beforeEach(() => navigate.mockClear())
 
 describe("ImpersonationBanner", () => {
   it("names the person being impersonated, with Stop", async () => {
-    renderWithClient(<ImpersonationBanner api={fakeApi(acting)} />)
+    renderWithClient(<ImpersonationBanner api={fakeApi(acting)} onNavigate={navigate} />)
     expect(await screen.findByRole("status", { name: "Impersonation" })).toBeTruthy()
     expect(screen.getByText(/You are impersonating Grace Hopper/)).toBeTruthy()
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy()
@@ -43,14 +42,14 @@ describe("ImpersonationBanner", () => {
 
   it("renders nothing for an ordinary session", async () => {
     const api = fakeApi({ ...acting, impersonatedBy: null })
-    renderWithClient(<ImpersonationBanner api={api} />)
+    renderWithClient(<ImpersonationBanner api={api} onNavigate={navigate} />)
     await waitFor(() => expect(api.getSession).toHaveBeenCalled())
     expect(screen.queryByRole("status", { name: "Impersonation" })).toBeNull()
   })
 
   it("renders nothing while signed out", async () => {
     const api = fakeApi(null)
-    renderWithClient(<ImpersonationBanner api={api} />)
+    renderWithClient(<ImpersonationBanner api={api} onNavigate={navigate} />)
     await waitFor(() => expect(api.getSession).toHaveBeenCalled())
     expect(screen.queryByRole("status", { name: "Impersonation" })).toBeNull()
   })
@@ -58,9 +57,9 @@ describe("ImpersonationBanner", () => {
   it("Stop ends impersonation and returns to /admin", async () => {
     const api = fakeApi(acting)
     const user = userEvent.setup()
-    renderWithClient(<ImpersonationBanner api={api} />)
+    renderWithClient(<ImpersonationBanner api={api} onNavigate={navigate} />)
     await user.click(await screen.findByRole("button", { name: "Stop" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ href: "/admin" }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/admin"))
     expect(api.stopImpersonating).toHaveBeenCalledTimes(1)
   })
 })

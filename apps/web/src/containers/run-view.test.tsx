@@ -1,27 +1,23 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { WebError } from "../lib/web-auth"
 import type { RunDetail, RunsApi } from "../lib/runs-api"
-import { useRunPolling } from "../lib/use-run-polling"
+import { LIVE_POLL_MS } from "../lib/use-run-polling"
 import { fakeAuth } from "../test/fake-auth"
 import { notFresh, renderWithReauth } from "../test/reauth"
 import { RunViewContainer } from "./run-view"
 
-// The poller is wrapped, not replaced: the tests read the `live` flag the container gives it.
-vi.mock("../lib/use-run-polling", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/use-run-polling")>()
-  return { ...actual, useRunPolling: vi.fn(actual.useRunPolling) }
-})
-
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
 
-/** The `live` flag the container last gave the poller. */
-function lastLive(): boolean | undefined {
-  return vi.mocked(useRunPolling).mock.calls.at(-1)?.[0].live
+/** How many more times the run is fetched while three poll windows pass. */
+async function refetchesOverThreePolls(get: { mock: { calls: unknown[] } }): Promise<number> {
+  const before = get.mock.calls.length
+  await act(() => vi.advanceTimersByTimeAsync(LIVE_POLL_MS * 3))
+  return get.mock.calls.length - before
 }
 
 /** A local time one day ahead, in the datetime-local format the picker takes. */
@@ -130,20 +126,29 @@ function renderRun(api: RunsApi, { role = "owner" as string } = {}) {
   )
 }
 
-describe("RunViewContainer", () => {
+describe("RunViewContainer polling", () => {
+  // Fake time that also moves with the clock, so Testing Library's waits still run.
   beforeEach(() => {
-    vi.mocked(useRunPolling).mockClear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  it("keeps polling while the first answer is pending", () => {
-    renderRun(fakeApi({ get: vi.fn(() => new Promise<RunDetail>(() => {})) }))
-    expect(lastLive()).toBe(true)
+  // A run counts as live until its first answer, but nothing shows that: TanStack Query folds a
+  // refetch into the first, still-pending fetch. What shows is a live run being fetched again.
+  it("keeps polling a live run", async () => {
+    const get = vi.fn(async () => detail({ status: "running", approvals: [] }))
+    renderRun(fakeApi({ get }))
+    await screen.findByRole("heading", { name: "Release triage" })
+    expect(await refetchesOverThreePolls(get)).toBeGreaterThan(0)
   })
 
   it("stops polling a run that has finished", async () => {
-    renderRun(fakeApi({ get: vi.fn(async () => detail({ status: "done", approvals: [] })) }))
+    const get = vi.fn(async () => detail({ status: "done", approvals: [] }))
+    renderRun(fakeApi({ get }))
     await screen.findByRole("heading", { name: "Release triage" })
-    expect(lastLive()).toBe(false)
+    expect(await refetchesOverThreePolls(get)).toBe(0)
   })
 
   it("stops polling a run that is not found, rather than refetching it every few seconds", async () => {
@@ -152,22 +157,21 @@ describe("RunViewContainer", () => {
     })
     renderRun(fakeApi({ get }))
     await screen.findByRole("heading", { name: "Run not found" })
-    expect(lastLive()).toBe(false)
+    expect(await refetchesOverThreePolls(get)).toBe(0)
   })
 
   it("stops polling a run that failed to load", async () => {
     // The container retries a server error twice (about 3 seconds) before it reads as failed.
-    renderRun(
-      fakeApi({
-        get: vi.fn(async () => {
-          throw new WebError("Server is down", 500)
-        }),
-      }),
-    )
+    const get = vi.fn(async () => {
+      throw new WebError("Server is down", 500)
+    })
+    renderRun(fakeApi({ get }))
     await screen.findByText("Could not load this run. Server is down", undefined, { timeout: 6000 })
-    expect(lastLive()).toBe(false)
+    expect(await refetchesOverThreePolls(get)).toBe(0)
   }, 10_000)
+})
 
+describe("RunViewContainer", () => {
   it("loads the run and approves through the decision route", async () => {
     const api = fakeApi()
     renderRun(api)

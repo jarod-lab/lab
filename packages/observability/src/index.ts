@@ -122,7 +122,8 @@ export function observe<Rest extends unknown[] = []>(
   }
 }
 
-export type HealthCheck = () => unknown | Promise<unknown>
+/** A dependency check: throws (or rejects) when the dependency is down. It may return a promise. */
+export type HealthCheck = () => unknown
 
 export interface HealthOptions {
   /** Per-check budget before it counts as failed. Default 2000. */

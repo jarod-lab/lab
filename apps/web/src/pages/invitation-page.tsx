@@ -49,6 +49,18 @@ function expiryLine(expiresAt: string | undefined, now: number): string | null {
   return `This invitation expires in ${days} days.`
 }
 
+/** The page's first state: the invitation for a signed-in person, or why there isn't one. */
+async function loadInvitation(auth: WebAuth, invitationId: string): Promise<State> {
+  try {
+    const session = await auth.getSession()
+    if (!session) return { status: "signed-out" }
+    const invitation = await auth.getInvitation(invitationId)
+    return { status: "ready", invitation, signedInAs: session.user.email }
+  } catch (caught) {
+    return { status: "error", message: messageOf(caught) }
+  }
+}
+
 /**
  * The link in an invitation email. The invitation can only be read by a signed-in person, so the
  * page signs them in or up first (with the invited address), then shows the invitation to accept.
@@ -61,20 +73,9 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
 
   useEffect(() => {
     let live = true
-    async function load() {
-      try {
-        const session = await auth.getSession()
-        if (!session) {
-          if (live) setState({ status: "signed-out" })
-          return
-        }
-        const invitation = await auth.getInvitation(invitationId)
-        if (live) setState({ status: "ready", invitation, signedInAs: session.user.email })
-      } catch (caught) {
-        if (live) setState({ status: "error", message: messageOf(caught) })
-      }
-    }
-    void load()
+    void loadInvitation(auth, invitationId).then((next) => {
+      if (live) setState(next)
+    })
     return () => {
       live = false
     }

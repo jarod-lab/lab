@@ -941,7 +941,7 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     let githubEmail = ""
     /** GitHub's id for the account is per address, as it would be for real people. */
     const githubAccountId = () =>
-      [...githubEmail].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+      Array.from(githubEmail).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
     const realFetch = globalThis.fetch
     const social = () => browser((url, init) => s.app.request(url, init))
 
@@ -1606,11 +1606,11 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         connectionId: string
       }
       // Over HTTP for every method: an identity provider deprovisions with PATCH and DELETE.
-      const scim = (path: string, init: RequestInit = {}) =>
-        owner.b.request(`/api/auth/scim/v2${path}`, {
-          ...init,
-          headers: { ...init.headers, authorization: `Bearer ${token}` },
-        })
+      const scim = (path: string, init: RequestInit = {}) => {
+        const headers = new Headers(init.headers)
+        headers.set("authorization", `Bearer ${token}`)
+        return owner.b.request(`/api/auth/scim/v2${path}`, { ...init, headers })
+      }
       return { owner, org, token, connectionId, scim }
     }
 

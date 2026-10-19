@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { AccountApi } from "../lib/account-api"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { fakeAuth } from "../test/fake-auth"
+import { fakeUploads } from "../test/fake-uploads"
 import { renderWithClient } from "../test/render"
 import { fakeReauthAuth, notFresh, renderWithReauth } from "../test/reauth"
 import { AccountProfileContainer } from "./account-profile"
@@ -61,7 +62,14 @@ describe("AccountProfileContainer", () => {
         organizationId === "org-a" ? "owner" : "member",
       ),
     })
-    renderWithClient(<AccountProfileContainer auth={auth} api={fakeAccountApi()} orgApi={orgApi} />)
+    renderWithClient(
+      <AccountProfileContainer
+        auth={auth}
+        api={fakeAccountApi()}
+        orgApi={orgApi}
+        uploads={fakeUploads()}
+      />,
+    )
     expect(await screen.findByRole("button", { name: "Delete my account" })).toHaveProperty(
       "disabled",
       true,
@@ -75,7 +83,9 @@ describe("AccountProfileContainer", () => {
     const user = userEvent.setup()
     const api = fakeAccountApi()
     const auth = fakeAuth({ memberRole: vi.fn(async () => "member") })
-    renderWithClient(<AccountProfileContainer auth={auth} api={api} orgApi={orgApi} />)
+    renderWithClient(
+      <AccountProfileContainer auth={auth} api={api} orgApi={orgApi} uploads={fakeUploads()} />,
+    )
     await user.click(await screen.findByRole("button", { name: "Change email" }))
     const dialog = await screen.findByRole("dialog")
     await user.type(within(dialog).getByLabelText("New email"), "ada@northwind.io")
@@ -99,7 +109,9 @@ describe("AccountProfileContainer", () => {
       }),
     })
     const auth = fakeAuth({ memberRole: vi.fn(async () => "member") })
-    renderWithClient(<AccountProfileContainer auth={auth} api={api} orgApi={orgApi} />)
+    renderWithClient(
+      <AccountProfileContainer auth={auth} api={api} orgApi={orgApi} uploads={fakeUploads()} />,
+    )
     await user.click(await screen.findByRole("button", { name: "Delete my account" }))
     const confirm = await screen.findByRole("alertdialog")
     await user.click(within(confirm).getByRole("button", { name: "Email me the link" }))
@@ -116,7 +128,10 @@ describe("AccountProfileContainer", () => {
     })
     const auth = fakeReauthAuth()
     const webAuth = fakeAuth({ memberRole: vi.fn(async () => "member") })
-    renderWithReauth(<AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} />, auth)
+    renderWithReauth(
+      <AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} uploads={fakeUploads()} />,
+      auth,
+    )
     await user.click(await screen.findByRole("button", { name: "Change email" }))
     const form = await screen.findByRole("dialog")
     await user.type(within(form).getByLabelText("New email"), "ada@northwind.io")
@@ -136,7 +151,10 @@ describe("AccountProfileContainer", () => {
     })
     const auth = fakeReauthAuth()
     const webAuth = fakeAuth({ memberRole: vi.fn(async () => "member") })
-    renderWithReauth(<AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} />, auth)
+    renderWithReauth(
+      <AccountProfileContainer auth={webAuth} api={api} orgApi={orgApi} uploads={fakeUploads()} />,
+      auth,
+    )
     await user.click(await screen.findByRole("button", { name: "Delete my account" }))
     const confirm = await screen.findByRole("alertdialog")
     await user.click(within(confirm).getByRole("button", { name: "Email me the link" }))
@@ -147,5 +165,99 @@ describe("AccountProfileContainer", () => {
     )
     expect(api.requestAccountDeletion).toHaveBeenCalledTimes(1)
     expect(auth.signInWithPassword).not.toHaveBeenCalled()
+  })
+
+  describe("avatar", () => {
+    const png = () =>
+      new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "me.png", { type: "image/png" })
+
+    it("uploads a picked photo and reloads the profile, then removes it", async () => {
+      const user = userEvent.setup()
+      let image: string | null = null
+      const api = fakeAccountApi({
+        getProfile: vi.fn(async () => ({
+          id: "user-1",
+          name: "Ada",
+          email: "ada@example.com",
+          emailVerified: true,
+          image,
+          currentSessionToken: "t-now",
+        })),
+      })
+      const uploads = fakeUploads({
+        setAvatar: vi.fn(async () => {
+          image = "https://files.example.com/user/user-1/avatar-1.png"
+          return image
+        }),
+        removeAvatar: vi.fn(async () => {
+          image = null
+        }),
+      })
+      const auth = fakeAuth({ memberRole: vi.fn(async () => "member") })
+      const { container } = renderWithClient(
+        <AccountProfileContainer auth={auth} api={api} orgApi={orgApi} uploads={uploads} />,
+      )
+      expect(
+        await screen.findByText("A square photo works best. PNG, JPEG, WebP or GIF, up to 1 MB."),
+      ).toBeTruthy()
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')
+      if (!input) throw new Error("no file input")
+      await user.upload(input, png())
+      await waitFor(() => expect(uploads.setAvatar).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(container.querySelector("img")?.getAttribute("src")).toBe(image))
+      await user.click(screen.getByRole("button", { name: "Use initials" }))
+      await waitFor(() => expect(uploads.removeAvatar).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(container.querySelector("img")).toBeNull())
+    })
+
+    it("refuses a file that is too big before sending it, and says why", async () => {
+      const user = userEvent.setup({ applyAccept: false })
+      const uploads = fakeUploads()
+      const auth = fakeAuth({ memberRole: vi.fn(async () => "member") })
+      const { container } = renderWithClient(
+        <AccountProfileContainer
+          auth={auth}
+          api={fakeAccountApi()}
+          orgApi={orgApi}
+          uploads={uploads}
+        />,
+      )
+      await screen.findByRole("button", { name: "Upload photo" })
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Upload photo" })).toHaveProperty(
+          "disabled",
+          false,
+        ),
+      )
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')
+      if (!input) throw new Error("no file input")
+      await user.upload(
+        input,
+        new File([new Uint8Array(2 * 1024 * 1024)], "big.png", { type: "image/png" }),
+      )
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Choose an image of 1 MB or less.",
+      )
+      await user.upload(input, new File(["<svg/>"], "x.svg", { type: "image/svg+xml" }))
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Choose a PNG, JPEG, WebP or GIF image.",
+      )
+      expect(uploads.setAvatar).not.toHaveBeenCalled()
+    })
+
+    it("disables the buttons with the reason while uploads are off", async () => {
+      const auth = fakeAuth({ memberRole: vi.fn(async () => "member") })
+      renderWithClient(
+        <AccountProfileContainer
+          auth={auth}
+          api={fakeAccountApi()}
+          orgApi={orgApi}
+          uploads={fakeUploads({}, { enabled: false })}
+        />,
+      )
+      const button = await screen.findByRole("button", { name: "Upload photo" })
+      expect(button).toHaveProperty("disabled", true)
+      expect(screen.getByText(/Photo upload is off on this server/)).toBeTruthy()
+    })
   })
 })

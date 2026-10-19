@@ -4,6 +4,7 @@ import { OrgGeneralContainer } from "../../../containers/org-general"
 import { RouterLink } from "../../../containers/router-link"
 import { useOrganizationsQuery } from "../../../containers/shell-data"
 import { getOrgSettingsApi } from "../../../lib/org-settings-api"
+import { getUploadsApi } from "../../../lib/uploads-api"
 import { getWebAuth } from "../../../lib/web-auth"
 
 export const Route = createFileRoute("/$org/settings/general")({
@@ -28,6 +29,7 @@ function OrgGeneralRoute() {
       }
       onExit={(next) => void router.navigate({ href: next ? `/${next}` : "/new", replace: true })}
       renderLink={RouterLink}
+      uploads={getUploadsApi()}
     />
   )
 }

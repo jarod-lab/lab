@@ -101,6 +101,35 @@ export const env = createEnv({
      * your Stripe test dashboard; none are made up here. Unset, no plans are offered.
      */
     STRIPE_PLANS: z.string().min(1).optional(),
+    /**
+     * The file store uploads (avatars, organization logos) go to: `local` (a directory this API
+     * serves at /files), `s3`, `r2` (Cloudflare) or `vercel-blob`. Unset, uploads are off. Each one's
+     * variables are below; the check after createEnv names any that are missing (docs/storage.md).
+     */
+    STORAGE_DRIVER: z.enum(["local", "s3", "r2", "vercel-blob"]).optional(),
+    /** s3 and r2: the bucket. */
+    STORAGE_BUCKET: z.string().min(1).optional(),
+    /**
+     * Where the stored files are read from: a CDN or custom domain in front of the bucket. Required for
+     * r2 (its r2.dev URL or a custom domain). s3 defaults to the bucket's own URL, local to <API>/files.
+     */
+    STORAGE_PUBLIC_URL: z.url().optional(),
+    /** local: the directory files are written to, relative to the API's working directory. */
+    STORAGE_LOCAL_DIR: z.string().min(1).default(".storage"),
+    S3_REGION: z.string().min(1).optional(),
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    /** Only with temporary credentials (an assumed role). */
+    S3_SESSION_TOKEN: z.string().min(1).optional(),
+    /** An S3-compatible endpoint instead of AWS (MinIO, LocalStack), addressed path-style. */
+    S3_ENDPOINT: z.url().optional(),
+    /** The Cloudflare account id (dashboard sidebar, or R2 > Overview). */
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    /** An R2 API token's S3 credentials (R2 > Manage API tokens), with Object Read & Write. */
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    /** vercel-blob: the store's read-write token. Vercel sets it when the store is connected. */
+    BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   // Only an explicit yes: "false" or "0" must not turn validation off.
@@ -129,4 +158,28 @@ if (env.STRIPE_SECRET_KEY && !env.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
   throw new Error(
     "STRIPE_SECRET_KEY must be a Stripe test-mode key (sk_test_...). Live keys are refused by this app.",
   )
+}
+
+/** What each file store needs, besides STORAGE_DRIVER itself. */
+const STORAGE_NEEDS = {
+  local: [],
+  s3: ["STORAGE_BUCKET", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"],
+  r2: [
+    "STORAGE_BUCKET",
+    "STORAGE_PUBLIC_URL",
+    "R2_ACCOUNT_ID",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+  ],
+  "vercel-blob": ["BLOB_READ_WRITE_TOKEN"],
+} as const satisfies Record<NonNullable<typeof env.STORAGE_DRIVER>, readonly (keyof typeof env)[]>
+
+// A file store with half its settings would fail on the first upload; say what is missing at startup.
+if (env.STORAGE_DRIVER) {
+  const missing = STORAGE_NEEDS[env.STORAGE_DRIVER].filter((name) => env[name] === undefined)
+  if (missing.length > 0) {
+    throw new Error(
+      `STORAGE_DRIVER=${env.STORAGE_DRIVER} needs ${missing.join(", ")}. Set them, or unset STORAGE_DRIVER to turn uploads off (docs/storage.md).`,
+    )
+  }
 }

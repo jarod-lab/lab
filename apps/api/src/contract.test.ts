@@ -100,8 +100,8 @@ describe("API contract", () => {
       }
     })
 
-    // Public operations are not MCP tools, so there is nothing to compare them with.
-    it.skipIf(op.auth === "none")("behaves the same over MCP as over REST", async () => {
+    // Public and person-only operations are not MCP tools, so there is nothing to compare them with.
+    it.skipIf(op.auth !== undefined)("behaves the same over MCP as over REST", async () => {
       const client = await t.mcpClient(t.owner.cookie)
       // Results with generated fields (ids, keys, timestamps) differ per call; compare their shape.
       const shape = (v: unknown): unknown =>

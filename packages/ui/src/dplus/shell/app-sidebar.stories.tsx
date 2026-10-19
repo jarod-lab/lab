@@ -41,4 +41,25 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const NoPinnedAgents: Story = { args: { pinnedAgents: [] } }
 export const NoAnnouncement: Story = { args: { announcement: undefined } }
+// A tiny inline avatar and logo, so the stories need no network.
+const avatar =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGOombMfK2IYWhIA8at1wZtyGRIAAAAASUVORK5CYII="
+const logo =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGN4sFQNK2IYWhIA5K9qwWzi6vIAAAAASUVORK5CYII="
+
+export const WithImages: Story = {
+  args: {
+    org: {
+      orgs: demoOrgs.map((o) => ({ ...o, logo })),
+      activeOrgId: "acme",
+      hrefFor: (o) => `#${o.slug}`,
+      settingsHref: "#org-settings",
+      createHref: "#new",
+    },
+    account: {
+      ...demoAccount,
+      user: { ...demoAccount.user, image: avatar },
+    },
+  },
+}
 export const Dark: Story = { decorators: [withDark] }

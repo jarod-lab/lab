@@ -3,8 +3,11 @@
 // (API_URL), so the browser sees one origin and the session cookies apply. Both children stop when
 // this process gets a signal or either one exits.
 import { spawn } from "node:child_process"
+import { mkdtempSync, rmSync } from "node:fs"
 import { createRequire } from "node:module"
 import { createServer } from "node:net"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const webPort = process.argv[2]
 if (!webPort) throw new Error("usage: node scripts/e2e-stack.mjs <web port>")
@@ -20,6 +23,11 @@ const freePort = () =>
   })
 const apiPort = process.env.E2E_API_PORT ?? (await freePort())
 const apiUrl = `http://127.0.0.1:${apiPort}`
+
+// Uploads are on for the stack: files go to a fresh directory that is removed when this process exits
+// (every exit path, the signal handlers and the children's exits, goes through process.exit).
+const storageDir = mkdtempSync(join(tmpdir(), "starter-e2e-storage-"))
+process.on("exit", () => rmSync(storageDir, { recursive: true, force: true }))
 
 const children = []
 const stop = () => {
@@ -55,6 +63,9 @@ const env = {
   // A suite signs in far more often than the per-IP limit allows (the limiter is for production). Refused
   // unless NODE_ENV is development or test, which e2e.config.ts sets.
   AUTH_RATE_LIMIT: "off",
+  // Uploads (avatar, org logo) go to the local driver, which the API serves at /files.
+  STORAGE_DRIVER: "local",
+  STORAGE_LOCAL_DIR: storageDir,
 }
 
 start("api", ["--filter", "@starter/api-app", "exec", "tsx", "src/server.ts"], env)

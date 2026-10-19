@@ -35,6 +35,32 @@ const shout = defineOperation({
   },
 })
 
+// REST only: an agent is never a signed-in person, and a public operation has no caller.
+const ownAvatar = defineOperation({
+  name: "set_own_avatar",
+  method: "PUT",
+  path: "/v1/me/avatar",
+  summary: "Set your avatar",
+  description: "Web app only.",
+  auth: "person",
+  permissions: {},
+  input: z.object({}),
+  output: z.object({}),
+  handler: () => ({}),
+})
+const openSignup = defineOperation({
+  name: "open_signup",
+  method: "POST",
+  path: "/v1/signup",
+  summary: "Sign up",
+  description: "No credential.",
+  auth: "none",
+  permissions: {},
+  input: z.object({}),
+  output: z.object({}),
+  handler: () => ({}),
+})
+
 const URL_ = "http://localhost/mcp"
 let clients: Client[] = []
 afterEach(async () => {
@@ -47,7 +73,7 @@ function setup(caller: Caller | null) {
     name: "test",
     version: "1.0.0",
     instructions: "Test server",
-    operations: [whoami, shout],
+    operations: [whoami, shout, ownAvatar, openSignup],
     authenticate: async () => caller,
     resourceMetadataUrl: "http://localhost/.well-known/oauth-protected-resource/mcp",
   })
@@ -165,6 +191,19 @@ describe("createMcpHandler", () => {
       code: -32602,
       message: expect.stringContaining("Unknown tool: nope"),
     })
+  })
+})
+
+describe("REST-only operations", () => {
+  it("are never tools, even for a session, and calling one by name is unknown", async () => {
+    const client = await connect({ ...full, actor: { type: "user", userId: "u1" }, via: "session" })
+    const names = (await client.listTools()).tools.map((tool) => tool.name)
+    expect(names).toEqual(["whoami", "shout"])
+    for (const name of ["set_own_avatar", "open_signup"]) {
+      await expect(client.callTool({ name, arguments: {} })).rejects.toMatchObject({
+        code: -32602,
+      })
+    }
   })
 })
 

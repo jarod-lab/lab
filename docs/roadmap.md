@@ -21,3 +21,8 @@
   Today they are in-app only (`docs/notifications.md`).
 - Verifying the Cursor and VS Code install snippets. Their shapes are inferred from docs.
 - `llms.txt` on a marketing domain (there is no marketing app here).
+- Uploads: a deleted organization's or person's files stay in the file store (their keys start
+  `org/<id>/` and `user/<id>/`, so a sweep can find them). Presigned direct-to-bucket uploads for
+  files bigger than an avatar. Resizing on upload. R2 buckets in an EU or US jurisdiction (an
+  `R2_JURISDICTION` for the `<account>.eu.` endpoint), and Vercel Blob through OIDC alone (no
+  read-write token). (`docs/storage.md`)

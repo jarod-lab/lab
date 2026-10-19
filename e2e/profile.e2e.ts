@@ -70,3 +70,37 @@ test("rename, change email through the link, and see deletion blocked by an owne
   await signOutUi(ctx)
   await expect(browser).toHaveURL(/\/sign-in/)
 })
+
+// The avatar circle is the square with the photo's <img> (or the initials) inside it.
+const AVATAR = "span.size-16"
+const AVATAR_PHOTO = "span.size-16 > img"
+
+test("upload a photo, see it render, and use initials again", async (ctx) => {
+  const { app, screen, browser } = ctx
+  const unique = uniqueId()
+  const email = `lin.${unique}@example.com`
+  // The natural width of the photo once the browser has loaded it, or 0 until then.
+  const loadedWidth = () =>
+    browser.evaluate((css: string) => {
+      const img = document.querySelector<HTMLImageElement>(css)
+      return img?.complete ? img.naturalWidth : 0
+    }, AVATAR_PHOTO)
+
+  await signUpUi(ctx, "Ada Lovelace", email)
+  await app.open("/account/profile")
+  await expect(screen.getByRole("heading", "Personal settings")).toBeVisible()
+  await expect(screen.getByRole("button", "Use initials")).toBeHidden()
+  await expect(browser.locator(AVATAR)).toHaveText("AL")
+
+  // The Upload button opens a hidden file input; the file is set on the input itself.
+  await browser.locator('input[type="file"]').setInputFiles("e2e/fixtures/logo.png")
+  await expect(browser.locator(AVATAR_PHOTO)).toBeVisible()
+  // Loaded means the browser fetched it from the store (the page's CSP allows it) and decoded it.
+  await expect.poll(loadedWidth).toBe(128)
+
+  // Use initials removes the photo and the initials come back.
+  await screen.getByRole("button", "Use initials").tap()
+  await expect(browser.locator(AVATAR_PHOTO)).toBeHidden()
+  await expect(browser.locator(AVATAR)).toHaveText("AL")
+  await expect(screen.getByRole("button", "Upload photo")).toBeVisible()
+})

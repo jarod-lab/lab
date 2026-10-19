@@ -63,13 +63,40 @@ describe("AccountProfilePage", () => {
     expect(screen.getByText("Viewer")).toBeTruthy()
   })
 
-  it("does not offer a photo upload, and says why", () => {
+  it("disables the photo upload while uploads are off, and says why", () => {
     render(<AccountProfilePage {...props()} />)
     const upload = screen.getByRole("button", { name: "Upload photo" })
     expect(upload).toHaveProperty("disabled", true)
+    expect(screen.queryByRole("button", { name: "Use initials" })).toBeNull()
     expect(
-      screen.getByText("Photo upload isn't available yet, so your initials are shown."),
+      screen.getByText("Photo upload is off on this server, so your initials are shown."),
     ).toBeTruthy()
+  })
+
+  it("shows the photo and offers to go back to initials once there is one", async () => {
+    const limits = { maxBytes: 1024 * 1024, contentTypes: ["image/png"] }
+    const onRemove = vi.fn(async () => undefined)
+    const { container } = render(
+      <AccountProfilePage
+        {...props({
+          profile: {
+            name: "Ada Lovelace",
+            email: "ada@example.com",
+            emailVerified: true,
+            image: "https://files.example.com/a.png",
+          },
+          avatar: { limits, onUpload: vi.fn(async () => undefined), onRemove },
+        })}
+      />,
+    )
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://files.example.com/a.png",
+    )
+    expect(screen.getByRole("button", { name: "Upload photo" })).toHaveProperty("disabled", false)
+    expect(screen.getByText("A square photo works best. PNG, up to 1 MB.")).toBeTruthy()
+    await userEvent.setup().click(screen.getByRole("button", { name: "Use initials" }))
+    expect(onRemove).toHaveBeenCalledOnce()
+    await expectNoA11yViolations(container.innerHTML)
   })
 
   it("saves a changed name and not an unchanged one", async () => {

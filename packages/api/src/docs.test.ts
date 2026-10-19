@@ -217,6 +217,19 @@ describe("llms.txt", () => {
     expect(llmsFullTxt(ops, info)).toContain("x-api-key")
   })
 
+  it("documents a person-only operation with the session cookie as its only security", () => {
+    const person = defineOperation({ ...updateNote, name: "person_note", auth: "person" })
+    const doc = openApiDocument([getNote, person], info)
+    const op = doc.paths["/v1/notes/{id}"]?.patch as { security: unknown[] }
+    expect(op.security).toEqual([{ session: [] }])
+    expect(doc.components.securitySchemes).toHaveProperty("session.in", "cookie")
+    expect(openApiDocument([getNote], info).components.securitySchemes).not.toHaveProperty(
+      "session",
+    )
+    expect(llmsTxt([person], info)).toContain("(`person_note`, web app only)")
+    expect(llmsFullTxt([person], info)).toContain("Credential: a person's web app session only.")
+  })
+
   it("documents a public operation with no security and no Idempotency-Key", () => {
     const doc = openApiDocument([publicNote], info)
     const read = doc.paths["/v1/notes/{id}"]?.get as { security: unknown[]; parameters: unknown[] }

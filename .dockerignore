@@ -12,3 +12,4 @@ out
 **/.next
 storybook-static
 e2e
+**/.storage

@@ -8,6 +8,19 @@ const OPTIONAL_UNDER_TEST = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "STRIPE_PLANS",
+  "STORAGE_DRIVER",
+  "STORAGE_BUCKET",
+  "STORAGE_PUBLIC_URL",
+  "STORAGE_LOCAL_DIR",
+  "S3_REGION",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_SESSION_TOKEN",
+  "S3_ENDPOINT",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "BLOB_READ_WRITE_TOKEN",
 ]
 
 describe("env", () => {
@@ -215,6 +228,59 @@ describe("env", () => {
         vi.stubEnv("WEB_ORIGINS", value)
         await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
       }
+    })
+  })
+
+  describe("file store", () => {
+    const base = () => {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+      vi.stubEnv("SKIP_ENV_VALIDATION", "")
+      vi.stubEnv("DATABASE_URL", "postgres://u:p@localhost:5432/db")
+      vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
+      vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
+      vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
+      for (const name of OPTIONAL_UNDER_TEST) vi.stubEnv(name, "")
+    }
+
+    it("is off when unset, and local needs nothing more", async () => {
+      base()
+      expect((await import("./index")).env.STORAGE_DRIVER).toBeUndefined()
+      base()
+      vi.stubEnv("STORAGE_DRIVER", "local")
+      const { env } = await import("./index")
+      expect(env.STORAGE_DRIVER).toBe("local")
+      expect(env.STORAGE_LOCAL_DIR).toBe(".storage")
+    })
+
+    it("names what each driver is missing", async () => {
+      const cases = [
+        ["s3", /needs STORAGE_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY\./],
+        ["r2", /needs STORAGE_BUCKET, STORAGE_PUBLIC_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID/],
+        ["vercel-blob", /needs BLOB_READ_WRITE_TOKEN\./],
+      ] as const
+      for (const [driver, message] of cases) {
+        base()
+        vi.stubEnv("STORAGE_DRIVER", driver)
+        await expect(import("./index")).rejects.toThrow(message)
+      }
+    })
+
+    it("accepts a complete r2 setup", async () => {
+      base()
+      vi.stubEnv("STORAGE_DRIVER", "r2")
+      vi.stubEnv("STORAGE_BUCKET", "uploads")
+      vi.stubEnv("STORAGE_PUBLIC_URL", "https://pub-xyz.r2.dev")
+      vi.stubEnv("R2_ACCOUNT_ID", "acc")
+      vi.stubEnv("R2_ACCESS_KEY_ID", "id")
+      vi.stubEnv("R2_SECRET_ACCESS_KEY", "secret") // gitleaks:allow
+      expect((await import("./index")).env.STORAGE_DRIVER).toBe("r2")
+    })
+
+    it("refuses an unknown driver", async () => {
+      base()
+      vi.stubEnv("STORAGE_DRIVER", "gcs")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
     })
   })
 })

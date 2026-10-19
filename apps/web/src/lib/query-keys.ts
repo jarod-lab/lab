@@ -38,6 +38,8 @@ export const qk = {
   organizations: () => ["organizations"] as const,
   /** Whether a slug is free, while someone types it on the create-organization page. */
   organizationSlugAvailable: (slug: string) => ["organization-slug-available", slug] as const,
+  /** Whether this server stores uploads, and what an image may be (get_upload_limits). */
+  uploadLimits: () => ["upload-limits"] as const,
   account: {
     all: () => ["account"] as const,
     sessions: () => ["account", "sessions"] as const,

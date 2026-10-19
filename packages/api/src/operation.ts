@@ -79,8 +79,16 @@ type AnyObject = z.ZodObject<z.ZodRawShape>
 
 /**
  * Who may call an operation. Omitted, a credential is required (an API key or OAuth token), and the
- * handler gets a `caller`. `"none"` makes the operation public, for the few that exist before anyone
- * has an account (signup). A public operation:
+ * handler gets a `caller`.
+ *
+ * `"person"` is for what only a signed-in person does for themselves (their own avatar): the web
+ * app's session, never an API key or OAuth token. Such an operation:
+ *   - is refused with FORBIDDEN to any other caller, before its input is read;
+ *   - is served over REST only, not as an MCP tool (agents never hold a session);
+ *   - runs the invoke hooks like any other, and is documented with the session cookie as its security.
+ *
+ * `"none"` makes the operation public, for the few that exist before anyone has an account (signup).
+ * A public operation:
  *   - has no organization, so `permissions` must be `{}` (`defineOperation` throws otherwise);
  *   - is served over REST only, not as an MCP tool (calling it by name is "unknown tool");
  *   - runs no invoke hooks: no metering, no Idempotency-Key, no audit. Its handler gets a
@@ -88,7 +96,7 @@ type AnyObject = z.ZodObject<z.ZodRawShape>
  *   - is documented with `security: []` in OpenAPI, and listed as needing no credential in llms.txt.
  * A credential sent with a public operation is ignored.
  */
-export type OperationAuth = "none"
+export type OperationAuth = "none" | "person"
 
 export interface OperationSpec<
   I extends AnyObject,
@@ -107,7 +115,7 @@ export interface OperationSpec<
   description: string
   /** Required permissions, all of them, in the caller's organization. `{}` means any caller. */
   permissions: P
-  /** Omitted: a credential is required. `"none"`: public (see `OperationAuth`). */
+  /** Omitted: a credential is required. `"person"`: web app only; `"none"`: public (see `OperationAuth`). */
   auth?: A
   /**
    * Path params, query and JSON body are merged into one object and validated against this.
@@ -214,6 +222,15 @@ export function assertAllowed(
   })
 }
 
+/** An `auth: "person"` operation is for a signed-in person only (see `OperationAuth`). */
+export function assertPerson(op: AnyOperation, caller: Caller): void {
+  if (op.auth !== "person" || caller.via === "session") return
+  throw new AppError("FORBIDDEN", "Only a person signed in to the web app can do this", {
+    context: { operation: op.name, organizationId: caller.organizationId },
+    hint: "Do it in the web app. API keys and AI clients can't call this operation.",
+  })
+}
+
 /**
  * Run an operation for a caller: check permissions, validate input, run `before` hooks, call the handler,
  * validate output, then run `after` hooks. Throws AppError (FORBIDDEN, BAD_REQUEST, or whatever a hook
@@ -231,6 +248,7 @@ export async function invoke(
   if (!hasCaller(ctx)) {
     throw new AppError("INTERNAL", `${op.name} needs a caller`, { context: { operation: op.name } })
   }
+  assertPerson(op, ctx.caller)
   assertAllowed(op, ctx.caller, options)
   const input = parseInput(op, raw)
   const event: InvokeEvent = { op, input, ctx }

@@ -171,7 +171,11 @@ describe("api app (real Postgres via PGlite)", () => {
       })
       expect((await t.req("/v1/projects", t.as(bare))).status).toBe(403)
       const client = await t.mcpClient(bare)
-      expect((await client.listTools()).tools.map((x) => x.name)).toEqual(["whoami", "boom"])
+      expect((await client.listTools()).tools.map((x) => x.name)).toEqual([
+        "whoami",
+        "get_upload_limits",
+        "boom",
+      ])
       await client.close()
     })
 
@@ -391,6 +395,7 @@ describe("api app (real Postgres via PGlite)", () => {
       expect((await read.listTools()).tools.map((x) => x.name)).toEqual([
         "whoami",
         "list_projects",
+        "get_upload_limits",
         "boom",
       ])
       await read.close()
@@ -426,6 +431,9 @@ describe("api app (real Postgres via PGlite)", () => {
         "get_inbox",
         "list_member_security",
         "reset_member_two_factor",
+        "get_upload_limits",
+        "set_organization_logo",
+        "remove_organization_logo",
         "boom",
       ])
       const res = await owner.callTool({ name: "create_project", arguments: { name: "Via MCP" } })

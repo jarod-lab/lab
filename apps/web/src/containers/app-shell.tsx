@@ -152,7 +152,7 @@ export function AppShellContainer({
       activeId={activeNav}
       support={{ href: "/llms.txt", label: "Agent docs" }}
       account={{
-        user: { name: user.name, email: user.email },
+        user: { name: user.name, email: user.email, image: user.image },
         theme,
         onThemeChange: (choice: ThemeChoice) => setTheme(choice),
         personalSettingsHref: "/account/profile",

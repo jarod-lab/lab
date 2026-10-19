@@ -34,7 +34,9 @@ import {
   type StatusOptions,
   type StatusProvider,
 } from "@starter/observability"
+import { type FileStore, IMMUTABLE } from "@starter/storage"
 import { type Context, Hono } from "hono"
+import { bodyLimit } from "hono/body-limit"
 
 import { BEARER_PATHS, bearerCors } from "./cors"
 import type { ApiHooks } from "./hooks"
@@ -71,7 +73,20 @@ export interface AppOptions {
    * /api/dev/mail route at all.
    */
   devMail?: DevMailSink
+  /**
+   * The file store uploads go to (STORAGE_DRIVER). Its origin joins the pages' `img-src`; a store the
+   * API serves itself (`local`) is mounted at `GET /files/*`. Unset, uploads are off.
+   */
+  files?: FileStore
+  /** Other origins page images load from: social sign-in avatars (GitHub, Google) in `user.image`. */
+  imageOrigins?: readonly string[]
 }
+
+/**
+ * The largest request body /v1 and /mcp read, in bytes. An upload is base64 JSON: a 1 MB image is
+ * about 1.4 MB of text. Checked before the body is read, unlike the input schema.
+ */
+export const MAX_BODY_BYTES = 2 * 1024 * 1024
 
 /** Idempotency-Key: 1 to 255 characters, or absent. */
 function idempotencyKeyOf(value: string | undefined): string | undefined {
@@ -274,6 +289,46 @@ export function createApp(opts: AppOptions) {
   // Dev and e2e only: the captured auth emails. Not mounted unless a sink was passed (DEV_MAIL_SINK).
   if (opts.devMail) app.get("/api/dev/mail", devMailRoute(opts.devMail))
 
+  // A body over the limit is refused before it is read or parsed.
+  const limit = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: () => {
+      throw new AppError(
+        "BAD_REQUEST",
+        `The request body is over ${MAX_BODY_BYTES / 1024 / 1024} MB`,
+        {
+          hint: "Send a smaller image (at most 1 MB; see get_upload_limits).",
+        },
+      )
+    },
+  })
+  app.use("/v1/*", limit)
+  app.use("/mcp", limit)
+
+  // Uploaded files, when the store is one this API serves itself (STORAGE_DRIVER=local).
+  const files = opts.files
+  if (files?.read) {
+    const read = files.read.bind(files)
+    app.get("/files/*", async (c) => {
+      let key: string
+      try {
+        key = decodeURIComponent(c.req.path.slice("/files/".length))
+      } catch {
+        throw new AppError("NOT_FOUND", "Not found")
+      }
+      const file = await read(key)
+      if (!file) throw new AppError("NOT_FOUND", "Not found")
+      return new Response(file.body, {
+        headers: {
+          "content-type": file.contentType,
+          "cache-control": IMMUTABLE,
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'",
+        },
+      })
+    })
+  }
+
   // MCP (Streamable HTTP, stateless).
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))
 
@@ -346,7 +401,10 @@ export function createApp(opts: AppOptions) {
     })
   }
 
-  if (opts.webDistDir) mountWeb(app, opts.webDistDir)
+  if (opts.webDistDir) {
+    const imageOrigins = [...(files ? [files.origin] : []), ...(opts.imageOrigins ?? [])]
+    mountWeb(app, opts.webDistDir, { imageOrigins })
+  }
 
   return app
 }

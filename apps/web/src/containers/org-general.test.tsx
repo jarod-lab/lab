@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from "vitest"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
 
+import type { UploadsApi } from "../lib/uploads-api"
 import { fakeAuth } from "../test/fake-auth"
+import { fakeUploads } from "../test/fake-uploads"
 import { renderWithClient } from "../test/render"
 import { OrgGeneralContainer } from "./org-general"
 
@@ -61,11 +63,12 @@ function fakeApi(overrides: Partial<OrgSettingsApi> = {}): OrgSettingsApi {
 
 const twoAgents = { list: vi.fn(async () => [{ id: "a1" }, { id: "a2" }]) } as never
 
-function setup(options: { role?: string; api?: OrgSettingsApi } = {}) {
+function setup(options: { role?: string; api?: OrgSettingsApi; uploads?: UploadsApi } = {}) {
   const auth = fakeAuth({ memberRole: vi.fn(async () => options.role ?? "owner") })
   const api = options.api ?? fakeApi()
   const onSlugChanged = vi.fn()
   const onExit = vi.fn()
+  const uploads = options.uploads ?? fakeUploads()
   const rendered = renderWithClient(
     <OrgGeneralContainer
       auth={auth}
@@ -75,10 +78,11 @@ function setup(options: { role?: string; api?: OrgSettingsApi } = {}) {
       onSlugChanged={onSlugChanged}
       onExit={onExit}
       agentsApi={twoAgents}
+      uploads={uploads}
     />,
   )
   rendered.queryClient.setQueryData(qk.organizations(), [acme, babbage])
-  return { auth, api, onSlugChanged, onExit, ...rendered }
+  return { auth, api, uploads, onSlugChanged, onExit, ...rendered }
 }
 
 describe("OrgGeneralContainer", () => {
@@ -167,5 +171,49 @@ describe("OrgGeneralContainer", () => {
     expect(await screen.findByRole("textbox", { name: "Organization name" })).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Delete organization" })).toBeNull()
     expect(api.countApiKeys).not.toHaveBeenCalled()
+  })
+
+  describe("logo", () => {
+    it("uploads a picked logo for this organization and shows the one the server returns", async () => {
+      const user = userEvent.setup()
+      let logo: string | null = null
+      const api = fakeApi({
+        getOrganization: vi.fn(async () => ({
+          id: "org-a",
+          name: "Acme Inc",
+          slug: "acme",
+          logo,
+          metadata: {},
+        })),
+      })
+      const uploads = fakeUploads({
+        setLogo: vi.fn(async () => {
+          logo = "https://files.example.com/org/org-a/logo-1.png"
+          return logo
+        }),
+      })
+      const { container } = setup({ api, uploads })
+      await screen.findByText("Square, at least 128px. PNG, JPEG, WebP or GIF, up to 1 MB.")
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')
+      if (!input) throw new Error("no file input")
+      await user.upload(
+        input,
+        new File([new Uint8Array([0x89])], "logo.png", { type: "image/png" }),
+      )
+      await waitFor(() => expect(uploads.setLogo).toHaveBeenCalledWith("org-a", expect.any(File)))
+      await waitFor(() =>
+        expect(container.querySelector('[data-slot="org-mark"] img')?.getAttribute("src")).toBe(
+          logo,
+        ),
+      )
+      expect(screen.getByRole("button", { name: "Remove logo" })).toBeTruthy()
+    })
+
+    it("offers no upload to a member, and does not ask about limits", async () => {
+      const { uploads } = setup({ role: "member" })
+      await screen.findByText(/Owners and admins can upload one/)
+      expect(screen.queryByRole("button", { name: "Upload logo" })).toBeNull()
+      expect(uploads.limits).not.toHaveBeenCalled()
+    })
   })
 })

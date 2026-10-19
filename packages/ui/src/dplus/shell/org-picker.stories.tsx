@@ -2,6 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite"
 import { demoOrgs, withDark } from "../pages/story-kit"
 import { OrgPicker, type OrgPickerProps } from "./org-picker"
 
+// A tiny inline logo, so the stories need no network.
+const logo =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGN4sFQNK2IYWhIA5K9qwWzi6vIAAAAASUVORK5CYII="
+
 const meta = {
   title: "D+/Shell/OrgPicker",
   component: OrgPicker,
@@ -43,6 +47,11 @@ export const CapabilityRoles: Story = {
       { id: "finance", name: "Finance Ltd", slug: "finance", role: "Billing" },
     ],
     activeOrgId: "review",
+  },
+}
+export const WithLogos: Story = {
+  args: {
+    orgs: demoOrgs.map((o) => ({ ...o, logo })),
   },
 }
 export const Dark: Story = { decorators: [withDark] }

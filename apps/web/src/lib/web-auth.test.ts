@@ -57,7 +57,7 @@ describe("createWebAuth", () => {
     })
     const auth = createWebAuth(BASE, fetchImpl)
     await expect(auth.getSession()).resolves.toEqual({
-      user: { id: "u1", email: "ada@example.com", name: "Ada" },
+      user: { id: "u1", email: "ada@example.com", name: "Ada", image: null },
       activeOrganizationId: "org-b",
       impersonatedBy: null,
     })
@@ -142,8 +142,8 @@ describe("createWebAuth", () => {
     })
     const auth = createWebAuth(BASE, fetchImpl)
     await expect(auth.listOrganizations()).resolves.toEqual([
-      { id: "org-a", name: "Analytical Ltd", slug: "a" },
-      { id: "org-b", name: "Babbage Labs", slug: "b" },
+      { id: "org-a", name: "Analytical Ltd", slug: "a", logo: null },
+      { id: "org-b", name: "Babbage Labs", slug: "b", logo: null },
     ])
     await auth.setActiveOrganization("org-b")
     expect(calls.at(-1)).toMatchObject({

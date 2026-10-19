@@ -7,6 +7,7 @@ import type { AnyOperation } from "@starter/api"
 import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { createLogger, type Logger } from "@starter/logger"
+import { createMemoryStore, type FileStore } from "@starter/storage"
 import { type AppOptions, createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
@@ -74,6 +75,8 @@ export interface TestAppOptions {
   rateLimit?: false | AuthRateLimitOptions
   /** Where auth events go. Defaults to the audit trail, as server.ts wires it. */
   onAuthEvent?: (event: AuthEvent) => void | Promise<void>
+  /** The file store uploads go to. Defaults to one in memory served at BASE/files; false turns uploads off. */
+  files?: FileStore | false
 }
 
 export async function createTestApp(
@@ -125,8 +128,12 @@ export async function createTestApp(
     limits: { claimed: 10_000, unclaimed: 500, ...options.limits },
   })
   const notifier = options.notifier ?? createApiNotifier({ auth, db: t.db })
+  const files =
+    options.files === false
+      ? undefined
+      : (options.files ?? createMemoryStore({ driver: "memory", publicUrl: `${BASE}/files` }))
   const operations = [
-    ...createOperations({ auth, db: t.db, meter, now: options.now, notifier }),
+    ...createOperations({ auth, db: t.db, meter, now: options.now, notifier, files }),
     ...extra,
   ]
   const app = createApp({
@@ -137,6 +144,7 @@ export async function createTestApp(
     devMail,
     auth,
     operations,
+    files,
     baseURL: BASE,
     name: "Test API",
     version: "1.0.0",
@@ -219,6 +227,7 @@ export async function createTestApp(
     app,
     auth,
     operations,
+    files,
     req,
     as,
     mcpClient,

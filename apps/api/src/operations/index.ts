@@ -11,6 +11,7 @@ import { projectOperations } from "./projects"
 import { runOperations } from "./runs"
 import { scimOperations } from "./scim"
 import type { OperationDeps } from "./shared"
+import { uploadOperations } from "./uploads"
 import { workspaceAgentOperations } from "./workspace-agents"
 
 export { signupInput } from "./account"
@@ -25,13 +26,14 @@ export function createOperations({
   meter,
   now = () => new Date(),
   notifier = createApiNotifier({ auth, db }),
+  files,
 }: Omit<OperationDeps, "now" | "notifier"> & {
   /** The clock: approval windows and timestamps read it, so tests can move time. */
   now?: () => Date
   /** Defaults to the notifier over `auth` and `db`; tests pass one that fails, or reports elsewhere. */
   notifier?: ApiNotifier
 }) {
-  const deps: OperationDeps = { auth, db, meter, now, notifier }
+  const deps: OperationDeps = { auth, db, meter, now, notifier, files }
   const account = accountOperations(deps)
   const projects = projectOperations(deps)
   const apiKeys = apiKeyOperations(deps)
@@ -42,6 +44,7 @@ export function createOperations({
   const approvals = approvalOperations(deps)
   const members = memberOperations(deps)
   const scim = scimOperations(deps)
+  const uploads = uploadOperations(deps)
 
   return defineRegistry([
     account.whoami,
@@ -75,5 +78,10 @@ export function createOperations({
     approvals.get_inbox,
     members.list_member_security,
     members.reset_member_two_factor,
+    uploads.get_upload_limits,
+    uploads.set_organization_logo,
+    uploads.remove_organization_logo,
+    uploads.set_my_avatar,
+    uploads.remove_my_avatar,
   ])
 }

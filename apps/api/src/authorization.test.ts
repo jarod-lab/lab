@@ -16,6 +16,9 @@ import { createTestApp, requestFor } from "./app.test.helpers"
 const PUBLIC: ReadonlySet<string> = new Set([
   "whoami", // answers about the credential itself
   "signup", // makes the account; there is no caller yet
+  "get_upload_limits", // describes this server, no organization's data
+  "set_my_avatar", // the person's own avatar; requirePerson refuses keys and tokens
+  "remove_my_avatar", // likewise
 ])
 
 type Json = Record<string, unknown>

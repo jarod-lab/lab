@@ -181,7 +181,7 @@ export function llmsTxt(ops: readonly AnyOperation[], info: ApiInfo, links: Docs
     "",
     ...ops.map(
       (op) =>
-        `- \`${op.method} ${op.path}\` (\`${op.name}\`${isPublic(op) ? ", no credential" : ""}): ${op.summary}`,
+        `- \`${op.method} ${op.path}\` (\`${op.name}\`${isPublic(op) ? ", no credential" : op.auth === "person" ? ", web app only" : ""}): ${op.summary}`,
     ),
     "",
   ]
@@ -203,7 +203,9 @@ export function llmsFullTxt(ops: readonly AnyOperation[], info: ApiInfo) {
       "",
       open
         ? "Credential: none. Anyone may call this."
-        : `Permissions: ${formatPermissions(op.permissions) || "none (any authenticated caller)"}`,
+        : op.auth === "person"
+          ? "Credential: a person's web app session only. API keys and OAuth tokens are refused."
+          : `Permissions: ${formatPermissions(op.permissions) || "none (any authenticated caller)"}`,
       "",
       "Input:",
       "",

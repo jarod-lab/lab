@@ -18,6 +18,8 @@ export interface AccountProfile {
   name: string
   email: string
   emailVerified: boolean
+  /** The avatar URL: an upload, or the GitHub or Google picture from social sign-in. */
+  image?: string | null
   /** The session's id of the current browser session (matches a SessionInfo's `token`). */
   currentSessionToken: string | null
 }
@@ -199,6 +201,7 @@ export function createAccountApi(baseURL?: string, fetchImpl?: typeof fetch): Ac
         name: session.user.name,
         email: session.user.email,
         emailVerified: session.user.emailVerified,
+        image: session.user.image ?? null,
         currentSessionToken: session.session.token,
       }
     },

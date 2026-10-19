@@ -75,6 +75,10 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Audit event** — a row recording who did which operation in which organization. Writes are audited;
   `FORBIDDEN` and `BAD_REQUEST` attempts are not (yet).
 - **Metering** — calls per organization per UTC day against its limit; read-only session calls are free.
+- **File store** — where uploaded files live: S3, Cloudflare R2, Vercel Blob or a local directory,
+  chosen by `STORAGE_DRIVER` (`@starter/storage`). Unset, uploads are off.
+- **Upload** — an image a person or agent sends to be kept in the file store: a person's **avatar**
+  (`user.image`) or an organization's **logo** (`organization.logo`). The row keeps its public URL.
 
 ## The web app
 

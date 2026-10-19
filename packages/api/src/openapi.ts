@@ -133,16 +133,18 @@ function operationObject(op: AnyOperation, oauth: ApiInfo["oauth"]) {
     },
     security: isPublic
       ? []
-      : [
-          { apiKey: [] },
-          { bearer: [] },
-          // Any token works for operations that need no permissions; otherwise any one listed scope.
-          ...(oauth
-            ? isEmpty(op.permissions)
-              ? [{ oauth2: [] }]
-              : oauth.scopesFor(op.permissions).map((s) => ({ oauth2: [s] }))
-            : []),
-        ],
+      : op.auth === "person"
+        ? [{ session: [] }]
+        : [
+            { apiKey: [] },
+            { bearer: [] },
+            // Any token works for operations that need no permissions; otherwise any one listed scope.
+            ...(oauth
+              ? isEmpty(op.permissions)
+                ? [{ oauth2: [] }]
+                : oauth.scopesFor(op.permissions).map((s) => ({ oauth2: [s] }))
+              : []),
+          ],
     "x-required-permissions": formatPermissions(op.permissions).split(", ").filter(Boolean),
     ...(op.hints && { "x-agent-hints": op.hints }),
   }
@@ -165,6 +167,16 @@ export function openApiDocument(ops: readonly AnyOperation[], info: ApiInfo) {
       securitySchemes: {
         apiKey: { type: "apiKey", in: "header", name: "x-api-key" },
         bearer: { type: "http", scheme: "bearer", description: "API key or OAuth access token" },
+        // Only operations a person does for themselves in the web app (auth: "person") take it.
+        ...(ops.some((op) => op.auth === "person") && {
+          session: {
+            type: "apiKey",
+            in: "cookie",
+            name: "better-auth.session_token",
+            description:
+              "The web app's session (`__Secure-` prefixed over HTTPS). Person-only operations accept nothing else.",
+          },
+        }),
         ...(info.oauth && {
           oauth2: {
             type: "oauth2",

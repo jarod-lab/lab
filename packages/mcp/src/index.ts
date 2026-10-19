@@ -150,7 +150,8 @@ function buildServer(opts: McpHandlerOptions, caller: Caller, requestId?: string
     { capabilities: { tools: {} }, instructions: opts.instructions },
   )
   // Public operations (auth "none") are REST only: they need no caller, so they are never tools.
-  const tools = opts.operations.filter((op) => op.auth !== "none")
+  // Nor are person-only ones (auth "person"): an MCP client is an agent, never a signed-in person.
+  const tools = opts.operations.filter((op) => op.auth === undefined)
   const visible = tools.filter((op) => canCall(op, caller))
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: visible.map(toTool) }))
   server.setRequestHandler(LooseCallToolRequestSchema, (loose) => {

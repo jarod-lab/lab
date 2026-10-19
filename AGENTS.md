@@ -51,6 +51,8 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
 - `packages/logger`, `packages/errors` — pino with redaction; `AppError`, `ErrorCode`,
   `reportError`.
 - `packages/observability` — `observe`, health and status handlers. See `docs/observability.md`.
+- `packages/storage` — `@starter/storage`, the file store uploads go to (S3, R2, Vercel Blob or a
+  local directory, by `STORAGE_DRIVER`) and image checks. See `docs/storage.md`.
 - `packages/env` — the only place env vars are read (Zod). `packages/config` — shared tsconfig and
   Vitest base.
 - `scripts/` — `scripts/worktree.mjs` (`pnpm wt`), `scripts/init-project.mjs`,
@@ -130,7 +132,8 @@ tables, `apps/api`, `packages/api`, `packages/mcp`, `packages/auth-proofs`, `pac
 - **Errors** are thrown `AppError`s, never returned shapes. Only 5xx and unexposed errors are
   reported.
 - **Public operations** use `auth: "none"` (REST only, no hooks; `signup` is the one). Never add a
-  credential-free route by hand.
+  credential-free route by hand. What only a signed-in person does for themselves (their avatar)
+  uses `auth: "person"`: session only, REST only.
 - **Person-only actions** (`PERSON_ONLY_ACTIONS`, the owner-only resources, `subscription`) are
   never granted to API keys or OAuth tokens.
 

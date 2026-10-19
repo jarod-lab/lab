@@ -55,6 +55,7 @@ import { type NotificationHooks, notificationHooks } from "./notify-hooks"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
 import { canManageBilling, ownerOnlyGuard } from "./owner-only"
+import { uploadFieldGuard } from "./upload-fields"
 import { ac, OAUTH_SCOPES, roles, rolePermissions } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
 import { twoFactorMagicLink } from "./magic-link-two-factor"
@@ -562,6 +563,8 @@ export function createAuth(opts: AuthOptions) {
       freshSessionGuard,
       // Owner-only single sign-on, SCIM provisioning and billing (catalog in access.ts, checks in owner-only.ts).
       ownerOnlyGuard,
+      // Logo and image columns are written by the upload operations, not by better-auth (upload-fields.ts).
+      uploadFieldGuard,
       // Domain verification (a DNS TXT record) gates sign-in: an unproven domain is never routed to its provider.
       sso({ domainVerification: { enabled: true } }),
       scim({

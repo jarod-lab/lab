@@ -96,6 +96,7 @@ export function toOrgSummaries(
     name: org.name,
     slug: org.slug,
     role: orgRoleLabel(roles.get(org.id)),
+    ...(org.logo ? { logo: org.logo } : {}),
   }))
 }
 

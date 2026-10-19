@@ -2,6 +2,7 @@ import { type Caller, decodeCursor, encodeCursor, operationsFor } from "@starter
 import type { Auth, Catalog } from "@starter/auth"
 import type { Database } from "@starter/db"
 import { AppError, reportError } from "@starter/errors"
+import type { FileStore } from "@starter/storage"
 import { z } from "zod"
 
 import type { Meter } from "../meter"
@@ -16,6 +17,8 @@ export interface OperationDeps {
   notifier: ApiNotifier
   /** The clock: approval windows and timestamps read it, so tests can move time. */
   now: () => Date
+  /** Where uploads go (STORAGE_DRIVER). Unset, uploads are off and their operations say so. */
+  files?: FileStore
 }
 
 /**

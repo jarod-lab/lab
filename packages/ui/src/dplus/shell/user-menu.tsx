@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { Avatar, AvatarFallback } from "../../components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { Button } from "../../components/ui/button"
 import {
   DropdownMenu,
@@ -18,7 +18,8 @@ import { type LinkProps, type RenderLink, useRenderLink } from "./link"
 export type ThemeChoice = "light" | "dark" | "system"
 
 export type UserMenuProps = {
-  user: { name: string; email: string }
+  /** `image`: the person's avatar URL, when they uploaded one (or signed in with GitHub or Google). */
+  user: { name: string; email: string; image?: string | null }
   theme: ThemeChoice
   onThemeChange: (theme: ThemeChoice) => void
   personalSettingsHref: string
@@ -78,6 +79,7 @@ export function UserMenu({
         }
       >
         <Avatar size="sm">
+          {user.image ? <AvatarImage src={user.image} alt="" /> : null}
           <AvatarFallback className="text-xs">{initialsOf(user.name)}</AvatarFallback>
         </Avatar>
         <span className="flex-1 text-left">{user.name}</span>

@@ -29,12 +29,22 @@ import { ASSIGNABLE_ROLES, type AssignableRole } from "../lib/members"
 import { ROLE_LABEL } from "../lib/roles"
 import { settingsTabs, slugChangeWarning } from "../lib/org-settings"
 import { ConfirmDialog } from "../components/confirm-dialog"
+import { ImageUpload, type ImageUploadLimits } from "../components/image-upload"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
 
 export type GeneralValues = { name: string; slug: string; defaultInviteRole: AssignableRole }
 
+/** The logo's upload: what the server accepts (null while uploads are off) and the two actions. */
+export interface LogoUpload {
+  limits: ImageUploadLimits | null
+  onUpload: (file: File) => Promise<void>
+  onRemove: () => Promise<void>
+}
+
 export interface OrgGeneralPageProps {
-  organization: { id: string; name: string; slug: string }
+  organization: { id: string; name: string; slug: string; logo?: string | null }
+  /** Omitted, uploads are shown as off. Only used when `canEdit`. */
+  logoUpload?: LogoUpload
   /** The app's host, shown before the URL slug (e.g. "app.example.com"). */
   host: string
   /** The caller's role name here, as shown ("Owner", "Approver", ...). */
@@ -85,6 +95,7 @@ function countNoun(count: number | undefined, one: string, many: string): string
 /** The organization settings "General" page (board OrgGeneral). Props in, callbacks out. */
 export function OrgGeneralPage({
   organization,
+  logoUpload,
   host,
   roleLabel,
   canEdit,
@@ -185,20 +196,29 @@ export function OrgGeneralPage({
             </form.Field>
           </div>
 
-          <div className="flex items-center gap-3.5">
-            <OrgMark name={organization.name} size="lg" />
-            <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-start gap-3.5">
+            <OrgMark name={organization.name} logo={organization.logo} size="lg" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <span className="text-sm font-semibold">Logo</span>
-              <span id="logo-reason" className="text-[13.5px] text-muted-foreground">
-                Square, at least 128px. SVG or PNG. Upload is not available yet, so the first letter
-                is shown.
-              </span>
+              {canEdit ? (
+                <ImageUpload
+                  uploadLabel="Upload logo"
+                  removeLabel="Remove logo"
+                  hasImage={Boolean(organization.logo)}
+                  limits={logoUpload?.limits ?? null}
+                  offReason="Logo upload is off on this server, so the first letter is shown."
+                  guidance="Square, at least 128px."
+                  onUpload={(file) => logoUpload?.onUpload(file) ?? Promise.resolve()}
+                  onRemove={() => logoUpload?.onRemove() ?? Promise.resolve()}
+                />
+              ) : (
+                <span className="text-[13.5px] text-muted-foreground">
+                  {organization.logo
+                    ? "Owners and admins can change it."
+                    : "None yet, so the first letter is shown. Owners and admins can upload one."}
+                </span>
+              )}
             </div>
-            {canEdit ? (
-              <Button variant="outline" disabled aria-describedby="logo-reason">
-                Upload
-              </Button>
-            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

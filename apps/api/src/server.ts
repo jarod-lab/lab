@@ -5,6 +5,7 @@ import { env } from "@starter/env"
 import { reportError } from "@starter/errors"
 import { createLogger } from "@starter/logger"
 import { parseStatusProviders } from "@starter/observability"
+import { createFileStore, type FileStore } from "@starter/storage"
 
 import { createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
@@ -60,6 +61,46 @@ const auth = createAuth({
   onNotificationError: (error, type) => reportError(error, { notification: type }),
 })
 
+// Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
+function fileStore(): FileStore | undefined {
+  switch (env.STORAGE_DRIVER) {
+    case undefined:
+      return undefined
+    case "local":
+      if (env.NODE_ENV === "production") {
+        logger.warn("STORAGE_DRIVER=local in production: uploads live on this server's disk only")
+      }
+      return createFileStore({
+        driver: "local",
+        dir: env.STORAGE_LOCAL_DIR,
+        publicUrl: env.STORAGE_PUBLIC_URL ?? `${baseURL}/files`,
+      })
+    case "s3":
+      return createFileStore({
+        driver: "s3",
+        bucket: env.STORAGE_BUCKET ?? "",
+        region: env.S3_REGION ?? "",
+        accessKeyId: env.S3_ACCESS_KEY_ID ?? "",
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? "",
+        sessionToken: env.S3_SESSION_TOKEN,
+        endpoint: env.S3_ENDPOINT,
+        publicUrl: env.STORAGE_PUBLIC_URL,
+      })
+    case "r2":
+      return createFileStore({
+        driver: "r2",
+        accountId: env.R2_ACCOUNT_ID ?? "",
+        bucket: env.STORAGE_BUCKET ?? "",
+        accessKeyId: env.R2_ACCESS_KEY_ID ?? "",
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? "",
+        publicUrl: env.STORAGE_PUBLIC_URL ?? "",
+      })
+    case "vercel-blob":
+      return createFileStore({ driver: "vercel-blob", token: env.BLOB_READ_WRITE_TOKEN ?? "" })
+  }
+}
+const files = fileStore()
+
 const meter = createMeter({
   db,
   limits: {
@@ -74,7 +115,7 @@ const notifier = createApiNotifier({ auth, db })
 const app = createApp({
   devMail,
   auth,
-  operations: createOperations({ auth, db, meter, notifier }),
+  operations: createOperations({ auth, db, meter, notifier, files }),
   baseURL,
   name: "Starter API",
   version: "0.0.0",
@@ -83,6 +124,12 @@ const app = createApp({
   hooks: createApiHooks({ db, meter, secret: env.BETTER_AUTH_SECRET, notifier }),
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
+  files,
+  // Social sign-in fills user.image with the provider's avatar URL; pages show it.
+  imageOrigins: [
+    ...(env.GITHUB_CLIENT_ID ? ["https://avatars.githubusercontent.com"] : []),
+    ...(env.GOOGLE_CLIENT_ID ? ["https://lh3.googleusercontent.com"] : []),
+  ],
   // Parsed here so a malformed list stops startup instead of showing nothing.
   ...(env.STATUS_PROVIDERS && {
     status: { providers: parseStatusProviders(env.STATUS_PROVIDERS) },

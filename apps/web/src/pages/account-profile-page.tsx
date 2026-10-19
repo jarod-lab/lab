@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+import { Field, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
 import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
@@ -20,6 +20,7 @@ import { PageBody } from "@starter/ui/dplus/shell/page-header"
 import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
+import { ImageUpload, type ImageUploadLimits } from "../components/image-upload"
 import { initialsOf } from "../lib/account-format"
 import { messageOf } from "../lib/messages"
 
@@ -37,8 +38,17 @@ export interface AccountProfileValues {
   name: string
 }
 
+/** The avatar's upload: what the server accepts (null while uploads are off) and the two actions. */
+export interface AvatarUpload {
+  limits: ImageUploadLimits | null
+  onUpload: (file: File) => Promise<void>
+  onRemove: () => Promise<void>
+}
+
 export interface AccountProfilePageProps {
-  profile: { name: string; email: string; emailVerified: boolean }
+  profile: { name: string; email: string; emailVerified: boolean; image?: string | null }
+  /** Omitted, uploads are shown as off. */
+  avatar?: AvatarUpload
   /** The address waiting for its confirmation link, or null. Local to this visit. */
   pendingEmail: string | null
   /** Set once the deletion link was emailed: the address it went to. */
@@ -64,6 +74,7 @@ const emailSchema = z.string().trim().email("Enter an email address, like you@ex
 /** The personal account page (board Profile): name, email, organizations and deleting the account. */
 export function AccountProfilePage({
   profile,
+  avatar,
   pendingEmail,
   deleteRequestedTo,
   organizations,
@@ -94,7 +105,12 @@ export function AccountProfilePage({
       />
 
       <PageBody className="gap-5">
-        <AvatarRow name={profile.name} email={profile.email} />
+        <AvatarRow
+          name={profile.name}
+          email={profile.email}
+          image={profile.image ?? null}
+          upload={avatar}
+        />
         <NameForm initialName={profile.name} onSave={onSaveName} />
         <EmailSection
           email={profile.email}
@@ -125,27 +141,39 @@ export function AccountProfilePage({
   )
 }
 
-function AvatarRow({ name, email }: { name: string; email: string }) {
-  const reasonId = useId()
+function AvatarRow({
+  name,
+  email,
+  image,
+  upload,
+}: {
+  name: string
+  email: string
+  image: string | null
+  upload: AvatarUpload | undefined
+}) {
   return (
     <div className="flex items-center gap-4">
       <span
         aria-hidden="true"
-        className="grid size-16 place-items-center rounded-full border-2 border-foreground text-xl font-bold"
+        className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-foreground text-xl font-bold"
       >
-        {initialsOf(name, email)}
+        {image ? (
+          <img src={image} alt="" className="size-full object-cover" />
+        ) : (
+          initialsOf(name, email)
+        )}
       </span>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled aria-describedby={reasonId}>
-          Upload photo
-        </Button>
-        <Button variant="outline" disabled aria-describedby={reasonId}>
-          Use initials
-        </Button>
-        <FieldDescription id={reasonId} className="basis-full">
-          Photo upload isn't available yet, so your initials are shown.
-        </FieldDescription>
-      </div>
+      <ImageUpload
+        uploadLabel="Upload photo"
+        removeLabel="Use initials"
+        hasImage={image !== null}
+        limits={upload?.limits ?? null}
+        offReason="Photo upload is off on this server, so your initials are shown."
+        guidance="A square photo works best."
+        onUpload={(file) => upload?.onUpload(file) ?? Promise.resolve()}
+        onRemove={() => upload?.onRemove() ?? Promise.resolve()}
+      />
     </div>
   )
 }

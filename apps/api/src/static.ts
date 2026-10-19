@@ -71,14 +71,17 @@ export function inlineScriptHashes(html: string): string[] {
   return hashes
 }
 
-/** Same-origin resources only, inline scripts by hash, and no framing (clickjacking). */
-export function contentSecurityPolicy(html: string): string {
+/**
+ * Same-origin resources only, inline scripts by hash, and no framing (clickjacking). Images may also
+ * come from `imageOrigins`: the file store's, and social sign-in avatars.
+ */
+export function contentSecurityPolicy(html: string, imageOrigins: readonly string[] = []): string {
   return [
     "default-src 'self'",
     `script-src 'self' ${inlineScriptHashes(html).join(" ")}`.trim(),
     // React sets style attributes at runtime, which a strict style-src would block.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    ["img-src 'self' data:", ...new Set(imageOrigins)].join(" "),
     "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",
@@ -92,12 +95,16 @@ export function contentSecurityPolicy(html: string): string {
  * Serve the built web app from `distDir`. Reads index.html now, so a missing build fails at startup
  * rather than on the first page view.
  */
-export function mountWeb<E extends Env>(app: Hono<E>, distDir: string): void {
+export function mountWeb<E extends Env>(
+  app: Hono<E>,
+  distDir: string,
+  { imageOrigins = [] }: { imageOrigins?: readonly string[] } = {},
+): void {
   const root = resolve(distDir)
   const html = readFileSync(join(root, "index.html"), "utf8")
   const pageHeaders = {
     "content-type": "text/html; charset=utf-8",
-    "content-security-policy": contentSecurityPolicy(html),
+    "content-security-policy": contentSecurityPolicy(html, imageOrigins),
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",

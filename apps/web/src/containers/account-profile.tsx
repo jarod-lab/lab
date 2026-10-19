@@ -9,6 +9,7 @@ import { accountKeys } from "../lib/account-keys"
 import { useReauthGuard } from "../components/reauth-dialog"
 import type { OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
+import type { UploadsApi } from "../lib/uploads-api"
 import type { WebAuth } from "../lib/web-auth"
 import {
   invalidateSession,
@@ -23,6 +24,8 @@ export interface AccountProfileContainerProps {
   api: AccountApi
   orgApi: Pick<OrgSettingsApi, "leaveOrganization">
   renderLink?: RenderLink
+  /** Avatar uploads. */
+  uploads: UploadsApi
 }
 
 /**
@@ -35,6 +38,7 @@ export function AccountProfileContainer({
   api,
   orgApi,
   renderLink,
+  uploads,
 }: AccountProfileContainerProps) {
   const queryClient = useQueryClient()
   // Changing the email and deleting the account need a recent sign-in (SESSION_NOT_FRESH otherwise).
@@ -43,6 +47,8 @@ export function AccountProfileContainer({
     queryKey: accountKeys.profile(),
     queryFn: () => api.getProfile(),
   })
+  // A failure to ask reads as "off": the page still works, with the buttons disabled.
+  const uploadLimits = useQuery({ queryKey: qk.uploadLimits(), queryFn: () => uploads.limits() })
   const organizations = useOrganizationsQuery(auth)
   const roles = useMemberRoles(auth, organizations.data)
 
@@ -82,7 +88,23 @@ export function AccountProfileContainer({
 
   return (
     <AccountProfilePage
-      profile={{ name: me.name, email: me.email, emailVerified: me.emailVerified }}
+      profile={{
+        name: me.name,
+        email: me.email,
+        emailVerified: me.emailVerified,
+        image: me.image ?? null,
+      }}
+      avatar={{
+        limits: uploadLimits.data?.enabled ? uploadLimits.data : null,
+        onUpload: async (file) => {
+          await uploads.setAvatar(file)
+          refreshAccount()
+        },
+        onRemove: async () => {
+          await uploads.removeAvatar()
+          refreshAccount()
+        },
+      }}
       pendingEmail={pendingEmail}
       deleteRequestedTo={deleteRequestedTo}
       organizations={rows}

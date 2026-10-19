@@ -8,6 +8,7 @@ import { defaultInviteRoleOf, ownerCount, withDefaultInviteRole } from "../lib/o
 import { type OrgSettingsApi, type OrgSettings } from "../lib/org-settings-api"
 import { getWorkspaceAgentsApi, type WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import { qk } from "../lib/query-keys"
+import type { UploadsApi } from "../lib/uploads-api"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { orgRoleLabel, invalidateSession, memberRoleQuery, useSessionQuery } from "./shell-data"
 
@@ -28,6 +29,8 @@ export interface OrgGeneralContainerProps {
   renderLink?: RenderLink
   /** Workspace agents, for the deletion count. Defaults to the app's API. */
   agentsApi?: Pick<WorkspaceAgentsApi, "list">
+  /** Logo uploads. */
+  uploads: UploadsApi
 }
 
 /**
@@ -43,6 +46,7 @@ export function OrgGeneralContainer({
   onExit,
   renderLink,
   agentsApi = getWorkspaceAgentsApi(),
+  uploads,
 }: OrgGeneralContainerProps) {
   const queryClient = useQueryClient()
   const organizationId = organization.id
@@ -73,6 +77,18 @@ export function OrgGeneralContainer({
     enabled: isOwner,
   })
 
+  // A failure to ask reads as "off": the page still works, with the upload disabled.
+  const uploadLimits = useQuery({
+    queryKey: qk.uploadLimits(),
+    queryFn: () => uploads.limits(),
+    enabled: canEdit,
+  })
+  /** After the logo changed: the page and the shell's organization list both show it. */
+  const logoChanged = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.org(organizationId).settings() })
+    void queryClient.invalidateQueries({ queryKey: qk.organizations() })
+  }
+
   // Stable: the page's availability check re-runs whenever this identity changes.
   const checkSlugFor = useCallback((slug: string) => auth.checkSlug(slug), [auth])
 
@@ -101,9 +117,7 @@ export function OrgGeneralContainer({
       // The shell's list and the URL both read the slug from here, so update it before navigating.
       queryClient.setQueryData<WebOrganization[]>(qk.organizations(), (list) =>
         list?.map((item) =>
-          item.id === organizationId
-            ? { id: item.id, name: updated.name, slug: updated.slug }
-            : item,
+          item.id === organizationId ? { ...item, name: updated.name, slug: updated.slug } : item,
         ),
       )
       void queryClient.invalidateQueries({ queryKey: qk.organizations() })
@@ -169,7 +183,18 @@ export function OrgGeneralContainer({
     <OrgGeneralPage
       // Remounted when the saved values change, so the form starts again from what the server holds.
       key={`${saved.name}|${saved.slug}|${saved.role}`}
-      organization={{ id: organizationId, name: saved.name, slug: saved.slug }}
+      organization={{ id: organizationId, name: saved.name, slug: saved.slug, logo: current.logo }}
+      logoUpload={{
+        limits: uploadLimits.data?.enabled ? uploadLimits.data : null,
+        onUpload: async (file) => {
+          await uploads.setLogo(organizationId, file)
+          logoChanged()
+        },
+        onRemove: async () => {
+          await uploads.removeLogo(organizationId)
+          logoChanged()
+        },
+      }}
       host={host}
       roleLabel={orgRoleLabel(roleText)}
       canEdit={canEdit}

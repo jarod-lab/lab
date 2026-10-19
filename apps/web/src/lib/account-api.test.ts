@@ -48,6 +48,7 @@ describe("createAccountApi", () => {
       name: "Jordan Lee",
       email: "j@acme.dev",
       emailVerified: true,
+      image: null,
       currentSessionToken: "tok-now",
     })
   })

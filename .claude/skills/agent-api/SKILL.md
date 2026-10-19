@@ -82,6 +82,12 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
    audit), and its OpenAPI entry has `security: []` and no `Idempotency-Key`. llms.txt marks it "no
    credential" from the same flag. A credential sent with it is ignored. Do not add a route by hand
    for a credential-free call: set `auth: "none"` and handle it in the handler.
+   Web-app-only operations: `auth: "person"` is for what a signed-in person does for themselves
+   (`set_my_avatar`). `invoke` refuses any caller but a session with FORBIDDEN, before the input is
+   read. The operation is REST only (not an MCP tool), runs the hooks as usual, and is documented
+   with the session cookie as its only security and "web app only" in llms.txt. List it in
+   `PUBLIC` in `authorization.test.ts` when its permissions are `{}`. Use `requirePerson` in the
+   handler for the user id.
 5. Update the contract and review it: `pnpm --filter @starter/api-app test -u`, then read the
    `apps/api/openapi.json` diff as a public API change. Adding is safe. Removing, renaming, making a
    field required, narrowing a type or requiring more permissions breaks deployed agents: add a new

@@ -22,8 +22,9 @@
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
     "@starter/logger": "workspace:*",
-    "@starter/observability": "workspace:*",
     "@starter/mcp": "workspace:*",
+    "@starter/observability": "workspace:*",
+    "@starter/storage": "workspace:*",
     "drizzle-orm": "catalog:",
     "hono": "^4.13.13",
     "zod": "catalog:"

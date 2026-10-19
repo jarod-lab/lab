@@ -115,3 +115,46 @@ test("a viewer sees General read-only: no save, no danger zone", async (ctx) => 
   await expect(screen.getByRole("button", /^Role for /)).toBeHidden()
   await expect(screen.getByRole("columnheader", "Two-factor")).toBeHidden()
 })
+
+// The organization's mark on this page is the large (size-12) square with the logo's <img> (or the first
+// letter) inside it; the sidebar has a smaller mark of its own.
+const MARK = '[data-slot="org-mark"].size-12'
+const MARK_LOGO = '[data-slot="org-mark"].size-12 > img'
+
+test("an owner uploads a logo, sees it render, and removes it back to the letter", async (ctx) => {
+  const { app, screen, browser } = ctx
+  const unique = uniqueId()
+  const email = `lena.${unique}@example.com`
+  const slug = `logo-${unique}`
+  // The natural width of the logo once the browser has loaded it, or 0 until then.
+  const loadedWidth = () =>
+    browser.evaluate((css: string) => {
+      const img = document.querySelector<HTMLImageElement>(css)
+      return img?.complete ? img.naturalWidth : 0
+    }, MARK_LOGO)
+
+  await signUpUi(ctx, "Lena Ortiz", email)
+  await app.open("/new")
+  await screen.getByLabel("Organization name").fill("Logo Works")
+  await screen.getByLabel("URL").fill(slug)
+  await expect(screen.getByText("Available")).toBeVisible()
+  await screen.getByRole("button", "Create organization").tap()
+  await expect(browser).toHaveURL(new RegExp(`/${slug}$`))
+
+  await app.open(`/${slug}/settings/general`)
+  await expect(screen.getByRole("heading", "Organization settings")).toBeVisible()
+  await expect(screen.getByRole("button", "Remove logo")).toBeHidden()
+  await expect(browser.locator(MARK)).toHaveText("L")
+
+  // Upload logo opens a hidden file input; the 128px square is set on the input itself.
+  await browser.locator('input[type="file"]').setInputFiles("e2e/fixtures/logo.png")
+  await expect(browser.locator(MARK_LOGO)).toBeVisible()
+  await expect.poll(loadedWidth).toBe(128)
+  await expect(screen.getByRole("button", "Remove logo")).toBeVisible()
+
+  // Remove logo takes the image away and the first letter comes back.
+  await screen.getByRole("button", "Remove logo").tap()
+  await expect(browser.locator(MARK_LOGO)).toBeHidden()
+  await expect(browser.locator(MARK)).toHaveText("L")
+  await expect(screen.getByRole("button", "Upload logo")).toBeVisible()
+})

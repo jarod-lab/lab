@@ -27,6 +27,7 @@ export const RESERVED_ORG_SLUGS = [
   "auth",
   "static",
   "assets",
+  "files",
 ] as const
 
 const reserved: ReadonlySet<string> = new Set(RESERVED_ORG_SLUGS)

@@ -59,7 +59,7 @@ function OrgGeneral({ viewer }: { viewer: boolean }) {
           <div className="flex flex-1 flex-col">
             <span className="text-sm font-semibold">Logo</span>
             <span className="text-[13.5px] text-muted-foreground">
-              Square, at least 128px. SVG or PNG.
+              Square, at least 128px. PNG, JPEG, WebP or GIF, up to 1 MB.
             </span>
           </div>
           {!viewer && (

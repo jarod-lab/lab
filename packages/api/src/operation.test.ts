@@ -109,6 +109,40 @@ describe("invoke", () => {
   })
 })
 
+describe('person-only operations (auth: "person")', () => {
+  const setAvatar = defineOperation({
+    name: "set_avatar",
+    method: "PUT",
+    path: "/v1/me/avatar",
+    summary: "Set your avatar",
+    description: "Web app only.",
+    auth: "person",
+    permissions: {},
+    input: z.object({ image: z.string() }),
+    output: z.object({ userId: z.string() }),
+    handler: (_input, ctx) => ({
+      userId: ctx.caller.actor.type === "user" ? ctx.caller.actor.userId : "",
+    }),
+  })
+
+  it("runs for a session, with its hooks", async () => {
+    const before = vi.fn()
+    expect(await invoke(setAvatar, { image: "x" }, { caller }, { hooks: { before } })).toEqual({
+      userId: "u1",
+    })
+    expect(before).toHaveBeenCalledOnce()
+  })
+
+  it("refuses API keys and OAuth tokens before reading the input", async () => {
+    for (const via of ["api-key", "oauth"]) {
+      await expect(invoke(setAvatar, {}, { caller: { ...caller, via } })).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        hint: expect.stringContaining("web app"),
+      })
+    }
+  })
+})
+
 describe('public operations (auth: "none")', () => {
   const signup = defineOperation({
     name: "open_signup",

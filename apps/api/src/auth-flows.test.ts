@@ -462,6 +462,104 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("logos and images are set by the upload operations", () => {
+    const REFUSED = { status: 400, code: "USE_UPLOAD_OPERATION" }
+    const EVIL = "https://evil.example/logo.png"
+
+    it("refuses a client-supplied organization logo on create and update, and clears with null", async () => {
+      const { b } = await signedUp("Logo Owner")
+      const refusedCreate = await b.client.organization.create({
+        name: "Logo Co",
+        slug: `logo-co-${n}`,
+        logo: EVIL,
+      })
+      expect(refusedCreate.error).toMatchObject(REFUSED)
+      expect(refusedCreate.error?.message).toContain("set_organization_logo")
+
+      const { data: org, error } = await b.client.organization.create({
+        name: "Logo Co",
+        slug: `logo-co-${n}`,
+      })
+      expect(error).toBeNull()
+      if (!org) throw new Error("no organization")
+
+      const refused = await b.client.organization.update({
+        data: { logo: EVIL },
+        organizationId: org.id,
+      })
+      expect(refused.error).toMatchObject(REFUSED)
+      const [row] = await t.db
+        .select({ logo: organization.logo })
+        .from(organization)
+        .where(eq(organization.id, org.id))
+      expect(row?.logo).toBeNull()
+
+      const renamed = await b.client.organization.update({
+        data: { name: "Logo Co Renamed" },
+        organizationId: org.id,
+      })
+      expect(renamed.error).toBeNull()
+      const cleared = await b.client.organization.update({
+        data: { logo: null },
+        organizationId: org.id,
+      })
+      expect(cleared.error).toBeNull()
+    })
+
+    it("refuses a client-supplied profile image, and clears it with null", async () => {
+      const { b, userId } = await signedUp("Image Person")
+      const refused = await b.client.updateUser({ image: EVIL })
+      expect(refused.error).toMatchObject(REFUSED)
+      expect(refused.error?.message).toContain("set_my_avatar")
+
+      const named = await b.client.updateUser({ name: "Image Renamed" })
+      expect(named.error).toBeNull()
+      const cleared = await b.client.updateUser({ image: null })
+      expect(cleared.error).toBeNull()
+      const [row] = await t.db
+        .select({ image: userTable.image })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+      expect(row?.image).toBeNull()
+    })
+
+    it("refuses a profile image at sign-up", async () => {
+      const b = open()
+      const { error } = await b.client.signUp.email({
+        email: email(),
+        password: PASSWORD,
+        name: "Sign Up Image",
+        image: EVIL,
+      })
+      expect(error).toMatchObject(REFUSED)
+    })
+
+    it("does not refuse server code: auth.api calls carry no request", async () => {
+      const { b, userId } = await signedUp("Server Side")
+      const headers = new Headers({ cookie: b.cookie() })
+      const { data: org } = await b.client.organization.create({
+        name: "Server Side Co",
+        slug: `server-side-${n}`,
+      })
+      if (!org) throw new Error("no organization")
+      await t.auth.api.updateOrganization({
+        body: { data: { logo: EVIL }, organizationId: org.id },
+        headers,
+      })
+      await t.auth.api.updateUser({ body: { image: EVIL }, headers })
+      const [orgRow] = await t.db
+        .select({ logo: organization.logo })
+        .from(organization)
+        .where(eq(organization.id, org.id))
+      const [userRow] = await t.db
+        .select({ image: userTable.image })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+      expect(orgRow?.logo).toBe(EVIL)
+      expect(userRow?.image).toBe(EVIL)
+    })
+  })
+
   describe("endpoints that must stay off or on", () => {
     it("keeps the session-to-JWT endpoint disabled and get-session free of JWTs", async () => {
       const { b } = await signedUp()

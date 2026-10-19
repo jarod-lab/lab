@@ -1,10 +1,22 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { Avatar, AvatarBadge, AvatarFallback, AvatarGroup } from "../components/ui/avatar"
+import {
+  Avatar,
+  AvatarBadge,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarImage,
+} from "../components/ui/avatar"
 import { OrgMark } from "./org-mark"
 import { withDark } from "./pages/story-kit"
 import { VariantRow, VariantTable } from "./pages/story-kit"
 
 // Identity: organizations are square OrgMarks, people are round Avatars.
+
+// A tiny inline logo and avatar, so the stories need no network.
+const logo =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGN4sFQNK2IYWhIA5K9qwWzi6vIAAAAASUVORK5CYII="
+const avatar =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGOombMfK2IYWhIA8at1wZtyGRIAAAAASUVORK5CYII="
 
 const meta = {
   title: "D+/Identity",
@@ -26,6 +38,8 @@ const looks = [
   ["personal", "Jordan's workspace", "personal workspace"],
 ] as const
 
+const logoLooks = ["filled", "outline", "personal"] as const
+
 function AllVariants() {
   return (
     <VariantTable columns={["sm", "default", "lg", "in context"]}>
@@ -43,6 +57,31 @@ function AllVariants() {
           </span>
         </VariantRow>
       ))}
+      {logoLooks.map((look) => (
+        <VariantRow key={`logo-${look}`} name={`OrgMark ${look}, logo`}>
+          <OrgMark name="Acme Inc" logo={logo} look={look} size="sm" />
+          <OrgMark name="Acme Inc" logo={logo} look={look} />
+          <OrgMark name="Acme Inc" logo={logo} look={look} size="lg" />
+          <span className="flex items-center gap-2.5">
+            <OrgMark name="Acme Inc" logo={logo} look={look} />
+            <span className="font-semibold">Acme Inc</span>
+          </span>
+        </VariantRow>
+      ))}
+      <VariantRow name="Avatar, image">
+        <Avatar size="sm">
+          <AvatarImage src={avatar} alt="" />
+          <AvatarFallback className="text-[10px]">JL</AvatarFallback>
+        </Avatar>
+        <Avatar>
+          <AvatarImage src={avatar} alt="" />
+          <AvatarFallback className="text-xs">JL</AvatarFallback>
+        </Avatar>
+        <Avatar size="lg">
+          <AvatarImage src={avatar} alt="" />
+          <AvatarFallback>JL</AvatarFallback>
+        </Avatar>
+      </VariantRow>
       <VariantRow name="Avatar">
         <Avatar size="sm">
           <AvatarFallback className="text-[10px]">JL</AvatarFallback>

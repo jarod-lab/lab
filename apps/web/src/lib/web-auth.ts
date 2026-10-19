@@ -19,7 +19,8 @@ export class WebError extends Error {
 }
 
 export interface WebSession {
-  user: { id: string; email: string; name: string }
+  /** `image`: the avatar URL, when the person has one. */
+  user: { id: string; email: string; name: string; image?: string | null }
   activeOrganizationId: string | null
   /** The admin's user id while this session is an impersonation; null otherwise. */
   impersonatedBy?: string | null
@@ -29,6 +30,8 @@ export interface WebOrganization {
   id: string
   name: string
   slug: string
+  /** The logo URL, when one was uploaded. */
+  logo?: string | null
 }
 
 /** The roles better-auth stores on a membership, lowercased. Custom roles may be added later. */
@@ -177,7 +180,7 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
       if (!result.data) return null
       const { user, session } = result.data
       return {
-        user: { id: user.id, email: user.email, name: user.name },
+        user: { id: user.id, email: user.email, name: user.name, image: user.image ?? null },
         activeOrganizationId:
           (session as { activeOrganizationId?: string | null }).activeOrganizationId ?? null,
         impersonatedBy:
@@ -207,11 +210,16 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
       unwrap(await client.signOut(), "Could not sign out")
     },
     async listOrganizations() {
-      const orgs = unwrap<Array<{ id: string; name: string; slug: string }>>(
+      const orgs = unwrap<Array<{ id: string; name: string; slug: string; logo?: string | null }>>(
         await client.organization.list(),
         "Could not load organizations",
       )
-      return orgs.map((org) => ({ id: org.id, name: org.name, slug: org.slug }))
+      return orgs.map((org) => ({
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        logo: org.logo ?? null,
+      }))
     },
     async memberRole(organizationId) {
       // Explicit organizationId: the session's active org is not necessarily the one asked about.

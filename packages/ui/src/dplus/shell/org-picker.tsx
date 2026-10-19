@@ -26,6 +26,8 @@ export type OrgSummary = {
   role: OrgRole
   /** A personal workspace (created at signup), not a shared organization. */
   personal?: boolean
+  /** The logo URL, when one was uploaded. */
+  logo?: string | null
 }
 
 export type OrgPickerProps = {
@@ -69,7 +71,7 @@ function OrgRow({
         } as LinkProps)
       }
     >
-      <OrgMark name={org.name} look={look} size="sm" />
+      <OrgMark name={org.name} logo={org.logo} look={look} size="sm" />
       <span className="flex flex-1 flex-col leading-tight">
         <span className={cn("font-semibold", active && "highlight self-start px-0.5")}>
           {org.name}
@@ -139,7 +141,7 @@ export function OrgPicker({
         }
       >
         {active ? (
-          <OrgMark name={active.name} />
+          <OrgMark name={active.name} logo={active.logo} />
         ) : (
           <span
             aria-hidden="true"

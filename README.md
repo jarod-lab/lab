@@ -73,6 +73,7 @@ commands and denies destructive ones; skills live in `.claude/skills`.
 - [`docs/database.md`](docs/database.md): tables, migrations and which ones are applied.
 - [`docs/testing.md`](docs/testing.md): test layout, thresholds and the auth-flow tests.
 - [`docs/observability.md`](docs/observability.md): `observe`, health and vendor status.
+- [`docs/storage.md`](docs/storage.md): uploads and the file store (S3, R2, Vercel Blob, local).
 - [`docs/ui.md`](docs/ui.md): vendored shadcn components, D+ pieces and stories.
 - [`docs/tooling.md`](docs/tooling.md): Storybook, portless, baseline, e2e, turbo, CI and dependencies.
 - [`docs/roadmap.md`](docs/roadmap.md): what is not built yet.

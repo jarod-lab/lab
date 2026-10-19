@@ -86,7 +86,15 @@ const invitations: InvitationView[] = [
 const matrix: MatrixRowView[] = [
   {
     label: "Invite and manage members",
-    cells: { owner: true, admin: true, member: false, viewer: false },
+    cells: {
+      owner: true,
+      admin: true,
+      member: false,
+      viewer: false,
+      approver: false,
+      operator: false,
+      billing: false,
+    },
   },
 ]
 
@@ -155,9 +163,9 @@ describe("MembersPage as owner", () => {
       name: "Invite and manage members",
     })
     const cells = within(row.closest("tr") as HTMLElement)
-    // owner and admin hold it; member and viewer do not
+    // owner and admin hold it; the other five columns do not
     expect(cells.getAllByText("Yes")).toHaveLength(2)
-    expect(cells.getAllByText("No")).toHaveLength(2)
+    expect(cells.getAllByText("No")).toHaveLength(5)
   })
 
   it("hides the security columns when the caller cannot read member security", () => {

@@ -1,18 +1,10 @@
 // Pure helpers for the organization settings page. No network, no React.
 
+import { ASSIGNABLE_ROLES, type AssignableRole } from "./members"
 import { isOwner } from "./roles"
 
-/** The roles a new invitation can start with (the board's "Default role for new invites"). */
-export const INVITE_ROLES = ["admin", "member", "viewer"] as const
-export type InviteRole = (typeof INVITE_ROLES)[number]
-
-export const INVITE_ROLE_LABEL: Record<InviteRole, string> = {
-  admin: "Admin",
-  member: "Member",
-  viewer: "Viewer",
-}
-
-export const DEFAULT_INVITE_ROLE: InviteRole = "member"
+/** The default invite role is one of the roles an invitation can name (members.ts): not owner. */
+export const DEFAULT_INVITE_ROLE: AssignableRole = "member"
 
 /** Where the default invite role lives: the organization's `metadata` (JSON on the server). */
 export const INVITE_ROLE_METADATA_KEY = "defaultInviteRole"
@@ -45,9 +37,9 @@ export function parseMetadata(value: unknown): Record<string, unknown> {
 }
 
 /** The stored default invite role, or Member when none is stored (or the stored one is unknown). */
-export function defaultInviteRoleOf(metadata: unknown): InviteRole {
+export function defaultInviteRoleOf(metadata: unknown): AssignableRole {
   const stored = parseMetadata(metadata)[INVITE_ROLE_METADATA_KEY]
-  return INVITE_ROLES.find((role) => role === stored) ?? DEFAULT_INVITE_ROLE
+  return ASSIGNABLE_ROLES.find((role) => role === stored) ?? DEFAULT_INVITE_ROLE
 }
 
 /**
@@ -56,7 +48,7 @@ export function defaultInviteRoleOf(metadata: unknown): InviteRole {
  */
 export function withDefaultInviteRole(
   metadata: unknown,
-  role: InviteRole,
+  role: AssignableRole,
 ): Record<string, unknown> {
   return { ...parseMetadata(metadata), [INVITE_ROLE_METADATA_KEY]: role }
 }

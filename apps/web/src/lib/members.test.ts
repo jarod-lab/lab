@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest"
 import { roles } from "@starter/auth/client"
 import {
   type Allows,
-  type MatrixRole,
   PERMISSION_MATRIX,
+  MATRIX_ROLES,
   canChangeRole,
   canRemoveMember,
   canResetTwoFactor,
@@ -20,17 +20,20 @@ import {
   ASSIGNABLE_ROLES,
   shownRoleOf,
   sentCopy,
-  topRoleOf,
 } from "./members"
+import { type OrgRole, isOrgRole } from "./roles"
 
 // Each role as the catalog states it, through better-auth's own authorize (the check checkRolePermission wraps).
-const catalogAllows = (role: MatrixRole, permission: Record<string, string[]>) =>
+const catalogAllows = (role: OrgRole, permission: Record<string, string[]>) =>
   roles[role].authorize(permission as never).success
 
 const allowsFor =
   (role: string): Allows =>
   (permission) =>
-    role.split(",").some((part) => catalogAllows(part.trim() as MatrixRole, permission))
+    role
+      .split(",")
+      .map((part) => part.trim())
+      .some((part) => isOrgRole(part) && catalogAllows(part, permission))
 
 describe("permissionMatrix", () => {
   const matrix = permissionMatrix(catalogAllows)
@@ -38,38 +41,84 @@ describe("permissionMatrix", () => {
 
   it("has one row per board label, each with a cell per role", () => {
     expect(matrix.map((r) => r.label)).toEqual(PERMISSION_MATRIX.map((r) => r.label))
-    for (const r of matrix)
-      expect(Object.keys(r.cells).sort()).toEqual(["admin", "member", "owner", "viewer"])
+    for (const r of matrix) expect(Object.keys(r.cells).sort()).toEqual(Object.keys(roles).sort())
   })
 
-  it("matches the catalog: owner does everything, viewer only reads", () => {
-    for (const r of matrix) expect(r.cells.owner, r.label).toBe(true)
+  it("has a column for every catalog role, and only those", () => {
+    expect([...MATRIX_ROLES].sort()).toEqual(Object.keys(roles).sort())
+  })
+
+  it("answers each capability role from the catalog, one capability per row", () => {
     expect(row("See agents, runs, settings")?.cells).toEqual({
       owner: true,
       admin: true,
       member: true,
       viewer: true,
+      approver: true,
+      operator: true,
+      billing: false,
     })
-    expect(row("Start runs, approve actions")?.cells.viewer).toBe(false)
+    expect(row("Start runs")?.cells).toEqual({
+      owner: true,
+      admin: true,
+      member: true,
+      viewer: false,
+      approver: false,
+      operator: true,
+      billing: false,
+    })
+    expect(row("Approve actions")?.cells).toEqual({
+      owner: true,
+      admin: true,
+      member: true,
+      viewer: false,
+      approver: true,
+      operator: false,
+      billing: false,
+    })
+    expect(row("Create and edit agents")?.cells).toEqual({
+      owner: true,
+      admin: true,
+      member: true,
+      viewer: false,
+      approver: false,
+      operator: false,
+      billing: false,
+    })
+  })
+
+  it("matches the catalog: owner does everything, viewer only reads", () => {
+    for (const r of matrix) expect(r.cells.owner, r.label).toBe(true)
     expect(row("Invite and manage members")?.cells).toEqual({
       owner: true,
       admin: true,
       member: false,
       viewer: false,
+      approver: false,
+      operator: false,
+      billing: false,
     })
   })
 
-  it("gives API keys and billing to owners and admins, as the catalog does", () => {
-    expect(row("API keys and billing")?.cells).toEqual({
+  it("gives API keys and billing to owners and admins, and billing to billing", () => {
+    expect(row("Create API keys")?.cells).toEqual({
       owner: true,
       admin: true,
       member: false,
       viewer: false,
+      approver: false,
+      operator: false,
+      billing: false,
     })
-  })
-
-  it("keeps org deletion owner-only, as the catalog does", () => {
-    expect(row("Delete or transfer the org")?.cells.admin).toBe(false)
+    expect(row("Change the subscription")?.cells).toEqual({
+      owner: true,
+      admin: true,
+      member: false,
+      viewer: false,
+      approver: false,
+      operator: false,
+      billing: true,
+    })
   })
 })
 
@@ -114,10 +163,11 @@ describe("who can change what", () => {
 })
 
 describe("roles and labels", () => {
-  it("shows a stored role string as its highest role", () => {
-    expect(topRoleOf("admin,member")).toBe("admin")
+  it("shows a stored role string as its most senior role", () => {
+    expect(shownRoleOf("admin,member")).toBe("admin")
     expect(roleLabelOf("member")).toBe("Member")
     expect(roleLabelOf("unknown-role")).toBe("Viewer")
+    expect(roleLabelOf("")).toBe("Viewer")
   })
 
   it("shows a capability role by its own name, ahead of viewer", () => {
@@ -127,6 +177,10 @@ describe("roles and labels", () => {
     expect(roleLabelOf("member,approver")).toBe("Member")
     expect(shownRoleOf("owner,billing")).toBe("owner")
     expect(roleLabelOf("billing")).toBe("Billing")
+  })
+
+  it("reads a stored role in any case, as the picker always has", () => {
+    expect(shownRoleOf(" Approver , Viewer ")).toBe("approver")
   })
 
   it("offers every catalog role but owner, in picker order", () => {

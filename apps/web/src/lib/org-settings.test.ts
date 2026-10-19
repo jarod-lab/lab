@@ -27,6 +27,13 @@ describe("default invite role", () => {
     expect(defaultInviteRoleOf({ defaultInviteRole: "owner" })).toBe("member")
   })
 
+  it("accepts the capability roles, and reads any other stored value as Member", () => {
+    expect(defaultInviteRoleOf({ defaultInviteRole: "approver" })).toBe("approver")
+    expect(defaultInviteRoleOf({ defaultInviteRole: "operator" })).toBe("operator")
+    expect(defaultInviteRoleOf({ defaultInviteRole: "billing" })).toBe("billing")
+    expect(defaultInviteRoleOf({ defaultInviteRole: "superuser" })).toBe("member")
+  })
+
   it("keeps every other metadata key when it sets the role", () => {
     expect(withDefaultInviteRole({ region: "eu" }, "viewer")).toEqual({
       region: "eu",

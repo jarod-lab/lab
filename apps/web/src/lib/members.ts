@@ -7,27 +7,24 @@ import { isOrgRole, isOwner, type OrgRole, ROLE_LABEL, roleParts } from "./roles
 export type Permission = Record<string, string[]>
 export type Allows = (permission: Permission) => boolean
 
-/** Roles in the order the page lists them. Owner is listed for the matrix only. */
-export const MATRIX_ROLES = ["owner", "admin", "member", "viewer"] as const
-export type MatrixRole = (typeof MATRIX_ROLES)[number]
-
-export const MATRIX_ROLE_LABEL: Record<MatrixRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  member: "Member",
-  viewer: "Viewer",
-}
-
-/** The stored role string ("admin,member") as its highest role; a role we don't know is a viewer. */
-export function topRoleOf(role: string): MatrixRole {
-  const parts = roleParts(role)
-  return MATRIX_ROLES.find((candidate) => parts.includes(candidate)) ?? "viewer"
-}
+/**
+ * The matrix's columns, in the order the page lists them: every catalog role (roles.ts). A test
+ * holds this list to the catalog's own keys, so a new role cannot be missing from the matrix.
+ */
+export const MATRIX_ROLES: readonly OrgRole[] = [
+  "owner",
+  "admin",
+  "member",
+  "viewer",
+  "approver",
+  "operator",
+  "billing",
+]
 
 /**
- * The role a stored role string shows as in the members list and the picker. Owner wins, then the
- * stored roles in this order: the capability roles before viewer, since each of them covers what a
- * viewer can see. A role we don't know is a viewer.
+ * The role a stored role string shows as in the members list, the picker and the invitation.
+ * Owner wins, then the rest in this order. Viewer comes last, so a list that names any other role
+ * shows that role rather than Viewer. A role we don't know is a viewer.
  */
 const SHOWN_ORDER: readonly OrgRole[] = [
   "owner",
@@ -39,7 +36,7 @@ const SHOWN_ORDER: readonly OrgRole[] = [
   "viewer",
 ]
 export function shownRoleOf(role: string): OrgRole {
-  const parts = roleParts(role).filter(isOrgRole)
+  const parts = roleParts(role.toLowerCase()).filter(isOrgRole)
   return SHOWN_ORDER.find((candidate) => parts.includes(candidate)) ?? "viewer"
 }
 
@@ -49,27 +46,29 @@ export function roleLabelOf(role: string): string {
 }
 
 /**
- * The role matrix: each row is one board label mapped to the catalog actions it needs, and each
- * cell is the plugin's answer for that role. Labels are the board's; the actions are the catalog's.
- * The board's "API keys and billing" row needs both grants in one set, which a single role must hold
- * (owners and admins do; members and viewers hold neither).
+ * The role matrix: one row per capability, each mapped to the catalog actions it needs, and each
+ * cell the plugin's answer for that role. A row names one capability, never two: a combined row
+ * reads "no" for a role that holds only one half (approver can approve but not start a run).
+ * Every row is one check of one permission set, so the cells come from the catalog alone.
  */
 export const PERMISSION_MATRIX: { label: string; permission: Permission }[] = [
   { label: "See agents, runs, settings", permission: { agent: ["read"], run: ["read"] } },
-  { label: "Start runs, approve actions", permission: { run: ["create", "approve"] } },
+  { label: "Start runs", permission: { run: ["create"] } },
+  { label: "Approve actions", permission: { run: ["approve"] } },
   { label: "Create and edit agents", permission: { agent: ["create", "update"] } },
   { label: "Invite and manage members", permission: { member: ["update", "delete"] } },
-  { label: "API keys and billing", permission: { apiKey: ["create"], subscription: ["update"] } },
+  { label: "Create API keys", permission: { apiKey: ["create"] } },
+  { label: "Change the subscription", permission: { subscription: ["update"] } },
   { label: "Delete or transfer the org", permission: { organization: ["delete"] } },
 ]
 
 export interface MatrixRowView {
   label: string
-  cells: Record<MatrixRole, boolean>
+  cells: Record<OrgRole, boolean>
 }
 
 /** The matrix, every cell computed by `allows(role, permission)`. */
-export function permissionMatrix(allows: (role: MatrixRole, permission: Permission) => boolean) {
+export function permissionMatrix(allows: (role: OrgRole, permission: Permission) => boolean) {
   return PERMISSION_MATRIX.map(
     (row): MatrixRowView => ({
       label: row.label,
@@ -78,6 +77,9 @@ export function permissionMatrix(allows: (role: MatrixRole, permission: Permissi
         admin: allows("admin", row.permission),
         member: allows("member", row.permission),
         viewer: allows("viewer", row.permission),
+        approver: allows("approver", row.permission),
+        operator: allows("operator", row.permission),
+        billing: allows("billing", row.permission),
       },
     }),
   )

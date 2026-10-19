@@ -115,8 +115,16 @@ describe("the picker against the permission catalog", () => {
     expect(everything.map((option) => option.key)).toEqual(expected)
   })
 
-  it("is built from the four roles the catalog defines", () => {
-    expect(Object.keys(roles).sort()).toEqual(["admin", "member", "owner", "viewer"])
+  it("is built from the seven roles the catalog defines", () => {
+    expect(Object.keys(roles).sort()).toEqual([
+      "admin",
+      "approver",
+      "billing",
+      "member",
+      "operator",
+      "owner",
+      "viewer",
+    ])
   })
 })
 

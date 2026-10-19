@@ -35,5 +35,15 @@ export const Loading: Story = {
 export const Error: Story = {
   args: { orgs: [], activeOrgId: null, status: "error", onRetry: () => {} },
 }
+export const CapabilityRoles: Story = {
+  args: {
+    orgs: [
+      { id: "review", name: "Review Co", slug: "review", role: "Approver" },
+      { id: "ops", name: "Ops Team", slug: "ops", role: "Operator" },
+      { id: "finance", name: "Finance Ltd", slug: "finance", role: "Billing" },
+    ],
+    activeOrgId: "review",
+  },
+}
 export const Dark: Story = { decorators: [withDark] }
 export const DarkNoActiveOrg: Story = { args: { activeOrgId: null }, decorators: [withDark] }

@@ -11,7 +11,6 @@ import {
   type AssignableRole,
   CANCEL_INVITATION,
   INVITE_PERMISSION,
-  type MatrixRole,
   SEE_SECURITY,
   canChangeRole,
   canRemoveMember,
@@ -25,6 +24,7 @@ import type { MembersApi, MemberSecurity, OrgInvitation } from "../lib/members-a
 import { defaultInviteRoleOf } from "../lib/org-settings"
 import { type OrgSettingsApi } from "../lib/org-settings-api"
 import { qk } from "../lib/query-keys"
+import type { OrgRole } from "../lib/roles"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import {
   type InviteOutcome,
@@ -227,7 +227,7 @@ export function MembersContainer({
         }))
     : undefined
 
-  const matrix = permissionMatrix((matrixRole: MatrixRole, permission) =>
+  const matrix = permissionMatrix((matrixRole: OrgRole, permission) =>
     api.roleAllows(matrixRole, permission),
   )
 

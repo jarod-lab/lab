@@ -12,6 +12,13 @@ describe("orgRoleLabel", () => {
     expect(orgRoleLabel(" Owner , member ")).toBe("Owner")
   })
 
+  it("shows a capability role as itself, not as Viewer", () => {
+    expect(orgRoleLabel("approver")).toBe("Approver")
+    expect(orgRoleLabel("viewer,approver")).toBe("Approver")
+    expect(orgRoleLabel("operator")).toBe("Operator")
+    expect(orgRoleLabel("billing")).toBe("Billing")
+  })
+
   it("shows Viewer for a role not known yet or a custom one", () => {
     expect(orgRoleLabel(undefined)).toBe("Viewer")
     expect(orgRoleLabel("auditor")).toBe("Viewer")

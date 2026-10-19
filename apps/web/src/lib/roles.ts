@@ -1,3 +1,4 @@
+import type { OrgRole as OrgRoleLabel } from "@starter/ui/dplus/shell/org-picker"
 import { roles } from "@starter/auth/client"
 
 /**
@@ -33,7 +34,7 @@ export function isOrgRole(role: string): role is OrgRole {
 }
 
 /** The name a person sees for each catalog role. */
-export const ROLE_LABEL: Record<OrgRole, string> = {
+export const ROLE_LABEL: Record<OrgRole, OrgRoleLabel> = {
   owner: "Owner",
   admin: "Admin",
   member: "Member",

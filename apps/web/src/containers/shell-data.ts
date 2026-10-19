@@ -10,7 +10,9 @@ import {
 } from "@tanstack/react-query"
 
 import { workspaceAgentKeys } from "../lib/agent-keys"
+import { shownRoleOf } from "../lib/members"
 import { qk } from "../lib/query-keys"
+import { ROLE_LABEL } from "../lib/roles"
 import { pinnedAgentsOf } from "../lib/workspace-agents"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth, WebOrganization, WebSession } from "../lib/web-auth"
@@ -76,33 +78,13 @@ export function invalidateSession(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ queryKey: qk.session() })
 }
 
-const RANK: Record<string, number> = { owner: 4, admin: 3, member: 2, viewer: 1 }
-
 /**
- * A membership's role string ("owner", "admin,member") as the picker's label. The highest role
- * wins. A role we don't know yet is shown as Viewer: the least it can be, and the server still
- * decides what the person may do.
+ * A membership's role string ("owner", "admin,member") as the picker's label: the role the members
+ * list shows for it (shownRoleOf). A role we don't know yet is shown as Viewer: the least it can
+ * be, and the server still decides what the person may do.
  */
 export function orgRoleLabel(role: string | undefined): OrgRole {
-  if (!role) return "Viewer"
-  const best = role
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .reduce<string | undefined>(
-      (top, part) =>
-        RANK[part] !== undefined && (!top || RANK[part] > (RANK[top] ?? 0)) ? part : top,
-      undefined,
-    )
-  switch (best) {
-    case "owner":
-      return "Owner"
-    case "admin":
-      return "Admin"
-    case "member":
-      return "Member"
-    default:
-      return "Viewer"
-  }
+  return ROLE_LABEL[shownRoleOf(role ?? "")]
 }
 
 export function toOrgSummaries(

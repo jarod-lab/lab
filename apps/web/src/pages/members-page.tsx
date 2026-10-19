@@ -3,7 +3,6 @@ import {} from "@tanstack/react-form"
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useId, useMemo, useRef, useState } from "react"
-import { cn } from "cn"
 import {} from "zod"
 
 import { Badge } from "@starter/ui/components/ui/badge"
@@ -34,7 +33,6 @@ import {
   type AssignableRole,
   LONG_LIST,
   MATRIX_ROLES,
-  MATRIX_ROLE_LABEL,
   type MatrixRowView,
   PREVIEW_ROWS,
   expiryCopy,
@@ -551,39 +549,38 @@ export function MembersPage({
             </h2>
             {/* A reference, not a data table: the board draws it unboxed and compact, its
                 labels flush with the heading, rather than in the boxed Table. */}
-            <table className="w-full border-collapse text-[13.5px] [&_td]:py-1.5 [&_th]:py-1.5 [&_tr]:border-b">
-              <thead>
-                <tr className="text-muted-foreground">
-                  <th scope="col" className="text-left font-semibold">
-                    <span className="sr-only">Permission</span>
-                  </th>
-                  {MATRIX_ROLES.map((role) => (
-                    <th
-                      key={role}
-                      scope="col"
-                      className={cn("font-semibold", role === "member" ? "w-16" : "w-14.5")}
-                    >
-                      {MATRIX_ROLE_LABEL[role]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {matrix.map((row) => (
-                  <tr key={row.label}>
-                    <th scope="row" className="text-left font-normal">
-                      {row.label}
+            {/* Seven role columns: scrolls inside its box on a phone rather than the page. */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[13.5px] [&_td]:py-1.5 [&_th]:py-1.5 [&_tr]:border-b">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th scope="col" className="text-left font-semibold">
+                      <span className="sr-only">Permission</span>
                     </th>
                     {MATRIX_ROLES.map((role) => (
-                      <td key={role} className="text-center font-bold">
-                        <span aria-hidden="true">{row.cells[role] ? "✓" : "—"}</span>
-                        <span className="sr-only">{row.cells[role] ? "Yes" : "No"}</span>
-                      </td>
+                      <th key={role} scope="col" className="px-1.5 font-semibold whitespace-nowrap">
+                        {ROLE_LABEL[role]}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {matrix.map((row) => (
+                    <tr key={row.label}>
+                      <th scope="row" className="text-left font-normal">
+                        {row.label}
+                      </th>
+                      {MATRIX_ROLES.map((role) => (
+                        <td key={role} className="px-1.5 text-center font-bold">
+                          <span aria-hidden="true">{row.cells[role] ? "✓" : "—"}</span>
+                          <span className="sr-only">{row.cells[role] ? "Yes" : "No"}</span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         </div>
       </div>

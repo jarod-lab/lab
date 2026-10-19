@@ -34,6 +34,14 @@ describe("OrgPicker", () => {
     await expectNoA11yViolations(renderToStaticMarkup(<OrgPicker {...base} status="error" />))
   })
 
+  it("names the capability roles as themselves, not as Viewer", async () => {
+    const orgs = [{ id: "review", name: "Review Co", slug: "review", role: "Approver" as const }]
+    const html = renderToStaticMarkup(<OrgPicker {...base} orgs={orgs} activeOrgId="review" />)
+    expect(html).toContain("Approver")
+    expect(html).not.toContain("Viewer")
+    await expectNoA11yViolations(html)
+  })
+
   it("personal orgs say so and the trigger shows 'Personal' for them", () => {
     const html = renderToStaticMarkup(<OrgPicker {...base} activeOrgId="jordan" />)
     expect(html).toContain("Personal · Owner")

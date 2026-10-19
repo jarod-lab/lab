@@ -37,7 +37,15 @@ describe("OrgGeneralPage as owner", () => {
     expect(
       (screen.getByRole("textbox", { name: "Organization name" }) as HTMLInputElement).disabled,
     ).toBe(false)
-    expect(screen.getByLabelText("Default role for new invites")).toBeTruthy()
+    const inviteRole = screen.getByLabelText("Default role for new invites") as HTMLSelectElement
+    expect([...inviteRole.options].map((option) => option.textContent)).toEqual([
+      "Admin",
+      "Member",
+      "Viewer",
+      "Approver",
+      "Operator",
+      "Billing",
+    ])
     expect((screen.getByLabelText("URL") as HTMLInputElement).value).toBe("acme")
     expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy()
     expect(screen.getByRole("heading", { name: "Danger zone" })).toBeTruthy()

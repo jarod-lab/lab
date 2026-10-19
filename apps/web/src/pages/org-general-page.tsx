@@ -24,23 +24,19 @@ import { type SlugStatus, SlugField } from "@starter/ui/dplus/shell/slug-field"
 import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
 import { OrgMark } from "@starter/ui/dplus/org-mark"
 
-import {
-  INVITE_ROLES,
-  INVITE_ROLE_LABEL,
-  type InviteRole,
-  settingsTabs,
-  slugChangeWarning,
-} from "../lib/org-settings"
+import { ASSIGNABLE_ROLES, type AssignableRole } from "../lib/members"
+import { ROLE_LABEL } from "../lib/roles"
+import { settingsTabs, slugChangeWarning } from "../lib/org-settings"
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { type SlugProblem, slugProblem } from "../lib/org-slug"
 
-export type GeneralValues = { name: string; slug: string; defaultInviteRole: InviteRole }
+export type GeneralValues = { name: string; slug: string; defaultInviteRole: AssignableRole }
 
 export interface OrgGeneralPageProps {
   organization: { id: string; name: string; slug: string }
   /** The app's host, shown before the URL slug (e.g. "app.example.com"). */
   host: string
-  /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
+  /** The caller's role name here, as shown ("Owner", "Approver", ...). */
   roleLabel: string
   /** owner/admin: may change the name, URL and default invite role. */
   canEdit: boolean
@@ -48,7 +44,7 @@ export interface OrgGeneralPageProps {
   isOwner: boolean
   /** The owner is the only owner, so they cannot leave yet. */
   soleOwner: boolean
-  defaultInviteRole: InviteRole
+  defaultInviteRole: AssignableRole
   /** Live counts where known; `undefined` shows [PLACEHOLDER]. */
   counts: { members?: number; apiKeys?: number; agents?: number }
   /** Admins who can be made owner. */
@@ -70,7 +66,7 @@ const schema = z.object({
   slug: z.string().refine((value) => slugProblem(value) === null, {
     message: "Choose a valid URL.",
   }),
-  defaultInviteRole: z.enum(INVITE_ROLES),
+  defaultInviteRole: z.enum(ASSIGNABLE_ROLES),
 })
 
 // A reserved address has no hint: the field's status line already says it.
@@ -218,13 +214,13 @@ export function OrgGeneralPage({
                     value={field.state.value}
                     disabled={!canEdit}
                     onChange={(event) =>
-                      field.handleChange(event.currentTarget.value as InviteRole)
+                      field.handleChange(event.currentTarget.value as AssignableRole)
                     }
                     onBlur={field.handleBlur}
                   >
-                    {INVITE_ROLES.map((role) => (
+                    {ASSIGNABLE_ROLES.map((role) => (
                       <NativeSelectOption key={role} value={role}>
-                        {INVITE_ROLE_LABEL[role]}
+                        {ROLE_LABEL[role]}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>

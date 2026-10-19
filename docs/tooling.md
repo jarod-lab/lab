@@ -50,7 +50,9 @@
   - The browser can't emulate dark mode (override `matchMedia` in an init script) or WebAuthn. Tests
     compute TOTP codes (`e2e/support/totp.ts`). Screenshots are withheld after a secret fill.
   - The e2e stack signs up and promotes the admin journey's account at startup (see `e2e/README.md`).
-  - Not in CI yet.
+  - CI runs it (the **e2e** job below) with `--exclude-tag visual`: the visual tests save
+    screenshots to compare with the boards by hand, and their CSP check only means something under
+    `e2e.dist.config.ts`.
 - Dependabot commits (signed off by `dependabot[bot]`) are exempt from commitlint, since they are
   written "Bump x from a to b".
 - **Dependabot** runs weekly (npm, GitHub Actions and the Docker base image) and groups minor and
@@ -60,6 +62,10 @@
   together, never one alone.
 - The `esbuild` alert is dismissed. It is a dev-only transitive dependency of `drizzle-kit`, and the
   advisory concerns esbuild's dev server, which we don't run.
+- **`pnpm audit`** skips the advisories in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`), each
+  with a comment giving its reason: the esbuild one above, and `braces` (GHSA-vfj7-8cjw-p6xm),
+  which reaches us only through the shadcn CLI and has no patched release yet. Add an entry by
+  hand; `pnpm audit --ignore <id>` also writes there, but without the reason.
 
 ## Turbo
 
@@ -88,6 +94,14 @@ an input there when a test reads a file no dependency reaches.
   files under `packages/ui/src/components`.
 - **OpenAPI breaking changes** (pull requests): oasdiff compares `apps/api/openapi.json` with the
   base branch and fails on errors.
+- **Dependency audit**: `pnpm audit --ignore-registry-errors`, its own job because a newly published
+  advisory fails it on any PR, whatever the diff. Make it a required check, or not, in branch
+  protection.
+- **e2e** (30-minute timeout): a `postgres:17-alpine` service with the compose credentials,
+  `scripts/release.mjs` to apply the migrations, a `BETTER_AUTH_SECRET` generated per run, then
+  `pnpm exec e2e run --exclude-tag visual --reporter list,junit`. CI mode retries once and runs one
+  worker. The report, JUnit, artifacts and `.e2e/logs` (the stack's log) are uploaded even on
+  failure. It needs no secrets, so it runs on fork PRs.
 - **Docker image**: builds without pushing.
 
 ## Catalog and lefthook

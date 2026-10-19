@@ -61,7 +61,8 @@ pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm baseline && \
 
 After an API change, run `pnpm --filter @starter/api-app test -u` and
 `pnpm --filter @starter/sdk generate` first. CI adds gitleaks, commitlint, a generated-files check,
-an OpenAPI check and a Docker build (`docs/tooling.md`). `pnpm format` fixes formatting.
+an OpenAPI check, `pnpm audit`, the e2e suite and a Docker build (`docs/tooling.md`). `pnpm format`
+fixes formatting.
 
 ## Rules
 
@@ -179,8 +180,10 @@ Details: `docs/tooling.md`.
   kits outside `packages/ui`, no `process.env` outside `packages/env`, no `any` in types, no bare
   `new Error` in `apps/api`, no server imports in client packages) and ratchets whose ceilings only
   go down (`baseline ratchet down <id>`; never raise one). Warnings don't fail the run; errors do.
-- e2e (`pnpm e2e`) is not in CI yet. Turbo's graph is in `turbo.jsonc`; its `transit` task carries
-  the package graph into test hashes.
+- e2e (`pnpm e2e`) runs in CI without the `visual` tag. Turbo's graph is in `turbo.jsonc`; its
+  `transit` task carries the package graph into test hashes.
+- `pnpm audit` runs in CI. Ignore an advisory only in `auditConfig.ignoreGhsas`
+  (`pnpm-workspace.yaml`) with a comment giving the reason; `pnpm audit --ignore` rewrites that file.
 - Dependencies align through the pnpm `catalog:`. Keep TypeScript at `^5.9.3`.
 
 ## Agent permissions

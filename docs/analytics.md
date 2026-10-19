@@ -93,3 +93,5 @@ against a fake `fetch`, as `posthog.test.ts` does.
 - Group properties for organizations (`$groupidentify`), and person properties.
 - UI events beyond page views, and an `organization.created` event.
 - Per-person opt-out.
+- A per-session rate limit on `POST /api/events`. Only the 20-event cap and the 16 KB body bound it.
+- Impersonation: while an admin acts as someone, their page views and writes count as that person's.

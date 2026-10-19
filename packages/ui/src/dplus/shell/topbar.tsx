@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { Fragment } from "react"
+import { Fragment, type ReactNode } from "react"
 import { InboxIcon, SearchIcon } from "lucide-react"
 import { Badge } from "../../components/ui/badge"
 import {
@@ -27,6 +27,8 @@ export type TopbarProps = {
   modifierKey?: string
   /** Items that need you. Zero shows an empty inbox, not a "0" badge. */
   inbox?: { count: number; onOpen?: () => void }
+  /** The notifications bell (NotificationsMenu), shown just before the inbox button. */
+  notifications?: ReactNode
   /**
    * Shows the phone-width menu button that opens the sidebar drawer. Needs an AppShell
    * (SidebarProvider) around it.
@@ -76,6 +78,7 @@ export function Topbar({
   searchLabel = "Search or ask an agent",
   modifierKey = "⌘",
   inbox,
+  notifications,
   showMenuButton = false,
   renderLink: renderLinkProp,
   className,
@@ -113,6 +116,7 @@ export function Topbar({
           <Kbd>K</Kbd>
         </KbdGroup>
       </Button>
+      {notifications}
       <Button
         variant="outline"
         size="icon"

@@ -12,6 +12,7 @@ import { type ThemeChoice, toggledTheme, useThemeChoice } from "../lib/theme"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth } from "../lib/web-auth"
 import { useInboxCount, useRunningCount } from "./inbox"
+import { NotificationsContainer } from "./notifications"
 import { paletteAction, paletteGroups } from "./palette-items"
 import { RouterLink } from "./router-link"
 import { ShortcutsDialog } from "./shortcuts-dialog"
@@ -171,6 +172,16 @@ export function AppShellContainer({
         count: inboxCount,
         onOpen: currentSlug ? () => onNavigate(`/${currentSlug}?status=needs_you`) : undefined,
       }}
+      notifications={
+        auth.notifications ? (
+          <NotificationsContainer
+            client={auth.notifications}
+            organizations={orgs}
+            readOnly={Boolean(session.data?.impersonatedBy)}
+            onNavigate={onNavigate}
+          />
+        ) : undefined
+      }
       showMenuButton
     />
   )

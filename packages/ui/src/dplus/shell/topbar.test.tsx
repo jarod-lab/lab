@@ -44,6 +44,20 @@ describe("Topbar", () => {
     h.cleanup()
   })
 
+  it("renders the notifications slot just before the inbox button", () => {
+    const html = renderToStaticMarkup(
+      wrap(
+        <Topbar
+          crumbs={crumbs}
+          inbox={{ count: 0 }}
+          notifications={<button type="button">Bell slot</button>}
+        />,
+      ),
+    )
+    expect(html).toContain("Bell slot")
+    expect(html.indexOf("Bell slot")).toBeLessThan(html.indexOf("Inbox, nothing needs you"))
+  })
+
   it("renders a crumb with no link as plain text", () => {
     const props: TopbarProps = { crumbs: [{ label: "Plain" }, { label: "Here" }] }
     expect(renderToStaticMarkup(wrap(<Topbar {...props} />))).toContain("Plain")

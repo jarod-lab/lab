@@ -48,8 +48,8 @@ const auth = createAuth({
       ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
       : undefined,
   passwordBreachCheck: true,
-  // Rate limits on sign-in, mail and one-time codes, by client IP (rate-limit.ts). Off unless set.
-  rateLimit: {},
+  // Rate limits on sign-in, mail and one-time codes, by client IP (rate-limit.ts). e2e turns them off.
+  rateLimit: env.AUTH_RATE_LIMIT === "on" ? {} : false,
   // Auth activity (sign-in, failed sign-in, sign-out, ...) lands in the audit trail (auth-events.ts).
   onAuthEvent: async (event) => {
     await recordAuthEvent(db, event)

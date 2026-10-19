@@ -87,6 +87,11 @@ export const env = createEnv({
      * GET /api/dev/mail. Only with NODE_ENV development or test (checked below).
      */
     DEV_MAIL_SINK: z.stringbool().optional(),
+    /**
+     * Auth rate limits (sign-in, mail, one-time codes), by client IP. "off" is for dev and e2e only:
+     * it is refused unless NODE_ENV is development or test (checked below), like DEV_MAIL_SINK.
+     */
+    AUTH_RATE_LIMIT: z.enum(["on", "off"]).default("on"),
     /** Stripe, test mode only: the key must be an sk_test_ key (checked below, with a clear message). */
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     /** The signing secret of the Stripe webhook endpoint (whsec_...). Needed with STRIPE_SECRET_KEY. */
@@ -108,6 +113,14 @@ export const env = createEnv({
 if (env.DEV_MAIL_SINK && env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
   throw new Error(
     "DEV_MAIL_SINK is for development and e2e only. Set NODE_ENV to development or test, or unset DEV_MAIL_SINK.",
+  )
+}
+
+// Turning the auth rate limits off is only for dev and e2e, where a suite signs in more than the limit
+// allows. Anything else (production, or NODE_ENV unset) keeps them on: failing open would drop the limits.
+if (env.AUTH_RATE_LIMIT === "off" && env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
+  throw new Error(
+    "AUTH_RATE_LIMIT=off is for development and e2e only. Set NODE_ENV to development or test, or unset AUTH_RATE_LIMIT.",
   )
 }
 

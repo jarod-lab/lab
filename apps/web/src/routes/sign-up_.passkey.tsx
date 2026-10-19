@@ -8,11 +8,20 @@ import { getWebAuth } from "../lib/web-auth"
 export const Route = createFileRoute("/sign-up_/passkey")({
   validateSearch: (search: Record<string, unknown>) => ({
     next: typeof search.next === "string" ? search.next : undefined,
+    // A refused link comes back here with its code (passkey-signup.ts), not signed in.
+    error: typeof search.error === "string" ? search.error : undefined,
   }),
   component: PasskeyLandingRoute,
 })
 
 function PasskeyLandingRoute() {
-  const { next } = Route.useSearch()
-  return <PasskeyLandingContainer auth={getWebAuth()} next={safeNext(next)} signUpHref="/sign-up" />
+  const { next, error } = Route.useSearch()
+  return (
+    <PasskeyLandingContainer
+      auth={getWebAuth()}
+      next={safeNext(next)}
+      signUpHref="/sign-up"
+      linkError={error ?? null}
+    />
+  )
 }

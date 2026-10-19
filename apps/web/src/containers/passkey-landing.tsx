@@ -17,6 +17,8 @@ export function PasskeyLandingContainer({
   auth,
   next,
   signUpHref,
+  signInHref,
+  linkError = null,
   client,
   navigate = navigateTo,
 }: {
@@ -24,15 +26,22 @@ export function PasskeyLandingContainer({
   /** Where the person goes once the passkey step is over (a safe path, already checked). */
   next: string
   signUpHref: string
+  signInHref?: string
+  /**
+   * The `error` the server put on the way here (passkey-signup.ts): the link was refused, so there is
+   * nothing to check for a session.
+   */
+  linkError?: string | null
   client?: AuthClient
   /** Full-page navigation to `next`. Tests inject a spy. */
   navigate?: (url: string) => void
 }) {
   const [authClient] = useState(() => client ?? makeAuthClient())
-  const [state, setState] = useState<PasskeyLandingState>("checking")
+  const [state, setState] = useState<PasskeyLandingState>(linkError ? "refused" : "checking")
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (linkError) return
     let live = true
     void (async () => {
       let session: WebSession | null = null
@@ -46,7 +55,7 @@ export function PasskeyLandingContainer({
     return () => {
       live = false
     }
-  }, [auth])
+  }, [auth, linkError])
 
   async function addPasskey() {
     setState("adding")
@@ -65,6 +74,7 @@ export function PasskeyLandingContainer({
       state={state}
       error={error}
       signUpHref={signUpHref}
+      signInHref={signInHref}
       onAddPasskey={() => void addPasskey()}
       onSkip={() => navigate(next)}
       onContinue={() => navigate(next)}

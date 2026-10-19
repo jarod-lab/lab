@@ -2,9 +2,13 @@ import { Button } from "@starter/ui/components/ui/button"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 
-/** Where the emailed sign-up link has got to: checking, signed in and waiting, or done. */
+/**
+ * Where the emailed sign-up link has got to: checking, signed in and waiting, or done. `refused` is a
+ * link the server turned away (it redirected here with ?error=), so nothing was signed in.
+ */
 export type PasskeyLandingState =
   | "checking"
+  | "refused"
   | "signed-out"
   | "ready"
   | "adding"
@@ -17,6 +21,8 @@ export interface PasskeyLandingPageProps {
   error: string | null
   /** Where the sign-up sends the person for a fresh start, when the link has gone stale. */
   signUpHref: string
+  /** Where someone who already finished signing up goes instead. */
+  signInHref?: string
   onAddPasskey: () => void
   onSkip: () => void
   onContinue: () => void
@@ -31,6 +37,7 @@ export function PasskeyLandingPage({
   state,
   error,
   signUpHref,
+  signInHref = "/sign-in",
   onAddPasskey,
   onSkip,
   onContinue,
@@ -40,6 +47,32 @@ export function PasskeyLandingPage({
       <AuthCard title="Finishing your sign-up">
         <output className="block text-muted-foreground">Checking your link…</output>
       </AuthCard>
+    )
+  }
+
+  if (state === "refused") {
+    return (
+      <AuthCard
+        title="This sign-up link can't be used"
+        description="It may have expired, been used already, or been cut short when it was copied. Start again to get a new link."
+        footer={
+          <p>
+            <a
+              href={signUpHref}
+              className="font-semibold text-foreground underline underline-offset-4"
+            >
+              Start again
+            </a>
+            {" · "}
+            <a
+              href={signInHref}
+              className="font-semibold text-foreground underline underline-offset-4"
+            >
+              Sign in
+            </a>
+          </p>
+        }
+      />
     )
   }
 
@@ -55,6 +88,13 @@ export function PasskeyLandingPage({
               className="font-semibold text-foreground underline underline-offset-4"
             >
               Start again
+            </a>
+            {" · "}
+            <a
+              href={signInHref}
+              className="font-semibold text-foreground underline underline-offset-4"
+            >
+              Sign in
             </a>
           </p>
         }

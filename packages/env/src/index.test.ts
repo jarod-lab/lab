@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 const OPTIONAL_UNDER_TEST = [
   "WEB_ORIGINS",
   "DEV_MAIL_SINK",
+  "AUTH_RATE_LIMIT",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "STRIPE_PLANS",
@@ -126,6 +127,40 @@ describe("env", () => {
       await expect(import("./index")).rejects.toThrow(
         /DEV_MAIL_SINK is for development and e2e only/,
       )
+    })
+
+    it("keeps the auth rate limits on by default", async () => {
+      base()
+      const { env } = await import("./index")
+      expect(env.AUTH_RATE_LIMIT).toBe("on")
+    })
+
+    it("allows the auth rate limits to be off in development and test", async () => {
+      for (const nodeEnv of ["development", "test"]) {
+        base()
+        vi.stubEnv("NODE_ENV", nodeEnv)
+        vi.stubEnv("AUTH_RATE_LIMIT", "off")
+        const { env } = await import("./index")
+        expect(env.AUTH_RATE_LIMIT).toBe("off")
+      }
+    })
+
+    it("refuses the auth rate limits off when NODE_ENV is production or unset", async () => {
+      for (const nodeEnv of ["production", undefined]) {
+        base()
+        vi.stubEnv("NODE_ENV", nodeEnv)
+        vi.stubEnv("AUTH_RATE_LIMIT", "off")
+        await expect(import("./index")).rejects.toThrow(
+          /AUTH_RATE_LIMIT=off is for development and e2e only/,
+        )
+      }
+    })
+
+    it("refuses an AUTH_RATE_LIMIT that is neither on nor off", async () => {
+      base()
+      vi.stubEnv("NODE_ENV", "development")
+      vi.stubEnv("AUTH_RATE_LIMIT", "false")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
     })
 
     it("accepts a Stripe test-mode key", async () => {

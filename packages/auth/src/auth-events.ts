@@ -12,6 +12,7 @@ import { reportError } from "@starter/errors"
 export const AUTH_EVENT_NAMES = [
   "auth.sign_in",
   "auth.sign_in_failed",
+  "auth.sign_up_started",
   "auth.sign_out",
   "auth.password_changed",
   "auth.password_reset",
@@ -79,7 +80,10 @@ export interface AuthEventsOptions {
 
 export const AUTH_EVENT_IP_HEADER = "x-starter-client-ip"
 
-type Draft = Pick<AuthEvent, "name" | "userId" | "organizationId" | "subjectUserId">
+/** A rule's event. `outcome` is set only where the call's result isn't the outcome (see the verify rule). */
+type Draft = Pick<AuthEvent, "name" | "userId" | "organizationId" | "subjectUserId"> & {
+  outcome?: string
+}
 type Rule = (call: AuthCallContext, failed: boolean) => Promise<Draft | null>
 
 const returnedRecord = (call: AuthCallContext): Record<string, unknown> | null =>
@@ -211,6 +215,19 @@ const RULES: Record<string, Rule> = {
       ? { name: "auth.user_deleted", userId: actingUser(call), organizationId: null }
       : null,
   "/delete-user/callback": account("auth.user_deleted"),
+  // Passkey sign-up (passkey-signup.ts). Starting it names the address's account (just created, or the
+  // one a refused start found); a refused start keeps its code as the outcome.
+  "/passkey-signup/start": async (call) => ({
+    name: "auth.sign_up_started",
+    userId: await emailUserId(call),
+    organizationId: null,
+  }),
+  // Opening the link signs the person in. Its success is a redirect (better-auth's redirects are
+  // thrown errors), so the rule reads the new session, not the result; a refused link has none.
+  "/passkey-signup/verify": async (call) => {
+    const userId = call.newSession?.user.id
+    return userId ? { name: "auth.sign_in", userId, organizationId: null, outcome: "ok" } : null
+  },
 }
 
 export const AUTH_EVENT_PATHS = Object.keys(RULES)
@@ -232,9 +249,10 @@ export async function mapAuthEvent(call: AuthCallContext): Promise<AuthEvent | n
   const failed = call.returned instanceof APIError
   const draft = await rule(call, failed)
   if (!draft) return null
+  const { outcome, ...fields } = draft
   return {
-    ...draft,
-    outcome: failed ? errorCodeOf(call.returned) : "ok",
+    ...fields,
+    outcome: outcome ?? (failed ? errorCodeOf(call.returned) : "ok"),
     ...(call.ip ? { ip: call.ip } : {}),
     path: call.path,
   }

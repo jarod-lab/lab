@@ -18,6 +18,10 @@ import { signupLimitBreach } from "./signup"
 
 export const PASSKEY_SIGNUP_START_PATH = "/passkey-signup/start"
 export const PASSKEY_SIGNUP_VERIFY_PATH = "/passkey-signup/verify"
+/** The web page a refused link lands on (apps/web routes/sign-up_.passkey.tsx), with ?error=<code>. */
+export const PASSKEY_SIGNUP_LANDING_PATH = "/sign-up/passkey"
+/** The error code a refused link carries: invalid, expired, already used, or never issued. */
+export const PASSKEY_SIGNUP_LINK_ERROR = "PASSKEY_SIGNUP_EXPIRED"
 
 /** How long the emailed link works. */
 export const PASSKEY_SIGNUP_TTL_MS = 30 * 60_000
@@ -55,11 +59,15 @@ interface Internal {
   ): Promise<{ token: string; userId: string } | null>
 }
 
-const invalidLink = () =>
-  APIError.from("BAD_REQUEST", {
-    message: "This sign-up link is invalid or has expired. Start again.",
-    code: "PASSKEY_SIGNUP_EXPIRED",
-  })
+/**
+ * A refused link is a redirect to the landing page, which explains it and offers a fresh start. The
+ * target is a constant path on this site (the same origin success redirects to), so it can't be an
+ * open redirect; nothing from the request is put in it.
+ */
+const refusedLink = (ctx: { redirect: (url: string) => Error }) =>
+  ctx.redirect(
+    `${PASSKEY_SIGNUP_LANDING_PATH}?${new URLSearchParams({ error: PASSKEY_SIGNUP_LINK_ERROR })}`,
+  )
 
 /** The return path after the link: a path on this site only (no scheme, no `//`), else the home page. */
 export function safePath(value: unknown): string {
@@ -138,16 +146,16 @@ export function passkeySignupPlugin(deps: PasskeySignupDeps) {
         async (ctx) => {
           const query = (ctx.query ?? {}) as { token?: unknown; callbackURL?: unknown }
           const token = typeof query.token === "string" ? query.token : ""
-          if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw invalidLink()
+          if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw refusedLink(ctx)
           const internal = ctx.context.internalAdapter as unknown as Internal
           const identifier = `${TOKEN_PREFIX}${token}`
           const row = await internal.findVerificationValue(identifier)
-          if (!row || row.expiresAt.getTime() <= Date.now()) throw invalidLink()
+          if (!row || row.expiresAt.getTime() <= Date.now()) throw refusedLink(ctx)
           const user = await internal.findUserById(row.value)
           // A verified account is claimed: the link can't sign anyone in again.
-          if (!user || user.emailVerified) throw invalidLink()
+          if (!user || user.emailVerified) throw refusedLink(ctx)
           // Single use: consumed before the session is made, so a replay finds nothing.
-          if (!(await internal.consumeVerificationValue(identifier))) throw invalidLink()
+          if (!(await internal.consumeVerificationValue(identifier))) throw refusedLink(ctx)
 
           await internal.updateUser(user.id, { emailVerified: true })
           const session = await internal.createSession(user.id, ctx)

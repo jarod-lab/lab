@@ -56,13 +56,31 @@ describe("PasskeyLandingPage", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy()
   })
 
-  it("points a stale link at sign-up", () => {
+  it("points a stale link at sign-up, and offers sign-in", () => {
     render(<PasskeyLandingPage {...props({ state: "signed-out" })} />)
     expect(screen.getByRole("link", { name: "Start again" }).getAttribute("href")).toBe("/sign-up")
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in")
+  })
+
+  it("explains a refused link, with start again and sign in", () => {
+    render(<PasskeyLandingPage {...props({ state: "refused", signInHref: "/account/login" })} />)
+    expect(screen.getByRole("heading", { name: "This sign-up link can't be used" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Start again" }).getAttribute("href")).toBe("/sign-up")
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
+      "/account/login",
+    )
+    expect(screen.queryByRole("button")).toBeNull()
   })
 
   it("has no accessibility violations in any state", async () => {
-    for (const state of ["checking", "signed-out", "ready", "failed", "added"] as const) {
+    for (const state of [
+      "checking",
+      "refused",
+      "signed-out",
+      "ready",
+      "failed",
+      "added",
+    ] as const) {
       const { container, unmount } = render(
         <PasskeyLandingPage {...props({ state, error: state === "failed" ? "Nope." : null })} />,
       )

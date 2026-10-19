@@ -2114,15 +2114,18 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const { link } = await mailed(address, "Finish creating your Starter account")
       expect((await b.request(link)).status).toBe(302)
 
+      // A refused link goes to the sign-up page, which explains it, and sets no cookie.
       const replay = await open().request(link)
-      expect(replay.status).toBe(400)
-      expect(await replay.json()).toMatchObject({ code: "PASSKEY_SIGNUP_EXPIRED" })
+      expect(replay.status).toBe(302)
+      expect(replay.headers.get("location")).toBe("/sign-up/passkey?error=PASSKEY_SIGNUP_EXPIRED")
+      expect(replay.headers.getSetCookie()).toEqual([])
 
       const forged = await open().request(
         `/api/auth/passkey-signup/verify?token=${"A".repeat(43)}&callbackURL=%2F`,
       )
-      expect(forged.status).toBe(400)
-      expect(await forged.json()).toMatchObject({ code: "PASSKEY_SIGNUP_EXPIRED" })
+      expect(forged.status).toBe(302)
+      expect(forged.headers.get("location")).toBe("/sign-up/passkey?error=PASSKEY_SIGNUP_EXPIRED")
+      expect(forged.headers.getSetCookie()).toEqual([])
     })
   })
 

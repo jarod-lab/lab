@@ -12,7 +12,13 @@ import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { type Adapter, personalOrganization } from "./membership"
-import { PASSKEY_SIGNUP_VERIFY_PATH, passkeySignupPlugin, safePath } from "./passkey-signup"
+import {
+  PASSKEY_SIGNUP_LANDING_PATH,
+  PASSKEY_SIGNUP_LINK_ERROR,
+  PASSKEY_SIGNUP_VERIFY_PATH,
+  passkeySignupPlugin,
+  safePath,
+} from "./passkey-signup"
 
 const BASE = "http://localhost:3000"
 
@@ -91,6 +97,15 @@ describe("passkey sign-up", () => {
   /** Opens a link the way the browser does: a GET to the verify route. */
   const open = (url: string) => s.auth.handler(new Request(url, { redirect: "manual" }))
 
+  /** A refused link: back to the landing page with the code, and no session cookie. */
+  const expectRefused = (res: Response) => {
+    expect(res.status).toBe(302)
+    expect(res.headers.get("location")).toBe(
+      `${PASSKEY_SIGNUP_LANDING_PATH}?error=${PASSKEY_SIGNUP_LINK_ERROR}`,
+    )
+    expect(res.headers.get("set-cookie")).toBeNull()
+  }
+
   const linkFor = (email: string) => {
     const link = s.outbox.filter((m) => m.email === email).at(-1)
     if (!link) throw new Error(`no link sent to ${email}`)
@@ -158,15 +173,19 @@ describe("passkey sign-up", () => {
     await start("replay.person@example.com")
     const url = linkFor("replay.person@example.com")
     expect((await open(url)).status).toBe(302)
-    const again = await open(url)
-    expect(again.status).toBe(400)
-    expect(await again.json()).toMatchObject({ code: "PASSKEY_SIGNUP_EXPIRED" })
+    expectRefused(await open(url))
   })
 
   it("a forged link is refused", async () => {
     const res = await open(`${BASE}/api/auth${PASSKEY_SIGNUP_VERIFY_PATH}?token=${"A".repeat(43)}`)
-    expect(res.status).toBe(400)
-    expect(res.headers.get("set-cookie")).toBeNull()
+    expectRefused(res)
+  })
+
+  it("a refused link never redirects to the callbackURL it carries", async () => {
+    const res = await open(
+      `${BASE}/api/auth${PASSKEY_SIGNUP_VERIFY_PATH}?token=${"B".repeat(43)}&callbackURL=${encodeURIComponent("https://evil.example.com")}`,
+    )
+    expectRefused(res)
   })
 
   it("an expired link is refused and verifies nothing", async () => {
@@ -177,9 +196,7 @@ describe("passkey sign-up", () => {
       .update(schema.verification)
       .set({ expiresAt: new Date(Date.now() - 1000) })
       .where(eq(schema.verification.identifier, `passkey-signup:${token}`))
-    const res = await open(url)
-    expect(res.status).toBe(400)
-    expect(res.headers.get("set-cookie")).toBeNull()
+    expectRefused(await open(url))
     expect((await userRow("expired.person@example.com"))?.emailVerified).toBe(false)
   })
 

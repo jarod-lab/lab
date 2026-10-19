@@ -54,6 +54,27 @@ describe("PasskeyLandingContainer", () => {
     expect(screen.getByRole("link", { name: "Start again" }).getAttribute("href")).toBe("/sign-up")
   })
 
+  it("explains a refused link without checking for a session, and offers start again or sign in", async () => {
+    const auth = fakeAuth()
+    renderWithClient(
+      <PasskeyLandingContainer
+        auth={auth}
+        next="/"
+        signUpHref="/sign-up"
+        signInHref="/sign-in"
+        linkError="PASSKEY_SIGNUP_EXPIRED"
+        client={fakeClient().client}
+        navigate={vi.fn()}
+      />,
+    )
+    expect(
+      await screen.findByRole("heading", { name: "This sign-up link can't be used" }),
+    ).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Start again" }).getAttribute("href")).toBe("/sign-up")
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in")
+    expect(auth.getSession).not.toHaveBeenCalled()
+  })
+
   it("creates the passkey on a click, then says so and continues to the next page", async () => {
     const user = userEvent.setup()
     const { addPasskey, navigate } = renderLanding()

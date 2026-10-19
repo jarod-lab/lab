@@ -231,6 +231,48 @@ describe("mapAuthEvent", () => {
     ).toMatchObject({ name: "auth.user_deleted", userId: "u_ann" })
   })
 
+  it("records a passkey sign-up's link as a sign-in, though its success is a redirect", async () => {
+    // better-auth's redirect is a thrown APIError with status FOUND: it is the success, not a failure.
+    const redirect = new APIError("FOUND", undefined, { location: "/welcome" })
+    expect(
+      await mapAuthEvent(
+        call("/passkey-signup/verify", { newSession: session("u_new"), returned: redirect }),
+      ),
+    ).toMatchObject({ name: "auth.sign_in", userId: "u_new", outcome: "ok" })
+    // A refused link (invalid, expired, reused, forged) creates no session: nothing is recorded.
+    expect(
+      await mapAuthEvent(
+        call("/passkey-signup/verify", {
+          returned: new APIError("FOUND", undefined, {
+            location: "/sign-up/passkey?error=PASSKEY_SIGNUP_EXPIRED",
+          }),
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it("records a passkey sign-up start for the address's account, with a refusal's code", async () => {
+    const lookup = async (email: string) => (email === "new@example.com" ? "u_new" : null)
+    expect(
+      await mapAuthEvent(
+        call("/passkey-signup/start", {
+          body: { email: "New@Example.com" },
+          returned: { sent: true },
+          findUserIdByEmail: lookup,
+        }),
+      ),
+    ).toMatchObject({ name: "auth.sign_up_started", userId: "u_new", outcome: "ok" })
+    expect(
+      await mapAuthEvent(
+        call("/passkey-signup/start", {
+          body: { email: "taken@example.com" },
+          returned: refused("ACCOUNT_EXISTS"),
+          findUserIdByEmail: async () => "u_taken",
+        }),
+      ),
+    ).toMatchObject({ name: "auth.sign_up_started", userId: "u_taken", outcome: "ACCOUNT_EXISTS" })
+  })
+
   it("returns null for a path that isn't mapped", async () => {
     expect(await mapAuthEvent(call("/get-session", { session: session("u_ann") }))).toBeNull()
   })
@@ -276,6 +318,8 @@ describe("path coverage", () => {
     "/admin/stop-impersonating",
     "/delete-user",
     "/delete-user/callback",
+    "/passkey-signup/start",
+    "/passkey-signup/verify",
   ]
 
   it("maps every listed endpoint", () => {

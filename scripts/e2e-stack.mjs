@@ -52,6 +52,9 @@ const env = {
   API_URL: apiUrl,
   // The web app is on its own origin here, so auth callbacks from it (magic link, reset) must be trusted.
   WEB_ORIGINS: `http://127.0.0.1:${webPort}`,
+  // A suite signs in far more often than the per-IP limit allows (the limiter is for production). Refused
+  // unless NODE_ENV is development or test, which e2e.config.ts sets.
+  AUTH_RATE_LIMIT: "off",
 }
 
 start("api", ["--filter", "@starter/api-app", "exec", "tsx", "src/server.ts"], env)

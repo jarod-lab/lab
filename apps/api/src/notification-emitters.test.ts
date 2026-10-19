@@ -3,7 +3,9 @@
 // run.done fires once, that usage.limit_reached fires once per organization per day, and that a
 // notifier that throws never changes an operation's response.
 import type { Caller } from "@starter/api"
+import { user } from "@starter/db"
 import { AppError } from "@starter/errors"
+import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestApp } from "./app.test.helpers"
@@ -274,6 +276,40 @@ describe("notification emitters", () => {
     expect(res.status).toBe(200)
     expect(await count(member.cookie, "security.two_factor_reset")).toBe(before.member + 1)
     expect(await count(t.owner.cookie, "security.two_factor_reset")).toBe(before.owner)
+  })
+
+  it("resetting a member's two-factor clears its enabled-at stamp, so a re-enable is news", async () => {
+    const other = await t.signUp("Stamped")
+    await t.auth.api.addMember({
+      body: { organizationId: t.owner.orgId, userId: other.userId, role: "member" },
+    })
+    await t.db
+      .update(user)
+      .set({ twoFactorEnabled: true, twoFactorEnabledAt: new Date() })
+      .where(eq(user.id, other.userId))
+    const res = await call(t.owner.cookie, `/v1/members/${other.userId}/two-factor/reset`, "POST")
+    expect(res.status).toBe(200)
+    const [row] = await t.db
+      .select({ on: user.twoFactorEnabled, at: user.twoFactorEnabledAt })
+      .from(user)
+      .where(eq(user.id, other.userId))
+    expect(row).toEqual({ on: false, at: null })
+  })
+
+  it("create_api_key tells the other key managers once, not the person who made it", async () => {
+    const before = {
+      admin: await count(admin.cookie, "api_key.created"),
+      owner: await count(t.owner.cookie, "api_key.created"),
+      member: await count(member.cookie, "api_key.created"),
+    }
+    const res = await call(t.owner.cookie, "/v1/api-keys", "POST", {
+      name: "Op key",
+      permissions: { project: ["read"] },
+    })
+    expect(res.status).toBe(200)
+    expect(await count(admin.cookie, "api_key.created")).toBe(before.admin + 1)
+    expect(await count(t.owner.cookie, "api_key.created")).toBe(before.owner)
+    expect(await count(member.cookie, "api_key.created")).toBe(before.member)
   })
 
   it("a notifier that throws doesn't change any operation's response", async () => {

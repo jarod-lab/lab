@@ -2366,6 +2366,27 @@ describe("notices from the auth flows (better-inbox)", () => {
     expect(ofType(await inboxOf(owner), "member.joined")).toEqual([])
   })
 
+  it("tells a person who already has an account that they were invited, with a link to accept", async () => {
+    const { org, owner } = await team()
+    const invitee = await person("Invitee")
+    const invite = await owner.b.client.organization.inviteMember({
+      email: invitee.email,
+      role: "member",
+      organizationId: org.id,
+    })
+    expect(invite.error).toBeNull()
+    const invitationId = invite.data?.id ?? ""
+    expect(ofType(await inboxOf(invitee), "invitation.received")).toEqual([
+      expect.objectContaining({
+        organizationId: null,
+        title: "Invitation to join",
+        body: `Owner invited you to join ${org.name}.`,
+        href: `/accept-invitation/${invitationId}`,
+      }),
+    ])
+    expect(ofType(await inboxOf(owner), "invitation.received")).toEqual([])
+  })
+
   it("tells the managers when an invitee joins, and not the invitee or a viewer", async () => {
     const { org, owner, admin, viewer } = await team()
     const invitee = `joiner-${++n}@example.com`

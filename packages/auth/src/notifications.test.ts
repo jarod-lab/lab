@@ -88,6 +88,13 @@ const samples = {
   "account.two_factor_disabled": { type: "account.two_factor_disabled", userId: "user_a" },
   "account.passkey_added": { type: "account.passkey_added", userId: "user_a" },
   "account.email_changed": { type: "account.email_changed", userId: "user_a" },
+  "invitation.received": {
+    type: "invitation.received",
+    userId: "user_a",
+    invitationId: "inv_1",
+    organizationName: "Acme",
+    inviterName: "Ada",
+  },
 } satisfies Record<NotificationEvent["type"], NotificationEvent>
 
 /** The catalog: the event types every emitter may send (graph/graph.md, Events). */
@@ -104,6 +111,7 @@ const CATALOG_TYPES = [
   "approval.requested",
   "billing.payment_failed",
   "billing.subscription_canceled",
+  "invitation.received",
   "member.joined",
   "member.removed",
   "member.role_changed",

@@ -60,6 +60,13 @@ export type NotificationEvent =
     } & InOrg)
   | ({ type: "member.role_changed"; memberUserId: string; role: string } & InOrg)
   | { type: "member.removed"; userId: string; organizationName: string }
+  | {
+      type: "invitation.received"
+      userId: string
+      invitationId: string
+      organizationName: string
+      inviterName?: string
+    }
   | ({ type: "api_key.created"; keyName: string; actorUserId: string } & InOrg)
   | ({ type: "api_key.revoked"; keyName: string; actorUserId: string } & InOrg)
   | ({ type: "agent_access.revoked"; clientName: string; actorUserId?: string } & InOrg)
@@ -190,6 +197,7 @@ export function recipientsOf(event: NotificationEvent): Recipients | null {
     case "account.two_factor_disabled":
     case "account.passkey_added":
     case "account.email_changed":
+    case "invitation.received":
       return { kind: "person", userId: event.userId }
   }
 }
@@ -344,6 +352,14 @@ export function renderNotification(event: NotificationEvent): RenderedNotificati
         title: "Sign-in email changed",
         body: "Your sign-in email was changed. If this wasn't you, reset your password.",
         href: "/account/profile",
+      }
+    case "invitation.received":
+      return {
+        type,
+        title: "Invitation to join",
+        body: `${event.inviterName ?? "Someone"} invited you to join ${event.organizationName}.`,
+        href: `/accept-invitation/${event.invitationId}`,
+        data: { invitationId: event.invitationId },
       }
   }
 }

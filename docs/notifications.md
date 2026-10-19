@@ -38,6 +38,11 @@ that need you.
   `apiKey: ["create", "delete"]`, billing managers `subscription: ["update"]`. If the catalog
   changes, the recipients follow.
 - **The person who caused an event is not told about it.**
+- **Fan-out is one insert per recipient, awaited by the request.** better-inbox refuses an org with
+  more than `maxFanout` members (1000 by default). Above that, every org-wide event is reported and
+  nobody gets it. Raise `inbox({ maxFanout })` or queue the sends before you get there.
+  `approval.requested` reaches every approver, and `member` approves. To narrow it, change
+  `APPROVERS` in the catalog, not the emitter.
 - **Org rows go when the access goes.** Removing a member, or the member leaving, deletes that
   user's rows for the organization. Deleting an organization cascades its rows (a foreign key in
   migration 0010).
@@ -56,6 +61,7 @@ that need you.
 | `run.failed` | `update_run` moves a run to failed (once) | the run's starter if a person, else member managers | yes |
 | `member.joined` | an invitation is accepted, or a member is added | member managers, minus the new member and the actor | yes |
 | `member.role_changed` | `/organization/update-member-role` | the member, unless they changed it themselves | yes |
+| `invitation.received` | an invitation is created for an address that already has an account | the invited person | no |
 | `member.removed` | a member is removed (not on leaving) | the removed person | no |
 | `api_key.created` | `/api-key/create`, which includes `create_api_key`; provisional keys are skipped | key managers, minus the actor | yes |
 | `api_key.revoked` | `/api-key/delete` | key managers, minus the actor | yes |

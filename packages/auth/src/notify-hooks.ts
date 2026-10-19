@@ -38,6 +38,16 @@ export interface NotificationHooks {
     organizationId: string
     organizationName: string
   }): Promise<void>
+  /**
+   * An invitation to someone who already has an account: a personal notice linking to it. Nothing
+   * for a new address (the invitation email is the only way to reach them).
+   */
+  invitationReceived(input: {
+    email: string
+    invitationId: string
+    organizationName: string
+    inviterName?: string
+  }): Promise<void>
   /** A billing event for the organization whose Stripe customer this is (organization.stripeCustomerId). */
   billing(stripeCustomerId: string, kind: "payment_failed" | "subscription_canceled"): Promise<void>
   /** Tenant hygiene: deletes the user's notifications for one organization (on removal and leaving). */
@@ -124,6 +134,30 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
       )
     } catch (error) {
       report(error, type)
+    }
+  }
+
+  const invitationReceived: NotificationHooks["invitationReceived"] = async ({
+    email,
+    invitationId,
+    organizationName,
+    inviterName,
+  }) => {
+    try {
+      const invitee = await (await adapter()).findOne<{ id: string }>({
+        model: "user",
+        where: [{ field: "email", value: email.toLowerCase() }],
+      })
+      if (!invitee) return
+      await personal({
+        type: "invitation.received",
+        userId: invitee.id,
+        invitationId,
+        organizationName,
+        inviterName,
+      })
+    } catch (error) {
+      report(error, "invitation.received")
     }
   }
 
@@ -330,6 +364,7 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
     inOrg,
     billing,
     personal,
+    invitationReceived,
     memberRemoved,
     dropOrgNotices,
     dropAllOrgNotices,

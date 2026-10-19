@@ -509,6 +509,15 @@ export function createAuth(opts: AuthOptions) {
               memberName: user.name,
             })
           },
+          // Someone who already has an account hears of the invitation in the app too.
+          afterCreateInvitation: async ({ invitation, inviter, organization }) => {
+            await notifications.invitationReceived({
+              email: invitation.email,
+              invitationId: invitation.id,
+              organizationName: organization.name,
+              inviterName: inviter.name,
+            })
+          },
           // Its notifications go with it (no organization is left for them to point at).
           afterDeleteOrganization: async ({ organization }) => {
             await notifications.dropAllOrgNotices(organization.id)

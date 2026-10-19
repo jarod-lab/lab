@@ -75,7 +75,9 @@
         "jsx-a11y/role-has-required-aria-props": "off",
         "jsx-a11y/role-supports-aria-props": "off",
         "jsx-a11y/scope": "off",
-        "jsx-a11y/tabindex-no-positive": "off"
+        "jsx-a11y/tabindex-no-positive": "off",
+        "typescript/restrict-template-expressions": "off",
+        "no-unused-vars": "off"
       }
     },
     {

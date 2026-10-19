@@ -136,6 +136,24 @@ skip_strings = true
 pattern = ":\\s*any\\b|<any\\b|,\\s*any[,>]|\\bas any\\b"
 message = "Avoid 'any'; use a specific type or 'unknown'"
 
+# Overrides shadcn-strict's no-inline-styles for the styles Tailwind can't express because they are
+# computed at runtime: virtualized lists (TanStack Virtual's spacer heights and row offsets) and the
+# design-system stories (a swatch per token, a grid sized to its columns). Everywhere else the rule holds.
+[[rule]]
+id = "no-inline-styles"
+type = "banned-pattern"
+severity = "warning"
+glob = "**/*.{tsx,jsx}"
+exclude_glob = [
+  "apps/web/src/pages/admin-page.tsx",
+  "apps/web/src/pages/members-page.tsx",
+  "apps/web/src/pages/org-home-page.tsx",
+  "packages/ui/src/dplus/pages/**",
+]
+pattern = "style={{"
+message = "Avoid inline styles — use Tailwind utility classes instead"
+suggest = "Replace style={{ ... }} with Tailwind classes"
+
 [[rule]]
 id = "no-new-function"
 type = "banned-pattern"

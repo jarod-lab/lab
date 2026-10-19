@@ -25,6 +25,30 @@ interface ConsentData {
   activeOrganizationId: string | null
 }
 
+/** The consent page's first state: the application and the person's organizations, or why not. */
+async function loadConsent(
+  auth: WebAuth,
+  clientId: string | undefined,
+): Promise<Loaded<ConsentData>> {
+  if (!clientId) return { status: "error", message: "This page needs an authorization request." }
+  try {
+    const session = await auth.getSession()
+    if (!session) return { status: "signed-out" }
+    const [clientName, organizations] = await Promise.all([
+      auth.getClientName(clientId),
+      auth.listOrganizations(),
+    ])
+    return {
+      status: "ready",
+      clientName: clientName ?? "An application",
+      organizations,
+      activeOrganizationId: session.activeOrganizationId,
+    }
+  } catch (caught) {
+    return { status: "error", message: messageOf(caught) }
+  }
+}
+
 /**
  * Asks the signed-in person to allow an application, in one organization. The organization switcher
  * applies first: the active organization is set (set-active) before the grant is recorded, because
@@ -43,33 +67,9 @@ export function ConsentPage({
 
   useEffect(() => {
     let live = true
-    async function load() {
-      if (!clientId) {
-        setLoaded({ status: "error", message: "This page needs an authorization request." })
-        return
-      }
-      try {
-        const session = await auth.getSession()
-        if (!session) {
-          if (live) setLoaded({ status: "signed-out" })
-          return
-        }
-        const [clientName, organizations] = await Promise.all([
-          auth.getClientName(clientId),
-          auth.listOrganizations(),
-        ])
-        if (!live) return
-        setLoaded({
-          status: "ready",
-          clientName: clientName ?? "An application",
-          organizations,
-          activeOrganizationId: session.activeOrganizationId,
-        })
-      } catch (caught) {
-        if (live) setLoaded({ status: "error", message: messageOf(caught) })
-      }
-    }
-    void load()
+    void loadConsent(auth, clientId).then((next) => {
+      if (live) setLoaded(next)
+    })
     return () => {
       live = false
     }
@@ -230,6 +230,18 @@ interface OrganizationChoice {
   activeOrganizationId: string | null
 }
 
+/** The organization picker's first state: the person's organizations, or why not. */
+async function loadOrganizationChoice(auth: WebAuth): Promise<Loaded<OrganizationChoice>> {
+  try {
+    const session = await auth.getSession()
+    if (!session) return { status: "signed-out" }
+    const organizations = await auth.listOrganizations()
+    return { status: "ready", organizations, activeOrganizationId: session.activeOrganizationId }
+  } catch (caught) {
+    return { status: "error", message: messageOf(caught) }
+  }
+}
+
 /**
  * Shown when the session has no usable active organization. Sets the one picked, then resumes the
  * OAuth flow with `POST /oauth2/continue { postLogin: true }`.
@@ -239,25 +251,9 @@ export function SelectOrganizationPage({ auth }: { auth: WebAuth }) {
 
   useEffect(() => {
     let live = true
-    async function load() {
-      try {
-        const session = await auth.getSession()
-        if (!session) {
-          if (live) setLoaded({ status: "signed-out" })
-          return
-        }
-        const organizations = await auth.listOrganizations()
-        if (!live) return
-        setLoaded({
-          status: "ready",
-          organizations,
-          activeOrganizationId: session.activeOrganizationId,
-        })
-      } catch (caught) {
-        if (live) setLoaded({ status: "error", message: messageOf(caught) })
-      }
-    }
-    void load()
+    void loadOrganizationChoice(auth).then((next) => {
+      if (live) setLoaded(next)
+    })
     return () => {
       live = false
     }

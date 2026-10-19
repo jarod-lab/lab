@@ -67,12 +67,20 @@ function TokenSpan({ type, value }: { type: string; value: string }): ReactNode 
   return <span className={`sh__token--${type}`}>{value}</span>
 }
 
+/** The text of a code element's children: react-markdown gives strings (or a list of them). */
+const textOf = (node: ReactNode): string => {
+  if (typeof node === "string") return node
+  if (typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map((child: ReactNode) => textOf(child)).join("")
+  return ""
+}
+
 const components: Components = {
   // react-markdown wraps fenced code in <pre>; CodeBlock is the <pre>, so the wrapper goes.
   pre: ({ children }) => <>{children}</>,
   code({ className, children }) {
     const language = /language-([\w+-]+)/.exec(className ?? "")?.[1]
-    const text = String(children).replace(/\n$/, "")
+    const text = textOf(children).replace(/\n$/, "")
     if (language === undefined && !text.includes("\n")) {
       return <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">{text}</code>
     }

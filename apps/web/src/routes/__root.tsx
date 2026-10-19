@@ -6,7 +6,7 @@ import {
   createRootRouteWithContext,
   useRouter,
 } from "@tanstack/react-router"
-import { type ReactNode, Suspense, lazy, useEffect, useState } from "react"
+import { type ReactNode, Suspense, lazy, useSyncExternalStore } from "react"
 
 import { ImpersonationBanner } from "../containers/impersonation-banner"
 import { getAdminApi } from "../lib/admin-api"
@@ -67,10 +67,15 @@ function RootOutlet() {
  * ever sees the shell for an instant.
  */
 function useHydrated() {
-  const [hydrated, setHydrated] = useState(false)
-  useEffect(() => setHydrated(true), [])
-  return hydrated
+  // The server snapshot (false) is what hydration renders; React then re-renders with the client's.
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  )
 }
+
+const subscribeToNothing = () => () => {}
 
 function RootDocument({ children }: { children: ReactNode }) {
   useThemeSync()

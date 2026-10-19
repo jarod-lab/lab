@@ -18,7 +18,7 @@ describe("createClient", () => {
     const calls: string[] = []
     const client = createClient("http://localhost:3000", {
       customFetchImpl: async (url) => {
-        calls.push(String(url))
+        calls.push(url instanceof Request ? url.url : String(url))
         return new Response(JSON.stringify({ password: true, social: ["github"] }), {
           headers: { "content-type": "application/json" },
         })

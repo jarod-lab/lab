@@ -72,11 +72,20 @@ export function expandPath(template: string, values: Record<string, string | num
   })
 }
 
+/** A query value as text: strings as they are, other scalars through String, anything else as JSON. */
+function queryText(value: unknown): string {
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value)
+  }
+  return JSON.stringify(value)
+}
+
 function appendQuery(url: URL, key: string, value: unknown) {
   if (value === undefined || value === null) return
   if (Array.isArray(value)) {
-    for (const item of value) url.searchParams.append(key, String(item))
+    for (const item of value) url.searchParams.append(key, queryText(item))
   } else {
-    url.searchParams.append(key, String(value))
+    url.searchParams.append(key, queryText(value))
   }
 }

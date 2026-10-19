@@ -13,6 +13,7 @@ import {
 } from "@starter/ui/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
 import { Input } from "@starter/ui/components/ui/input"
+import { Progress } from "@starter/ui/components/ui/progress"
 import { Meter } from "@starter/ui/dplus/meter"
 import { Status } from "@starter/ui/dplus/status"
 
@@ -77,17 +78,15 @@ export function StepTimeline({ steps }: { steps: RunStep[] }) {
               ) : null}
             </div>
             {step.status === "running" && step.progressTotal !== null ? (
-              <div
+              // The step's meta line says the count; the bar is the picture of it.
+              <Progress
                 aria-hidden="true"
-                className="ml-7 h-2.5 overflow-hidden rounded-[3px] border border-border hatch"
-              >
-                <div
-                  className="h-full bg-foreground"
-                  style={{
-                    width: `${Math.min(100, Math.round(((step.progressDone ?? 0) / Math.max(1, step.progressTotal)) * 100))}%`,
-                  }}
-                />
-              </div>
+                className="ml-7"
+                value={Math.min(
+                  100,
+                  Math.round(((step.progressDone ?? 0) / Math.max(1, step.progressTotal)) * 100),
+                )}
+              />
             ) : null}
             {step.detail ? (
               <p className="ml-7 text-sm text-muted-foreground">{step.detail}</p>

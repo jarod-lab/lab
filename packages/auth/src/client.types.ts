@@ -7,8 +7,8 @@ import { createClient } from "./client"
 
 // The same wrapsClient the product uses, with no other plugin: the product's plugins may extend
 // these methods (passkey, two-factor) but must not change the email sign-in and sign-up signatures.
-const plain = createAuthClient({ baseURL: "http://localhost:3000", plugins: [wrapsClient()] })
-const client = createClient("http://localhost:3000")
+const plain = createAuthClient({ baseURL: "https://localhost:3000", plugins: [wrapsClient()] })
+const client = createClient("https://localhost:3000")
 
 // The product's plugins add options to these methods, so compare the call shape, not the exact type.
 expectTypeOf(client.signIn.email).toBeFunction()

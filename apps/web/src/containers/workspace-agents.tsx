@@ -14,7 +14,7 @@ import type {
   WorkspaceAgentsApi,
 } from "../lib/workspace-agents-api"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
-import { type AgentView, agentViewOf } from "../lib/workspace-agents"
+import { agentViewOf } from "../lib/workspace-agents"
 import { WorkspaceAgentsPage } from "../pages/workspace-agents-page"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
 
@@ -31,8 +31,8 @@ export interface WorkspaceAgentsContainerProps {
   api: WorkspaceAgentsApi
   settings: Pick<OrgSettingsApi, "roleAllows">
   organization: WebOrganization
-  /** The view from the URL (`?view=`). Permissions is the default. */
-  view: AgentView | string | undefined
+  /** The view from the URL (`?view=`), unchecked until agentViewOf reads it. */
+  view: string | undefined
   /** The agent selected in the URL (`?agent=`). Falls back to the first agent. */
   selectedId: string | undefined
   onSelect: (agentId: string | null) => void
@@ -114,7 +114,7 @@ export function WorkspaceAgentsContainer({
       refreshAgents()
       // Its runs are gone too: the run lists and the counts for them are stale.
       void queryClient.invalidateQueries({ queryKey: qk.org(organizationId).runs() })
-      void queryClient.removeQueries({ queryKey: workspaceAgentKeys.runCount(organizationId, id) })
+      queryClient.removeQueries({ queryKey: workspaceAgentKeys.runCount(organizationId, id) })
     },
   })
 

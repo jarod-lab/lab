@@ -408,7 +408,7 @@ describe("workspace agents and runs", () => {
       )
       expect(created.status).toBe(200)
       const del = await json(
-        await call(member.cookie, `/v1/workspace-agents/${created.body.id}`, "DELETE"),
+        await call(member.cookie, `/v1/workspace-agents/${created.body.id as string}`, "DELETE"),
       )
       expect(del).toMatchObject({ status: 403, body: { error: { code: "FORBIDDEN" } } })
       const { runId, approvalId } = await driveToApproval()

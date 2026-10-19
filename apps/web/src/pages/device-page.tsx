@@ -29,6 +29,14 @@ function initialOrganizationId(organizations: WebOrganization[], activeId: strin
   return organizations[0]?.id ?? ""
 }
 
+/** The signed-in person's organizations, or null when no one is signed in. */
+async function loadContext(auth: WebAuth): Promise<Context | null> {
+  const session = await auth.getSession()
+  if (!session) return null
+  const organizations = await auth.listOrganizations()
+  return { organizations, activeOrganizationId: session.activeOrganizationId }
+}
+
 /**
  * Approves or denies a device (headless) sign-in: the agent shows a code, the person enters it here.
  * Like consent, the chosen organization is set active before the approval, because the token's `org`
@@ -40,33 +48,35 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
   const [reloads, setReloads] = useState(0)
   const [code, setCode] = useState(initialUserCode ?? "")
   const [request, setRequest] = useState<Request | null>(null)
-  const [selected, setSelected] = useState("")
+  // The organization picked in the switcher; until then, the one the context starts on.
+  const [chosen, setChosen] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<"approved" | "denied" | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
-    async function load() {
-      try {
-        const session = await auth.getSession()
-        if (!session) {
-          if (live) setContext(null)
-          return
-        }
-        const organizations = await auth.listOrganizations()
-        if (!live) return
-        setSelected(initialOrganizationId(organizations, session.activeOrganizationId))
-        setContext({ organizations, activeOrganizationId: session.activeOrganizationId })
-      } catch (caught) {
+    void loadContext(auth).then(
+      (next) => {
+        if (live) setContext(next)
+      },
+      (caught: unknown) => {
         if (live) setError(messageOf(caught))
-      }
-    }
-    void load()
+      },
+    )
     return () => {
       live = false
     }
   }, [auth, reloads])
+
+  const selected =
+    chosen ??
+    (context ? initialOrganizationId(context.organizations, context.activeOrganizationId) : "")
+  // A different person after sign-in or sign-out starts again on their own organization.
+  const reload = () => {
+    setChosen(null)
+    setReloads((n) => n + 1)
+  }
 
   // Approval records the active organization, so it needs one the person belongs to.
   const canApprove = context?.organizations.some((org) => org.id === selected) ?? false
@@ -82,7 +92,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
         <SignInOrUp
           auth={auth}
           hint="Your agent is waiting for you to approve it."
-          onSignedIn={() => setReloads((n) => n + 1)}
+          onSignedIn={reload}
         />
       </AuthCard>
     )
@@ -146,7 +156,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
     <AuthCard
       title="Connect a device"
       description="Enter the code your agent shows you."
-      footer={<NotYou auth={auth} onSignedOut={() => setReloads((n) => n + 1)} />}
+      footer={<NotYou auth={auth} onSignedOut={reload} />}
     >
       <div className="flex flex-col gap-4">
         <FieldGroup>
@@ -189,7 +199,7 @@ export function DevicePage({ auth, initialUserCode }: { auth: WebAuth; initialUs
                 organizations={context.organizations}
                 value={selected}
                 disabled={pending}
-                onChange={setSelected}
+                onChange={setChosen}
               />
             ) : (
               <ErrorAlert message="You do not belong to an organization, so there is nothing to grant." />

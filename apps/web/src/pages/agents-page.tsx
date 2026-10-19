@@ -20,14 +20,25 @@ const AGENT_TYPE_LABEL: Record<ConnectedAgent["type"], string> = {
   apiKey: "API key",
 }
 
-const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : "Never")
+const formatDate = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "Never"
+
+interface Loaded {
+  agents: ConnectedAgent[]
+  events: AuditEvent[]
+  nextCursor: string | null
+}
 
 /** The agents connected to the active organization, with revoke, and the audit trail. */
 export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }) {
-  const [agents, setAgents] = useState<ConnectedAgent[] | null>(null)
-  const [events, setEvents] = useState<AuditEvent[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  // The agents and the audit trail arrive together; null until they have.
+  const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const agents = loaded?.agents ?? null
+  const events = loaded?.events ?? []
+  const nextCursor = loaded?.nextCursor ?? null
   const [busy, setBusy] = useState(false)
   const revokingRef = useRef(false)
 
@@ -36,10 +47,7 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
     async function load() {
       try {
         const [loadedAgents, audit] = await Promise.all([api.listAgents(), api.listAuditEvents()])
-        if (!live) return
-        setAgents(loadedAgents)
-        setEvents(audit.events)
-        setNextCursor(audit.nextCursor)
+        if (live) setLoaded({ agents: loadedAgents, ...audit })
       } catch (caught) {
         if (live) setError(messageOf(caught))
       }
@@ -58,7 +66,13 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
     setError(null)
     try {
       await api.revokeAgent(agent.id)
-      setAgents((current) => (current ?? []).filter((item) => item.id !== agent.id))
+      setLoaded(
+        (current) =>
+          current && {
+            ...current,
+            agents: current.agents.filter((item) => item.id !== agent.id),
+          },
+      )
     } catch (caught) {
       setError(messageOf(caught))
     } finally {
@@ -73,8 +87,14 @@ export function AgentsPage({ api, pills }: { api: AgentsApi; pills?: ReactNode }
     setError(null)
     try {
       const page = await api.listAuditEvents(nextCursor)
-      setEvents((current) => [...current, ...page.events])
-      setNextCursor(page.nextCursor)
+      setLoaded(
+        (current) =>
+          current && {
+            ...current,
+            events: [...current.events, ...page.events],
+            nextCursor: page.nextCursor,
+          },
+      )
     } catch (caught) {
       setError(messageOf(caught))
     } finally {

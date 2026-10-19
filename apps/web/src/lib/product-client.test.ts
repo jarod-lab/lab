@@ -5,11 +5,9 @@ import { payload, productClient, toWebError } from "./product-client"
 import { WebError } from "./web-auth"
 
 function json(payload: unknown, init: ResponseInit = {}) {
-  return new Response(JSON.stringify(payload), {
-    status: 200,
-    headers: { "content-type": "application/json", ...init.headers },
-    ...init,
-  })
+  const headers = new Headers(init.headers)
+  if (!headers.has("content-type")) headers.set("content-type", "application/json")
+  return new Response(JSON.stringify(payload), { status: 200, ...init, headers })
 }
 
 const fetchStub = (reply: () => Response) => vi.fn(async (_request: Request) => reply())

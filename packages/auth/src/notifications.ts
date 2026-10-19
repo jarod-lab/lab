@@ -1,4 +1,4 @@
-// Every in-app notification the starter sends. One event catalog, one pure renderer (title, body,
+// Every in-app notification the app sends. One event catalog, one pure renderer (title, body,
 // href), recipients derived from the permission catalog, and one sender that never fails its caller.
 //
 // Sends go through better-inbox's `notify` endpoint (`auth.api.notify`, server-only). Inside a

@@ -4,8 +4,10 @@
 // The MCP registry only accepts a namespace you can prove. With --domain acme.com the registry name is
 // com.acme/<name> (proved with a DNS record); otherwise io.github.<owner>/<name> (proved by signing in
 // to GitHub), with the owner defaulting to the GitHub owner of the `origin` remote.
+// Template-only text sits between a `template:start` and a `template:end` comment line (`#`, `//`,
+// `<!--` or `{/*`); it is removed, along with this script, so the new repo carries no template setup.
 import { execSync } from "node:child_process"
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs"
+import { readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join, sep } from "node:path"
 
 const USAGE =
@@ -59,10 +61,13 @@ if (domain !== undefined) {
 }
 const registryName = namespace && `${namespace}/${name}`
 
-const title = name
-  .split("-")
-  .map((w) => w[0].toUpperCase() + w.slice(1))
-  .join(" ")
+const words = name.split("-").map((w) => w[0].toUpperCase() + w.slice(1))
+const title = words.join(" ")
+// The SDK's class names (AcmeError), env prefixes (ACME_CONFIG_DIR) and the database name, which
+// `pnpm wt` needs as [a-z0-9_] to derive <db>_wt_<branch>.
+const pascal = words.join("")
+const constant = name.toUpperCase().replaceAll("-", "_")
+const dbName = name.replaceAll("-", "_")
 
 const SKIP = new Set(["node_modules", ".git", ".turbo", "dist", "pnpm-lock.yaml", "worktrees"])
 // Vendored third-party skills (the ones in skills-lock.json) are not ours to rewrite; the other
@@ -70,8 +75,12 @@ const SKIP = new Set(["node_modules", ".git", ".turbo", "dist", "pnpm-lock.yaml"
 // (.env.example, the template, is still renamed).
 const VENDORED = new Set(Object.keys(JSON.parse(readFileSync("skills-lock.json", "utf8")).skills))
 const SELF = "scripts/init-project.mjs"
-// The shipped skill's frontmatter `name` and prose follow the product. The folder keeps its name.
+// The shipped skill's frontmatter `name` and prose follow the product, and so does its folder.
 const SKILL = join("skills", "starter", "SKILL.md")
+// Template history a new project has no use for.
+const TEMPLATE_ONLY = [join("docs", "prompts"), SELF]
+const MARK = String.raw`^[ \t]*(?:#|\/\/|<!--|\{\/\*)[ \t]*template:`
+const TEMPLATE_BLOCK = new RegExp(String.raw`${MARK}start\b.*\n[\s\S]*?${MARK}end\b.*\n`, "gm")
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
@@ -96,30 +105,51 @@ for (const file of walk(".")) {
     continue
   }
   let next = text
+    .replace(TEMPLATE_BLOCK, "")
+    .replace(/^\s*"init-project": .*\n/m, "")
+    .replaceAll(" `scripts/init-project.mjs`,", "")
     .replaceAll("@starter/", `@${name}/`)
     .replace(/("name": ")starter(")/g, `$1${name}$2`)
     .replace(/("name": "(?:api|app)\.)starter(")/g, `$1${name}$2`)
     .replace(/^# starter$/m, `# ${name}`)
     .replace(/(name = ")starter(")/g, `$1${name}$2`)
-    .replaceAll("localhost:5432/starter", `localhost:5432/${name}`)
+    .replaceAll("localhost:5432/starter", `localhost:5432/${dbName}`)
     // compose's DATABASE_URL points at the same database as POSTGRES_DB.
-    .replace(/(@db:5432\/)starter\b/g, `$1${name}`)
-    .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${name}`)
-    .replace(/-d starter/g, `-d ${name}`)
+    .replace(/(@db:5432\/)starter\b/g, `$1${dbName}`)
+    .replace(/POSTGRES_DB: starter/g, `POSTGRES_DB: ${dbName}`)
+    .replace(/-d starter/g, `-d ${dbName}`)
+    .replace(/\bstarter_wt_/g, `${dbName}_wt_`)
     // compose's project name, which worktrees share.
     .replace(/^name: starter$/m, `name: ${name}`)
     // Hostnames in comments, docs and env examples (portless.json names them the same way). The
     // bare parent domain is the passkey rpID that auth's tests expect.
     .replace(/\b(app|api)\.starter\b/g, `$1.${name}`)
     .replace(/\bstarter\.localhost\b/g, `${name}.localhost`)
-    .replace(/^New project from this template:.*\n/m, "")
-    // The display name as a whole word ("Starter API", "Starter"), never inside an identifier such
-    // as the SDK's "StarterError", whose class name stays as it is. "for Starter" and "your Starter
+    // Worktree folders are siblings named after the checkout (`pnpm wt`).
+    .replace(/\.\.\/starter\./g, `../${name}.`)
+    // The display name as a whole word ("Starter API", "Starter"). "for Starter" and "your Starter
     // account" are the app name in auth-flows' expected email subjects.
     .replace(/"Starter(?=[ "])/g, `"${title}`)
     .replace(/\bStarter API\b/g, `${title} API`)
     .replace(/\b(for|your) Starter\b/g, `$1 ${title}`)
     .replaceAll("Starter <", `${title} <`)
+    // The SDK's public names. Only these: `RunStarter`, `runStarterUserId` and "the run's starter"
+    // mean the person who started a run.
+    .replace(/\bStarter(?=(?:Error|ErrorInit|Client)\b)/g, pascal)
+    .replace(/\btoStarterError\b/g, `to${pascal}Error`)
+    .replace(/\bSTARTER_(?=[A-Z])/g, `${constant}_`)
+    // Identifiers: better-auth plugin ids, HKDF and HMAC labels, baseline rule ids, the client-IP
+    // header, temp-dir prefixes, the image tag, the theme storage key and an audit actor.
+    .replace(/\bstarter-(?=[a-z])/g, `${name}-`)
+    .replace(/\bstarter(?=\\?[.:](?:theme|access-ended)\b)/g, name)
+    // The CLI: its bin, its commands in help and hints, its OAuth client name and its config dir.
+    .replace(/"starter"(?=: "(?:\.\/dist\/bin\.js|node dist\/bin\.js)")/g, `"${name}"`)
+    .replace(/\bstarter(?= (?:login|logout|whoami|ops|call|--help|CLI)\b)/g, name)
+    .replace(/(?<=binary )`starter`|`starter`(?= (?:command|bin)\b)/g, `\`${name}\``)
+    .replace(/^const HELP = `starter:/m, `const HELP = \`${name}:`)
+    .replace(/(\.config|\bxdg|\bXDG_CONFIG_HOME)\/starter\b/g, `$1/${name}`)
+    .replace(/"\.config"\), "starter"\)/g, `".config"), "${name}")`)
+    .replace(/\bskills\/starter\b/g, `skills/${name}`)
   if (file === SKILL) {
     next = next.replace(/^name: starter$/m, `name: ${name}`).replace(/\bStarter\b/g, title)
   }
@@ -131,11 +161,10 @@ for (const file of walk(".")) {
   }
 }
 
-console.log(`Renamed to "${name}" in ${changed} files.`)
-console.log(
-  "Kept the skills/starter folder name (the skill's frontmatter name and prose were renamed; " +
-    "rename the folder by hand, and update apps/api/src/skill-parity.test.ts with it).",
-)
+renameSync(join("skills", "starter"), join("skills", name))
+for (const path of TEMPLATE_ONLY) rmSync(path, { recursive: true, force: true })
+
+console.log(`Renamed to "${name}" in ${changed} files (database ${dbName}, skills/${name}).`)
 if (registryName) console.log(`MCP registry name: ${registryName}`)
 else
   console.warn(
@@ -147,6 +176,9 @@ if (host) {
     `Before publishing, prove ${host} to the registry with a DNS TXT record (mcp-publisher login dns).`,
   )
 }
+// The workspace's package names changed, so the lockfile must be rewritten (pnpm freezes it under CI).
 console.log("Refreshing lockfile…")
-execSync("pnpm install", { stdio: "inherit" })
-console.log("Done. Review `git diff`, then commit.")
+execSync("pnpm install --no-frozen-lockfile", { stdio: "inherit" })
+// Renamed imports change line lengths, which the formatter (and the pre-commit hook) would reject.
+execSync("pnpm format", { stdio: "inherit" })
+console.log("Done. Review `git diff`, then commit. This script has removed itself.")

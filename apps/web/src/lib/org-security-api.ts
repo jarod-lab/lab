@@ -2,7 +2,7 @@ import { ssoRegisterBody } from "./org-security"
 import type { SsoFormValues } from "./org-security"
 import { makeAuthClient, WebError } from "./web-auth"
 
-// The organization's Security calls: SSO providers (the sso plugin) and the SCIM token (starter's
+// The organization's Security calls: SSO providers (the sso plugin) and the SCIM token (our
 // owner-only endpoint). Every call names its organization. The server allows them to the owner alone.
 
 export interface SsoProvider {

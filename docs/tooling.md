@@ -119,13 +119,24 @@ an input there when a test reads a file no dependency reaches.
 - lefthook's format step runs Biome over `ts`, `tsx`, `js`, `mjs`, `json` and `css` staged files.
   Markdown is not formatted by Biome in this version.
 
+<!-- template:start -->
 ## Template setup
 
 `pnpm init-project <name>` renames the `@starter/` scope and package names, `name` fields, the
-`# starter` title, the database name (`.env.example`, compose `DATABASE_URL` and `POSTGRES_DB`), the
-portless and compose hostnames, the display name (for example `Starter API`), the MCP registry name,
-and the skill's `name:` and prose (its folder stays `skills/starter`). It skips local `.env` files
-(`.env.example` is still renamed) and the vendored skills in `skills-lock.json`.
+`# starter` title, the database name (`.env.example`, compose, CI; dashes become underscores, so
+`my-app` gets `my_app` and `pnpm wt` can derive `my_app_wt_<branch>`), the portless and compose
+hostnames, the display name (for example `Starter API`), the MCP registry name, the SDK's public
+names (`StarterError`, `StarterClient`), the `STARTER_` env prefix, the CLI (bin, help, config dir),
+better-auth plugin ids, baseline rule ids, and the skill (`name:`, prose and the `skills/starter`
+folder). It leaves `RunStarter` and "the run's starter" alone: they mean who started a run. It skips
+local `.env` files (`.env.example` is still renamed) and the vendored skills in `skills-lock.json`.
+
+Text between a `template:start` and a `template:end` comment line (`#`, `//`, `<!--` or `{/*`) is
+about the template itself; init-project deletes it, along with `docs/prompts/`, its own script and the CI
+job that tests it. It then runs `pnpm install --no-frozen-lockfile` and `pnpm format`. The CI job
+`template` runs it on a scratch checkout as `smoke-app` and runs the done-checks on the result, so
+add a rename rule (or a `template:` block) whenever you add a template name it should not keep.
+<!-- template:end -->
 
 ## Worktrees
 
@@ -192,4 +203,6 @@ The API image (`Dockerfile`) runs `apps/api` from source with `tsx src/server.ts
 - Biome skips `apps/api/openapi.json`, the committed contract.
 - Exceptions to baseline's `use-starter-env` rule are listed in `baseline.toml`.
 - The agent-graph working directory under .claude is gitignored: it is working state for graph runs.
+<!-- template:start -->
 - `docs/build-app/` keeps only the design boards; the build prompt is `docs/prompts/build-app.md`.
+<!-- template:end -->

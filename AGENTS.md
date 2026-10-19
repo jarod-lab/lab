@@ -10,8 +10,11 @@ words in code, docs and UI, and add a line there before introducing a new one.
 ```bash
 mise trust && mise install   # Node 24, pnpm 11, gitleaks; a fresh clone is untrusted until this
 pnpm install
-# template only: renames scope, DB, display and MCP registry names
+# template:start
+# new project only: renames the template (scope, DB, CLI, SDK, skill, MCP registry names), drops
+# the template-only text and itself, then installs and formats
 pnpm init-project <name> [owner] [--domain <domain>]
+# template:end
 cp .env.example .env         # mise loads it; BETTER_AUTH_SECRET: openssl rand -base64 32
 docker compose up -d db      # optional local Postgres; tests don't need it
 pnpm wt new <branch>         # a worktree in ../starter.<name> with its own database
@@ -176,8 +179,10 @@ Details: `docs/database.md`.
 - Applying migrations (`db:migrate`, `drizzle-kit push`) is denied for agents. Ask the user, or use
   `scripts/release.mjs` in a deploy. The exception is `pnpm wt`: it migrates only a worktree's own
   `*_wt_*` database, and agents run it themselves.
+<!-- template:start -->
 - Migrations `0001_agent_auth` through `0011_auth_hardening`; 0003 onward are not applied
   yet.
+<!-- template:end -->
 
 ## Tooling
 

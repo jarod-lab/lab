@@ -16,7 +16,7 @@
 - `0001_agent_auth` adds the API key, JWKS and OAuth tables (apikey, jwks, oauth_*).
 - `0002_organizations` adds organization, member, invitation, `session.active_organization_id` and
   the example `project` table.
-- `0003_agent_distribution` (the user runs it) adds `audit_event`, `usage_daily`, `idempotency_key`,
+- `0003_agent_distribution` adds `audit_event`, `usage_daily`, `idempotency_key`,
   `signup_attempt` and the device grant's `device_code` table. The first three cascade from
   `organization`. `signup_attempt` is keyed by IP and email domain, not by org.
 - `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs`
@@ -40,7 +40,9 @@
     `clientId` indexes on those tables are now redundant;
   - `member.source`: `"scim"` for a membership the directory created, else null. SCIM
     deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).
+<!-- template:start -->
 - Migrations `0003` through `0011` are not applied until the user runs them.
+<!-- template:end -->
 
 ## Cleanup
 

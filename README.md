@@ -8,10 +8,16 @@ OAuth 2.1 for agents.
 ## Use it
 
 ```bash
+# template:start
 gh repo create my-app --template <owner>/<repo> --private --clone && cd my-app
+# template:end
 mise trust && mise install        # Node 24, pnpm 11, gitleaks
 pnpm install
-pnpm init-project my-app [owner] [--domain acme.com]  # renames the scope, DB name, display name and MCP registry name
+# template:start
+# Renames the scope, database (my_app), CLI, SDK names, skill and MCP registry name, removes the
+# template-only text and itself, then refreshes the lockfile and formats.
+pnpm init-project my-app [owner] [--domain acme.com]
+# template:end
 cp .env.example .env              # mise loads it; fill in BETTER_AUTH_SECRET (openssl rand -base64 32)
 docker compose up -d db           # local Postgres (tests don't need it)
 ```
@@ -111,13 +117,16 @@ shows up in review, and contract tests run every documented example over REST an
 
 ## Before you publish
 
-- **Name the server.** The registry only accepts a name you can prove (`io.github.<owner>/<repo>` or your domain).
-  `pnpm init-project <name> --domain acme.com` sets `com.acme/<name>`; prove the domain with a DNS TXT record
-  (`mcp-publisher login dns`), which also covers subdomains such as `api.acme.com`. Prefer it once the product has a
-  domain: the name then belongs to the product, not to a GitHub account. Without `--domain` it sets
-  `io.github.<owner>/<name>`, taking the owner from its second argument or the GitHub `origin` remote. To change it
-  later, set `registry` in `apps/api/src/server.ts` and `DEFAULT_REGISTRY_META` in `packages/api/src/server-json.ts`
-  to the same value. Either way,
+- **Name the server.** The registry only accepts a name you can prove: `io.github.<owner>/<name>`, or
+  `com.acme/<name>` for a domain proved with a DNS TXT record (`mcp-publisher login dns`), which also covers
+  subdomains such as `api.acme.com`. Prefer the domain once the product has one: the name then belongs to the
+  product, not to a GitHub account.
+  <!-- template:start -->
+  `pnpm init-project <name> --domain acme.com` sets `com.acme/<name>`. Without `--domain` it sets
+  `io.github.<owner>/<name>`, taking the owner from its second argument or the GitHub `origin` remote.
+  <!-- template:end -->
+  To change it, set `registry` in `apps/api/src/server.ts` and `DEFAULT_REGISTRY_META` in
+  `packages/api/src/server-json.ts` to the same value. Either way,
   replace the placeholder title and description in `apps/api/src/server.ts`. The discovery test pins the committed `server.json` to
   `DEFAULT_REGISTRY_META` and to `ROOT_INFO` in `apps/api/src/discovery.test.ts`; update `ROOT_INFO` too.
 - **Regenerate the root `server.json`:** `UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app test discovery`, then commit it.

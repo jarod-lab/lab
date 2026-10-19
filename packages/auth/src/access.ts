@@ -20,9 +20,9 @@ export const statements = {
   // requests); `approve` is a person's decision (never granted to a key or an OAuth token);
   // `steer` covers the messages and deferrals a person sends to a run.
   run: ["create", "read", "update", "approve", "steer"],
-  // Owner only (see roles): single sign-on providers and SCIM provisioning tokens.
+  // Owner only (see roles): single sign-on providers and SCIM provisioning tokens (mint, list, revoke).
   sso: ["read", "update"],
-  scim: ["create"],
+  scim: ["create", "read", "delete"],
   // Owners and admins (see roles): the organization's subscription and its billing.
   subscription: ["read", "update"],
   // Owner only: turning off another member's two-factor sign-in.

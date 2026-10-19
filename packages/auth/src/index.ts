@@ -1,3 +1,4 @@
+import { allowed } from "@starter/api"
 import { apiKey } from "@better-auth/api-key"
 import { oauthProvider } from "@better-auth/oauth-provider"
 import { passkey } from "@better-auth/passkey"
@@ -30,7 +31,7 @@ import { PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { impersonationGuard } from "./guards"
 import { FRESH_AGE_SECONDS, freshSessionGuard } from "./fresh-session"
-import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
+import { endGrantsOnLeave, revokeGrantsWith, revokeMemberGrants } from "./member-grants"
 import {
   type Adapter,
   findMember,
@@ -49,13 +50,14 @@ import { createNotices } from "./notices"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
 import { canManageBilling, ownerOnlyGuard } from "./owner-only"
-import { ac, OAUTH_SCOPES, roles } from "./permissions"
+import { ac, OAUTH_SCOPES, roles, rolePermissions } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
 import { twoFactorMagicLink } from "./magic-link-two-factor"
 import { passkeySignupPlugin } from "./passkey-signup"
 import { type AuthRateLimitOptions, authIpAddress, authRateLimit } from "./rate-limit"
 import { resumeMagicLinkAuthorization } from "./resume"
 import { endProvisionalKeys } from "./signup"
+import { scimProjection } from "./scim-projection"
 import {
   type ScimConnection,
   type ScimConnectionInput,
@@ -278,6 +280,12 @@ export function createAuth(opts: AuthOptions) {
     if (!scimApi.management) throw new Error("auth is not initialised")
     await endScimTokensOf(scimApi.management, userId, organizationId)
   }
+  // A SCIM deprovision ends a person's access the way a removal does, inside the SCIM transaction: the
+  // adapter for the grants (the Drizzle handle would wait on that transaction), the tokens via the plugin.
+  const endAccessIn = async (db: Adapter, userId: string, organizationId: string) => {
+    await revokeGrantsWith(db, { organizationId, userId }, new Date())
+    await endScim(userId, organizationId)
+  }
 
   // Callbacks below run after construction and need the adapter, so they read it from this ref.
   const ref: { context?: Promise<{ adapter: Adapter }> } = {}
@@ -369,6 +377,12 @@ export function createAuth(opts: AuthOptions) {
         beforeDelete: async (user) => {
           const db = await adapter()
           await assertCanDelete(db, user.id, billing)
+          // The SCIM tokens they minted end with them. Memberships are read first: they cascade away.
+          const memberships = await db.findMany<{ organizationId: string }>({
+            model: "member",
+            where: [{ field: "userId", value: user.id }],
+          })
+          for (const { organizationId } of memberships) await endScim(user.id, organizationId)
           await removePersonalOrganization(db, user.id, billing)
         },
       },
@@ -475,6 +489,8 @@ export function createAuth(opts: AuthOptions) {
       scim({
         connections: [],
         managedConnections: { credentialHashSecret: scimCredentialHashSecret(opts.secret) },
+        // Provisioned users become members of the token's organization (scim-projection.ts).
+        projection: scimProjection(endAccessIn),
       }),
       scimTokenPlugin({
         connect: async (input) => {
@@ -504,6 +520,11 @@ export function createAuth(opts: AuthOptions) {
           afterRemoveMember: async ({ member, organization }) => {
             await revokeMemberGrants(opts.db, member.userId, organization.id)
             await endScim(member.userId, organization.id)
+          },
+          // A creator demoted below the role that may mint SCIM tokens loses them (the catalog's scim:create).
+          afterUpdateMemberRole: async ({ member }) => {
+            if (allowed(rolePermissions(member.role), { scim: ["create"] })) return
+            await endScim(member.userId, member.organizationId)
           },
         },
       }),
@@ -579,7 +600,8 @@ export function createAuth(opts: AuthOptions) {
   scimApi.management = {
     list: (provisioningDomainId) =>
       auth.api.listSCIMManagedConnections({ body: { provisioningDomainId } }),
-    decommission: (input) => auth.api.decommissionSCIMManagedConnection({ body: input }),
+    get: (input) => auth.api.getSCIMManagedConnection({ body: input }),
+    revokeCredential: (input) => auth.api.revokeSCIMManagedCredential({ body: input }),
   }
   ref.context = auth.$context
   // The app's Drizzle handle, for the tables better-auth doesn't own (signup_attempt, see signup.ts).

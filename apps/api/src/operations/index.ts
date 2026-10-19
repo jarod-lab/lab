@@ -9,6 +9,7 @@ import { memberOperations } from "./members"
 import { projectOperations } from "./projects"
 import type { OperationDeps } from "./shared"
 import { runOperations } from "./runs"
+import { scimOperations } from "./scim"
 import { workspaceAgentOperations } from "./workspace-agents"
 
 export { signupInput } from "./account"
@@ -36,6 +37,7 @@ export function createOperations({
   const runs = runOperations(deps)
   const approvals = approvalOperations(deps)
   const members = memberOperations(deps)
+  const scim = scimOperations(deps)
 
   return defineRegistry([
     account.whoami,
@@ -45,6 +47,8 @@ export function createOperations({
     projects.delete_project,
     apiKeys.create_api_key,
     apiKeys.list_api_keys,
+    scim.list_scim_tokens,
+    scim.revoke_scim_token,
     connected.list_connected_agents,
     connected.revoke_agent_access,
     audit.list_audit_events,

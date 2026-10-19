@@ -58,7 +58,20 @@ const keyId = idOf(
   await send(owner, "/v1/api-keys", { name: "CI", permissions: { project: ["read"] } }),
   "api key",
 )
+// A SCIM token of acme's, minted through the plugin's server-only call (the owner's route needs a session).
+const scimTokenId = (
+  await t.auth.api.createSCIMManagedConnection({
+    body: {
+      creationRequestId: "authz-fixture-scim",
+      provisioningDomainId: t.owner.orgId,
+      actorId: t.owner.userId,
+      scopes: ["scim.users.read", "scim.users.write", "scim.groups.read", "scim.groups.write"],
+      expiresAt: new Date(Date.now() + 86_400_000),
+    },
+  })
+).connection.connectionId
 const acmeIds = [
+  scimTokenId,
   projectId,
   agentId,
   runId,
@@ -80,6 +93,7 @@ function aimedAtAcme(op: AnyOperation, input: Json): Json {
     ["/v1/approvals/", { id: approvalId }],
     ["/v1/agents/", { id: `key_${keyId}` }],
     ["/v1/members/", { userId: t.viewer.userId }],
+    ["/v1/scim/tokens/", { id: scimTokenId }],
   ]
   const values = fixtures.find(([prefix]) => op.path.startsWith(prefix))?.[1]
   const missing = params.filter((p) => !values || !(p in values))

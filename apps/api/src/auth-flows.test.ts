@@ -6,7 +6,14 @@ import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { and, eq } from "drizzle-orm"
 import { personalSlug } from "@starter/auth"
-import { auditEvent, organization, passkey as passkeyTable, verification } from "@starter/db/schema"
+import {
+  auditEvent,
+  member,
+  organization,
+  passkey as passkeyTable,
+  user as userTable,
+  verification,
+} from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
@@ -1512,13 +1519,16 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         json({ organizationId: org }),
       )
       expect(minted.status).toBe(200)
-      const { token } = (await minted.json()) as { token: string }
+      const { token, connectionId } = (await minted.json()) as {
+        token: string
+        connectionId: string
+      }
       const scim = (bearer: string) =>
         departing.b.request("/api/auth/scim/v2/Users", {
           headers: { authorization: `Bearer ${bearer}` },
         })
       expect((await scim(token)).status).toBe(200)
-      return { departing, heir, org, token, scim }
+      return { departing, heir, org, token, connectionId, scim }
     }
 
     it("a removed owner's SCIM token stops working at once", async () => {
@@ -1539,6 +1549,178 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       )
       expect(left.status).toBe(200)
       expect((await scim(token)).status).toBe(401)
+    })
+  })
+
+  describe("SCIM tokens and account deletion", () => {
+    const json = (body: unknown) => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    it("deleting the token's creator ends the token", async () => {
+      // A sole member of their own personal organization: nothing else depends on it.
+      const departing = await signedUp("Solo")
+      const org = (await whoami(departing.b)).body.organizationId ?? ""
+      const minted = await departing.b.request(
+        "/api/auth/scim/generate-token",
+        json({ organizationId: org }),
+      )
+      expect(minted.status).toBe(200)
+      const { token } = (await minted.json()) as { token: string }
+      const scim = () =>
+        departing.b.request("/api/auth/scim/v2/Users", {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      expect((await scim()).status).toBe(200)
+      // Deletion is confirmed by the emailed link, as in the delete-account tests.
+      const asked = await departing.b.client.deleteUser({ callbackURL: "/goodbye" })
+      expect(asked.error).toBeNull()
+      const confirm = await mailed(departing.email, "Confirm deleting your Starter account")
+      expect((await departing.b.request(confirm.link)).status).toBe(302)
+      expect((await scim()).status).toBe(401)
+    })
+  })
+
+  describe("SCIM provisioning into the organization", () => {
+    const json = (body: unknown, method = "POST") => ({
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const SCIM_USER = "urn:ietf:params:scim:schemas:core:2.0:User"
+    const PATCH = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+
+    /** An owner with a SCIM token for their org, and a `scim` request helper bound to that token. */
+    async function ownerWithScim(name: string) {
+      const owner = await signedUp(`${name} owner`)
+      const org = (await whoami(owner.b)).body.organizationId ?? ""
+      const minted = await owner.b.request(
+        "/api/auth/scim/generate-token",
+        json({ organizationId: org }),
+      )
+      expect(minted.status).toBe(200)
+      const { token, connectionId } = (await minted.json()) as {
+        token: string
+        connectionId: string
+      }
+      // Over HTTP for every method: an identity provider deprovisions with PATCH and DELETE.
+      const scim = (path: string, init: RequestInit = {}) =>
+        owner.b.request(`/api/auth/scim/v2${path}`, {
+          ...init,
+          headers: { ...init.headers, authorization: `Bearer ${token}` },
+        })
+      return { owner, org, token, connectionId, scim }
+    }
+
+    /** The organization's member row for a person, by email, or null. */
+    async function memberOf(address: string, org: string) {
+      const [row] = await t.db
+        .select({ role: member.role })
+        .from(member)
+        .innerJoin(userTable, eq(userTable.id, member.userId))
+        .where(and(eq(userTable.email, address), eq(member.organizationId, org)))
+      return row ?? null
+    }
+
+    it("a provisioned user becomes a member, loses it on deactivation and regains it on reactivation", async () => {
+      const { org, scim } = await ownerWithScim("Provision")
+      const address = email()
+      const created = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: address,
+          displayName: "New Hire",
+          emails: [{ value: address, primary: true }],
+          active: true,
+        }),
+      )
+      expect(created.status).toBe(201)
+      const { id: scimId } = (await created.json()) as { id: string }
+      expect(await memberOf(address, org)).toEqual({ role: "member" })
+
+      const off = await scim(
+        `/Users/${scimId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(off.status).toBe(200)
+      expect(await memberOf(address, org)).toBeNull()
+
+      const on = await scim(
+        `/Users/${scimId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: true } }] },
+          "PATCH",
+        ),
+      )
+      expect(on.status).toBe(200)
+      expect(await memberOf(address, org)).toEqual({ role: "member" })
+    })
+
+    it("a DELETE of the SCIM user removes the membership", async () => {
+      const { org, scim } = await ownerWithScim("Delete")
+      const address = email()
+      const created = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: address,
+          emails: [{ value: address, primary: true }],
+          active: true,
+        }),
+      )
+      const { id: scimId } = (await created.json()) as { id: string }
+      expect(await memberOf(address, org)).toEqual({ role: "member" })
+      const gone = await scim(`/Users/${scimId}`, { method: "DELETE" })
+      expect(gone.status).toBe(204)
+      expect(await memberOf(address, org)).toBeNull()
+    })
+
+    it("lists the organization's tokens without secrets, and revoking one stops it at once", async () => {
+      const { owner, token, connectionId, scim } = await ownerWithScim("Revoke")
+      const listed = await owner.b.request("/v1/scim/tokens")
+      expect(listed.status).toBe(200)
+      const { tokens } = (await listed.json()) as { tokens: { id: string }[] }
+      expect(tokens.map((x) => x.id)).toContain(connectionId)
+      expect(JSON.stringify(tokens)).not.toContain(token)
+
+      const revoked = await owner.b.request(`/v1/scim/tokens/${connectionId}`, { method: "DELETE" })
+      expect(revoked.status).toBe(200)
+      expect((await scim("/Users")).status).toBe(401)
+      const after = await owner.b.request("/v1/scim/tokens")
+      const { tokens: remaining } = (await after.json()) as { tokens: { id: string }[] }
+      expect(remaining.map((x) => x.id)).not.toContain(connectionId)
+    })
+
+    it("another organization's token is NOT_FOUND to revoke", async () => {
+      const { connectionId } = await ownerWithScim("Victim")
+      const intruder = await signedUp("Intruder")
+      const res = await intruder.b.request(`/v1/scim/tokens/${connectionId}`, { method: "DELETE" })
+      expect(res.status).toBe(404)
+    })
+
+    it("demoting the creator below the owner role ends their token", async () => {
+      const { owner, org, scim } = await ownerWithScim("Demoted")
+      // Another owner makes the change: the sole owner cannot leave the organization without an owner.
+      const heir = await signedUp("Demoted heir")
+      await t.auth.api.addMember({
+        body: { organizationId: org, userId: heir.userId, role: "owner" },
+      })
+      const [self] = await t.db
+        .select({ id: member.id })
+        .from(member)
+        .where(and(eq(member.userId, owner.userId), eq(member.organizationId, org)))
+      const demoted = await heir.b.request(
+        "/api/auth/organization/update-member-role",
+        json({ memberId: self?.id, role: "admin", organizationId: org }),
+      )
+      expect(demoted.status).toBe(200)
+      expect((await scim("/Users")).status).toBe(401)
     })
   })
 

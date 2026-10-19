@@ -6,6 +6,7 @@ import type { Database } from "@starter/db"
 import { oauthAccessToken, oauthConsent, oauthRefreshToken } from "@starter/db/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
+import type { Adapter } from "./membership"
 
 /** Which grants to end: every one in the organization, or narrowed to a client and/or a user. */
 export interface GrantScope {
@@ -52,6 +53,31 @@ export async function revokeGrants(db: Database, scope: GrantScope, now: Date): 
       .returning({ id: oauthConsent.id })
     return refreshed.length + access.length + consents.length
   })
+}
+
+/**
+ * `revokeGrants` through a better-auth adapter, for code that runs inside a better-auth transaction
+ * (the SCIM projection): the Drizzle handle would wait on that transaction. Same effect: live tokens
+ * are stamped (already-revoked ones keep their stamp) and the consents are deleted.
+ */
+export async function revokeGrantsWith(db: Adapter, scope: GrantScope, now: Date): Promise<void> {
+  const where = [
+    { field: "referenceId", value: scope.organizationId },
+    ...(scope.clientId === undefined ? [] : [{ field: "clientId", value: scope.clientId }]),
+    ...(scope.userId === undefined ? [] : [{ field: "userId", value: scope.userId }]),
+  ]
+  for (const model of ["oauthRefreshToken", "oauthAccessToken"] as const) {
+    const rows = await db.findMany<{ id: string; revoked: Date | null }>({ model, where })
+    const live = rows.filter((row) => !row.revoked).map((row) => row.id)
+    if (live.length > 0) {
+      await db.updateMany({
+        model,
+        where: [{ field: "id", value: live, operator: "in" }],
+        update: { revoked: now },
+      })
+    }
+  }
+  await db.deleteMany({ model: "oauthConsent", where })
 }
 
 /** End every OAuth grant the user made in the organization: consents and refresh/access tokens. */

@@ -402,6 +402,8 @@ describe("api app (real Postgres via PGlite)", () => {
         "delete_project",
         "create_api_key",
         "list_api_keys",
+        "list_scim_tokens",
+        "revoke_scim_token",
         "list_connected_agents",
         "revoke_agent_access",
         "list_audit_events",

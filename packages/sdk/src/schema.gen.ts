@@ -109,6 +109,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/scim/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the organization's SCIM tokens (no secrets)
+         * @description Lists the SCIM provisioning tokens minted for the caller's organization, newest first: id, who minted each and when, when it was last used (null if never) and when it expires. The token itself is shown once, at minting, and never again. Use the id with revoke_scim_token to end one. Owners only (scim:read).
+         */
+        get: operations["list_scim_tokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/scim/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a SCIM token
+         * @description Ends a SCIM provisioning token: its next request gets 401. The people it already provisioned stay members; removing them is done by removing the member. Returns NOT_FOUND for ids that aren't live SCIM tokens of this organization. Owners only (scim:delete). Confirm with the user first.
+         */
+        delete: operations["revoke_scim_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -902,6 +942,106 @@ export interface operations {
                         permissions: {
                             [key: string]: string[];
                         };
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_scim_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tokens: {
+                            /** @description Use with revoke_scim_token */
+                            id: string;
+                            createdAt: string;
+                            createdBy: {
+                                id: string;
+                                name: string;
+                            } | null;
+                            lastUsedAt: string | null;
+                            expiresAt: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revoke_scim_token: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Unique key for this request. Retrying with the same key and body returns the first response; reusing it with a different body is a CONFLICT. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        revoked: true;
                     };
                 };
             };

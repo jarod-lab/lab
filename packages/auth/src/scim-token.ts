@@ -23,22 +23,31 @@ const TOKEN_DAYS = 365
 /** The actor recorded when the product ends access on someone's behalf (a removal or a leave). */
 export const ACCESS_ENDED_ACTOR = "starter:access-ended"
 
-/** The scim plugin's server-only managed-connection calls (see auth index.ts). */
+/**
+ * The scim plugin's server-only managed-connection calls (see auth index.ts). A token is one
+ * credential of a managed connection; revoking the credential is what ends it.
+ */
 export interface ScimManagement {
   list: (provisioningDomainId: string) => Promise<{
     connections: { connectionId: string; createdBy: string; status: string }[]
   }>
-  decommission: (input: {
+  get: (input: { connectionId: string; provisioningDomainId: string }) => Promise<{
+    credentials: { credentialId: string; status: string }[]
+  }>
+  revokeCredential: (input: {
     connectionId: string
     provisioningDomainId: string
+    credentialId: string
     actorId: string
   }) => Promise<unknown>
 }
 
 /**
- * Ends the SCIM tokens a person minted for an organization. A token is a managed connection whose
- * creator is that person, and it works only while the connection is active, so decommissioning
- * stops it at once. Run when the person is removed or leaves: a token outlives the membership otherwise.
+ * Ends the SCIM tokens a person minted for an organization: revokes each active credential of the
+ * connections they created there. A revoked credential no longer authenticates (the plugin's bearer
+ * check requires an active one), so the next SCIM request gets 401. The connection and the users it
+ * provisioned stay as they are: a token's end doesn't deprovision the directory's people. Run when
+ * the person is removed, leaves, is demoted below the role that may mint tokens, or is deleted.
  */
 export async function endScimTokensOf(
   scim: ScimManagement,
@@ -48,11 +57,19 @@ export async function endScimTokensOf(
   const { connections } = await scim.list(organizationId)
   for (const connection of connections) {
     if (connection.createdBy !== userId || connection.status !== "active") continue
-    await scim.decommission({
+    const { credentials } = await scim.get({
       connectionId: connection.connectionId,
       provisioningDomainId: organizationId,
-      actorId: ACCESS_ENDED_ACTOR,
     })
+    for (const credential of credentials) {
+      if (credential.status !== "active") continue
+      await scim.revokeCredential({
+        connectionId: connection.connectionId,
+        provisioningDomainId: organizationId,
+        credentialId: credential.credentialId,
+        actorId: ACCESS_ENDED_ACTOR,
+      })
+    }
   }
 }
 

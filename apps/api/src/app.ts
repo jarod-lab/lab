@@ -229,8 +229,9 @@ export function createApp(opts: AppOptions) {
 
   // Auth: better-auth routes, plus OAuth discovery at the root (RFC 8414 path insertion too).
   // better-auth rate-limits by CLIENT_IP_HEADER (packages/auth/src/rate-limit.ts). The header is the
-  // address we trust, so a client's own copy is dropped and replaced.
-  app.on(["GET", "POST"], `${AUTH_BASE_PATH}/*`, (c) =>
+  // address we trust, so a client's own copy is dropped and replaced. SCIM (RFC 7644) also uses PUT,
+  // PATCH and DELETE: an identity provider deprovisions with them.
+  app.on(["GET", "POST", "PUT", "PATCH", "DELETE"], `${AUTH_BASE_PATH}/*`, (c) =>
     auth.handler(withClientIp(c.req.raw, clientIp(c, trustProxy))),
   )
   for (const suffix of ["", AUTH_BASE_PATH]) {

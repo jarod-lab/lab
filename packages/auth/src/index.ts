@@ -566,3 +566,24 @@ export * from "./permissions"
 export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
 export { type GrantScope, revokeGrants } from "./member-grants"
 export { memberGrants, personalSlug } from "./membership"
+export {
+  APPROVERS,
+  BILLING_MANAGERS,
+  createNotifier,
+  KEY_MANAGERS,
+  MEMBER_MANAGERS,
+  type NotificationEvent,
+  type NotificationType,
+  type Notifier,
+  type NotifierOptions,
+  type NotifyBody,
+  type NotifyFn,
+  notifyBodyOf,
+  type OrgEventInput,
+  type OrgRef,
+  type Recipients,
+  type RenderedNotification,
+  recipientsOf,
+  renderNotification,
+  rolesWith,
+} from "./notifications"

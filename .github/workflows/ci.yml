@@ -99,10 +99,26 @@ jobs:
           if grep -rInE "$pattern" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.turbo \
             --exclude-dir=dist --exclude=pnpm-lock.yaml $vendored .; then exit 1; fi
           test -f skills/smoke-app/SKILL.md && test ! -e skills/starter && test ! -e docs/prompts
+      # The user's first commit, through the same hooks (gitleaks, baseline, format, commitlint).
+      - name: First commit
+        run: |
+          git add -A
+          git -c user.name=ci -c user.email=ci@example.com commit -q -m "chore: init smoke-app"
       - run: pnpm baseline
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # The check job's generated-files step, as the new project runs it.
+      - name: Generated files are current
+        run: |
+          pnpm --filter @smoke-app/db db:generate
+          pnpm --filter @smoke-app/auth generate
+          pnpm --filter @smoke-app/sdk generate
+          pnpm stories
+          pnpm biome format --write packages/db/src/auth-schema.ts packages/ui/src/components
+          git add --intent-to-add packages/db
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
       - run: pnpm test:coverage
       - run: pnpm format:check
   # template:end

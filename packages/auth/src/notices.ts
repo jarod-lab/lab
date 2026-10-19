@@ -25,6 +25,8 @@ export interface Notices {
   emailChangeRequested(input: { to: string; newEmail: string; name?: string }): Promise<void>
   /** The link that deletes the account, sent to the account's own address before anything is deleted. */
   deleteAccountConfirmation(input: { to: string; name?: string; url: string }): Promise<void>
+  /** The first email of a passkey sign-up: the link proves the address, then a passkey is added. */
+  passkeySignupLink(input: { to: string; name?: string; url: string }): Promise<void>
 }
 
 const greeting = (name?: string) => {
@@ -104,6 +106,24 @@ export function createNotices(options: NoticeOptions): Notices {
         footnote: "If you didn't ask for this, ignore this email. Your account stays as it is.",
       })
       await send(to, { subject: `Confirm deleting your ${app} account`, html, text })
+    },
+
+    async passkeySignupLink({ to, name, url }) {
+      const { html, text } = renderLayout({
+        brand: {},
+        appName: app,
+        previewText: `Finish creating your ${app} account`,
+        heading: "Finish creating your account",
+        paragraphs: [
+          greeting(name),
+          `Open the link below to confirm this email address. Then you can add a passkey to sign in to ${app} without a password.`,
+          "The link works once and expires in 30 minutes.",
+        ],
+        action: { label: "Confirm and continue", url },
+        footnote:
+          "If you didn't ask for this, ignore this email. No account is signed in until you open the link.",
+      })
+      await send(to, { subject: `Finish creating your ${app} account`, html, text })
     },
   }
 }

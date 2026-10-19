@@ -15,4 +15,6 @@ export const auth = createAuth({
     webhookSecret: placeholder("whsec"),
     plans: [{ name: "placeholder", priceId: placeholder("price") }],
   },
+  // The `rateLimit` table exists only with the database limiter on (server.ts turns it on).
+  rateLimit: {},
 })

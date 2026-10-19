@@ -57,6 +57,7 @@ export function memberOperations({ db }: Pick<OperationDeps, "db">) {
       "belongs to the account, so it is refused with CONFLICT while the member belongs to any other organization; " +
       "the person then turns it off in their own security settings. Confirm with the user before calling.",
     permissions: { twoFactor: ["reset"] },
+    fresh: true,
     input: z.object({
       userId: z.string().describe("The member's user id, from list_member_security"),
     }),

@@ -4,12 +4,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { AnyOperation } from "@starter/api"
-import { createAuth } from "@starter/auth"
+import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import { type Logger, createLogger } from "@starter/logger"
 import { type AppOptions, createApp } from "./app"
 import { createApiHooks } from "./hooks"
 import { createDevMailSink } from "./dev-mail"
+import { recordAuthEvent } from "./data/audit"
 import { type MeterLimits, createMeter } from "./meter"
 import { createOperations } from "./operations"
 
@@ -66,6 +67,10 @@ export interface TestAppOptions {
   devMail?: boolean
   /** Stripe test mode, with these plans (see auth's stripe option). Unset, billing is not mounted. */
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
+  /** Auth rate limits. Off unless a test opts in (auth-flows: the limiter test), so flows don't 429. */
+  rateLimit?: false | AuthRateLimitOptions
+  /** Where auth events go. Defaults to the audit trail, as server.ts wires it. */
+  onAuthEvent?: (event: AuthEvent) => void | Promise<void>
 }
 
 export async function createTestApp(
@@ -105,6 +110,12 @@ export async function createTestApp(
     webOrigins: options.webOrigins,
     github: options.github,
     google: options.google,
+    rateLimit: options.rateLimit ?? false,
+    onAuthEvent:
+      options.onAuthEvent ??
+      (async (event) => {
+        await recordAuthEvent(t.db, event)
+      }),
   })
   const meter = createMeter({
     db: t.db,

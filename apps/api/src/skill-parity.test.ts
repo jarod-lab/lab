@@ -22,6 +22,7 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   NOT_FOUND: true,
   CONFLICT: true,
   RATE_LIMITED: true,
+  SESSION_NOT_FRESH: true,
   INTERNAL: true,
 }
 

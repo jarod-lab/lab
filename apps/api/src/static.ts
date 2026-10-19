@@ -15,6 +15,7 @@ import type { Env, Hono } from "hono"
 export const PAGE_PATHS = [
   "/sign-in",
   "/sign-up",
+  "/sign-up/passkey",
   "/consent",
   "/select-organization",
   "/accept-invitation/:id",

@@ -4,8 +4,9 @@
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
 import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { eq } from "drizzle-orm"
-import { passkey as passkeyTable, verification } from "@starter/db/schema"
+import { and, eq } from "drizzle-orm"
+import { personalSlug } from "@starter/auth"
+import { auditEvent, organization, passkey as passkeyTable, verification } from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { BASE, createTestApp } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
@@ -1989,6 +1990,142 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  /** Make a session look `seconds` old: freshness is measured from its creation. */
+  const ageSessions = async (userId: string, seconds: number) =>
+    (await t.auth.$context).adapter.update({
+      model: "session",
+      where: [{ field: "userId", value: userId }],
+      update: { createdAt: new Date(Date.now() - seconds * 1000) },
+    })
+
+  describe("fresh sessions for sensitive actions", () => {
+    it("refuses a stale session's passkey registration and two-factor enrolment", async () => {
+      const { b, userId } = await signedUp("Stale")
+      await ageSessions(userId, 2 * 60 * 60)
+
+      const passkeyOptions = await b.request("/api/auth/passkey/generate-register-options")
+      expect(passkeyOptions.status).toBe(403)
+      expect(await passkeyOptions.json()).toMatchObject({ code: "SESSION_NOT_FRESH" })
+
+      const enrol = await b.request("/api/auth/two-factor/enable", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: PASSWORD }),
+      })
+      expect(enrol.status).toBe(403)
+      expect(await enrol.json()).toMatchObject({ code: "SESSION_NOT_FRESH" })
+    })
+
+    it("allows the same actions on a fresh sign-in", async () => {
+      const { b, email: address, userId } = await signedUp("Fresh")
+      await ageSessions(userId, 2 * 60 * 60)
+      await b.client.signOut()
+
+      const again = open()
+      await again.client.signIn.email({ email: address, password: PASSWORD })
+      const options = await again.request("/api/auth/passkey/generate-register-options")
+      expect(options.status).toBe(200)
+      const enrol = await again.request("/api/auth/two-factor/enable", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: PASSWORD }),
+      })
+      expect(enrol.status).toBe(200)
+    })
+  })
+
+  describe("auth events are audited", () => {
+    /** The audit rows a person's auth activity wrote, in their personal organization. */
+    const auditRowsOf = async (userId: string) => {
+      const [personal] = await t.db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(eq(organization.slug, personalSlug(userId)))
+        .limit(1)
+      return t.db
+        .select({ operation: auditEvent.operation, outcome: auditEvent.outcome })
+        .from(auditEvent)
+        .where(
+          and(eq(auditEvent.organizationId, personal?.id ?? ""), eq(auditEvent.actorId, userId)),
+        )
+    }
+
+    it("writes a sign-in, a failed sign-in and a sign-out to the personal organization", async () => {
+      const { b, email: address, userId } = await signedUp("Audited")
+      const visitor = open()
+      const wrong = await visitor.client.signIn.email({
+        email: address,
+        password: "wrong-password",
+      })
+      expect(wrong.error).toBeTruthy()
+      await visitor.client.signIn.email({ email: address, password: PASSWORD })
+      await b.client.signOut()
+
+      const rows = await auditRowsOf(userId)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { operation: "auth.sign_in", outcome: "ok" },
+          { operation: "auth.sign_in_failed", outcome: expect.any(String) },
+          { operation: "auth.sign_out", outcome: "ok" },
+        ]),
+      )
+      expect(rows.find((r) => r.operation === "auth.sign_in_failed")?.outcome).not.toBe("ok")
+    })
+  })
+
+  describe("passkey sign-up (the mailbox is proven before any credential)", () => {
+    const startSignUp = (b: ReturnType<typeof open>, address: string) =>
+      b.request("/api/auth/passkey-signup/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: address, name: "Pat", callbackURL: "/welcome" }),
+      })
+
+    it("emails a link and issues no session; the link signs in a verified account", async () => {
+      const address = email()
+      const b = open()
+      const start = await startSignUp(b, address)
+      expect(start.status).toBe(200)
+      expect(await start.json()).toEqual({ sent: true })
+      expect(start.headers.getSetCookie()).toEqual([])
+      expect(b.jar.size).toBe(0)
+
+      const mail = await mailed(address, "Finish creating your Starter account")
+      expect(mail.link).toContain("/api/auth/passkey-signup/verify?token=")
+
+      const opened = await b.request(mail.link)
+      expect(opened.status).toBe(302)
+      expect(opened.headers.getSetCookie().length).toBeGreaterThan(0)
+      const { data } = await b.client.getSession()
+      expect(data?.user).toMatchObject({ email: address, emailVerified: true })
+    })
+
+    it("refuses an email that already has an account", async () => {
+      const { email: address } = await signedUp("Taken")
+      const res = await startSignUp(open(), address)
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ code: "ACCOUNT_EXISTS" })
+    })
+
+    it("refuses a link once it has been used, and one that was never issued", async () => {
+      const address = email()
+      const b = open()
+      await startSignUp(b, address)
+      const { link } = await mailed(address, "Finish creating your Starter account")
+      expect((await b.request(link)).status).toBe(302)
+
+      const replay = await open().request(link)
+      expect(replay.status).toBe(400)
+      expect(await replay.json()).toMatchObject({ code: "PASSKEY_SIGNUP_EXPIRED" })
+
+      const forged = await open().request(
+        `/api/auth/passkey-signup/verify?token=${"A".repeat(43)}&callbackURL=%2F`,
+      )
+      expect(forged.status).toBe(400)
+      expect(await forged.json()).toMatchObject({ code: "PASSKEY_SIGNUP_EXPIRED" })
+    })
+  })
+
   describe("security summary", () => {
     it("reports the password change, when two-factor went on, and the backup codes left", async () => {
       const { b, email: address } = await signedUp()
@@ -2214,5 +2351,46 @@ describe("web app on another origin (WEB_ORIGINS)", () => {
     })
     expect(error).toMatchObject({ status: 403, code: "INVALID_REDIRECT_URL" })
     expect(w.outbox.filter((m) => m.to === address)).toHaveLength(0)
+  })
+})
+
+describe("auth rate limit over HTTP (opted in, behind a trusted proxy)", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  beforeAll(async () => {
+    t = await createTestApp([], { trustProxy: true, rateLimit: {} })
+  })
+  afterAll(() => t.close())
+
+  /** A wrong-password sign-in from one client address (X-Forwarded-For, as a proxy sets it). */
+  const signIn = (ip: string, extra: Record<string, string> = {}) =>
+    t.req("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: BASE,
+        "x-forwarded-for": ip,
+        ...extra,
+      },
+      body: JSON.stringify({ email: "nobody@example.com", password: "wrong-password" }),
+    })
+
+  it("answers 429 once one client address exceeds the sign-in limit", async () => {
+    const statuses: number[] = []
+    for (let i = 0; i < 6; i++) statuses.push((await signIn("203.0.113.10")).status)
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401])
+    expect(statuses[5]).toBe(429)
+  })
+
+  it("keeps a separate count for each client address", async () => {
+    expect((await signIn("198.51.100.7")).status).toBe(401)
+  })
+
+  it("ignores a client-sent copy of the client-IP header: the proxy's address decides", async () => {
+    // 203.0.113.10 is over its limit. Claiming another address in the header changes nothing.
+    const spoofed = await signIn("203.0.113.10", { "x-starter-client-ip": "192.0.2.99" })
+    expect(spoofed.status).toBe(429)
+    // Nor does a spoofed header alone on a fresh address start a new bucket for the limited one.
+    const other = await signIn("198.51.100.8", { "x-starter-client-ip": "203.0.113.10" })
+    expect(other.status).toBe(401)
   })
 })

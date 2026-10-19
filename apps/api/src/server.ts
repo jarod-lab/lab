@@ -7,6 +7,7 @@ import { parseStatusProviders } from "@starter/observability"
 
 import { createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
+import { recordAuthEvent } from "./data/audit"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createOperations } from "./operations"
@@ -47,6 +48,12 @@ const auth = createAuth({
       ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
       : undefined,
   passwordBreachCheck: true,
+  // Rate limits on sign-in, mail and one-time codes, by client IP (rate-limit.ts). Off unless set.
+  rateLimit: {},
+  // Auth activity (sign-in, failed sign-in, sign-out, ...) lands in the audit trail (auth-events.ts).
+  onAuthEvent: async (event) => {
+    await recordAuthEvent(db, event)
+  },
 })
 
 const meter = createMeter({

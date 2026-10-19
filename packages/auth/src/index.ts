@@ -8,9 +8,14 @@ import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { wraps } from "@wraps.dev/better-auth"
 import Stripe from "stripe"
-import { type DBTransactionAdapter, betterAuth, getCurrentAdapter } from "better-auth"
+import {
+  type BetterAuthPlugin,
+  type DBTransactionAdapter,
+  betterAuth,
+  getCurrentAdapter,
+} from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { APIError, createAuthMiddleware } from "better-auth/api"
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
 import {
   admin,
   haveIBeenPwned,
@@ -20,9 +25,11 @@ import {
   organization,
   twoFactor,
 } from "better-auth/plugins"
+import { authEvents, type AuthEvent } from "./auth-events"
 import { PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
 import { impersonationGuard } from "./guards"
+import { FRESH_AGE_SECONDS, freshSessionGuard } from "./fresh-session"
 import { endGrantsOnLeave, revokeMemberGrants } from "./member-grants"
 import {
   type Adapter,
@@ -45,6 +52,8 @@ import { canManageBilling, ownerOnlyGuard } from "./owner-only"
 import { ac, OAUTH_SCOPES, roles } from "./permissions"
 import { isReservedOrgSlug, slugOf } from "./reserved-slugs"
 import { twoFactorMagicLink } from "./magic-link-two-factor"
+import { passkeySignupPlugin } from "./passkey-signup"
+import { type AuthRateLimitOptions, authIpAddress, authRateLimit } from "./rate-limit"
 import { resumeMagicLinkAuthorization } from "./resume"
 import { endProvisionalKeys } from "./signup"
 import {
@@ -66,6 +75,13 @@ export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
 export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
 export { parseStripePlans, type StripePlanConfig } from "./stripe-plans"
 export { type SignInMethods, type SocialProvider } from "./sign-in-methods"
+export {
+  type AuthEvent,
+  type AuthEventName,
+  AUTH_EVENT_NAMES,
+} from "./auth-events"
+export { FRESH_AGE_SECONDS, FRESH_SESSION_PATHS, freshSessionGuard, isFresh } from "./fresh-session"
+export { type AuthRateLimitOptions, CLIENT_IP_HEADER } from "./rate-limit"
 
 /** Where better-auth's routes are mounted; the OAuth issuer is `${baseURL}${AUTH_BASE_PATH}`. */
 export const AUTH_BASE_PATH = "/api/auth"
@@ -150,6 +166,17 @@ export interface AuthOptions {
    * (price ids from the Stripe test dashboard); none are invented. No plans means no subscriptions.
    */
   stripe?: { secretKey: string; webhookSecret: string; plans?: { name: string; priceId: string }[] }
+  /**
+   * Opt-in rate limits for better-auth's credential, mail and one-time-code endpoints, keyed on the
+   * client address (apps/api sets it, see CLIENT_IP_HEADER). Unset or `false`: off, so library and
+   * test callers see no 429s. server.ts passes `{}` for the defaults. Counts live in `rateLimit`.
+   */
+  rateLimit?: false | AuthRateLimitOptions
+  /**
+   * Called for each auth event (sign-in, failed sign-in, sign-out, factor and key changes; see
+   * auth-events.ts). server.ts writes them to the audit trail. Errors are reported, never returned.
+   */
+  onAuthEvent?: (event: AuthEvent) => void | Promise<void>
 }
 
 /**
@@ -202,6 +229,25 @@ export function passkeyRpID(origins: readonly string[]): string {
 function setUserFields(db: Adapter, userId: string, update: Record<string, unknown>) {
   return db.updateMany({ model: "user", where: [{ field: "id", value: userId }], update })
 }
+
+/**
+ * better-auth's sign-out deletes the session without putting it in the context, so the audit mapper
+ * (auth-events.ts) would not know who signed out. This loads it before the endpoint runs.
+ */
+const signOutSession = {
+  id: "starter-sign-out-session",
+  hooks: {
+    before: [
+      {
+        matcher: (ctx: { path?: string }) => ctx.path === "/sign-out",
+        handler: createAuthMiddleware(async (ctx) => {
+          const session = await getSessionFromCtx(ctx)
+          if (session) return { context: { session } }
+        }),
+      },
+    ],
+  },
+} satisfies BetterAuthPlugin
 
 export function createAuth(opts: AuthOptions) {
   if (opts.stripe && !opts.stripe.secretKey.startsWith("sk_test_")) {
@@ -299,9 +345,11 @@ export function createAuth(opts: AuthOptions) {
         await wrapsPlugin.emails.passwordChanged({ user })
       },
     },
+    // Rate limits key on the client address apps/api sets in CLIENT_IP_HEADER (rate-limit.ts).
+    rateLimit: authRateLimit(opts.rateLimit ?? false),
     // better-auth turns its origin/CSRF checks off under a test runner. Keep them on, so tests
     // exercise what production does (requests with cookies must come from a trusted origin).
-    advanced: { disableOriginCheck: false },
+    advanced: { disableOriginCheck: false, ipAddress: authIpAddress },
     // The jwt plugin's session-to-JWT endpoint, and the device plugin's /device/token, which mints a
     // session token. OAuth clients get tokens from /oauth2/token instead (device grant included).
     // delete-consent removes the consent row but leaves the client's refresh tokens, which keep the
@@ -337,6 +385,9 @@ export function createAuth(opts: AuthOptions) {
       },
     },
     session: {
+      // A sensitive action needs a sign-in this recent (fresh-session.ts). better-auth's own guarded
+      // endpoints (list-sessions, change-password, ...) use the same window.
+      freshAge: FRESH_AGE_SECONDS,
       // How the session was signed in, shown on the security page (login-method.ts).
       additionalFields: {
         loginMethod: { type: "string", required: false, input: false },
@@ -414,6 +465,9 @@ export function createAuth(opts: AuthOptions) {
       // Platform admins: a user whose `role` is "admin". Impersonation is limited by impersonationGuard.
       admin({ adminRoles: ["admin"], defaultRole: "user" }),
       impersonationGuard,
+      // Sensitive actions (passkeys, two-factor enrolment, keys, members, admin) need a recent sign-in.
+      // Right after the impersonation guard: an impersonated session is refused there first.
+      freshSessionGuard,
       // Owner-only single sign-on, SCIM provisioning and billing (catalog in access.ts, checks in owner-only.ts).
       ownerOnlyGuard,
       // Domain verification (a DNS TXT record) gates sign-in: an unproven domain is never routed to its provider.
@@ -509,6 +563,15 @@ export function createAuth(opts: AuthOptions) {
       }),
       // RFC 8628 device grant on the same token endpoint (see device.ts).
       deviceAuthorizationPlugin({ interval: opts.deviceInterval }),
+      // Passkey sign-up: the emailed link proves the address and signs in; the passkey is added after
+      // (passkey-signup.ts). Reads the passkey() defaults above, so it needs no registration option.
+      passkeySignupPlugin({
+        db: opts.db,
+        sendLink: ({ email, name, url }) => notices.passkeySignupLink({ to: email, name, url }),
+      }),
+      signOutSession,
+      // Audit events for auth activity (auth-events.ts).
+      authEvents({ onAuthEvent: opts.onAuthEvent ?? (() => {}) }),
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter)] : []),
     ],
   })

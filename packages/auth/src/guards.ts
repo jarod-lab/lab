@@ -81,6 +81,7 @@ export const IMPERSONATION_REFUSED_GET_PATHS = [
   "/oauth2/end-session",
   // Consumes an emailed link: signs in, verifies the address or changes it, or deletes the account.
   "/magic-link/verify",
+  "/passkey-signup/verify",
   "/verify-email",
   "/delete-user/callback",
   // OAuth, SSO and SAML callbacks: they link an account or sign someone in.

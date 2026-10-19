@@ -17,6 +17,7 @@ import {
 import {
   AUTH_BASE_PATH,
   type Auth,
+  CLIENT_IP_HEADER,
   OAUTH_SCOPE_GRANTS,
   OAUTH_SCOPES,
   oauthProviderAuthServerMetadata,
@@ -82,12 +83,6 @@ function idempotencyKeyOf(value: string | undefined): string | undefined {
   }
   return value
 }
-
-/**
- * better-auth's rate limiter reads the client address from this header (packages/auth/src/rate-limit.ts,
- * CLIENT_IP_HEADER). Kept here until @starter/auth exports it.
- */
-const CLIENT_IP_HEADER = "x-starter-client-ip"
 
 /**
  * The request for better-auth with the client address set from what we trust. A copy the client sent

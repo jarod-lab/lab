@@ -52,6 +52,7 @@ export function connectedAgentOperations({ db }: Pick<OperationDeps, "db">) {
       "The client itself is not deleted. Returns NOT_FOUND " +
       "for ids that aren't connected to this organization. Confirm with the user before calling.",
     permissions: { apiKey: ["delete"] },
+    fresh: true,
     input: z.object({ id: z.string().describe("Agent id from list_connected_agents") }),
     output: z.object({ revoked: z.literal(true) }),
     hints: { destructive: true },

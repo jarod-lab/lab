@@ -44,6 +44,7 @@ export function apiKeyOperations({ auth, db }: Pick<OperationDeps, "auth" | "db"
       "within the caller's own. The key is returned once; store it securely. Only a signed-in user " +
       "(session or OAuth) can create keys, not another API key.",
     permissions: { apiKey: ["create"] },
+    fresh: true,
     input: z.object({
       name: z.string().trim().min(1).max(100).describe("What the key is for"),
       permissions: permissionsInput.describe(

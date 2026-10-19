@@ -117,4 +117,5 @@ Every error is `{ "error": { "code", "message", "hint?" } }`. Read the `hint`: i
 - `NOT_FOUND`: also returned for another organization's ids. Don't retry the same id.
 - `CONFLICT`: the Idempotency-Key is in use or was used with another body. Use a new key only for a new action.
 - `RATE_LIMITED`: back off for `Retry-After` seconds, then retry.
+- `SESSION_NOT_FRESH`: a person's session signed in over an hour ago and the action is sensitive (create_api_key, decide_approval, undo_approval, reset_member_two_factor, revoke_agent_access). The person must sign in again; API keys and OAuth tokens are not affected.
 - `INTERNAL`: retry once, then report it with the `x-request-id` response header.

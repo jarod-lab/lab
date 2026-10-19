@@ -83,6 +83,7 @@ export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now"
       "clients can't. Returns CONFLICT if the approval was already decided. Confirm the decision with the " +
       "user before calling.",
     permissions: { run: ["approve"] },
+    fresh: true,
     input: approvalRef.extend({ decision: z.enum(["approve", "deny"]) }),
     output: approvalOutputSchema,
     hints: { destructive: true },
@@ -112,6 +113,7 @@ export function approvalOperations({ db, now }: Pick<OperationDeps, "db" | "now"
       "Undoes a decision (approve or deny) before it takes effect, returning the approval to pending. After " +
       "30 seconds the decision stands and this returns CONFLICT. Only a person signed in to the web app can undo.",
     permissions: { run: ["approve"] },
+    fresh: true,
     input: approvalRef,
     output: approvalOutputSchema,
     examples: [{ input: { id: "00000000-0000-0000-0000-000000000000" }, error: "NOT_FOUND" }],

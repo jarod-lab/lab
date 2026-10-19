@@ -15,6 +15,14 @@ preset = ["react", "accessibility"]
 path = "apps/app"
 exclude_rules = ["max-component-size", "prefer-use-reducer", "no-direct-document-query", "no-array-index-key", "no-new-function"]
 
+# The marketing site's sections are React components, server-rendered by Astro: the same rules as
+# the app. The DOM queries are in tests; the index keys are placeholder slots (the logo strip), whose
+# only identity is their position.
+[[baseline.scoped]]
+preset = ["react", "accessibility"]
+path = "apps/site"
+exclude_rules = ["max-component-size", "no-direct-document-query", "no-array-index-key"]
+
 [[baseline.scoped]]
 preset = "accessibility"
 path = "packages/ui/src/dplus"

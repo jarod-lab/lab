@@ -1,0 +1,198 @@
+@import "@starter/ui/styles.css";
+
+/* Tailwind scans this site and the ui package's components, vendored and D+ (not auto-detected from
+   node_modules), as apps/app/src/app.css does. */
+@source "../../../packages/ui/src/components/ui";
+@source "../../../packages/ui/src/dplus";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/* The design's marketing type: bigger than the app's scale, fluid between phone and desktop. */
+@utility type-hero {
+  font-size: clamp(40px, 5.6vw, 68px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+@utility type-page-title {
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+  text-wrap: balance;
+}
+@utility type-section {
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+@utility type-lead {
+  font-size: 19px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* Rendered Markdown (blog posts, changelog entries, legal documents). Markdown output has no
+   classes, so its elements are styled here from the same tokens. */
+.post-body,
+.legal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+
+  & h2 {
+    margin-top: 16px;
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    scroll-margin-top: 24px;
+  }
+  & a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  & ul,
+  & ol {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 22px;
+  }
+  & ul {
+    list-style: disc;
+  }
+  & ol {
+    list-style: decimal;
+  }
+  & pre {
+    overflow-x: auto;
+    padding: 18px 20px;
+    border-radius: 12px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-family: var(--font-mono);
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+  & :not(pre) > code {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+  }
+  & kbd {
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2.5px;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  & blockquote {
+    padding: 4px 0 4px 20px;
+    border-left: 3px solid var(--foreground);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+  }
+  /* <aside class="note"> in Markdown: the solar callout. */
+  & .note {
+    display: flex;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: var(--solar);
+    color: var(--solar-foreground);
+    font-size: 16.5px;
+    line-height: 1.55;
+  }
+  & .note strong {
+    flex: none;
+  }
+  & figure {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  & figcaption {
+    font-size: 14.5px;
+    color: var(--muted-foreground);
+  }
+  /* Stand-in for a diagram you have yet to draw (inline SVG keeps the page light). */
+  & .figure-placeholder {
+    display: grid;
+    min-height: 240px;
+    place-items: center;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--muted-foreground);
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    background-image: repeating-linear-gradient(
+      135deg,
+      var(--hatch) 0 1.5px,
+      transparent 1.5px 7px
+    );
+  }
+}
+
+/* Legal sections are numbered, the number muted before each heading. */
+.legal-body {
+  counter-reset: section;
+  font-size: 17px;
+  color: var(--secondary-foreground);
+
+  & h2 {
+    counter-increment: section;
+    margin-top: 6px;
+    font-size: 24px;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    color: var(--foreground);
+  }
+  & h2::before {
+    content: counter(section) ".";
+    margin-right: 8px;
+    color: var(--muted-foreground);
+  }
+  & h2 + p {
+    font-size: 15.5px;
+  }
+  & strong {
+    color: var(--foreground);
+  }
+}
+
+/* A changelog entry's summary and list. */
+.change-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--secondary-foreground);
+
+  & ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 20px;
+    list-style: disc;
+  }
+}

@@ -16,3 +16,6 @@ storybook-static
 
 # Local file store (STORAGE_DRIVER=local)
 **/.storage/
+
+# Astro (apps/site): generated types
+.astro/

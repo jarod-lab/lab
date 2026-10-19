@@ -1,0 +1,9 @@
+---
+import { NotFound } from "../components/not-found"
+import Base from "../layouts/base.astro"
+import { site } from "../site"
+---
+
+<Base title={`Page not found — ${site.name}`} announce={false}>
+  <NotFound />
+</Base>

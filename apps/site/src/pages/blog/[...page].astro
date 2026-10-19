@@ -1,0 +1,34 @@
+---
+import type { GetStaticPaths } from "astro"
+
+import { BlogIndex } from "../../components/blog/blog-index"
+import { usedCategories } from "../../data/content"
+import Base from "../../layouts/base.astro"
+import { allPosts } from "../../lib/content"
+import { site } from "../../site"
+
+/** The featured post on top, then six a page: /blog, then /blog/2, /blog/3... */
+export const getStaticPaths = (async ({ paginate }) => {
+  const posts = await allPosts()
+  const featured = (posts.find((p) => p.entry.data.featured) ?? posts[0])?.summary
+  const summaries = posts.map((p) => p.summary)
+  const rest = summaries.filter((p) => p !== featured)
+  return paginate(rest, { pageSize: 6, props: { featured, categories: usedCategories(summaries) } })
+}) satisfies GetStaticPaths
+
+const { page, featured, categories } = Astro.props
+---
+
+<Base title={`Blog — ${site.name}`} active="blog">
+  <BlogIndex
+    posts={page.data}
+    featured={page.currentPage === 1 ? featured : undefined}
+    categories={categories}
+    page={{
+      current: page.currentPage,
+      last: page.lastPage,
+      prev: page.url.prev,
+      next: page.url.next,
+    }}
+  />
+</Base>

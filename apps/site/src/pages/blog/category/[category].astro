@@ -1,0 +1,25 @@
+---
+import type { GetStaticPaths } from "astro"
+
+import { BlogIndex } from "../../../components/blog/blog-index"
+import { CATEGORY_LABELS, usedCategories } from "../../../data/content"
+import Base from "../../../layouts/base.astro"
+import { allPosts } from "../../../lib/content"
+import { site } from "../../../site"
+
+/** One page per category that has posts, all of them, newest first. */
+export const getStaticPaths = (async () => {
+  const posts = (await allPosts()).map((p) => p.summary)
+  const categories = usedCategories(posts)
+  return categories.map((category) => ({
+    params: { category },
+    props: { category, categories, posts: posts.filter((p) => p.category === category) },
+  }))
+}) satisfies GetStaticPaths
+
+const { category, categories, posts } = Astro.props
+---
+
+<Base title={`${CATEGORY_LABELS[category]} — ${site.name} blog`} active="blog">
+  <BlogIndex posts={posts} category={category} categories={categories} />
+</Base>

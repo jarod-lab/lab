@@ -11,7 +11,7 @@
   as `jsPlugins` (`.oxlintrc.json`), every recommended rule as an error. `exhaustive-deps`
   allowlists the `BillingAdapter` type: a service whose `mode` stands for it in query keys.
 - **portless**: `pnpm dev` runs the apps' dev scripts on stable `*.localhost` URLs (`app.starter`,
-  `api.starter`; `portless.json`). `"turbo": false` is set because portless's turbo mode runs the
+  `api.starter`, `site.starter`; `portless.json`). `"turbo": false` is set because portless's turbo mode runs the
   root `dev` script, which is portless itself.
 - **Web and CLI builds**: `pnpm --filter @starter/app build` writes `apps/app/dist`, which
   `WEB_DIST_DIR` needs. `pnpm --filter @starter/cli build` writes `dist/bin.js`.

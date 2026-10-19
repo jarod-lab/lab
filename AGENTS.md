@@ -34,6 +34,9 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   tenant helpers in `src/tenant.ts`, tenant data in `src/data/`. `apps/api/src/server.ts` only wires
   env, DB and listener.
 - `apps/app` — `@starter/app`, TanStack Start in SPA mode (the D+ app). See `docs/web-app.md`.
+- `apps/site` — `@starter/site`, the static Astro marketing site (home, pricing, blog, changelog,
+  legal) built from `@starter/ui`. Markup lives in `.tsx` components, not `.astro`. See
+  `docs/site.md`.
 - `packages/api` — operation registry (`defineOperation`, `defineRegistry`, `invoke`), OpenAPI,
   llms.txt, server.json, pagination. Framework-agnostic.
 - `packages/sdk` — `@starter/sdk`, the typed client generated from `apps/api/openapi.json`.

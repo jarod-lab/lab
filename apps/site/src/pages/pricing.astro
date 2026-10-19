@@ -1,0 +1,27 @@
+---
+import { FaqSection } from "../components/faq-list"
+import { CompareTable } from "../components/pricing/compare-table"
+import { Enterprise, Plans } from "../components/pricing/plans"
+import { billingFaqs } from "../data/faqs"
+import Base from "../layouts/base.astro"
+import { site } from "../site"
+---
+
+<Base
+  title={`Pricing — ${site.name}`}
+  description="Per-seat plans with unlimited runs within fair use. Viewers are free on paid plans."
+  active="pricing"
+>
+  <Plans />
+  <Enterprise />
+  <CompareTable />
+  <FaqSection id="bfaq-h" title="Billing questions" faqs={billingFaqs}>
+    <p class="text-secondary-foreground">
+      Still deciding?
+      <a href={site.signUpUrl} class="font-semibold text-foreground underline underline-offset-3">
+        Start free
+      </a>
+      — no card, no time limit.
+    </p>
+  </FaqSection>
+</Base>

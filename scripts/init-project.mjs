@@ -110,7 +110,7 @@ for (const file of walk(".")) {
     .replaceAll(" `scripts/init-project.mjs`,", "")
     .replaceAll("@starter/", `@${name}/`)
     .replace(/("name": ")starter(")/g, `$1${name}$2`)
-    .replace(/("name": "(?:api|app)\.)starter(")/g, `$1${name}$2`)
+    .replace(/("name": "(?:api|app|site)\.)starter(")/g, `$1${name}$2`)
     .replace(/^# starter$/m, `# ${name}`)
     .replace(/(name = ")starter(")/g, `$1${name}$2`)
     .replaceAll("localhost:5432/starter", `localhost:5432/${dbName}`)
@@ -123,7 +123,7 @@ for (const file of walk(".")) {
     .replace(/^name: starter$/m, `name: ${name}`)
     // Hostnames in comments, docs and env examples (portless.json names them the same way). The
     // bare parent domain is the passkey rpID that auth's tests expect.
-    .replace(/\b(app|api)\.starter\b/g, `$1.${name}`)
+    .replace(/\b(app|api|site)\.starter\b/g, `$1.${name}`)
     .replace(/\bstarter\.localhost\b/g, `${name}.localhost`)
     // Worktree folders are siblings named after the checkout (`pnpm wt`).
     .replace(/\.\.\/starter\./g, `../${name}.`)

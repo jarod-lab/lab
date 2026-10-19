@@ -1,0 +1,57 @@
+---
+import type { GetStaticPaths } from "astro"
+import { render } from "astro:content"
+
+import { PostPage } from "../../components/blog/post-page"
+import Base from "../../layouts/base.astro"
+import { allPosts } from "../../lib/content"
+import { site } from "../../site"
+
+export const getStaticPaths = (async () => {
+  const posts = await allPosts()
+  return posts.map(({ entry, summary }) => ({
+    params: { slug: summary.slug },
+    props: {
+      entry,
+      summary,
+      // Same category first, then the newest of the rest.
+      related: posts
+        .map((p) => p.summary)
+        .filter((p) => p.slug !== summary.slug)
+        .sort(
+          (a, b) =>
+            Number(b.category === summary.category) - Number(a.category === summary.category),
+        )
+        .slice(0, 3),
+    },
+  }))
+}) satisfies GetStaticPaths
+
+const { entry, summary, related } = Astro.props
+const { Content, headings } = await render(entry)
+const toc = headings.filter((h) => h.depth === 2).map((h) => ({ slug: h.slug, text: h.text }))
+---
+
+<Base title={`${summary.title} — ${site.name} blog`} description={summary.description} active="blog">
+  <PostPage
+    post={summary}
+    highlight={entry.data.highlight}
+    authorBio={entry.data.authorBio}
+    toc={toc}
+    related={related}
+  >
+    <Content />
+  </PostPage>
+</Base>
+
+<script>
+  // "Copy link": the only script on a post. Without clipboard access the button says so.
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-copy-link]")) {
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(window.location.href).then(
+        () => (button.textContent = "Link copied"),
+        () => (button.textContent = "Copy the address bar"),
+      )
+    })
+  }
+</script>

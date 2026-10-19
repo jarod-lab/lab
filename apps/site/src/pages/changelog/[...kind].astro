@@ -1,0 +1,43 @@
+---
+import type { GetStaticPaths } from "astro"
+import { render } from "astro:content"
+
+import { ChangeEntry, ChangelogHeader } from "../../components/changelog"
+import { CHANGE_KINDS } from "../../data/content"
+import Base from "../../layouts/base.astro"
+import { allChanges } from "../../lib/content"
+import { site } from "../../site"
+
+/** /changelog with every entry, and /changelog/new, /improved, /fixed with just that kind. */
+export const getStaticPaths = (() =>
+  [undefined, ...CHANGE_KINDS].map((kind) => ({
+    params: { kind },
+    props: { kind },
+  }))) satisfies GetStaticPaths
+
+const { kind } = Astro.props
+const entries = (await allChanges()).filter((e) => !kind || e.data.kinds.includes(kind))
+const rendered = await Promise.all(entries.map(async (e) => ({ e, ...(await render(e)) })))
+---
+
+<Base title={`Changelog — ${site.name}`} active="changelog">
+  <div class="mx-auto flex max-w-250 flex-col gap-8 px-6 pt-16 pb-20 leading-[1.6]">
+    <ChangelogHeader kind={kind} />
+    <div class="flex flex-col border-t-2 border-foreground">
+      {
+        rendered.map(({ e, Content }) => (
+          <ChangeEntry
+            id={e.id}
+            title={e.data.title}
+            version={e.data.version}
+            date={e.data.date}
+            kinds={e.data.kinds}
+            post={e.data.post}
+          >
+            <Content />
+          </ChangeEntry>
+        ))
+      }
+    </div>
+  </div>
+</Base>

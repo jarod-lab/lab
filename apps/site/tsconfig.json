@@ -1,0 +1,9 @@
+{
+  "extends": "@starter/config/tsconfig.base.json",
+  "include": [".astro/types.d.ts", "src", "*.ts"],
+  "exclude": ["dist"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["node"]
+  }
+}

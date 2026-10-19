@@ -2,6 +2,7 @@
   "turbo": false,
   "apps": {
     "apps/api": { "name": "api.starter" },
-    "apps/app": { "name": "app.starter" }
+    "apps/app": { "name": "app.starter" },
+    "apps/site": { "name": "site.starter" }
   }
 }

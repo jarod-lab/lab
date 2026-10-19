@@ -1,0 +1,33 @@
+---
+import type { GetStaticPaths } from "astro"
+import { render } from "astro:content"
+
+import { LegalPage } from "../../components/legal-page"
+import Base from "../../layouts/base.astro"
+import { allLegal } from "../../lib/content"
+import { site } from "../../site"
+
+export const getStaticPaths = (async () => {
+  const docs = await allLegal()
+  const tabs = docs.map((d) => ({ slug: d.id, label: d.data.tab ?? d.data.title }))
+  return docs.map((entry) => ({ params: { slug: entry.id }, props: { entry, tabs } }))
+}) satisfies GetStaticPaths
+
+const { entry, tabs } = Astro.props
+const { Content, headings } = await render(entry)
+const sections = headings.filter((h) => h.depth === 2).map((h) => ({ slug: h.slug, text: h.text }))
+---
+
+<Base title={`${entry.data.title} — ${site.name}`} announce={false}>
+  <LegalPage
+    title={entry.data.title}
+    effective={entry.data.effective}
+    updated={entry.data.updated}
+    summary={entry.data.summary}
+    tabs={tabs}
+    current={entry.id}
+    sections={sections}
+  >
+    <Content />
+  </LegalPage>
+</Base>

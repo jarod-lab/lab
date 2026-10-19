@@ -1,0 +1,28 @@
+---
+import { FaqSection } from "../components/faq-list"
+import { Benefits } from "../components/home/benefits"
+import { FinalCta } from "../components/home/final-cta"
+import { Hero } from "../components/home/hero"
+import { HowItWorks } from "../components/home/how-it-works"
+import { Inbox } from "../components/home/inbox"
+import { PricingTeaser } from "../components/home/pricing-teaser"
+import { Proof } from "../components/home/proof"
+import { Security } from "../components/home/security"
+import { Testimonial } from "../components/home/testimonial"
+import { homeFaqs } from "../data/faqs"
+import Base from "../layouts/base.astro"
+import { site } from "../site"
+---
+
+<Base title={`${site.name} — agents that wait for your yes`}>
+  <Hero />
+  <Proof />
+  <Benefits />
+  <HowItWorks />
+  <Inbox />
+  <Testimonial />
+  <Security />
+  <PricingTeaser />
+  <FaqSection id="faq-h" title="Questions teams ask first" faqs={homeFaqs} />
+  <FinalCta />
+</Base>

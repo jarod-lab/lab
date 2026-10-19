@@ -79,6 +79,16 @@ export const env = createEnv({
       ),
     /** Dev only: the API that apps/app's vite dev server proxies /api, /v1, /mcp and /.well-known to. */
     API_URL: z.url().optional(),
+    /**
+     * Build only (apps/site): the marketing site's public origin, for canonical URLs and the RSS
+     * feeds. Read by apps/site/astro.config.ts. Unset, http://localhost:4321.
+     */
+    SITE_URL: z.url().optional(),
+    /**
+     * Build only (apps/site): the web app the marketing site's "Sign in" and "Start free" link to.
+     * Read by apps/site/astro.config.ts. Unset, the app under portless, else http://localhost:3000.
+     */
+    APP_URL: z.url().optional(),
     /** e2e only: the model credential the e2e tester (`pnpm e2e`) uses for its agent steps. */
     AI_GATEWAY_API_KEY: z.string().min(1).optional(),
     NODE_ENV: z.enum(["development", "test", "production"]).optional(),

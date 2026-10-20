@@ -45,6 +45,7 @@ export function projectOperations({ db }: Pick<OperationDeps, "db">) {
     summary: "Create a project",
     description: "Creates a project in the caller's organization and returns it.",
     permissions: { project: ["create"] },
+    hints: { readOnly: false, destructive: false },
     input: z.object({ name: z.string().trim().min(1).max(100).describe("Project name") }),
     output: projectOutput,
     examples: [{ input: { name: "Website" } }],
@@ -65,7 +66,7 @@ export function projectOperations({ db }: Pick<OperationDeps, "db">) {
     permissions: { project: ["delete"] },
     input: z.object({ id: z.string().describe("Project id from list_projects") }),
     output: z.object({ deleted: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { id: "00000000-0000-0000-0000-000000000000" }, error: "NOT_FOUND" }],
     handler: ({ id }, { caller }) =>
       inCallerOrg(caller, (org, actor) =>

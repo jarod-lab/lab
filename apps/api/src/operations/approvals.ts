@@ -38,6 +38,7 @@ export function approvalOperations({
       "until get_run shows it approved; a denied one must not be taken. stepId attaches it to an existing " +
       "step; otherwise the request creates a step for it.",
     permissions: { run: ["update"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend({
       action: z
         .string()
@@ -109,7 +110,7 @@ export function approvalOperations({
     fresh: true,
     input: approvalRef.extend({ decision: z.enum(["approve", "deny"]) }),
     output: approvalOutputSchema,
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [
       {
         input: { id: "00000000-0000-0000-0000-000000000000", decision: "approve" },
@@ -152,6 +153,7 @@ export function approvalOperations({
       "30 seconds the decision stands and this returns CONFLICT. Only a person signed in to the web app can undo.",
     permissions: { run: ["approve"] },
     fresh: true,
+    hints: { readOnly: false, destructive: false },
     input: approvalRef,
     output: approvalOutputSchema,
     examples: [{ input: { id: "00000000-0000-0000-0000-000000000000" }, error: "NOT_FOUND" }],

@@ -145,6 +145,7 @@ export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" |
       "Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three " +
       "always-ask actions on. Start its work with start_run. Returns the agent.",
     permissions: { agent: ["create"] },
+    hints: { readOnly: false, destructive: false },
     input: agentSettingsInput,
     output: workspaceAgentOutput,
     examples: [{ input: { name: "Release triage", description: "Groups release blockers" } }],
@@ -166,6 +167,7 @@ export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" |
       "NOT_FOUND for ids outside this organization. Changing autonomy or the always-ask actions changes what " +
       "agents may do without asking: confirm with the user first.",
     permissions: { agent: ["update"] },
+    hints: { readOnly: false, destructive: true, idempotent: true },
     input: agentRef.extend(agentSettingsInput.partial().shape),
     output: workspaceAgentOutput,
     examples: [
@@ -200,7 +202,7 @@ export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" |
     permissions: { agent: ["delete"] },
     input: agentRef,
     output: z.object({ deleted: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { id: "00000000-0000-0000-0000-000000000000" }, error: "NOT_FOUND" }],
     handler: ({ id }, { caller }) =>
       inCallerOrg(caller, (org, proof) =>

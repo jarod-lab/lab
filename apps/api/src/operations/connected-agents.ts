@@ -55,7 +55,7 @@ export function connectedAgentOperations({ db, notifier }: Pick<OperationDeps, "
     fresh: true,
     input: z.object({ id: z.string().describe("Agent id from list_connected_agents") }),
     output: z.object({ revoked: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { id: "key_00000000" }, error: "NOT_FOUND" }],
     handler: ({ id }, { caller }) =>
       inCallerOrg(caller, async (org, proof) => {

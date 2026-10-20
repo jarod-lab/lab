@@ -45,6 +45,7 @@ export function apiKeyOperations({ auth, db }: Pick<OperationDeps, "auth" | "db"
       "(session or OAuth) can create keys, not another API key.",
     permissions: { apiKey: ["create"] },
     fresh: true,
+    hints: { readOnly: false, destructive: false },
     input: z.object({
       name: z.string().trim().min(1).max(100).describe("What the key is for"),
       permissions: permissionsInput.describe(

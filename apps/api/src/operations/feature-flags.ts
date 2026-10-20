@@ -293,7 +293,7 @@ export function featureFlagOperations({
       enabled: z.boolean().optional().describe("The kill switch: false pauses the rollout"),
     }),
     output: flagOutput,
-    hints: { idempotent: true },
+    hints: { readOnly: false, destructive: false, idempotent: true },
     examples: [{ input: { key: "new-checkout", percentage: 5 }, error: "NOT_FOUND" }],
     handler: ({ key, percentage, enabled }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
@@ -328,7 +328,7 @@ export function featureFlagOperations({
       value: z.boolean().default(true).describe("true (default): on for them; false: off"),
     }),
     output: flagOutput,
-    hints: { idempotent: true },
+    hints: { readOnly: false, destructive: false, idempotent: true },
     examples: [
       { input: { key: "new-checkout", organizations: ["acme"], value: true }, error: "NOT_FOUND" },
     ],
@@ -362,7 +362,7 @@ export function featureFlagOperations({
       organization: z.string().min(1).describe("Organization id or slug"),
     }),
     output: flagOutput.extend({ removed: z.boolean() }),
-    hints: { idempotent: true, destructive: true },
+    hints: { readOnly: false, destructive: true, idempotent: true },
     examples: [{ input: { key: "new-checkout", organization: "acme" }, error: "NOT_FOUND" }],
     handler: ({ key, organization }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
@@ -397,7 +397,7 @@ export function featureFlagOperations({
       value: z.boolean().describe("The value everyone keeps: true to keep the feature"),
     }),
     output: flagOutput,
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { key: "new-checkout", value: true }, error: "NOT_FOUND" }],
     handler: ({ key, value }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {
@@ -434,7 +434,7 @@ export function featureFlagOperations({
     permissions: { featureFlag: ["delete"] },
     input: z.object({ key: keyInput }),
     output: z.object({ deleted: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { key: "new-checkout" }, error: "NOT_FOUND" }],
     handler: ({ key }, { caller }) =>
       inOperatorOrg(caller, operator, async (org, proof) => {

@@ -58,7 +58,7 @@ export function scimOperations({ auth, db }: Pick<OperationDeps, "auth" | "db">)
     fresh: true,
     input: z.object({ id: z.string().describe("Token id from list_scim_tokens") }),
     output: z.object({ revoked: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { id: "ba_scim_connection_00000000" }, error: "NOT_FOUND" }],
     handler: ({ id }, { caller }) =>
       inCallerOrg(caller, async (org, proof) => {

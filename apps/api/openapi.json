@@ -605,7 +605,11 @@
         ],
         "x-required-permissions": [
           "project:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/projects/{id}": {
@@ -704,6 +708,7 @@
           "project:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -861,7 +866,11 @@
         ],
         "x-required-permissions": [
           "apiKey:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       },
       "get": {
         "operationId": "list_api_keys",
@@ -1251,6 +1260,7 @@
           "scim:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -1487,6 +1497,7 @@
           "apiKey:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -2033,7 +2044,11 @@
         ],
         "x-required-permissions": [
           "agent:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/workspace-agents/{id}": {
@@ -2418,7 +2433,12 @@
         ],
         "x-required-permissions": [
           "agent:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": true
+        }
       },
       "delete": {
         "operationId": "delete_agent",
@@ -2515,6 +2535,7 @@
           "agent:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -2763,7 +2784,11 @@
         ],
         "x-required-permissions": [
           "run:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs": {
@@ -3745,7 +3770,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/steps": {
@@ -4004,7 +4033,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/steps/{stepId}": {
@@ -4260,7 +4293,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/approvals": {
@@ -4477,7 +4514,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/approvals/{id}/decision": {
@@ -4675,6 +4716,7 @@
           "run:approve"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -4846,7 +4888,11 @@
         ],
         "x-required-permissions": [
           "run:approve"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/messages": {
@@ -4979,7 +5025,11 @@
         ],
         "x-required-permissions": [
           "run:steer"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/defer": {
@@ -5221,7 +5271,11 @@
         ],
         "x-required-permissions": [
           "run:steer"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/inbox": {
@@ -5513,6 +5567,7 @@
           "twoFactor:reset"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -5720,7 +5775,11 @@
         ],
         "x-required-permissions": [
           "organization:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": true
+        }
       },
       "delete": {
         "operationId": "remove_organization_logo",
@@ -5811,6 +5870,7 @@
           "organization:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true,
           "idempotent": true
         }
@@ -6864,6 +6924,8 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false,
           "idempotent": true
         },
         "x-audience": "operator"
@@ -6965,6 +7027,7 @@
           "featureFlag:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         },
         "x-audience": "operator"
@@ -7260,6 +7323,8 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false,
           "idempotent": true
         },
         "x-audience": "operator"
@@ -7532,8 +7597,9 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
-          "idempotent": true,
-          "destructive": true
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": true
         },
         "x-audience": "operator"
       }
@@ -7814,6 +7880,7 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         },
         "x-audience": "operator"

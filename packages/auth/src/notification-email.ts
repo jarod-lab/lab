@@ -1,10 +1,10 @@
-// The email half of notifications: better-inbox's delivery channel, sent through the user's own SES
+// The email half of notifications: @byo-oss/notifications' delivery channel, sent through the user's own SES
 // with Wraps like the auth emails, in the same layout. Which events email, and when, is
 // NOTIFICATION_EMAIL_ROUTES in notifications.ts; the API process sends them (delivery-sweep.ts).
 import { renderLayout, type WrapsSesOptions } from "@wraps.dev/better-auth"
 import { WrapsEmail } from "@wraps.dev/email"
-import type { InboxChannel, inbox } from "better-inbox"
-import { notificationUrl, type WrapsEmailSender, wrapsEmail } from "better-inbox/wraps"
+import type { InboxChannel, inbox } from "@byo-oss/notifications"
+import { notificationUrl, type WrapsEmailSender, wrapsEmail } from "@byo-oss/notifications/wraps"
 
 export interface NotificationEmailOptions {
   /** "Name <addr@domain>", the auth emails' sender. */
@@ -44,7 +44,7 @@ export function notificationEmailChannel(opts: NotificationEmailOptions): InboxC
 
 /**
  * Indexes for the delivery queue: the sweep reads due rows by status and time, and a throttled send
- * looks up the person's last email of that type. Kept out of the plugin call because better-inbox's
+ * looks up the person's last email of that type. Kept out of the plugin call because @byo-oss/notifications'
  * schema type has no `indexes` field (as `withGrantIndexes` does for the OAuth plugin).
  */
 export function withDeliveryIndexes(plugin: ReturnType<typeof inbox>): ReturnType<typeof inbox> {

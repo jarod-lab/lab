@@ -35,7 +35,7 @@
     "@tanstack/react-table": "^9.3.1",
     "@tanstack/react-virtual": "^3.14.20",
     "better-auth": "catalog:",
-    "better-inbox": "^0.6.0",
+    "@byo-oss/notifications": "^0.7.0",
     "cn": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

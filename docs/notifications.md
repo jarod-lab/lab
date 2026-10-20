@@ -1,6 +1,6 @@
 # Notifications
 
-In-app notifications come from [better-inbox](https://github.com/better-inbox/better-inbox), a
+In-app notifications come from [@byo-oss/notifications](https://github.com/byo-oss/notifications), a
 better-auth plugin. A **notification** (GLOSSARY) is a row in the `notification` table addressed to
 one user. A row that is about an organization is stamped with that organization's id. The top bar's
 bell lists a person's notifications. It is separate from the **Inbox**, which is the count of runs
@@ -23,7 +23,7 @@ that need you.
     org event needs the caller's `OrganizationId` proof:
     `inCallerOrg(caller, (org, proof) => notifier.inOrg(org, proof, event))`.
 - `packages/ui/src/dplus/shell/notifications-menu.tsx` is the bell and panel (presentational).
-  `apps/app/src/containers/notifications.tsx` wires it to better-inbox's `useInbox`. It polls the
+  `apps/app/src/containers/notifications.tsx` wires it to @byo-oss/notifications' `useInbox`. It polls the
   unread count every 30 s, paused while the tab is hidden, and refreshes the list whenever the
   bell opens.
 
@@ -64,7 +64,7 @@ is the channel.
   `apiKey: ["create", "delete"]`, billing managers `subscription: ["update"]`. If the catalog
   changes, the recipients follow.
 - **The person who caused an event is not told about it.**
-- **Fan-out is one insert per recipient, awaited by the request.** better-inbox refuses an org with
+- **Fan-out is one insert per recipient, awaited by the request.** @byo-oss/notifications refuses an org with
   more than `maxFanout` members (1000 by default). Above that, every org-wide event is reported and
   nobody gets it. Raise `inbox({ maxFanout })` or queue the sends before you get there.
   `approval.requested` reaches every approver, and `member` approves. To narrow it, change

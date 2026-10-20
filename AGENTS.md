@@ -47,7 +47,7 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   `docs/database.md`.
 - `packages/auth` — better-auth with organizations, org API keys (`sk_`), OAuth 2.1, device grant.
   `packages/auth/src/access.ts` is the permission catalog (browser-safe). See `docs/auth.md`.
-  In-app notifications (better-inbox): send only through the catalog in
+  In-app notifications (@byo-oss/notifications): send only through the catalog in
   `packages/auth/src/notifications.ts`, never `auth.api.notify`. See `docs/notifications.md`.
 - `packages/auth-proofs` — gdp-ts proofs (`lib/ids.ts`, `proofs/`,
   `packages/auth-proofs/src/mistakes.types.ts`).
@@ -113,7 +113,7 @@ fixes formatting.
   floating or misused promises are errors, so a promise you mean to drop takes `void`. Biome skips
   `.claude/` and lockfiles, and does not format Markdown.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`).
-  Don't hand-edit `minimumReleaseAgeExclude`. It lists only our own packages (`better-inbox`,
+  Don't hand-edit `minimumReleaseAgeExclude`. It lists only our own packages (`@byo-oss/*`,
   `@wraps.dev/*`), by name, so our releases install the day they publish. Every other package
   waits out the 24-hour release age.
 - **Vendored shadcn:** `packages/ui/src/components/ui/` and `src/hooks/` come from the shadcn CLI

@@ -1,13 +1,13 @@
 // Every in-app notification the app sends. One event catalog, one pure renderer (title, body,
 // href), recipients derived from the permission catalog, and one sender that never fails its caller.
 //
-// Sends go through better-inbox's `notify` endpoint (`auth.api.notify`, server-only). Inside a
+// Sends go through @byo-oss/notifications' `notify` endpoint (`auth.api.notify`, server-only). Inside a
 // better-auth transaction the endpoint would read through the outer adapter, which waits on the
 // transaction it is inside of (PGlite has one connection; see notifications.test.ts). So `send`
 // defers to after the transaction commits, and runs at once when none is open.
 import { allowed } from "@starter/api"
 import { queueAfterTransactionHook } from "@better-auth/core/context"
-import type { DeliveryRule } from "better-inbox"
+import type { DeliveryRule } from "@byo-oss/notifications"
 
 import { type Permissions, rolePermissions, roles, type RoleName } from "./permissions"
 
@@ -84,7 +84,7 @@ export type NotificationEvent =
 export type NotificationType = NotificationEvent["type"]
 
 /**
- * The events that also email the person (better-inbox delivery rules; docs/notifications.md). Types
+ * The events that also email the person (@byo-oss/notifications delivery rules; docs/notifications.md). Types
  * not listed stay in-app.
  * - Security notices go out at once, even if read first: the email is the record, and it reaches
  *   the owner when someone else is in the account.
@@ -135,7 +135,7 @@ export type Recipients =
   | { kind: "member"; organizationId: string; userId: string }
   | { kind: "person"; userId: string }
 
-/** The body `auth.api.notify` takes (better-inbox). */
+/** The body `auth.api.notify` takes (@byo-oss/notifications). */
 export interface NotifyBody {
   userId?: string
   organizationId?: string
@@ -175,7 +175,7 @@ const orgFanOut = (
   excludeUserIds: readonly (string | undefined)[] = [],
 ): Recipients | null => {
   const rules = rolesWith(need)
-  // An empty role list would reach every member (better-inbox ignores `roles` when it is empty).
+  // An empty role list would reach every member (@byo-oss/notifications ignores `roles` when it is empty).
   if (rules.length === 0) return null
   return {
     kind: "members",

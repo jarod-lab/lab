@@ -1,4 +1,4 @@
-// Sends notification emails (docs/notifications.md). better-inbox writes a delivery row when a
+// Sends notification emails (docs/notifications.md). @byo-oss/notifications writes a delivery row when a
 // notification is routed to email; delayed emails and retries go out only when something calls
 // `processDeliveries`, so the API process does, on a timer. Every replica may run it: each
 // delivery is claimed before it is sent, so two sweeps never send the same email.

@@ -32,7 +32,7 @@ packages:
   - "packages/*"
 
 minimumReleaseAgeExclude:
-  - better-inbox
+  - '@byo-oss/*'
   - '@wraps.dev/*'
 
 allowBuilds:

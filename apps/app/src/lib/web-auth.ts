@@ -1,6 +1,6 @@
 import { TWO_FACTOR_PATH, createClient } from "@starter/auth/client"
 import type { SignInMethods, SocialProvider } from "@starter/auth/client"
-import type { InboxFetchClient } from "better-inbox/react"
+import type { InboxFetchClient } from "@byo-oss/notifications/react"
 
 import { rawSearch } from "./navigation"
 
@@ -104,7 +104,7 @@ export interface WebAuth {
    */
   requestPasswordReset?(input: { email: string; redirectTo: string }): Promise<void>
   /**
-   * The person's notifications and unread count (better-inbox's `inbox.*` endpoints), for the bell in
+   * The person's notifications and unread count (@byo-oss/notifications' `inbox.*` endpoints), for the bell in
    * the top bar. Optional so pages and tests without it show no bell.
    */
   notifications?: InboxFetchClient
@@ -151,7 +151,7 @@ export function makeAuthClient(baseURL?: string, fetchImpl?: typeof fetch): Auth
 }
 
 /**
- * better-inbox's hook takes its own client shape. This adapts the better-auth client's inbox
+ * @byo-oss/notifications' hook takes its own client shape. This adapts the better-auth client's inbox
  * actions to it, so the page never needs a cast.
  */
 function inboxFetchClient(inbox: AuthClient["inbox"]): InboxFetchClient {

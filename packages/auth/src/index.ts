@@ -8,7 +8,7 @@ import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
-import { inbox } from "better-inbox"
+import { inbox } from "@byo-oss/notifications"
 import { type WrapsSesOptions, wraps } from "@wraps.dev/better-auth"
 import { reportError } from "@starter/errors"
 import Stripe from "stripe"
@@ -741,7 +741,7 @@ export function createAuth(opts: AuthOptions) {
       signOutSession,
       // Audit events for auth activity (auth-events.ts).
       authEvents({ onAuthEvent: opts.onAuthEvent ?? (() => {}) }),
-      // In-app notifications (better-inbox): the bell. Written by the server only (auth.api.notify).
+      // In-app notifications (@byo-oss/notifications): the bell. Written by the server only (auth.api.notify).
       // Some events also email (NOTIFICATION_EMAIL_ROUTES; the API's delivery sweep sends them).
       withDeliveryIndexes(
         inbox({

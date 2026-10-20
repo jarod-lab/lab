@@ -5,7 +5,7 @@ import {
 import { passkeyClient } from "@better-auth/passkey/client"
 import { ssoClient } from "@better-auth/sso/client"
 import { stripeClient } from "@better-auth/stripe/client"
-import { inboxClient } from "better-inbox/client"
+import { inboxClient } from "@byo-oss/notifications/client"
 import { wrapsClient } from "@wraps.dev/better-auth/client"
 import type { BetterAuthClientOptions, BetterAuthClientPlugin } from "better-auth/client"
 import { createAuthClient } from "better-auth/client"

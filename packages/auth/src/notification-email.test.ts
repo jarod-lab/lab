@@ -1,4 +1,4 @@
-import { inbox } from "better-inbox"
+import { inbox } from "@byo-oss/notifications"
 import { describe, expect, it } from "vitest"
 
 import { notificationEmailChannel, withDeliveryIndexes } from "./notification-email"

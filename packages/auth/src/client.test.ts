@@ -57,7 +57,7 @@ describe("createClient", () => {
   // The client ships to browsers: no server code (@starter/api, the DB, ./permissions) may reach it.
   it("imports only browser-safe modules", () => {
     const browserSafe =
-      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|better-inbox\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
+      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|@byo-oss\/notifications\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
     const imports = [...importsOf("./client.ts"), ...importsOf("./access.ts")]
     expect(imports.filter((i) => !browserSafe.test(i ?? ""))).toEqual([])
   })

@@ -2573,7 +2573,7 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
-  describe("notifications (better-inbox)", () => {
+  describe("notifications (@byo-oss/notifications)", () => {
     it("lists a notification, marks it read and the unread count drops; another user can't see or mark it", async () => {
       const ada = await signedUp("Ada notices")
       const bob = await signedUp("Bob notices")
@@ -2919,7 +2919,7 @@ describe("auth rate limit over HTTP (opted in, behind a trusted proxy)", () => {
 
 // The notices the auth layer sends (packages/auth/src/notify-hooks.ts, index.ts): each event reaches
 // the people it is about, and not the actor. Read through the recipient's own session, as the bell does.
-describe("notices from the auth flows (better-inbox)", () => {
+describe("notices from the auth flows (@byo-oss/notifications)", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   const STRIPE_WEBHOOK_SECRET = "whsec_placeholder_for_tests" // gitleaks:allow
   beforeAll(async () => {

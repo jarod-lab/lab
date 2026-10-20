@@ -55,7 +55,7 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Steer** — a message a person sends to a running run (`steer_run`). **Defer** pushes a run's attention
   to a later time.
 - **Inbox** — the person's list of runs that need them, across the organization.
-- **Notification** — an in-app message to one person (`notification` table, better-inbox), optionally
+- **Notification** — an in-app message to one person (`notification` table, @byo-oss/notifications), optionally
   stamped with an organization, shown under the top bar's bell. Not the **Inbox**.
 - **Notification event** — one typed event (`NotificationEvent`, `packages/auth/src/notifications.ts`)
   that every notification is sent through; its recipients come from the permission catalog.

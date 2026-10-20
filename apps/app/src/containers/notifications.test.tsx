@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { InboxFetchClient, InboxNotification } from "better-inbox/react"
+import type { InboxFetchClient, InboxNotification } from "@byo-oss/notifications/react"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"

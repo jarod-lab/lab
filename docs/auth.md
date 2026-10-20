@@ -199,6 +199,25 @@ Every step that resumes an authorization carries `oauth_query`. The magic link c
 instead of sending them through SES. `GET /api/dev/mail?to=` returns them, and the e2e tests read
 their links there.
 
+## Auth email locally
+
+To send real auth emails from `pnpm dev`, reuse an AWS account where Wraps is already deployed
+(`wraps email init`): its SES must be out of the sandbox, with the domain of `EMAIL_FROM` verified.
+In `.env`:
+
+- `AWS_PROFILE`: an SSO profile for that account (`aws sso login` first). The AWS SDK reads it; no
+  code passes it. The region is Wraps' default, `us-east-1`.
+- `EMAIL_FROM`: an address on the verified domain.
+- `DEV_MAIL_SINK` unset, or the emails stay in memory.
+
+The identity's default configuration set (`wraps email init` names it `wraps-email-<domain>`)
+publishes its SES events to EventBridge, local sends included. The deployed `wraps-email-role` trusts
+only AWS services, so local sends run as your SSO role, not that one.
+
+If the AWS CLI works but sends fail with Wraps' `CredentialsError`, check the profile for a
+`credential_process` line (left by `aws-sso-util`): the JS SDK runs it instead of `sso_session`, and a
+stale one fails.
+
 ## Exports from `@starter/auth`
 
 - `revokeGrants(db, scope, now)` (`packages/auth/src/member-grants.ts`) ends a grant: it deletes the

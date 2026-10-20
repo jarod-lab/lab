@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs"
 
 import { runWithTransaction } from "@better-auth/core/context"
+import { deleteMemberData } from "@byo-oss/notifications"
+import { notification } from "@starter/db/schema"
+import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestAuth } from "./auth.test.helpers"
@@ -553,6 +556,71 @@ describe("the hazard: auth.api.notify called directly inside a transaction", () 
     // The transaction never ends, so the database is left as it is: this test owns its database.
     naive.catch(() => {})
     await expect(withTimeout(naive, 1_500)).rejects.toThrow("timed out")
+  })
+})
+
+describe("deleteMemberData inside a transaction (SCIM deprovisioning)", () => {
+  // Its own database: the commit and rollback cases change the same rows, in order.
+  let h: Awaited<ReturnType<typeof createTestAuth>>
+  let owner: { userId: string; orgId: string }
+  let member: { userId: string }
+
+  beforeAll(async () => {
+    h = await createTestAuth()
+    owner = await h.signUp("Owner")
+    member = await h.signUp("Member")
+    await h.addMember(owner.orgId, member.userId, "member")
+    await h.auth.api.notify({
+      body: {
+        userId: member.userId,
+        organizationId: owner.orgId,
+        type: "approval.requested",
+        title: "Org",
+      },
+    })
+    await h.auth.api.notify({
+      body: { userId: member.userId, type: "account.password_changed", title: "Personal" },
+    })
+  })
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  const titles = async () =>
+    (
+      await h.db
+        .select({ title: notification.title })
+        .from(notification)
+        .where(eq(notification.userId, member.userId))
+    )
+      .map((row) => row.title)
+      .sort()
+  const drop = () =>
+    deleteMemberData(h.auth, { userId: member.userId, organizationId: owner.orgId })
+
+  it("a rollback keeps the member's notices for the organization", async () => {
+    const adapter = (await h.auth.$context).adapter
+    await expect(
+      withTimeout(
+        runWithTransaction(adapter, async () => {
+          await drop()
+          throw new Error("the membership write failed")
+        }),
+        5_000,
+      ),
+    ).rejects.toThrow("the membership write failed")
+    expect(await titles()).toEqual(["Org", "Personal"])
+  })
+
+  it("a commit drops the member's notices for the organization and keeps the personal one", async () => {
+    const adapter = (await h.auth.$context).adapter
+    const result = await withTimeout(
+      runWithTransaction(adapter, () => drop()),
+      5_000,
+    )
+    expect(result).toEqual({ notifications: 1 })
+    expect(await titles()).toEqual(["Personal"])
   })
 })
 

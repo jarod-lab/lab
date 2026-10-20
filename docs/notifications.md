@@ -72,8 +72,12 @@ is the channel.
 - **Org rows go when the access goes.** The inbox plugin does this itself (0.8): removing a member,
   or the member leaving, deletes that user's rows for the organization, and deleting an organization
   deletes its rows (backed by the foreign key in migration 0010). The removal notice is personal, not
-  stamped with the organization, so it survives. SCIM deprovisioning removes the membership inside
-  the directory's transaction, outside those endpoints, so it doesn't drop the rows yet.
+  stamped with the organization, so it survives. SCIM deprovisioning is outside those endpoints: it
+  removes the membership inside the directory's transaction, so `endAccessIn` (`packages/auth/src/index.ts`)
+  calls `deleteMemberData` there, and the rows commit or roll back with the membership. That needs
+  @byo-oss/notifications 0.8.2: 0.8.0's cleanup used the outer adapter and hangs on PGlite inside the
+  transaction. The tests are in `apps/api/src/auth-flows.test.ts` (over HTTP) and
+  `packages/auth/src/notifications.test.ts` (commit and rollback).
 - **Adding an event:** add it to `NotificationEvent`, `renderNotification` and `recipientsOf`, then
   add it to the table below. The test in `packages/auth/src/notifications.test.ts` checks that
   every catalog type is listed here. Add a line to GLOSSARY.md only for a new concept, not for a

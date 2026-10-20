@@ -32,8 +32,8 @@ export interface ProjectionLogger {
 
 /**
  * The plugin's projection. `endAccess` runs when deprovisioning removes a membership: it ends the
- * user's OAuth grants and SCIM tokens in the organization, through the transaction's adapter (see
- * index.ts). The plugin calls `reconcileUser` for every change to a user's SCIM sources, inside the
+ * user's OAuth grants, SCIM tokens and notifications in the organization, through the transaction's
+ * adapter (see index.ts). The plugin calls `reconcileUser` for every change to a user's SCIM sources, inside the
  * directory's transaction, so the membership write commits or rolls back with the SCIM write. Idempotent.
  */
 export const scimProjection = (

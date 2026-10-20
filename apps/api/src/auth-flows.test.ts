@@ -9,6 +9,7 @@ import { personalSlug } from "@starter/auth"
 import {
   auditEvent,
   member,
+  notification,
   organization,
   passkey as passkeyTable,
   session as sessionTable,
@@ -1811,6 +1812,75 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const gone = await scim(`/Users/${scimId}`, { method: "DELETE" })
       expect(gone.status).toBe(204)
       expect(await memberOf(address, org)).toBeNull()
+    })
+
+    it("a directory deprovisioning drops the member's notices for that organization, and keeps the rest", async () => {
+      const { org, scim } = await ownerWithScim("Notices")
+      const provision = async (address: string) => {
+        const created = await scim(
+          "/Users",
+          json({
+            schemas: [SCIM_USER],
+            userName: address,
+            emails: [{ value: address, primary: true }],
+            active: true,
+          }),
+        )
+        expect(created.status).toBe(201)
+        return ((await created.json()) as { id: string }).id
+      }
+      const leaving = email()
+      const staying = email()
+      const leavingScimId = await provision(leaving)
+      await provision(staying)
+      const idOf = async (address: string) =>
+        (
+          await t.db
+            .select({ id: userTable.id })
+            .from(userTable)
+            .where(eq(userTable.email, address))
+        )[0]?.id ?? ""
+      const leavingId = await idOf(leaving)
+      const stayingId = await idOf(staying)
+
+      // Seeding is setup: the server writes the rows the way the features do.
+      await t.auth.api.notify({
+        body: { userId: leavingId, organizationId: org, type: "approval.requested", title: "Org" },
+      })
+      await t.auth.api.notify({
+        body: { userId: leavingId, type: "account.password_changed", title: "Personal" },
+      })
+      await t.auth.api.notify({
+        body: {
+          userId: stayingId,
+          organizationId: org,
+          type: "approval.requested",
+          title: "Stays",
+        },
+      })
+      const titlesOf = async (userId: string) =>
+        (
+          await t.db
+            .select({ title: notification.title })
+            .from(notification)
+            .where(eq(notification.userId, userId))
+        )
+          .map((row) => row.title)
+          .sort()
+      expect(await titlesOf(leavingId)).toEqual(["Org", "Personal"])
+
+      const off = await scim(
+        `/Users/${leavingScimId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(off.status).toBe(200)
+      expect(await memberOf(leaving, org)).toBeNull()
+      // The organization's notices go with the membership; the personal one does not.
+      expect(await titlesOf(leavingId)).toEqual(["Personal"])
+      expect(await titlesOf(stayingId)).toEqual(["Stays"])
     })
 
     it("a directory deprovisioning removes only what it provisioned: a member an owner added by hand stays", async () => {

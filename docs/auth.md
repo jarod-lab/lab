@@ -159,7 +159,8 @@ Every step that resumes an authorization carries `oauth_query`. The magic link c
 - Provisioned users join as `member` (`SCIM_MEMBER_ROLE`); a role given later is kept while they stay
   active (`packages/auth/src/scim-projection.ts`).
 - Deprovisioning (active false, or the SCIM user deleted) removes only a membership the directory
-  created (`member.source = "scim"`) and ends the user's grants and SCIM tokens in that org. A member
+  created (`member.source = "scim"`) and ends the user's grants, SCIM tokens and notifications for that
+  org (the notifications in the same transaction; see `docs/notifications.md`). A member
   added by hand or invited stays (logged as `scim.deprovision.hand_made_kept`). An owner is never
   removed (`scim.deprovision.owner_kept`): change the role first. Admins are removed.
 - `list_scim_tokens` and `revoke_scim_token` are owner-only (`scim` resource). Revoking keeps the

@@ -8,7 +8,7 @@ import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
-import { inbox } from "@byo-oss/notifications"
+import { type AuthWithContext, deleteMemberData, inbox } from "@byo-oss/notifications"
 import { type WrapsSesOptions, wraps } from "@wraps.dev/better-auth"
 import { reportError } from "@starter/errors"
 import Stripe from "stripe"
@@ -337,10 +337,15 @@ export function createAuth(opts: AuthOptions) {
     if (!scimApi.management) throw new Error("auth is not initialised")
     await endScimTokensOf(scimApi.management, userId, organizationId)
   }
+  // The inbox package's cleanup takes the auth instance, which only exists after betterAuth returns.
+  const inboxRef: { auth?: AuthWithContext } = {}
   // A SCIM deprovision ends a person's access the way a removal does, inside the SCIM transaction: the
-  // adapter for the grants (the Drizzle handle would wait on that transaction), the tokens via the plugin.
+  // adapter for the grants (the Drizzle handle would wait on that transaction), the tokens via the plugin,
+  // and their notices for the organization (deleteMemberData picks up the open transaction itself).
   const endAccessIn = async (db: Adapter, userId: string, organizationId: string) => {
+    if (!inboxRef.auth) throw new Error("auth is not initialised")
     await revokeGrantsWith(db, { organizationId, userId }, new Date())
+    await deleteMemberData(inboxRef.auth, { userId, organizationId })
     await endScim(userId, organizationId)
   }
 
@@ -760,6 +765,7 @@ export function createAuth(opts: AuthOptions) {
     ],
   })
   notifyRef.notify = (body) => auth.api.notify(body)
+  inboxRef.auth = auth
   scimApi.connect = (input) => auth.api.createSCIMManagedConnection(input)
   scimApi.management = {
     list: (provisioningDomainId) =>

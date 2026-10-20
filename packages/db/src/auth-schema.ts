@@ -697,7 +697,48 @@ export const notification = pgTable("notification", {
   href: text("href"),
   data: jsonb("data"),
   read: boolean("read").default(false).notNull(),
+  seenAt: timestamp("seen_at"),
   createdAt: timestamp("created_at").notNull(),
+})
+
+export const notificationDelivery = pgTable(
+  "notification_delivery",
+  {
+    id: text("id").primaryKey(),
+    notificationId: text("notification_id")
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    channel: text("channel").notNull(),
+    status: text("status").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    claimedAt: timestamp("claimed_at"),
+    sentAt: timestamp("sent_at"),
+    detail: text("detail"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("notificationDelivery_due_idx").on(table.status, table.scheduledFor),
+    index("notificationDelivery_throttle_idx").on(
+      table.userId,
+      table.type,
+      table.channel,
+      table.sentAt,
+    ),
+  ],
+)
+
+export const inboxPresence = pgTable("inbox_presence", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
 })
 
 export const subscription = pgTable("subscription", {
@@ -744,6 +785,8 @@ export const userRelations = relations(user, ({ one, many }) => ({
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
   notifications: many(notification),
+  notificationDeliverys: many(notificationDelivery),
+  inboxPresence: one(inboxPresence),
 }))
 
 export const sessionRelations = relations(session, ({ one, many }) => ({
@@ -953,9 +996,28 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
   }),
 }))
 
-export const notificationRelations = relations(notification, ({ one }) => ({
+export const notificationRelations = relations(notification, ({ one, many }) => ({
   user: one(user, {
     fields: [notification.userId],
+    references: [user.id],
+  }),
+  notificationDeliverys: many(notificationDelivery),
+}))
+
+export const notificationDeliveryRelations = relations(notificationDelivery, ({ one }) => ({
+  notification: one(notification, {
+    fields: [notificationDelivery.notificationId],
+    references: [notification.id],
+  }),
+  user: one(user, {
+    fields: [notificationDelivery.userId],
+    references: [user.id],
+  }),
+}))
+
+export const inboxPresenceRelations = relations(inboxPresence, ({ one }) => ({
+  user: one(user, {
+    fields: [inboxPresence.userId],
     references: [user.id],
   }),
 }))

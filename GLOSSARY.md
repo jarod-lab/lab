@@ -59,6 +59,8 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
   stamped with an organization, shown under the top bar's bell. Not the **Inbox**.
 - **Notification event** — one typed event (`NotificationEvent`, `packages/auth/src/notifications.ts`)
   that every notification is sent through; its recipients come from the permission catalog.
+- **Delivery** — one notification queued for another channel (email), a `notification_delivery` row.
+  It is sent, skipped (read or seen first, throttled) or failed; see `docs/notifications.md`.
 
 ## The API
 

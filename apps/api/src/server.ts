@@ -11,6 +11,7 @@ import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
 import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
+import { startDeliverySweep } from "./delivery-sweep"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
@@ -71,6 +72,16 @@ const auth = createAuth({
   onNotificationError: (error, type) => reportError(error, { notification: type }),
   onSignUp: (event) => captureSignUp(analytics, event),
 })
+
+// Notification emails (docs/notifications.md): the delayed ones and retries go out from this timer.
+const deliverySweep =
+  env.NOTIFICATION_SWEEP_MS > 0
+    ? startDeliverySweep({
+        process: () => auth.api.processDeliveries({}),
+        intervalMs: env.NOTIFICATION_SWEEP_MS,
+        logger,
+      })
+    : undefined
 
 // Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
 function fileStore(): FileStore | undefined {
@@ -173,9 +184,11 @@ const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)
 serve({ fetch: app.fetch, port }, (addr) => logger.info({ port: addr.port }, "api listening"))
 
 // Before the process goes (a deploy's SIGTERM, or Ctrl-C): write the flag exposures counted since
-// the last flush, and send the analytics still queued.
+// the last flush, send the analytics still queued, and let a notification sweep in flight finish.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
-    void Promise.allSettled([flags.close(), analytics.shutdown()]).finally(() => process.exit(0))
+    void Promise.allSettled([flags.close(), analytics.shutdown(), deliverySweep?.stop()]).finally(
+      () => process.exit(0),
+    )
   })
 }

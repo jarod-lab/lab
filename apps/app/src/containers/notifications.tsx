@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { InboxFetchClient } from "better-inbox/react"
 import { useInbox } from "better-inbox/react"
 
@@ -55,6 +55,20 @@ export function NotificationsContainer({
     read: n.read,
     organizationName: n.organizationId ? (names.get(n.organizationId) ?? null) : null,
   }))
+
+  // The open menu shows these rows, so they count as seen: an "email if unread" still pending for
+  // them is dropped (docs/notifications.md). An impersonated session isn't the person; it marks none.
+  const unseenIds =
+    open && !readOnly
+      ? rows
+          .filter((n) => !n.read && !n.seenAt)
+          .map((n) => n.id)
+          .join(",")
+      : ""
+  const { markSeen } = inbox
+  useEffect(() => {
+    if (unseenIds) void markSeen(unseenIds.split(","))
+  }, [unseenIds, markSeen])
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)

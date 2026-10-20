@@ -50,7 +50,13 @@ import {
 } from "./account-plugin"
 import { type LoginContext, signInOf } from "./login-method"
 import { createNotices } from "./notices"
-import { type NotificationType, type NotifyFn, createNotifier } from "./notifications"
+import { notificationEmailChannel, withDeliveryIndexes } from "./notification-email"
+import {
+  NOTIFICATION_EMAIL_ROUTES,
+  type NotificationType,
+  type NotifyFn,
+  createNotifier,
+} from "./notifications"
 import { type NotificationHooks, notificationHooks } from "./notify-hooks"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
@@ -420,16 +426,17 @@ export function createAuth(opts: AuthOptions) {
     emailAndPassword: {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
-      // Wraps fills this gap only when it is unset, so the notice is sent from here. Resetting through
-      // an emailed link proves the mailbox, so the address counts as verified: provisional signups
-      // (see signup.ts) are claimed this way.
+      // Wraps fills this gap only when it is unset, so the reset's side effects run here. Resetting
+      // through an emailed link proves the mailbox, so the address counts as verified: provisional
+      // signups (see signup.ts) are claimed this way.
       onPasswordReset: async ({ user }) => {
         // Verified first: a failing notice must not leave the claim unrecorded. This write skips
         // the user update hook, so the provisional key is ended here too.
         const db = await adapter()
         await setUserFields(db, user.id, { emailVerified: true })
         await endProvisionalKeys(db, user.id)
-        await wrapsPlugin.emails.passwordChanged({ user })
+        // The "password changed" email is this notification's email route (cancelIfRead: false), as
+        // for /change-password, so it is not also sent from here.
         await notifications.personal({ type: "account.password_changed", userId: user.id })
       },
     },
@@ -735,7 +742,20 @@ export function createAuth(opts: AuthOptions) {
       // Audit events for auth activity (auth-events.ts).
       authEvents({ onAuthEvent: opts.onAuthEvent ?? (() => {}) }),
       // In-app notifications (better-inbox): the bell. Written by the server only (auth.api.notify).
-      inbox(),
+      // Some events also email (NOTIFICATION_EMAIL_ROUTES; the API's delivery sweep sends them).
+      withDeliveryIndexes(
+        inbox({
+          appUrl: opts.baseURL,
+          channels: {
+            email: notificationEmailChannel({
+              from: opts.emailFrom,
+              appName: opts.appName ?? "Starter",
+              ses: opts.ses,
+            }),
+          },
+          routes: NOTIFICATION_EMAIL_ROUTES,
+        }),
+      ),
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter, notifications)] : []),
     ],
   })

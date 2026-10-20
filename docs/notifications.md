@@ -10,8 +10,9 @@ that need you.
 
 - `packages/auth/src/index.ts` mounts `inbox()`. `packages/auth/src/client.ts` adds
   `inboxClient()`. The routes are `GET /api/auth/inbox/list`, `GET /api/auth/inbox/unread-count`,
-  `POST /api/auth/inbox/mark-read` and `POST /api/auth/inbox/mark-all-read`. They are session-only
-  and scoped to the caller. An impersonated session can list but not mark read (`guards.ts`).
+  `POST /api/auth/inbox/mark-read`, `POST /api/auth/inbox/mark-seen` and
+  `POST /api/auth/inbox/mark-all-read`. They are session-only and scoped to the caller. An
+  impersonated session can list but not mark anything read or seen (`guards.ts`).
 - `auth.api.notify` is server-only, never an HTTP route. Don't call it directly. Send through the
   catalog:
   - `packages/auth/src/notifications.ts` is the event catalog (`NotificationEvent`).
@@ -25,6 +26,30 @@ that need you.
   `apps/app/src/containers/notifications.tsx` wires it to better-inbox's `useInbox`. It polls the
   unread count every 30 s, paused while the tab is hidden, and refreshes the list whenever the
   bell opens.
+
+## Email
+
+Some events also email the person, through their own SES with Wraps, in the auth emails' layout.
+The **email** column below says which. `NOTIFICATION_EMAIL_ROUTES` in
+`packages/auth/src/notifications.ts` holds the rules; `packages/auth/src/notification-email.ts`
+is the channel.
+
+- **Security notices go out at once, even if read first.** The email is the record, and it reaches
+  the owner when someone else is in the account.
+- **The rest wait 15 minutes** and are dropped if the notification was read or seen in the app.
+  Opening the bell marks the unread rows it shows as seen (`mark-seen`); that doesn't change the
+  badge. A person who isn't in the app gets the email at once. "In the app" means their bell polled
+  the unread count in the last 2 minutes; an impersonated session doesn't count.
+- **A throttle caps events that can repeat**: one email per person per window, the rest stay in-app.
+- **Sending**: each routed notification gets a `notification_delivery` row. The API process sends
+  the due ones every `NOTIFICATION_SWEEP_MS` (60 s; `apps/api/src/delivery-sweep.ts`). Every replica
+  can run the sweep: each delivery is claimed before it is sent. A failed send retries with backoff
+  and gives up after 5 attempts (`status: "failed"`, the error in `detail`). Delivery is
+  at-least-once: a crash after SES accepted an email can send it again.
+- **Adding an email:** add the type to `NOTIFICATION_EMAIL_ROUTES` and fill in its **email** cell
+  below; `notifications.test.ts` checks the two agree. Leave out events another email already
+  covers: `invitation.received` (the invitation email) and `account.email_changed` (the old address
+  was told when the change was requested).
 
 ## Rules
 
@@ -53,25 +78,25 @@ that need you.
 
 ## Events
 
-| type | sent when | to | organization |
-|---|---|---|---|
-| `approval.requested` | `request_approval` | approvers, minus the requester | yes |
-| `approval.decided` | `decide_approval`, at decision time; the copy says the decision can be undone for 30 s | the run's starter if a person, unless they decided | yes |
-| `run.done` | `update_run` moves a run to done (once) | the run's starter if a person | yes |
-| `run.failed` | `update_run` moves a run to failed (once) | the run's starter if a person, else member managers | yes |
-| `member.joined` | an invitation is accepted, or a member is added | member managers, minus the new member and the actor | yes |
-| `member.role_changed` | `/organization/update-member-role` | the member, unless they changed it themselves | yes |
-| `invitation.received` | an invitation is created for an address that already has an account | the invited person | no |
-| `member.removed` | a member is removed (not on leaving) | the removed person | no |
-| `api_key.created` | `/api-key/create`, which includes `create_api_key`; provisional keys are skipped | key managers, minus the actor | yes |
-| `api_key.revoked` | `/api-key/delete` | key managers, minus the actor | yes |
-| `agent_access.revoked` | `revoke_agent_access` | key managers, minus the actor | yes |
-| `security.two_factor_reset` | `reset_member_two_factor` | the member | yes |
-| `billing.payment_failed` | Stripe `invoice.payment_failed` | billing managers | yes |
-| `billing.subscription_canceled` | Stripe `customer.subscription.deleted` | billing managers | yes |
-| `usage.limit_reached` | the first call refused by the daily meter, once per organization per UTC day (a marker row in `usage_daily`) | billing managers | yes |
-| `account.password_changed` | `/change-password` or a password reset | the user | no |
-| `account.two_factor_enabled` | two-factor turned on | the user | no |
-| `account.two_factor_disabled` | two-factor turned off | the user | no |
-| `account.passkey_added` | `/passkey/verify-registration` | the user | no |
-| `account.email_changed` | a change-email link is verified | the user | no |
+| type | sent when | to | organization | email |
+|---|---|---|---|---|
+| `approval.requested` | `request_approval` | approvers, minus the requester | yes | after 15 min unread, 1/h |
+| `approval.decided` | `decide_approval`, at decision time; the copy says the decision can be undone for 30 s | the run's starter if a person, unless they decided | yes | no |
+| `run.done` | `update_run` moves a run to done (once) | the run's starter if a person | yes | no |
+| `run.failed` | `update_run` moves a run to failed (once) | the run's starter if a person, else member managers | yes | after 15 min unread, 1/h |
+| `member.joined` | an invitation is accepted, or a member is added | member managers, minus the new member and the actor | yes | no |
+| `member.role_changed` | `/organization/update-member-role` | the member, unless they changed it themselves | yes | no |
+| `invitation.received` | an invitation is created for an address that already has an account | the invited person | no | no |
+| `member.removed` | a member is removed (not on leaving) | the removed person | no | no |
+| `api_key.created` | `/api-key/create`, which includes `create_api_key`; provisional keys are skipped | key managers, minus the actor | yes | at once |
+| `api_key.revoked` | `/api-key/delete` | key managers, minus the actor | yes | no |
+| `agent_access.revoked` | `revoke_agent_access` | key managers, minus the actor | yes | no |
+| `security.two_factor_reset` | `reset_member_two_factor` | the member | yes | at once |
+| `billing.payment_failed` | Stripe `invoice.payment_failed` | billing managers | yes | after 15 min unread, 1/day |
+| `billing.subscription_canceled` | Stripe `customer.subscription.deleted` | billing managers | yes | no |
+| `usage.limit_reached` | the first call refused by the daily meter, once per organization per UTC day (a marker row in `usage_daily`) | billing managers | yes | after 15 min unread |
+| `account.password_changed` | `/change-password` or a password reset | the user | no | at once |
+| `account.two_factor_enabled` | two-factor turned on | the user | no | no |
+| `account.two_factor_disabled` | two-factor turned off | the user | no | at once |
+| `account.passkey_added` | `/passkey/verify-registration` | the user | no | at once |
+| `account.email_changed` | a change-email link is verified | the user | no | no |

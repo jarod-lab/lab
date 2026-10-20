@@ -41,10 +41,11 @@ function fakeInbox(notifications: InboxNotification[], unread = 0) {
   const unreadCount = vi.fn(async () => ({ data: { count: unread }, error: null }))
   const markRead = vi.fn(async () => ({ data: {}, error: null }))
   const markAllRead = vi.fn(async () => ({ data: {}, error: null }))
+  const markSeen = vi.fn(async () => ({ data: {}, error: null }))
   const client: InboxFetchClient = {
-    inbox: { list, unreadCount, markRead, markAllRead },
+    inbox: { list, unreadCount, markRead, markAllRead, markSeen },
   }
-  return { client, list, markRead, markAllRead }
+  return { client, list, markRead, markAllRead, markSeen }
 }
 
 function renderBell(overrides: Partial<Parameters<typeof NotificationsContainer>[0]> = {}) {
@@ -117,6 +118,24 @@ describe("NotificationsContainer", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Approval requested/ }))
     await waitFor(() => expect(onNavigate).toHaveBeenCalledWith("/analytical/runs/run-1"))
     expect(markRead).toHaveBeenCalledWith({ id: "n1" })
+  })
+
+  it("marks the unread rows seen when the bell opens, not before", async () => {
+    const { list, markSeen } = renderBell()
+    await bell()
+    await waitFor(() => expect(list).toHaveBeenCalled())
+    expect(markSeen).not.toHaveBeenCalled()
+    await userEvent.click(await bell())
+    await screen.findByRole("list", { name: "Notifications list" })
+    await waitFor(() => expect(markSeen).toHaveBeenCalledWith({ ids: ["n1", "n2"] }))
+  })
+
+  it("marks nothing seen for a read-only (impersonated) session", async () => {
+    const { markSeen } = renderBell({ readOnly: true })
+    await userEvent.click(await bell())
+    await screen.findByRole("list", { name: "Notifications list" })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(markSeen).not.toHaveBeenCalled()
   })
 
   it("navigates without marking read when the session is read-only (impersonation)", async () => {

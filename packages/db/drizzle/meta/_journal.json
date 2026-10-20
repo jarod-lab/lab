@@ -92,6 +92,13 @@
       "when": 1792438525578,
       "tag": "0012_feature_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792471696294,
+      "tag": "0013_notification_email",
+      "breakpoints": true
     }
   ]
 }

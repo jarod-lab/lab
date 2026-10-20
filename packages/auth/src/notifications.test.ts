@@ -8,6 +8,7 @@ import {
   APPROVERS,
   BILLING_MANAGERS,
   createNotifier,
+  NOTIFICATION_EMAIL_ROUTES,
   type NotificationEvent,
   type NotifyBody,
   type NotifyFn,
@@ -148,6 +149,20 @@ describe("renderNotification", () => {
     const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
     const documented = [...doc.matchAll(/^\| `([a-z_.]+)` \|/gm)].map((m) => m[1] ?? "").sort()
     expect(documented).toEqual(CATALOG_TYPES)
+  })
+
+  it("documents which events email, as NOTIFICATION_EMAIL_ROUTES routes them", () => {
+    const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
+    const emailCell = new Map(
+      [...doc.matchAll(/^\| `([a-z_.]+)` \|.*\| ([^|]+) \|$/gm)].map((m) => [m[1], m[2]?.trim()]),
+    )
+    const routes: Record<string, unknown> = NOTIFICATION_EMAIL_ROUTES
+    for (const type of CATALOG_TYPES) {
+      expect({ type, emails: emailCell.get(type) !== "no" }).toEqual({
+        type,
+        emails: type in routes,
+      })
+    }
   })
 
   it("renders the org-scoped copy and links explicitly", () => {

@@ -7,6 +7,7 @@
 // defers to after the transaction commits, and runs at once when none is open.
 import { allowed } from "@starter/api"
 import { queueAfterTransactionHook } from "@better-auth/core/context"
+import type { DeliveryRule } from "better-inbox"
 
 import { type Permissions, rolePermissions, roles, type RoleName } from "./permissions"
 
@@ -81,6 +82,31 @@ export type NotificationEvent =
   | { type: "account.email_changed"; userId: string }
 
 export type NotificationType = NotificationEvent["type"]
+
+/**
+ * The events that also email the person (better-inbox delivery rules; docs/notifications.md). Types
+ * not listed stay in-app.
+ * - Security notices go out at once, even if read first: the email is the record, and it reaches
+ *   the owner when someone else is in the account.
+ * - The rest wait 15 minutes and are dropped if the notification was read or seen in the app. A
+ *   person who isn't in the app (no bell poll in the last 2 minutes) gets them at once.
+ * - Throttles cap the ones that can repeat: one email per person per window, the rest in-app only.
+ */
+export const NOTIFICATION_EMAIL_ROUTES = {
+  "account.password_changed": [{ channel: "email", cancelIfRead: false }],
+  "account.two_factor_disabled": [{ channel: "email", cancelIfRead: false }],
+  "account.passkey_added": [{ channel: "email", cancelIfRead: false }],
+  "security.two_factor_reset": [{ channel: "email", cancelIfRead: false }],
+  "api_key.created": [{ channel: "email", cancelIfRead: false }],
+  "billing.payment_failed": [
+    { channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 24 } },
+  ],
+  "usage.limit_reached": [{ channel: "email", ifUnreadAfter: { minutes: 15 } }],
+  "approval.requested": [
+    { channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 1 } },
+  ],
+  "run.failed": [{ channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 1 } }],
+} satisfies Partial<Record<NotificationType, DeliveryRule<"email">[]>>
 
 /** An org-scoped event as an emitter writes it: the org's ref is filled in by the sender. */
 export type OrgEventInput = NotificationEvent extends infer E

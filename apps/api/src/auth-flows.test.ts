@@ -256,7 +256,9 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const again = await visitor.client.resetPassword({ newPassword: "yet-another-one", token })
       expect(again.error).toMatchObject({ status: 400, code: "INVALID_TOKEN" })
 
-      // The Wraps plugin's password-changed notice went out after the reset.
+      // The password-changed notice is the notification's email (NOTIFICATION_EMAIL_ROUTES), sent
+      // by the delivery sweep, which the server runs on a timer.
+      await t.auth.api.processDeliveries({})
       const notices = await delivered(address, 2)
       expect(notices).toHaveLength(2)
       expect(notices[1]?.subject).toMatch(/password/i)
@@ -343,6 +345,26 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         password: "a-new-passphrase",
       })
       expect(fresh.error).toBeNull()
+    })
+
+    it("emails the change, even once the notification is read in the app", async () => {
+      const { b, email: address } = await signedUp()
+      const before = inbox(address).length
+      const ok = await b.client.changePassword({
+        currentPassword: PASSWORD,
+        newPassword: "a-new-passphrase",
+      })
+      expect(ok.error).toBeNull()
+
+      const { data } = await b.client.inbox.list({ query: {} })
+      const notice = data?.notifications.find((n) => n.type === "account.password_changed")
+      expect(notice).toBeTruthy()
+      await b.client.inbox.markRead({ id: notice?.id ?? "" })
+
+      // a security notice goes out even if read first (cancelIfRead: false)
+      await t.auth.api.processDeliveries({})
+      const mails = await delivered(address, before + 1)
+      expect(mails.at(-1)?.subject).toMatch(/password/i)
     })
   })
 

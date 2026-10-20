@@ -348,10 +348,21 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
 
     it("emails the change, even once the notification is read in the app", async () => {
-      const { b, email: address } = await signedUp()
+      const { b, email: address, userId } = await signedUp()
       const before = inbox(address).length
-      const ok = await b.client.changePassword({
+
+      // An unverified address gets no notification email: the signup may have used someone else's.
+      const unverified = await b.client.changePassword({
         currentPassword: PASSWORD,
+        newPassword: "an-interim-passphrase",
+      })
+      expect(unverified.error).toBeNull()
+      await t.auth.api.processDeliveries({})
+      expect(inbox(address)).toHaveLength(before)
+
+      await t.db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, userId))
+      const ok = await b.client.changePassword({
+        currentPassword: "an-interim-passphrase",
         newPassword: "a-new-passphrase",
       })
       expect(ok.error).toBeNull()

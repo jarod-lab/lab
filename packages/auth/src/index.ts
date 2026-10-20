@@ -754,6 +754,9 @@ export function createAuth(opts: AuthOptions) {
             }),
           },
           routes: NOTIFICATION_EMAIL_ROUTES,
+          // Only to a verified address: a signup (or a provisional one, by an agent) can use
+          // someone else's, and its events would otherwise mail them. A reset verifies first.
+          shouldDeliver: ({ user }) => user.emailVerified,
         }),
       ),
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter, notifications)] : []),

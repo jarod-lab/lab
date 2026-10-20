@@ -113,7 +113,9 @@ fixes formatting.
   floating or misused promises are errors, so a promise you mean to drop takes `void`. Biome skips
   `.claude/` and lockfiles, and does not format Markdown.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`).
-  Don't hand-edit `minimumReleaseAgeExclude`.
+  Don't hand-edit `minimumReleaseAgeExclude`. It lists only our own packages (`better-inbox`,
+  `@wraps.dev/*`), by name, so our releases install the day they publish. Every other package
+  waits out the 24-hour release age.
 - **Vendored shadcn:** `packages/ui/src/components/ui/` and `src/hooks/` come from the shadcn CLI
   (`base-sera`). Add with `npx shadcn@latest add`, never by hand, then restyle to the D+ system.
   Details and stories: `docs/ui.md`.

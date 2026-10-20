@@ -139,18 +139,21 @@ Set up once, by a person:
   `MCP_PUBLISHER_SHA256` in `release.yml` (the sha256 comes from the release's
   `registry_<version>_checksums.txt`). Bump both together.
 - **GitHub environment** `release`: add required reviewers and limit deployment to version tags.
-- **MCP registry namespace**: `server.json` is named `io.github.<owner>/starter`. The workflow logs
+- **MCP registry namespace**: `server.json` is named `io.github.<owner>/<name>`. The workflow logs
   in with `mcp-publisher login github-oidc`, which proves the `<owner>` is the repository's owner,
   so no secret is needed. A custom domain namespace needs DNS authentication instead
   (`mcp-publisher login dns` with an Ed25519 key in DNS), and the workflow must change to match.
-- **Scope rename**: `pnpm init-project` renames `@starter` in the packages, `server.json` and the
-  registry name, so a new project publishes under its own scope.
 - **Repository URL**: npm provenance refuses a package whose `repository.url` doesn't match the
-  repository the workflow runs in. `init-project` sets it to `github.com/<owner>/<name>`, so a
-  repository named differently needs both package.json files (and `product.ts`) edited by hand.
+  repository the workflow runs in. Keep it equal in both package.json files and `product.ts`.
+<!-- template:start -->
+- **Scope rename**: `pnpm init-project` renames `@starter` in the packages, `server.json` and the
+  registry name, so a new project publishes under its own scope. It sets the repository URL to
+  `github.com/<owner>/<name>`, so a repository named differently needs it edited by hand, and
+  `--domain` rewrites the public origin.
+<!-- template:end -->
 
-The CLI's default origin is `https://api.example.com`, which `pnpm init-project --domain` rewrites.
-Local development sets `STARTER_URL` or `--base-url`.
+The CLI's default origin is the product's public URL (`PRODUCT.publicURL` in
+`apps/api/src/product.ts`). Local development sets `STARTER_URL` or `--base-url`.
 
 ## Catalog and lefthook
 

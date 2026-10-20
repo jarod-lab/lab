@@ -2,8 +2,8 @@ import type { RegistryMeta } from "@starter/api"
 
 // What this product is, as the outside world sees it. The API's title, version and description
 // (OpenAPI, llms.txt, /.well-known/mcp/server.json), its MCP registry entry, and the public origin
-// that the committed server.json and the shipped skill name all come from here. `pnpm init-project`
-// rewrites the placeholders; a deployment's runtime base URL still comes from the environment.
+// that the committed server.json and the shipped skill name all come from here. A deployment's
+// runtime base URL still comes from the environment.
 // Keep the CLI and SDK versions (packages/cli, packages/sdk) equal to `version`: product.test.ts
 // checks it.
 

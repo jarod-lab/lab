@@ -1,6 +1,6 @@
 import createFetchClient from "openapi-fetch"
 import { StarterError } from "./errors"
-import type { paths } from "./schema.gen"
+import type { paths as GeneratedPaths } from "./schema.gen"
 import { createTransport, type TransportOptions } from "./transport"
 
 export interface ClientOptions extends TransportOptions {
@@ -20,6 +20,16 @@ export interface RawRequest {
 
 export type StarterClient = ReturnType<typeof createClient>
 
+// openapi-fetch's declarations require `Record<string, Record<HttpMethod, {}>>`. schema.gen.ts is an
+// interface (no implicit index signature), and openapi-typescript marks absent methods `?: undefined`
+// (not assignable to `{}`). These mapped types keep the same keys and values, with every method
+// present (an absent one is `never`), so the emitted declarations check under skipLibCheck: false.
+type Paths = {
+  [Path in keyof GeneratedPaths]: {
+    [Method in keyof GeneratedPaths[Path]]-?: Exclude<GeneratedPaths[Path][Method], undefined>
+  }
+}
+
 /** The API client: typed calls from schema.gen.ts plus an untyped `request` for any operation. */
 export function createClient(options: ClientOptions) {
   if (options.apiKey !== undefined && options.accessToken !== undefined) {
@@ -27,7 +37,7 @@ export function createClient(options: ClientOptions) {
   }
   const baseURL = options.baseURL.replace(/\/+$/, "")
   const transport = createTransport(options)
-  const typed = createFetchClient<paths>({ baseUrl: baseURL, fetch: transport })
+  const typed = createFetchClient<Paths>({ baseUrl: baseURL, fetch: transport })
 
   /** Untyped call: for operations chosen at runtime (the CLI's `call`). Resolves to the JSON body. */
   async function request(method: Method, path: string, init: RawRequest = {}): Promise<unknown> {

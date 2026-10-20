@@ -1,0 +1,109 @@
+name: Release
+
+# Publishes @starter/cli and @starter/sdk to npm, with provenance, and then server.json to the MCP
+# registry. Run only from a version tag (v<version>), by pushing the tag or by dispatching from it.
+# See docs/tooling.md, "Releasing".
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm and the MCP registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      # npm provenance and the MCP registry's GitHub OIDC login both mint tokens from this.
+      id-token: write
+    env:
+      # mcp-publisher release (registry v1.8.1) and the sha256 of its linux/amd64 archive, from
+      # registry_1.8.1_checksums.txt in that release. Bump both together.
+      MCP_PUBLISHER_VERSION: "1.8.1"
+      MCP_PUBLISHER_SHA256: "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+      - run: pnpm install --frozen-lockfile
+
+      # The tag must be v<version> of both packages and of the committed server.json. Nothing is
+      # published from any other ref, and the registry record can't drift from the packages.
+      - name: Check the versions match the tag
+        run: |
+          cli=$(node -p "require('./packages/cli/package.json').version")
+          sdk=$(node -p "require('./packages/sdk/package.json').version")
+          server=$(node -p "require('./server.json').version")
+          echo "cli=$cli sdk=$sdk server=$server ref=$GITHUB_REF_NAME"
+          if [ "$cli" != "$sdk" ] || [ "$cli" != "$server" ]; then
+            echo "The cli, sdk and server.json versions differ" >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_NAME" != "v$cli" ]; then
+            echo "Run the release from tag v$cli, not $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Build and test the packages
+        run: |
+          pnpm --filter @starter/cli --filter @starter/sdk build
+          pnpm --filter @starter/cli --filter @starter/sdk test
+
+      # npm and pnpm read the token from ~/.npmrc, where ${NODE_AUTH_TOKEN} is expanded at run time.
+      # The value is never printed. mise-action sets no registry, so this file does the auth.
+      - name: Configure npm authentication
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "The NPM_TOKEN secret is not set" >&2
+            exit 1
+          fi
+          printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
+          chmod 600 "$HOME/.npmrc"
+
+      # pnpm 11's publish has no --provenance flag (pnpm publish --help), so each package is packed
+      # with pnpm, which rewrites workspace: and catalog: ranges, and the tarball is published with
+      # npm, which generates the provenance statement from this job's OIDC token. A package whose
+      # version is already on npm is skipped, so a re-run after a later failure is safe.
+      - name: Publish the packages to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for dir in packages/sdk packages/cli; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm, skipping"
+              continue
+            fi
+            packs="$RUNNER_TEMP/packs/$dir"
+            mkdir -p "$packs"
+            pnpm --filter "$name" pack --pack-destination "$packs"
+            tarball=$(ls "$packs"/*.tgz)
+            npm publish "$tarball" --provenance --access public
+          done
+
+      # Retried on its own: the packages above are skipped when they already exist. The binary is
+      # pinned and its sha256 checked before it runs.
+      - name: Publish the server record to the MCP registry
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  ${archive}" | sha256sum --check --strict
+          tar xzf "$archive" -C "$RUNNER_TEMP" mcp-publisher
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish

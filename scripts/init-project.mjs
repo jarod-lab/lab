@@ -88,7 +88,12 @@ const ORIGIN_FILES = new Set([
   "server.json",
   join("packages", "cli", "src", "main.ts"),
 ])
-const REPOSITORY_FILES = new Set([join("apps", "api", "src", "product.ts"), "server.json"])
+const REPOSITORY_FILES = new Set([
+  join("apps", "api", "src", "product.ts"),
+  "server.json",
+  join("packages", "cli", "package.json"),
+  join("packages", "sdk", "package.json"),
+])
 // The shipped skill's frontmatter `name` and prose follow the product, and so does its folder.
 const SKILL = join("skills", "starter", "SKILL.md")
 // Template history a new project has no use for.

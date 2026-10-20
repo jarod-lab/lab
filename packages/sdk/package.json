@@ -1,17 +1,36 @@
 {
   "name": "@starter/sdk",
-  "private": true,
   "version": "0.0.0",
+  "description": "Typed TypeScript client for the Starter API, generated from its OpenAPI contract.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/example/starter.git",
+    "directory": "packages/sdk"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   },
   "files": [
     "dist"
   ],
   "scripts": {
     "generate": "node scripts/generate-schema.mjs",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json --emitDeclarationOnly && esbuild src/index.ts --bundle --packages=external --format=esm --platform=neutral --target=es2022 --outfile=dist/index.js && node scripts/declaration-extensions.mjs",
     "typecheck": "tsc",
     "lint": "oxlint --type-aware -c ../../.oxlintrc.json",
     "test": "vitest run",
@@ -25,6 +44,7 @@
     "@starter/config": "workspace:*",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "esbuild": "^0.28.2",
     "openapi-typescript": "^7.13.0",
     "oxlint": "catalog:",
     "typescript": "catalog:",

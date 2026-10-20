@@ -88,4 +88,30 @@ describe("useSignOut", () => {
     await act(() => button.result.current.mutateAsync())
     await waitFor(() => expect(page.result.current.data).toBeNull())
   })
+
+  it("hands over to the caller (the way to /sign-in) without waiting for the page to refetch", async () => {
+    let signedIn = true
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children)
+    const auth = {
+      signOut: vi.fn(async () => {
+        signedIn = false
+      }),
+    } as unknown as WebAuth
+    // Signed out, the page's query never answers (a slow or retrying request).
+    renderHook(
+      () =>
+        useQuery({
+          queryKey: ["who"],
+          queryFn: () => (signedIn ? Promise.resolve("ada") : new Promise<string>(() => {})),
+        }),
+      { wrapper },
+    )
+    const button = renderHook(() => useSignOut(auth), { wrapper })
+    const onSignedOut = vi.fn()
+
+    act(() => button.result.current.mutate(undefined, { onSuccess: onSignedOut }))
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalledTimes(1))
+  })
 })

@@ -3295,6 +3295,7 @@ describe("notices from the auth flows (better-inbox)", () => {
 
 describe("client ID metadata documents (CIMD) over HTTP", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
+  const open = () => browser((url, init) => t.app.request(url, init))
   /** Metadata documents the stub transport serves, by URL. Anything else is a 404. */
   const served = new Map<string, unknown>()
   /** The URLs the server asked for: a request that is refused before fetching never appears. */
@@ -3402,4 +3403,157 @@ describe("client ID metadata documents (CIMD) over HTTP", () => {
       description: expect.stringMatching(/does not match/),
     })
   })
+
+  it("runs the whole journey for a metadata-document client: sign-in to revoke", async () => {
+    const CLIENT = "https://client.example/journey.json"
+    served.set(CLIENT, {
+      client_id: CLIENT,
+      client_name: "Journey agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+    })
+    const address = `cimd-journey-${Date.now()}@example.com`
+    const signup = await open().client.signUp.email({
+      email: address,
+      password: PASSWORD,
+      name: "Journey",
+    })
+    expect(signup.error).toBeNull()
+    const orgId = await (async () => {
+      const b = open()
+      await b.client.signIn.email({ email: address, password: PASSWORD })
+      return ((await (await b.request("/v1/whoami")).json()) as { organizationId: string })
+        .organizationId
+    })()
+
+    const verifier = b64(randomBytes(32))
+    const query = new URLSearchParams({
+      response_type: "code",
+      client_id: CLIENT,
+      redirect_uri: REDIRECT,
+      scope: "openid offline_access read write admin",
+      state: "journey",
+      code_challenge: b64(createHash("sha256").update(verifier).digest()),
+      code_challenge_method: "S256",
+      resource: MCP,
+    })
+
+    // Sign in: the authorization goes to sign-in first, and the password sign-in resumes it.
+    const c = open()
+    const toLogin = await c.request(`/api/auth/oauth2/authorize?${query}`)
+    const login = new URL(toLogin.headers.get("location") ?? "", BASE)
+    expect(login.pathname).toBe("/sign-in")
+    const oauthQuery = signedQuery(login.search)
+    const signIn = await c.request("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: address, password: PASSWORD, oauth_query: oauthQuery }),
+    })
+    expect(signIn.status).toBe(200)
+    expect((await c.request("/v1/whoami")).status).toBe(200)
+
+    // Select organization: with no valid active org, the authorization goes to the picker first.
+    await c.request("/api/auth/organization/set-active", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationId: null }),
+    })
+    const picker = new URL(
+      (await c.request(`/api/auth/oauth2/authorize?${query}`)).headers.get("location") ?? "",
+      BASE,
+    )
+    expect(picker.pathname).toBe("/select-organization")
+    await c.request("/api/auth/organization/set-active", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationId: orgId }),
+    })
+    const cont = await c.request("/api/auth/oauth2/continue", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ postLogin: true, oauth_query: picker.search.slice(1) }),
+    })
+    const consentPage = new URL(((await cont.json()) as { url: string }).url, BASE)
+    expect(consentPage.pathname).toBe("/consent")
+
+    // Consent, then the token exchange with PKCE and the resource.
+    const consent = await c.request("/api/auth/oauth2/consent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accept: true, oauth_query: consentPage.search.slice(1) }),
+    })
+    const code = new URL(((await consent.json()) as { url: string }).url).searchParams.get("code")
+    expect(code).toBeTruthy()
+    const exchange = await t.req("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code ?? "",
+        redirect_uri: REDIRECT,
+        client_id: CLIENT,
+        code_verifier: verifier,
+        resource: MCP,
+      }),
+    })
+    const tokens = (await exchange.json()) as { access_token: string; refresh_token: string }
+    expect(tokens.access_token).toBeTruthy()
+    expect(tokens.refresh_token).toBeTruthy()
+    const auth = bearer(tokens.access_token)
+
+    // MCP: the tool list works, and a call acts in the chosen organization.
+    const mcp = await t.mcpClient(auth)
+    try {
+      const { tools } = await mcp.listTools()
+      expect(tools.map((tool) => tool.name)).toContain("list_connected_agents")
+      const who = await mcp.callTool({ name: "whoami", arguments: {} })
+      expect(who.isError ?? false).toBe(false)
+      expect(JSON.stringify(who)).toContain(orgId)
+    } finally {
+      await mcp.close()
+    }
+
+    // REST: the connected agent is listed under its client id, then revoked by that id.
+    const listed = await t.req("/v1/agents", { headers: auth })
+    expect(listed.status).toBe(200)
+    const { agents } = (await listed.json()) as {
+      agents: { id: string; clientId: string | null }[]
+    }
+    const agent = agents.find((a) => a.clientId === CLIENT)
+    expect(agent?.id).toBe(`client_${CLIENT}`)
+    const revoked = await t.req(`/v1/agents/${encodeURIComponent(agent?.id ?? "")}`, {
+      method: "DELETE",
+      headers: auth,
+    })
+    expect(revoked.status).toBe(200)
+    expect(await revoked.json()).toEqual({ revoked: true })
+
+    // Revoked: the refresh token is refused, and so is the access token it held.
+    const refreshed = await t.req("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: CLIENT,
+        resource: MCP,
+      }),
+    })
+    expect(refreshed.status).toBe(400)
+    expect(((await refreshed.json()) as { error: string }).error).toBe("invalid_grant")
+    expect((await t.req("/v1/whoami", { headers: auth })).status).toBe(401)
+  })
 })
+
+/** The signed query the sign-in page sends back (as the web app's client builds it). */
+function signedQuery(search: string): string {
+  const params = new URLSearchParams(search)
+  const names = new Set(params.getAll("ba_param"))
+  const out = new URLSearchParams()
+  for (const [k, v] of params) if (k === "sig" || k === "ba_param" || names.has(k)) out.append(k, v)
+  return out.toString()
+}
+const b64 = (buf: Buffer) => buf.toString("base64url")
+const bearer = (token: string) => ({ authorization: `Bearer ${token}` })

@@ -145,6 +145,9 @@ Set up once, by a person:
   (`mcp-publisher login dns` with an Ed25519 key in DNS), and the workflow must change to match.
 - **Scope rename**: `pnpm init-project` renames `@starter` in the packages, `server.json` and the
   registry name, so a new project publishes under its own scope.
+- **Repository URL**: npm provenance refuses a package whose `repository.url` doesn't match the
+  repository the workflow runs in. `init-project` sets it to `github.com/<owner>/<name>`, so a
+  repository named differently needs both package.json files (and `product.ts`) edited by hand.
 
 The CLI's default origin is `https://api.example.com`, which `pnpm init-project --domain` rewrites.
 Local development sets `STARTER_URL` or `--base-url`.

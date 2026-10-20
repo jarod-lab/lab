@@ -1,8 +1,8 @@
-import { provisionalSignup } from "@starter/auth"
+import { memberGrants, provisionalSignup } from "@starter/auth"
 import { z } from "zod"
 
 import { actsForOperator } from "../tenant"
-import { actorOf, defineOperation, type OperationDeps } from "./shared"
+import { actorOf, defineOperation, type OperationDeps, requirePerson } from "./shared"
 
 /** POST /v1/signup's body. */
 export const signupInput = z.object({
@@ -121,8 +121,40 @@ export function accountOperations({
     },
   })
 
+  const get_my_operator_organization = defineOperation({
+    name: "get_my_operator_organization",
+    method: "GET",
+    path: "/v1/me/operator-organization",
+    summary: "Find the operator organization, if you belong to it",
+    description:
+      "Returns the id of the operator organization (the one that runs the product and manages " +
+      "feature flags) when the signed-in person is a member of it, whatever organization the " +
+      "session is on; null otherwise. The web app uses it for the admin console. Only a person in " +
+      "the web app can call it: API keys and AI clients get FORBIDDEN.",
+    // About the person, not the organization the session is on: never a key or token.
+    auth: "person",
+    permissions: {},
+    input: z.object({}),
+    output: z.object({
+      organizationId: z
+        .string()
+        .nullable()
+        .describe("The operator organization's id, or null when you are not a member of it"),
+    }),
+    hints: { readOnly: true, idempotent: true },
+    examples: [{ input: {}, output: { organizationId: null } }],
+    handler: async (_input, { caller }) => {
+      const userId = requirePerson(caller)
+      const operatorId = operator.organizationId
+      if (operatorId === undefined) return { organizationId: null }
+      const grants = await memberGrants((await auth.$context).adapter, userId, operatorId)
+      return { organizationId: grants ? operatorId : null }
+    },
+  })
+
   return {
     whoami,
     signup,
+    get_my_operator_organization,
   }
 }

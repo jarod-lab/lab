@@ -47,8 +47,6 @@ const VIEW_PILLS: { id: AgentView; label: string }[] = [
 ]
 
 export interface WorkspaceAgentsPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { id: string; name: string; slug: string }
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
@@ -88,7 +86,6 @@ export interface WorkspaceAgentsPageProps {
  * the selected agent's permissions. Props in, callbacks out.
  */
 export function WorkspaceAgentsPage({
-  operator = false,
   organization,
   roleLabel,
   view,
@@ -120,7 +117,7 @@ export function WorkspaceAgentsPage({
 
   // Level 2 sits in each view's section heading, not in the org header.
   const pills = <ViewPills slug={organization.slug} activeView={view} renderLink={renderLink} />
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
 
   async function confirmRemove() {
     if (!selected || removeBusyRef.current) return

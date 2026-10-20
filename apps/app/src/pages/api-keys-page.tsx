@@ -50,8 +50,6 @@ import { settingsTabs } from "../lib/org-settings"
 import { messageOf } from "../lib/messages"
 
 export interface ApiKeysPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { id: string; name: string; slug: string }
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
@@ -91,7 +89,6 @@ const formatDate = (value: string) =>
 
 /** The organization's API keys (board OrgApiKeys). Props in, callbacks out. */
 export function ApiKeysPage({
-  operator = false,
   organization,
   roleLabel,
   canList,
@@ -183,7 +180,7 @@ export function ApiKeysPage({
 
   const table = useTable({ features, columns, data: keys ?? NO_KEYS })
 
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
 
   async function confirmRevoke() {
     if (!revoking || revokeBusyRef.current) return

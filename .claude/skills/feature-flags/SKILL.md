@@ -12,7 +12,8 @@ that the operator organization changes through the operator operations. Words as
 **Credential.** Rollout operations answer only to the **operator organization**
 (`OPERATOR_ORGANIZATION_ID`; `whoami` says `operator: true`): an `sk_` key of that organization with
 `featureFlag` permissions, or an OAuth token in it (`write` ramps, `admin` also deletes). Call them as
-MCP tools or with `starter call <operation> --json '{...}'`.
+MCP tools or with `starter call <operation> --json '{...}'`. A person in that organization does the
+same in the web app's admin console, `/admin/flags`.
 
 **Evidence** is what `get_feature_flag` returns: evaluations and 5xx errors per value per day
 (`days`), the 7-day totals (`exposures`), and the targets. An error report names the flags its

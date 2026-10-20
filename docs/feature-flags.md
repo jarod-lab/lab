@@ -30,7 +30,8 @@ FORBIDDEN before its permissions are read, never sees them as MCP tools, and doe
 Within the operator organization they need the `featureFlag` permission (`read`, `update`,
 `delete`): owners and admins hold it, OAuth `read`/`write`/`admin` grant read/update/delete, and an
 `sk_` key can carry it. Writes are audited like any other operation. Unset, rollouts are served
-but nobody can change one.
+but nobody can change one. In the web app, the operator organization's members manage rollouts in
+the admin console at `/admin/flags` (`docs/web-app.md`).
 
 ## Evaluation
 

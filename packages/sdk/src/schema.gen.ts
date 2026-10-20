@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/operator-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the operator organization, if you belong to it
+         * @description Returns the id of the operator organization (the one that runs the product and manages feature flags) when the signed-in person is a member of it, whatever organization the session is on; null otherwise. The web app uses it for the admin console. Only a person in the web app can call it: API keys and AI clients get FORBIDDEN.
+         */
+        get: operations["get_my_operator_organization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -833,6 +853,49 @@ export interface operations {
                             /** @description Until the email is verified */
                             requestsPerDay: number;
                         };
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    get_my_operator_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description The operator organization's id, or null when you are not a member of it */
+                        organizationId: string | null;
                     };
                 };
             };

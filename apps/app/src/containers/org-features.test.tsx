@@ -2,32 +2,16 @@
 import { InMemoryProvider, OpenFeature } from "@openfeature/web-sdk"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
-import type { FeatureFlagsApi } from "../lib/feature-flags-api"
 import { createFlagProvider, FLAG_DOMAIN, flagContext, useFlag } from "../lib/flags"
-import { useIsOperator } from "../lib/operator"
-import { fakeFeatureFlagsApi } from "../test/fake-feature-flags"
 import { json, productFetch } from "../test/product-fetch"
 import { OrgFeatures } from "./org-features"
 
 function Probe() {
   const whatsNew = useFlag("whats-new-card")
-  const operator = useIsOperator()
-  return (
-    <p>
-      whats-new {String(whatsNew)} · operator {String(operator)}
-    </p>
-  )
+  return <p>whats-new {String(whatsNew)}</p>
 }
-
-const api = (operator: boolean | Error): FeatureFlagsApi =>
-  fakeFeatureFlagsApi({
-    isOperator: vi.fn(async () => {
-      if (operator instanceof Error) throw operator
-      return operator
-    }),
-  })
 
 const inMemory = (value: boolean) => () =>
   new InMemoryProvider({
@@ -42,12 +26,7 @@ function renderFeatures(props: Partial<Parameters<typeof OrgFeatures>[0]> = {}) 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <OrgFeatures
-        organizationId="org-1"
-        api={api(false)}
-        createProvider={inMemory(false)}
-        {...props}
-      >
+      <OrgFeatures organizationId="org-1" createProvider={inMemory(false)} {...props}>
         <Probe />
       </OrgFeatures>
     </QueryClientProvider>,
@@ -60,17 +39,16 @@ afterEach(async () => {
 
 describe("OrgFeatures", () => {
   it("serves the flag's value from the organization's provider", async () => {
-    renderFeatures({ createProvider: inMemory(true), api: api(true) })
-    expect(await screen.findByText("whats-new true · operator true")).toBeTruthy()
+    renderFeatures({ createProvider: inMemory(true) })
+    expect(await screen.findByText("whats-new true")).toBeTruthy()
     expect(OpenFeature.getContext(FLAG_DOMAIN)).toEqual({ targetingKey: "org-1" })
   })
 
-  it("falls back to the catalog default, and to not the operator, when they can't be read", async () => {
+  it("falls back to the catalog default when the flags can't be read", async () => {
     renderFeatures({
-      api: api(new Error("offline")),
       createProvider: () => createFlagProvider("org-1", async () => json({}, { status: 500 })),
     })
-    expect(await screen.findByText("whats-new false · operator false")).toBeTruthy()
+    expect(await screen.findByText("whats-new false")).toBeTruthy()
   })
 })
 

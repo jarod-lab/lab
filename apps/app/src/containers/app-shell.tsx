@@ -6,11 +6,13 @@ import { CommandPalette } from "@starter/ui/dplus/shell/command-palette"
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
 
+import { canOpenAdmin } from "../lib/admin-nav"
 import { modifierKeyLabel } from "../lib/platform"
 import { getRunsApi } from "../lib/runs-api"
 import { type ThemeChoice, toggledTheme, useThemeChoice } from "../lib/theme"
 import type { WorkspaceAgentsApi } from "../lib/workspace-agents-api"
 import type { WebAuth } from "../lib/web-auth"
+import { type AdminAccessApis, useAdminAccess } from "./admin-access"
 import { useInboxCount, useRunningCount } from "./inbox"
 import { NotificationsContainer } from "./notifications"
 import { paletteAction, paletteGroups } from "./palette-items"
@@ -31,10 +33,12 @@ export type AppShellContainerProps = {
   auth: WebAuth
   /** The organization slug from the URL. Null on account pages, which show the active organization. */
   slug: string | null
-  /** Which sidebar item is active: "home", "agents" or "settings". */
-  activeNav?: "home" | "agents" | "settings"
+  /** Which sidebar item is active: "home", "agents", "settings" or "admin" (the console link). */
+  activeNav?: "home" | "agents" | "settings" | "admin"
   /** The workspace agents, for the sidebar's pinned list. Pages that show none leave it out. */
   agents?: WorkspaceAgentsApi
+  /** Who may open the admin console (its sidebar link). Defaults to the browser's APIs. */
+  adminApis?: AdminAccessApis
   crumbs: Crumb[]
   /** Client navigation for app paths (the router's navigate). */
   onNavigate: (href: string) => void
@@ -53,6 +57,7 @@ export function AppShellContainer({
   slug,
   activeNav,
   agents,
+  adminApis,
   crumbs,
   onNavigate,
   onSignedOut,
@@ -85,6 +90,8 @@ export function AppShellContainer({
     organizationId: current?.id ?? null,
     ready: session.data?.activeOrganizationId === current?.id,
   })
+  // The console link shows for those who run the product: platform admins and the operator's members.
+  const admin = useAdminAccess(adminApis)
   const [theme, setTheme] = useThemeChoice()
   const signOut = useSignOut(auth)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -150,6 +157,7 @@ export function AppShellContainer({
       nav={navItems}
       pinnedAgents={pinnedAgents}
       activeId={activeNav}
+      admin={canOpenAdmin(admin.access) ? { href: "/admin" } : undefined}
       support={{ href: "/llms.txt", label: "Agent docs" }}
       account={{
         user: { name: user.name, email: user.email, image: user.image },

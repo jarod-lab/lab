@@ -287,6 +287,78 @@
         "x-required-permissions": []
       }
     },
+    "/v1/me/operator-organization": {
+      "get": {
+        "operationId": "get_my_operator_organization",
+        "summary": "Find the operator organization, if you belong to it",
+        "description": "Returns the id of the operator organization (the one that runs the product and manages feature flags) when the signed-in person is a member of it, whatever organization the session is on; null otherwise. The web app uses it for the admin console. Only a person in the web app can call it: API keys and AI clients get FORBIDDEN.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizationId": {
+                      "description": "The operator organization's id, or null when you are not a member of it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "organizationId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-required-permissions": [],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
     "/v1/projects": {
       "get": {
         "operationId": "list_projects",

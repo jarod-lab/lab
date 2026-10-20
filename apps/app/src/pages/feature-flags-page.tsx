@@ -15,8 +15,7 @@ import {
 } from "@starter/ui/components/ui/table"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
 import { PageBody } from "@starter/ui/dplus/shell/page-header"
-import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
-import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
+import { type SettingsTab, SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { FormError, useAppForm } from "../components/form"
@@ -38,14 +37,14 @@ import {
   targetsSummary,
 } from "../lib/feature-flags"
 import { messageOf } from "../lib/messages"
-import { settingsTabs } from "../lib/org-settings"
 
 export interface FeatureFlagsPageProps {
-  organization: { name: string; slug: string }
-  /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
+  /** The operator organization, which the rollouts are managed as. */
+  organization: { name: string }
+  /** "Owner", "Admin", "Member" or "Viewer": the caller's role there. */
   roleLabel: string
-  /** Whether this is the operator organization: only it manages flags. */
-  isOperator: boolean
+  /** The admin console's tabs this person may open (adminTabs). */
+  tabs: SettingsTab[]
   /** The flags, once loaded. */
   flags: FeatureFlag[] | undefined
   flagsError: string | null
@@ -85,13 +84,14 @@ const STATUS_VARIANT: Record<FlagStatus, "success" | "outline" | "secondary" | "
 const onOff = (value: boolean) => (value ? "on" : "off")
 
 /**
- * The operator organization's feature flags: each flag's rollout, evaluations and stale signals,
- * and the controls to target, ramp, pause, reclaim and delete. Props in, callbacks out.
+ * The admin console's Feature flags tab: each flag's rollout, evaluations and stale signals, and the
+ * controls to target, ramp, pause, reclaim and delete, as the operator organization. Props in,
+ * callbacks out.
  */
 export function FeatureFlagsPage({
   organization,
   roleLabel,
-  isOperator,
+  tabs,
   flags,
   flagsError,
   onRetry,
@@ -106,7 +106,6 @@ export function FeatureFlagsPage({
   onDelete,
   renderLink = anchorLink,
 }: FeatureFlagsPageProps) {
-  const tabs = settingsTabs(organization.slug, isOperator)
   const columns = useMemo(
     () =>
       helper.columns([
@@ -193,20 +192,14 @@ export function FeatureFlagsPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SettingsHeader
-        title="Organization settings"
-        context={`${organization.name} · you are ${roleLabel}`}
+        title="Admin"
+        context={`As ${organization.name} · you are ${roleLabel}`}
         tabs={tabs}
         activeTab="flags"
         renderLink={renderLink}
       />
       <PageBody className="gap-6">
-        {isOperator ? null : (
-          <ViewOnlyNotice subject={organization.name}>
-            Feature flags are managed by the operator organization, the one that runs the product.
-          </ViewOnlyNotice>
-        )}
-
-        {isOperator && flagsError ? (
+        {flagsError ? (
           <div role="alert" className="flex flex-col items-start gap-2 text-destructive">
             <p>{flagsError}</p>
             <Button variant="outline" onClick={onRetry}>
@@ -215,11 +208,11 @@ export function FeatureFlagsPage({
           </div>
         ) : null}
 
-        {isOperator && !flags && !flagsError ? (
+        {!flags && !flagsError ? (
           <output className="block text-muted-foreground">Loading…</output>
         ) : null}
 
-        {isOperator && flags && flags.length === 0 ? (
+        {flags && flags.length === 0 ? (
           <section className="flex flex-col items-start gap-2 rounded-lg border-2 border-dashed border-border p-5">
             <h2 className="font-bold">No feature flags yet</h2>
             <p className="text-muted-foreground">
@@ -228,7 +221,7 @@ export function FeatureFlagsPage({
           </section>
         ) : null}
 
-        {isOperator && flags && flags.length > 0 ? (
+        {flags && flags.length > 0 ? (
           <Table aria-label="Feature flags">
             <TableHeader>
               {table.getHeaderGroups().map((group) => (
@@ -268,7 +261,7 @@ export function FeatureFlagsPage({
           </Table>
         ) : null}
 
-        {isOperator && selectedKey ? (
+        {selectedKey ? (
           detail && detail.key === selectedKey ? (
             <FlagDetail
               // A new flag starts with fresh forms and no leftover error.

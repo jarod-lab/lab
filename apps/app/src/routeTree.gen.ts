@@ -27,6 +27,9 @@ import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accep
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as AccountProfileRouteImport } from './routes/account/profile'
 import { Route as AccountSecurityRouteImport } from './routes/account/security'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminFlagsRouteImport } from './routes/admin/flags'
+import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as SettingsAgentsRouteImport } from './routes/settings/agents'
 import { Route as SignUpPasskeyRouteImport } from './routes/sign-up_.passkey'
@@ -131,6 +134,21 @@ const AccountSecurityRoute = AccountSecurityRouteImport.update({
   path: '/security',
   getParentRoute: () => AccountRoute,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFlagsRoute = AdminFlagsRouteImport.update({
+  id: '/flags',
+  path: '/flags',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
 const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
   id: '/invite/$invitationId',
   path: '/invite/$invitationId',
@@ -196,7 +214,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$org': typeof OrgRouteWithChildren
   '/account': typeof AccountRouteWithChildren
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -209,11 +227,14 @@ export interface FileRoutesByFullPath {
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/sign-up/passkey': typeof SignUpPasskeyRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
+  '/admin/': typeof AdminIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
@@ -226,7 +247,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -239,11 +259,14 @@ export interface FileRoutesByTo {
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/sign-up/passkey': typeof SignUpPasskeyRoute
   '/$org': typeof OrgIndexRoute
   '/account': typeof AccountIndexRoute
+  '/admin': typeof AdminIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
@@ -259,7 +282,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$org': typeof OrgRouteWithChildren
   '/account': typeof AccountRouteWithChildren
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/claim': typeof ClaimRoute
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
@@ -272,11 +295,14 @@ export interface FileRoutesById {
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
+  '/admin/flags': typeof AdminFlagsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/settings/agents': typeof SettingsAgentsRoute
   '/sign-up_/passkey': typeof SignUpPasskeyRoute
   '/$org/': typeof OrgIndexRoute
   '/account/': typeof AccountIndexRoute
+  '/admin/': typeof AdminIndexRoute
   '/$org/runs/$runId': typeof OrgRunsRunIdRoute
   '/$org/settings/agents': typeof OrgSettingsAgentsRoute
   '/$org/settings/api-keys': typeof OrgSettingsApiKeysRoute
@@ -306,11 +332,14 @@ export interface FileRouteTypes {
     | '/accept-invitation/$invitationId'
     | '/account/profile'
     | '/account/security'
+    | '/admin/flags'
+    | '/admin/users'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/sign-up/passkey'
     | '/$org/'
     | '/account/'
+    | '/admin/'
     | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
@@ -323,7 +352,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/claim'
     | '/consent'
     | '/device'
@@ -336,11 +364,14 @@ export interface FileRouteTypes {
     | '/accept-invitation/$invitationId'
     | '/account/profile'
     | '/account/security'
+    | '/admin/flags'
+    | '/admin/users'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/sign-up/passkey'
     | '/$org'
     | '/account'
+    | '/admin'
     | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
@@ -368,11 +399,14 @@ export interface FileRouteTypes {
     | '/accept-invitation/$invitationId'
     | '/account/profile'
     | '/account/security'
+    | '/admin/flags'
+    | '/admin/users'
     | '/invite/$invitationId'
     | '/settings/agents'
     | '/sign-up_/passkey'
     | '/$org/'
     | '/account/'
+    | '/admin/'
     | '/$org/runs/$runId'
     | '/$org/settings/agents'
     | '/$org/settings/api-keys'
@@ -388,7 +422,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   OrgRoute: typeof OrgRouteWithChildren
   AccountRoute: typeof AccountRouteWithChildren
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ClaimRoute: typeof ClaimRoute
   ConsentRoute: typeof ConsentRoute
   DeviceRoute: typeof DeviceRoute
@@ -532,6 +566,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountSecurityRouteImport
       parentRoute: typeof AccountRoute
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/flags': {
+      id: '/admin/flags'
+      path: '/flags'
+      fullPath: '/admin/flags'
+      preLoaderRoute: typeof AdminFlagsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/invite/$invitationId': {
       id: '/invite/$invitationId'
       path: '/invite/$invitationId'
@@ -662,11 +717,25 @@ const AccountRouteChildren: AccountRouteChildren = {
 const AccountRouteWithChildren =
   AccountRoute._addFileChildren(AccountRouteChildren)
 
+interface AdminRouteChildren {
+  AdminFlagsRoute: typeof AdminFlagsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminFlagsRoute: AdminFlagsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   OrgRoute: OrgRouteWithChildren,
   AccountRoute: AccountRouteWithChildren,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   ClaimRoute: ClaimRoute,
   ConsentRoute: ConsentRoute,
   DeviceRoute: DeviceRoute,

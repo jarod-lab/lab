@@ -44,6 +44,10 @@ const users: AdminUser[] = [
 function props(overrides: Partial<AdminPageProps> = {}): AdminPageProps {
   return {
     me,
+    tabs: [
+      { id: "users", label: "Users", href: "/admin/users" },
+      { id: "flags", label: "Feature flags", href: "/admin/flags" },
+    ],
     users,
     total: users.length,
     loading: false,

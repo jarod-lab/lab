@@ -46,7 +46,7 @@ export function detailFixture(overrides: Partial<FeatureFlagDetail> = {}): Featu
 /** Every call answers with the fixtures; tests override what they look at. */
 export function fakeFeatureFlagsApi(overrides: Partial<FeatureFlagsApi> = {}): FeatureFlagsApi {
   return {
-    isOperator: vi.fn(async () => true),
+    operatorOrganization: vi.fn(async () => "org-a"),
     list: vi.fn(async () => [flagFixture()]),
     get: vi.fn(async () => detailFixture()),
     update: vi.fn(async () => flagFixture()),

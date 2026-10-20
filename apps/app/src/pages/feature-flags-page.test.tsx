@@ -9,9 +9,12 @@ import { FeatureFlagsPage, type FeatureFlagsPageProps } from "./feature-flags-pa
 
 function props(overrides: Partial<FeatureFlagsPageProps> = {}): FeatureFlagsPageProps {
   return {
-    organization: { name: "Acme Inc", slug: "acme" },
+    organization: { name: "Acme Inc" },
     roleLabel: "Owner",
-    isOperator: true,
+    tabs: [
+      { id: "users", label: "Users", href: "/admin/users" },
+      { id: "flags", label: "Feature flags", href: "/admin/flags" },
+    ],
     flags: [
       flagFixture(),
       flagFixture({
@@ -54,18 +57,13 @@ describe("FeatureFlagsPage", () => {
     const orphan = within(table).getByText("old-banner").closest("tr") as HTMLElement
     expect(within(orphan).getByText("Not in code")).toBeTruthy()
     expect(within(orphan).getByText("Delete rollout")).toBeTruthy()
-    // The Feature flags tab shows for the operator.
-    expect(screen.getByRole("link", { name: "Feature flags" })).toBeTruthy()
+    // The console's Feature flags tab is current.
+    expect(screen.getByRole("link", { name: "Feature flags" }).getAttribute("aria-current")).toBe(
+      "page",
+    )
     await userEvent.setup().click(within(row).getByRole("button", { name: "Manage new-search" }))
     expect(p.onSelect).toHaveBeenCalledWith("new-search")
     await expectNoA11yViolations(document.body.innerHTML)
-  })
-
-  it("tells another organization the operator manages flags", () => {
-    renderPage({ isOperator: false, flags: undefined })
-    expect(screen.getByText(/managed by the operator organization/)).toBeTruthy()
-    expect(screen.queryByRole("table")).toBeNull()
-    expect(screen.queryByRole("link", { name: "Feature flags" })).toBeNull()
   })
 
   it("shows a failed list with a retry", async () => {

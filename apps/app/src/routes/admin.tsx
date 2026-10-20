@@ -1,28 +1,34 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router"
+import { Outlet, createFileRoute, useRouter, useRouterState } from "@tanstack/react-router"
 
-import { AdminContainer } from "../containers/admin"
-import { adminSessionQuery } from "../containers/admin-data"
-import { RouterLink } from "../containers/router-link"
-import { getAdminApi } from "../lib/admin-api"
+import { AppShellContainer } from "../containers/app-shell"
+import { adminCrumbs } from "../lib/admin-nav"
+import { requireSession } from "../lib/guards"
+import { getWebAuth } from "../lib/web-auth"
 
-// The platform admin page. Signed-out visitors go to sign-in and come back here. Anyone signed in gets
-// the page, and the page itself answers "Not available" unless the session is a platform admin.
+// The admin console (/admin/*), for the people who run the product, in the app shell. Signed-out
+// visitors go to sign-in and come back here. Each tab answers "Not available" to anyone it isn't for.
 export const Route = createFileRoute("/admin")({
-  beforeLoad: async ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     if (typeof window === "undefined") return
-    const session = await context.queryClient.ensureQueryData(adminSessionQuery(getAdminApi()))
-    if (!session) throw redirect({ to: "/sign-in", search: { next: "/admin" } })
+    await requireSession(context.queryClient, getWebAuth(), location.href)
   },
-  component: AdminRoute,
+  component: AdminLayout,
 })
 
-function AdminRoute() {
+function AdminLayout() {
+  const auth = getWebAuth()
   const router = useRouter()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
   return (
-    <AdminContainer
-      api={getAdminApi()}
+    <AppShellContainer
+      auth={auth}
+      slug={null}
+      activeNav="admin"
+      crumbs={adminCrumbs(pathname)}
       onNavigate={(href) => void router.navigate({ href })}
-      renderLink={RouterLink}
-    />
+      onSignedOut={() => void router.navigate({ href: "/sign-in", replace: true })}
+    >
+      <Outlet />
+    </AppShellContainer>
   )
 }

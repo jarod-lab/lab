@@ -158,8 +158,8 @@ gating, targeting, ramping, reclaiming and removing a flag, and `pnpm flags stal
 
 Details: `docs/web-app.md`.
 
-- Routes: `/:org` (with `/runs/:runId` and `/settings/*`), `/account/*`, `/new`, `/admin`, and the
-  OAuth pages. Theme: `lib/theme.ts`.
+- Routes: `/:org` (with `/runs/:runId` and `/settings/*`), `/account/*`, `/new`, `/admin/*` (the
+  admin console: users, feature flags), and the OAuth pages. Theme: `lib/theme.ts`.
 - Route files are thin. Data and mutations live in `src/containers`; presentational pages in
   `src/pages` take props and callbacks.
 - Call the product API through `@starter/sdk` (`productClient(orgId)`, `lib/product-client.ts`).

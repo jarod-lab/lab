@@ -13,4 +13,6 @@ export const adminKeys = {
   /** Every user list, any search or page. */
   users: () => ["admin", "users"] as const,
   list: (query: AdminListQuery) => ["admin", "users", query] as const,
+  /** The operator organization's id when the person belongs to it (get_my_operator_organization). */
+  operatorOrganization: () => ["admin", "operator-organization"] as const,
 }

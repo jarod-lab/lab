@@ -42,8 +42,6 @@ export interface LogoUpload {
 }
 
 export interface OrgGeneralPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { id: string; name: string; slug: string; logo?: string | null }
   /** Omitted, uploads are shown as off. Only used when `canEdit`. */
   logoUpload?: LogoUpload
@@ -96,7 +94,6 @@ function countNoun(count: number | undefined, one: string, many: string): string
 
 /** The organization settings "General" page (board OrgGeneral). Props in, callbacks out. */
 export function OrgGeneralPage({
-  operator = false,
   organization,
   logoUpload,
   host,
@@ -136,7 +133,7 @@ export function OrgGeneralPage({
     },
   })
 
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

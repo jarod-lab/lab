@@ -8,10 +8,11 @@
 
 - `/:org` (org slug; `OrgGate` sets the active org before org content renders)
 - `/:org/runs/:runId`
-- `/:org/settings/{general,members,api-keys,billing,agents,security}`, and `/:org/settings/flags`
-  in the operator organization only
+- `/:org/settings/{general,members,api-keys,billing,agents,security}` (`/:org/settings/flags`
+  redirects to `/admin/flags`)
 - `/account/{profile,security}`
-- `/new`, `/two-factor`, `/admin`
+- `/admin/{users,flags}`, the admin console (see below)
+- `/new`, `/two-factor`
 - the OAuth, device, claim, reset and `/accept-invitation/:id` pages (`/invite/:id` is an alias;
   `/settings/agents` redirects)
 
@@ -74,11 +75,26 @@ answers until the provider does. Keep the call in the route file or a container 
 down, so pages stay props-in (the org home's `whats-new-card` is the example). Tests pass
 `createProvider` an `InMemoryProvider` (`containers/org-features.test.tsx`).
 
-`OrgFeatures` also asks `whoami` whether this is the operator organization (`OperatorContext`,
-`lib/operator.ts`). Settings containers read it with `useIsOperator()` and pass `operator` to their
-page, whose `settingsTabs(slug, operator)` adds Feature flags (`/:org/settings/flags`: rollouts, targets, reclaim, delete) only there. It has no
-board or e2e journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server
-start, which the e2e stack can't know before it creates its organizations.
+`OrgFeatures` mounts the org's pages only once the provider is set: a flag hook that first reads the
+default provider never hears the new one become ready.
+
+## Admin console
+
+`/admin/*` is for the people who run the product, in the app shell with no org slug. Its tabs
+(`lib/admin-nav.ts`) show by who may open them (`useAdminAccess`, `containers/admin-access.ts`):
+
+- **Users** (`/admin/users`): platform admins, the better-auth user role `admin`. Search, ban,
+  impersonate, revoke sessions, set role.
+- **Feature flags** (`/admin/flags`): members of the operator organization, whose id
+  `get_my_operator_organization` (`/v1/me/operator-organization`, session only) returns whatever
+  org the session is on. `AdminFlagsContainer` moves the session to that org (`OrgGate`), since the
+  rollout operations answer only to it. Rollouts, targets, reclaim, delete. It has no board or e2e
+  journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server start, which
+  the e2e stack can't know before it creates its organizations.
+
+`/admin` lands on the first tab the person may open. The sidebar's outlined **Admin** link, above
+Agent docs, shows only to someone with at least one tab. Each tab still answers "Not available" to
+anyone it isn't for, and the server decides every call.
 
 ## Theme
 

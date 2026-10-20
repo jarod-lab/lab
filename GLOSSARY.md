@@ -90,6 +90,8 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Operator organization** — the one organization that runs the product (`OPERATOR_ORGANIZATION_ID`).
   Only it manages feature flags: its members, keys and agents call the **operator operations**
   (`audience: "operator"`), which other organizations neither see nor may call.
+- **Admin console** — the web app's `/admin` pages for the people who run the product: Users for
+  platform admins (the user role `admin`), Feature flags for the operator organization's members.
 - **Feature flag** — a boolean release switch declared in code (`defineFlag` in
   `packages/flags/src/catalog.ts`): key, description, owner, default. Removing it from the catalog
   makes every call site that still reads it a compile error.

@@ -29,8 +29,6 @@ import {
 import { settingsTabs } from "../lib/org-settings"
 
 export interface OrgSecurityPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { name: string; slug: string }
   /** The app's origin, for the SCIM base URL. */
   origin: string
@@ -58,7 +56,6 @@ export interface OrgSecurityPageProps {
 
 /** The organization's Security page: single sign-on providers and SCIM provisioning (owner only). */
 export function OrgSecurityPage({
-  operator = false,
   organization,
   origin,
   roleLabel,
@@ -75,7 +72,7 @@ export function OrgSecurityPage({
   onDismissScim,
   renderLink = anchorLink,
 }: OrgSecurityPageProps) {
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SettingsHeader

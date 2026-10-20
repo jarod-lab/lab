@@ -12,7 +12,6 @@ import { qk } from "../lib/query-keys"
 import type { WebAuth, WebOrganization } from "../lib/web-auth"
 import { ApiKeysPage } from "../pages/api-keys-page"
 import { memberRoleQuery, orgRoleLabel } from "./shell-data"
-import { useIsOperator } from "../lib/operator"
 
 // The permissions the server checks: apiKey:read lists keys (list_api_keys), apiKey:delete revokes
 // one (revoke_agent_access), apiKey:create makes a new key. The page derives its controls from the
@@ -41,7 +40,6 @@ export function ApiKeysContainer({
   organization,
   renderLink,
 }: ApiKeysContainerProps) {
-  const operator = useIsOperator()
   const queryClient = useQueryClient()
   const organizationId = organization.id
   // Creating and revoking keys need a recent sign-in (SESSION_NOT_FRESH otherwise).
@@ -98,7 +96,6 @@ export function ApiKeysContainer({
 
   return (
     <ApiKeysPage
-      operator={operator}
       organization={organization}
       roleLabel={orgRoleLabel(roleText)}
       canList={canList}

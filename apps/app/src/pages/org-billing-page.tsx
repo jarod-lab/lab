@@ -33,8 +33,6 @@ import { ConfirmDialog } from "../components/confirm-dialog"
 import { settingsTabs } from "../lib/org-settings"
 
 export interface OrgBillingPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { name: string; slug: string }
   /** The caller's role as the page words it, e.g. "Owner". */
   roleLabel: string
@@ -72,7 +70,6 @@ function SampleTag({ show }: { show: boolean }) {
  * that opens the provider in a new tab; in the fixture every control is disabled, with the reason.
  */
 export function OrgBillingPage({
-  operator = false,
   organization,
   roleLabel,
   canChange,
@@ -87,7 +84,7 @@ export function OrgBillingPage({
   onCancel,
   renderLink = anchorLink,
 }: OrgBillingPageProps) {
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
   const reasonId = useId()
   const [confirmCancel, setConfirmCancel] = useState(false)
   const connected = mode === "stripe"

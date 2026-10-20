@@ -47,6 +47,25 @@ describe("install snippets", () => {
     expect(config).toEqual({ url: "https://api.acme.test/mcp" })
   })
 
+  it("gives a connector for claude.ai, and a Gemini CLI command and settings entry", () => {
+    const txt = installSnippets(info).join("\n")
+    expect(txt).toContain("### Claude on claude.ai")
+    expect(txt).toContain("Add custom connector")
+    expect(txt).toContain("gemini mcp add --transport http acme-api https://api.acme.test/mcp")
+    expect(txt).toContain('"httpUrl": "https://api.acme.test/mcp"')
+  })
+
+  it("tells a Codex user to sign in after adding the server", () => {
+    expect(installSnippets(info).join("\n")).toContain("codex mcp login acme-api")
+  })
+
+  it("points the CLI at this deployment's origin, with the signup-free commands", () => {
+    const txt = installSnippets(info).join("\n")
+    expect(txt).toContain("### CLI")
+    expect(txt).toContain("npx @starter/cli login --base-url https://api.acme.test")
+    expect(txt).toContain("npx @starter/cli call <operation>")
+  })
+
   it("includes the self-signup section only when signup is public", () => {
     expect(installSnippets(info).join("\n")).not.toContain("self-signup")
     expect(installSnippets(info, ["signup"]).join("\n")).toContain("/v1/signup")

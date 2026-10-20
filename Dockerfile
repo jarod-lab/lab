@@ -36,6 +36,9 @@ ENV NODE_ENV=production \
     WEB_DIST_DIR=/app/apps/app/dist
 COPY --from=builder --chown=node:node /app /app
 COPY --chown=node:node scripts/release.mjs /app/scripts/release.mjs
+# The agent skill, served at /skill.md (apps/api/src/server.ts reads it). Not a workspace package, so
+# turbo prune leaves it out of out/full.
+COPY --chown=node:node skills /app/skills
 USER node
 WORKDIR /app/apps/api
 EXPOSE 3000

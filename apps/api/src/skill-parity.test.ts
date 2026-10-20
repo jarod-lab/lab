@@ -46,7 +46,7 @@ const codeSpans = (text: string) => [...text.matchAll(/`([^`\s]+)`/g)].map((m) =
 describe("skills/starter/SKILL.md matches the server", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   beforeAll(async () => {
-    t = await createTestApp()
+    t = await createTestApp([], { skill: SKILL })
   })
   afterAll(() => t.close())
 
@@ -88,6 +88,20 @@ describe("skills/starter/SKILL.md matches the server", () => {
       expect(txt, path).toContain("urn:ietf:params:oauth:grant-type:device_code")
       expect(txt, path).toContain("/api/auth/device/code")
       expect(txt, path).toContain("/v1/signup")
+      expect(txt, path).toContain("gemini mcp add --transport http")
+      expect(txt, path).toContain("httpUrl")
+      expect(txt, path).toContain("Add custom connector")
+      expect(txt, path).toContain("codex mcp login")
+      expect(txt, path).toContain("npx @starter/cli login")
+      // The skill is the Docs entry agents read first, and it is the served file itself.
+      expect(txt, path).toMatch(/- \[Agent skill\]\(https?:\/\/[^)]+\/skill\.md\)/)
     }
+  })
+
+  it("serves the skill file itself at /skill.md, as markdown", async () => {
+    const res = await t.req("/skill.md")
+    expect(res.status).toBe(200)
+    expect(res.headers.get("content-type")).toContain("text/markdown")
+    expect(await res.text()).toBe(SKILL)
   })
 })

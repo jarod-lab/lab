@@ -1,5 +1,5 @@
-import { type AnyOperation, formatPermissions } from "./operation"
 import { type ApiInfo, inputSchema, outputSchema } from "./openapi"
+import { type AnyOperation, formatPermissions } from "./operation"
 
 export interface DocsLinks {
   /** Extra links for the llms.txt "Docs" section, e.g. a quickstart or the agent skill. */
@@ -105,11 +105,34 @@ export function installSnippets(info: ApiInfo, unauthenticated: readonly string[
     "",
     fence("json", JSON.stringify({ servers: { [name]: { type: "http", url: mcp } } }, null, 2)),
     "",
+    "### Claude on claude.ai",
+    "",
+    "Settings → Connectors (Customize → Connectors on a personal plan) → Add custom connector, then paste",
+    `\`${mcp}\` as the MCP server URL and click Add. Choose "Sign in now" when it asks how people connect,`,
+    "so each person signs in with their own account.",
+    "",
+    "### Gemini CLI",
+    "",
+    fence("sh", `gemini mcp add --transport http ${name} ${mcp}`),
+    "Or put this in `~/.gemini/settings.json`:",
+    "",
+    fence("json", JSON.stringify({ mcpServers: { [name]: { httpUrl: mcp } } }, null, 2)),
+    "",
     "### Codex CLI",
     "",
     "Add this to `~/.codex/config.toml` (or a trusted project's `.codex/config.toml`):",
     "",
     fence("toml", `[mcp_servers.${name}]\nurl = "${mcp}"`),
+    "Then sign in once, in the browser: `codex mcp login " + name + "`.",
+    "",
+    "### CLI",
+    "",
+    "The `starter` command signs in with the device grant (below) and calls any operation from a terminal:",
+    "",
+    fence(
+      "sh",
+      `npx @starter/cli login --base-url ${info.baseURL}\nnpx @starter/cli whoami\nnpx @starter/cli ops\nnpx @starter/cli call <operation> --json '{}'`,
+    ),
     "",
     "### Any other MCP client",
     "",
@@ -193,9 +216,12 @@ export function llmsTxt(all: readonly AnyOperation[], info: ApiInfo, links: Docs
 }
 
 /** Every operation in full, as one Markdown file. Serve it at /llms-full.txt. */
-export function llmsFullTxt(all: readonly AnyOperation[], info: ApiInfo) {
+export function llmsFullTxt(all: readonly AnyOperation[], info: ApiInfo, links: DocsLinks = {}) {
   const ops = forCustomers(all)
   const unauthenticated = publicNames(ops)
+  const docs = (links.docs ?? []).map(
+    (d) => `- [${d.title}](${d.url})${d.note ? `: ${d.note}` : ""}`,
+  )
   const sections = ops.map((op) => {
     const example = op.examples?.[0]
     const open = isPublic(op)
@@ -234,6 +260,7 @@ export function llmsFullTxt(all: readonly AnyOperation[], info: ApiInfo) {
   })
   return [
     ...intro(info, unauthenticated),
+    ...(docs.length > 0 ? ["## Docs", "", ...docs, ""] : []),
     ...installSnippets(info, unauthenticated),
     ...sections,
   ].join("\n")

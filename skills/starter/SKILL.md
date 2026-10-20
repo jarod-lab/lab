@@ -13,13 +13,15 @@ Keep it in step with apps/api: operation names, scopes and error codes here are 
 apps/api/src/skill-parity.test.ts. Install snippets come from llms.txt, not from this file. -->
 <!-- template:end -->
 
-Starter exposes the same operations three ways. Pick the first that fits:
+Starter exposes the same operations four ways. Pick the first that fits:
 
 1. **MCP** (best inside an agent): `https://api.example.com/mcp` (Streamable HTTP). The client signs the
    person in with OAuth on first use; no key is pasted. Tools are the operations below, except `signup`,
   which is REST only.
 2. **REST** (scripts, CI, server code): JSON over HTTPS, with an API key or an OAuth access token.
 3. **OpenAPI** for generated clients: `https://api.example.com/openapi.json`.
+4. **CLI** (terminal, CI): `npx @starter/cli login` signs in with the device grant, then
+   `npx @starter/cli call <operation>` runs any operation and `npx @starter/cli ops` lists them. Output is JSON.
 
 Install snippets for each client are in `https://api.example.com/llms.txt` under "Install".
 

@@ -8,13 +8,13 @@ import type { Analytics } from "@starter/analytics"
 import type { AnyOperation } from "@starter/api"
 import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
-import { createLogger, type Logger } from "@starter/logger"
 import type { FlagCatalog } from "@starter/flags"
+import { createLogger, type Logger } from "@starter/logger"
 import { createMemoryStore, type FileStore } from "@starter/storage"
 import { captureSignUp } from "./analytics"
 import { type AppOptions, createApp } from "./app"
-import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
+import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter, type MeterLimits } from "./meter"
@@ -58,6 +58,8 @@ export interface TestAppOptions {
   trustProxy?: boolean
   /** A built web app to serve (see static.test.ts). */
   webDistDir?: string
+  /** The agent skill text, served at /skill.md (the route is absent without it). */
+  skill?: string
   /** Defaults to a silent logger; pass one with a destination to read the access log. */
   logger?: Logger
   /** Serve GET /status for these vendors (see app.ts). */
@@ -173,6 +175,7 @@ export async function createTestApp(
     analytics,
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
+    skill: options.skill,
     status: options.status,
     devMail,
     auth,

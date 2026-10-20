@@ -51,6 +51,7 @@ describe("AppShellContainer", () => {
             unreadCount: vi.fn(async () => ({ data: { count: 1 }, error: null })),
             markRead: vi.fn(async () => ({ data: null, error: null })),
             markAllRead: vi.fn(async () => ({ data: null, error: null })),
+            markSeen: vi.fn(async () => ({ data: null, error: null })),
           },
         },
       }),

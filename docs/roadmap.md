@@ -7,8 +7,11 @@
   until it's configured.
 - Admins can still read SSO provider config.
 - E2e for passkeys (the e2e browser has no WebAuthn).
-- Publishing: the MCP registry, the Claude connectors directory, Smithery, and `npx skills add` for
-  `skills/starter`. Each needs your namespace and a real URL.
+- Publishing: `.github/workflows/release.yml` publishes the CLI, the SDK and server.json from a
+  version tag, once the setup in `docs/tooling.md` ("Releasing") is done. Not yet automated: the
+  Claude connectors directory, Smithery, and `npx skills add` for `skills/starter` (which needs a
+  public repository; the API serves the skill at `/skill.md` meanwhile). Each needs your namespace and
+  a real URL. A `.well-known/agent-skills/index.json` once that convention settles.
 - Deploy target: the Dockerfile and `scripts/release.mjs` only. No platform config.
 - LLM onboarding eval: an agent starting from `llms.txt` alone, judged on its run. The deterministic
   HTTP journeys exist (`apps/api/src/onboarding.test.ts`: device grant from discovery, self-signup
@@ -19,7 +22,8 @@
 - Notifications for agents: an operation (`list_notifications`) so an OAuth client acting for a
   person can read their notifications. Email or push delivery, per-person preferences and digests.
   Today they are in-app only (`docs/notifications.md`).
-- Verifying the Cursor and VS Code install snippets. Their shapes are inferred from docs.
+- Verifying the Cursor and VS Code install snippets. Their shapes are inferred from docs. Windsurf
+  and a Claude Desktop entry are left out of llms.txt until their docs give a URL-only remote setup.
 - `llms.txt` on the marketing site (`apps/site`), and a sitemap. The site has no search, no
   newsletter backend (the form posts to `site.newsletterAction`) and no theme toggle.
 - Uploads: a deleted organization's or person's files stay in the file store (their keys start

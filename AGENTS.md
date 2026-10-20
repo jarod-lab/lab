@@ -29,10 +29,11 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
 ## Layout
 
 - `apps/api` — Hono on Node (`@hono/node-server`), run with `tsx`. `createApp`
-  (`apps/api/src/app.ts`) serves REST, `/mcp`, OpenAPI, llms.txt, `/health`, `/status`, OAuth
+  (`apps/api/src/app.ts`) serves REST, `/mcp`, OpenAPI, llms.txt, `/skill.md`, `/health`, `/status`, OAuth
   discovery, `/api/auth/*` and OFREP (`/ofrep/v1/*`, a protocol route like `/api/auth/*`). Operations are in `src/operations/`, invoke hooks in `src/hooks.ts`,
   tenant helpers in `src/tenant.ts`, tenant data in `src/data/`. `apps/api/src/server.ts` only wires
-  env, DB and listener.
+  env, DB and listener. `src/product.ts` is the one source for the product's name, version, public URL
+  and MCP registry entry.
 - `apps/app` — `@starter/app`, TanStack Start in SPA mode (the D+ app). See `docs/web-app.md`.
 - `apps/site` — `@starter/site`, the static Astro marketing site (home, pricing, blog, changelog,
   legal) built from `@starter/ui`. Markup lives in `.tsx` components, not `.astro`. See
@@ -68,8 +69,9 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`, `scripts/flags.mjs` (`pnpm flags`).
 - `Dockerfile`, `docker-compose.yml` — the API image; compose's `migrate` runs `scripts/release.mjs`
   first.
-- `skills/starter` — the template skill for customers' agents; `server.json` — the MCP registry
-  record.
+- `skills/starter` — the template skill for customers' agents, served at `/skill.md`; `server.json`
+  — the MCP registry record; `.github/workflows/release.yml` publishes both packages and the record
+  (`docs/tooling.md`, "Releasing").
 
 ## Before you call a change done
 

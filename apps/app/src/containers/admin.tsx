@@ -47,7 +47,9 @@ export function AdminContainer({ api, onNavigate, renderLink }: AdminContainerPr
       // Impersonating changes who the session is: nothing cached can be kept. Stopping does the same
       // in the banner. Everything else only changes the list.
       if (action.kind === "impersonate") {
-        queryClient.clear()
+        // reset, not clear: this page can stay mounted while "/" loads, and must not keep the
+        // admin's answers for the impersonated session
+        void queryClient.resetQueries()
         onNavigate("/")
         return
       }

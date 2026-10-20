@@ -69,9 +69,11 @@ is the channel.
   nobody gets it. Raise `inbox({ maxFanout })` or queue the sends before you get there.
   `approval.requested` reaches every approver, and `member` approves. To narrow it, change
   `APPROVERS` in the catalog, not the emitter.
-- **Org rows go when the access goes.** Removing a member, or the member leaving, deletes that
-  user's rows for the organization. Deleting an organization cascades its rows (a foreign key in
-  migration 0010).
+- **Org rows go when the access goes.** The inbox plugin does this itself (0.8): removing a member,
+  or the member leaving, deletes that user's rows for the organization, and deleting an organization
+  deletes its rows (backed by the foreign key in migration 0010). The removal notice is personal, not
+  stamped with the organization, so it survives. SCIM deprovisioning removes the membership inside
+  the directory's transaction, outside those endpoints, so it doesn't drop the rows yet.
 - **Adding an event:** add it to `NotificationEvent`, `renderNotification` and `recipientsOf`, then
   add it to the table below. The test in `packages/auth/src/notifications.test.ts` checks that
   every catalog type is listed here. Add a line to GLOSSARY.md only for a new concept, not for a

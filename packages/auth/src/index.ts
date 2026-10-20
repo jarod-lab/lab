@@ -626,12 +626,13 @@ export function createAuth(opts: AuthOptions) {
             })
             refuseReservedSlug(organization.slug, current?.slug)
           },
-          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`), and
-          // drops their notifications for this organization. The removed person is told (not themselves).
+          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`). The
+          // inbox plugin drops their notifications for this organization (and on leaving, and when the
+          // organization is deleted). The removed person is told (not themselves), in a personal notice
+          // that isn't stamped with the organization, so it survives that cleanup.
           afterRemoveMember: async ({ member, user, organization }) => {
             await revokeMemberGrants(opts.db, member.userId, organization.id)
             await endScim(member.userId, organization.id)
-            await notifications.dropOrgNotices(user.id, organization.id)
             await notifications.memberRemoved({
               userId: user.id,
               organizationId: organization.id,
@@ -655,10 +656,6 @@ export function createAuth(opts: AuthOptions) {
               organizationName: organization.name,
               inviterName: inviter.name,
             })
-          },
-          // Its notifications go with it (no organization is left for them to point at).
-          afterDeleteOrganization: async ({ organization }) => {
-            await notifications.dropAllOrgNotices(organization.id)
           },
           afterAddMember: async ({ member, user, organization }) => {
             await notifications.inOrg(organization.id, {

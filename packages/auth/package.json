@@ -31,7 +31,7 @@
     "@wraps.dev/better-auth": "^0.4.0",
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "catalog:",
-    "@byo-oss/notifications": "^0.7.0",
+    "@byo-oss/notifications": "^0.8.0",
     "drizzle-orm": "catalog:",
     "jose": "catalog:",
     "stripe": "^23.0.0"

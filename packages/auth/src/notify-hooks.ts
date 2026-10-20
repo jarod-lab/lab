@@ -50,10 +50,6 @@ export interface NotificationHooks {
   }): Promise<void>
   /** A billing event for the organization whose Stripe customer this is (organization.stripeCustomerId). */
   billing(stripeCustomerId: string, kind: "payment_failed" | "subscription_canceled"): Promise<void>
-  /** Tenant hygiene: deletes the user's notifications for one organization (on removal and leaving). */
-  dropOrgNotices(userId: string, organizationId: string): Promise<void>
-  /** Tenant hygiene: deletes every notification stamped with an organization (when it is deleted). */
-  dropAllOrgNotices(organizationId: string): Promise<void>
   /** True once per self-removal (a member removing themselves through remove-member, i.e. leaving). */
   takeSelfRemoval(userId: string, organizationId: string): boolean
   /** The `hooks` registered on the auth instance (see index.ts). */
@@ -161,31 +157,6 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
     }
   }
 
-  const dropAllOrgNotices = async (organizationId: string) => {
-    try {
-      await (await adapter()).deleteMany({
-        model: "notification",
-        where: [{ field: "organizationId", value: organizationId }],
-      })
-    } catch (error) {
-      report(error, "member.removed")
-    }
-  }
-
-  const dropOrgNotices = async (userId: string, organizationId: string) => {
-    try {
-      await (await adapter()).deleteMany({
-        model: "notification",
-        where: [
-          { field: "userId", value: userId },
-          { field: "organizationId", value: organizationId },
-        ],
-      })
-    } catch (error) {
-      report(error, "member.removed")
-    }
-  }
-
   const memberRemoved: NotificationHooks["memberRemoved"] = async ({
     userId,
     organizationId,
@@ -264,16 +235,6 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
               stringField(bodyOf(ctx), "organizationId") ?? session?.session.activeOrganizationId
             if (session && organizationId)
               selfRemovals.delete(selfKey(organizationId, session.user.id))
-          }),
-        },
-        {
-          // A member who leaves keeps no notices for that organization. No notice goes out.
-          matcher: (ctx: { path?: string }) => ctx.path === "/organization/leave",
-          handler: createAuthMiddleware(async (ctx) => {
-            if (!successful(ctx)) return
-            const session = await getSessionFromCtx(ctx)
-            const organizationId = stringField(bodyOf(ctx), "organizationId")
-            if (session && organizationId) await dropOrgNotices(session.user.id, organizationId)
           }),
         },
         {
@@ -366,8 +327,6 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
     personal,
     invitationReceived,
     memberRemoved,
-    dropOrgNotices,
-    dropAllOrgNotices,
     takeSelfRemoval,
     plugin,
   }

@@ -44,6 +44,8 @@
   `notification_delivery` queue (indexed by status and due time, and by person, type and channel
   for throttling; declared in `withDeliveryIndexes()` so `auth generate` keeps them) and
   `inbox_presence` (when each person's bell last polled). See `docs/notifications.md`.
+  @byo-oss/notifications 0.8 declares `onDelete: "cascade"` on its references; the generated schema
+  already had it, so 0.8 needs no migration.
 <!-- template:start -->
 - Migrations `0003` through `0011` are not applied until the user runs them.
 <!-- template:end -->

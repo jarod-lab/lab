@@ -3292,3 +3292,114 @@ describe("notices from the auth flows (better-inbox)", () => {
     expect(again.error).toBeNull()
   })
 })
+
+describe("client ID metadata documents (CIMD) over HTTP", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  /** Metadata documents the stub transport serves, by URL. Anything else is a 404. */
+  const served = new Map<string, unknown>()
+  /** The URLs the server asked for: a request that is refused before fetching never appears. */
+  const fetched: string[] = []
+  const stubFetch = async (input: string | URL | Request): Promise<Response> => {
+    const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+    fetched.push(url)
+    const doc = served.get(url)
+    if (doc === undefined) return new Response("not found", { status: 404 })
+    return new Response(JSON.stringify(doc), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+  beforeAll(async () => {
+    t = await createTestApp([], { clientMetadataFetch: stubFetch })
+  })
+  afterAll(() => t.close())
+
+  /** An authorization request whose client_id is a metadata document URL, as an MCP client sends. */
+  const authorize = (clientId: string) =>
+    t.req(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        scope: "openid offline_access read",
+        state: "s1",
+        code_challenge: createHash("sha256").update("verifier").digest("base64url"),
+        code_challenge_method: "S256",
+        resource: MCP,
+      })}`,
+      { redirect: "manual" } as RequestInit,
+    )
+
+  /** The OAuth error an authorization answers with: in the redirect, or in a JSON body. */
+  const refusal = async (res: Response): Promise<{ error?: string; description?: string }> => {
+    if (res.status === 302) {
+      const location = new URL(res.headers.get("location") ?? "", BASE)
+      return {
+        error: location.searchParams.get("error") ?? undefined,
+        description: location.searchParams.get("error_description") ?? undefined,
+      }
+    }
+    const body = (await res.json()) as { error?: string; error_description?: string }
+    return { error: body.error, description: body.error_description }
+  }
+
+  it("advertises client_id_metadata_document_supported and keeps dynamic registration", async () => {
+    const res = await t.req("/.well-known/oauth-authorization-server/api/auth")
+    expect(res.status).toBe(200)
+    const meta = (await res.json()) as Record<string, unknown>
+    expect(meta.client_id_metadata_document_supported).toBe(true)
+    expect(meta.registration_endpoint).toBe(`${BASE}/api/auth/oauth2/register`)
+  })
+
+  it("refuses a client_id URL that is not HTTPS, without fetching it", async () => {
+    expect(await refusal(await authorize("http://client.example.com/metadata.json"))).toMatchObject(
+      {
+        error: "invalid_client",
+      },
+    )
+  })
+
+  it("refuses a client_id URL on a private or loopback address before fetching it", async () => {
+    for (const url of ["https://127.0.0.1/metadata.json", "https://10.0.0.5/metadata.json"]) {
+      expect(await refusal(await authorize(url))).toMatchObject({
+        error: "invalid_client",
+        description: "client_id URL must not target a private or reserved address",
+      })
+    }
+  })
+
+  it("accepts an HTTPS client_id whose metadata document is fetched and matches it", async () => {
+    const clientId = "https://client.example/metadata.json"
+    served.set(clientId, {
+      client_id: clientId,
+      client_name: "Agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    })
+    const res = await authorize(clientId)
+    expect(fetched).toContain(clientId)
+    expect(res.status).toBe(302)
+    // No session yet, so the authorization goes on to sign-in: it was accepted, not refused.
+    expect(new URL(res.headers.get("location") ?? "", BASE).pathname).toBe("/sign-in")
+  })
+
+  it("refuses an HTTPS client_id whose metadata document names a different client_id", async () => {
+    const clientId = "https://client.example/mismatch.json"
+    served.set(clientId, {
+      client_id: "https://client.example/someone-else.json",
+      client_name: "Agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    })
+    const res = await authorize(clientId)
+    expect(fetched).toContain(clientId)
+    expect(await refusal(res)).toMatchObject({
+      error: "invalid_client",
+      description: expect.stringMatching(/does not match/),
+    })
+  })
+})

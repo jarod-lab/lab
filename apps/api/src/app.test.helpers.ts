@@ -6,7 +6,12 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { Analytics } from "@starter/analytics"
 import type { AnyOperation } from "@starter/api"
-import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
+import {
+  type AuthEvent,
+  type AuthOptions,
+  type AuthRateLimitOptions,
+  createAuth,
+} from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
 import type { FlagCatalog } from "@starter/flags"
 import { createLogger, type Logger } from "@starter/logger"
@@ -91,6 +96,8 @@ export interface TestAppOptions {
   operator?: boolean
   /** The flags the app declares. Defaults to the product's catalog (packages/flags). */
   flagCatalog?: FlagCatalog
+  /** Fetch for Client ID Metadata Documents. Defaults to the SSRF-safe transport; tests stub it. */
+  clientMetadataFetch?: AuthOptions["clientMetadataFetch"]
 }
 
 export async function createTestApp(
@@ -121,6 +128,7 @@ export async function createTestApp(
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, `${BASE}/mcp`],
+    clientMetadataFetch: options.clientMetadataFetch,
     ses: { client: devMail?.client ?? ses },
     stripe: options.stripe,
     // Senders swallow failures; a test must not pass because an email silently failed.

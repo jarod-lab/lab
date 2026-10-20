@@ -1,4 +1,5 @@
 catalog:
+  "@better-auth/cimd": "1.7.7"
   "@better-auth/oauth-provider": "1.7.7"
   "@better-auth/passkey": "1.7.7"
   "@better-auth/sso": "1.7.7"

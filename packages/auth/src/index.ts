@@ -1,6 +1,8 @@
 import { allowed } from "@starter/api"
+import { cimd } from "@better-auth/cimd"
+import { fetchClientMetadataResource } from "@better-auth/cimd/node"
 import { apiKey } from "@better-auth/api-key"
-import { oauthProvider } from "@better-auth/oauth-provider"
+import { type ClientMetadataResourceFetch, oauthProvider } from "@better-auth/oauth-provider"
 import { passkey } from "@better-auth/passkey"
 import { scim } from "@better-auth/scim"
 import { sso } from "@better-auth/sso"
@@ -151,6 +153,11 @@ export interface AuthOptions {
   oauthPages?: { login?: string; consent?: string; selectOrganization?: string }
   /** Protected resources OAuth tokens are issued for (RFC 8707), e.g. `${baseURL}/mcp`. */
   oauthResources?: string[]
+  /**
+   * Fetch for Client ID Metadata Documents (CIMD). Defaults to the SSRF-safe Node transport
+   * (public addresses only, connection pinned, no redirects). Only a test overrides it.
+   */
+  clientMetadataFetch?: ClientMetadataResourceFetch
   /**
    * Per-key request limit. better-auth's default is 10 per day, which one agent session exhausts.
    * Defaults to 600 per minute; `false` turns it off (e.g. when a gateway rate-limits instead).
@@ -717,6 +724,12 @@ export function createAuth(opts: AuthOptions) {
           customAccessTokenClaims: ({ referenceId }) => (referenceId ? { org: referenceId } : {}),
         }),
       ),
+      // Client ID Metadata Documents: an HTTPS client_id is fetched and validated, with no
+      // registration. Dynamic registration stays on for clients that don't use it. Keep the default
+      // fetch policy (HTTPS, public addresses, no redirects); see docs/auth.md.
+      cimd({
+        fetchClientMetadataResource: opts.clientMetadataFetch ?? fetchClientMetadataResource,
+      }),
       // A pending OAuth authorization survives the emailed link (see resume.ts). After oauthProvider,
       // so its signature check has already run on the sign-in request.
       resumeMagicLinkAuthorization({

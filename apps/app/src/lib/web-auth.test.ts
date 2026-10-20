@@ -269,6 +269,36 @@ describe("createWebAuth", () => {
     )
   })
 })
+describe("notifications client for the bell", () => {
+  it("sends every inbox action the bell uses, mark-seen included", async () => {
+    const { fetchImpl, calls } = fakeServer({
+      "GET /api/auth/inbox/list": { body: { notifications: [], hasMore: false } },
+      "GET /api/auth/inbox/unread-count": { body: { count: 0 } },
+      "POST /api/auth/inbox/mark-read": { body: { success: true } },
+      "POST /api/auth/inbox/mark-all-read": { body: { success: true } },
+      "POST /api/auth/inbox/mark-seen": { body: { count: 1 } },
+    })
+    const notifications = createWebAuth(BASE, fetchImpl).notifications
+    if (!notifications) throw new Error("the web auth has no notifications client")
+    const { inbox } = notifications
+    await inbox.list({ query: { limit: 20, offset: 0, filter: "unread" } })
+    await inbox.unreadCount({})
+    await inbox.markRead({ id: "n1" })
+    await inbox.markAllRead({})
+    // without it the bell marks nothing seen, and every "email if unread" goes out
+    expect(inbox.markSeen).toBeDefined()
+    await inbox.markSeen?.({ ids: ["n1", "n2"] })
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "GET /api/auth/inbox/list",
+      "GET /api/auth/inbox/unread-count",
+      "POST /api/auth/inbox/mark-read",
+      "POST /api/auth/inbox/mark-all-read",
+      "POST /api/auth/inbox/mark-seen",
+    ])
+    expect(calls.at(-1)?.body).toEqual({ ids: ["n1", "n2"] })
+  })
+})
+
 describe("organization calls for the org switcher", () => {
   it("checkSlug answers true for a free slug, false for a taken one, and throws for anything else", async () => {
     const free = fakeServer({

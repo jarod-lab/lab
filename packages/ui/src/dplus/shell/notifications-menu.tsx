@@ -1,5 +1,6 @@
 import { cn } from "cn"
 import { BellIcon } from "lucide-react"
+import type { Ref } from "react"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../../components/ui/empty"
@@ -37,6 +38,8 @@ export type NotificationsMenuProps = {
   loading?: boolean
   /** The list could not be loaded. */
   failed?: boolean
+  /** A ref for a row's element, so the container can tell when the row is actually on screen. */
+  rowRef?: (item: NotificationItem) => Ref<HTMLLIElement> | undefined
   /** The clock for the relative times. Defaults to now. */
   now?: Date
   className?: string
@@ -84,6 +87,7 @@ export function NotificationsMenu({
   onLoadMore,
   loading = false,
   failed = false,
+  rowRef,
   now,
   className,
 }: NotificationsMenuProps) {
@@ -171,7 +175,7 @@ export function NotificationsMenu({
           ) : (
             <ul aria-label="Notifications list" className="flex flex-col p-1.5">
               {items.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} ref={rowRef?.(item)}>
                   <button
                     type="button"
                     onClick={() => onSelect(item)}

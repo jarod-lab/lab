@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import type { InboxFetchClient } from "better-inbox/react"
-import { useInbox } from "better-inbox/react"
+import { useInbox, useSeenOnView } from "better-inbox/react"
 
 import {
   type NotificationItem,
@@ -56,19 +56,13 @@ export function NotificationsContainer({
     organizationName: n.organizationId ? (names.get(n.organizationId) ?? null) : null,
   }))
 
-  // The open menu shows these rows, so they count as seen: an "email if unread" still pending for
-  // them is dropped (docs/notifications.md). An impersonated session isn't the person; it marks none.
-  const unseenIds =
-    open && !readOnly
-      ? rows
-          .filter((n) => !n.read && !n.seenAt)
-          .map((n) => n.id)
-          .join(",")
-      : ""
-  const { markSeen } = inbox
-  useEffect(() => {
-    if (unseenIds) void markSeen(unseenIds.split(","))
-  }, [unseenIds, markSeen])
+  // An unread row counts as seen once at least half of it has been on screen for a second, which
+  // drops an "email if unread" still pending for it (docs/notifications.md). Rows below the scroll
+  // don't count. An impersonated session isn't the person; it marks none.
+  const seenRef = useSeenOnView(inbox.markSeen)
+  const seenAt = new Map(rows.map((n) => [n.id, n.seenAt]))
+  const rowRef = (item: NotificationItem) =>
+    readOnly || item.read || seenAt.get(item.id) ? undefined : seenRef(item.id)
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
@@ -113,6 +107,7 @@ export function NotificationsContainer({
       onLoadMore={handleLoadMore}
       loading={inbox.isLoading}
       failed={Boolean(inbox.error)}
+      rowRef={rowRef}
     />
   )
 }

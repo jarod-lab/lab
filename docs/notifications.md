@@ -37,7 +37,8 @@ is the channel.
 - **Security notices go out at once, even if read first.** The email is the record, and it reaches
   the owner when someone else is in the account.
 - **The rest wait 15 minutes** and are dropped if the notification was read or seen in the app.
-  Opening the bell marks the unread rows it shows as seen (`mark-seen`); that doesn't change the
+  An unread row in the open bell is marked seen (`mark-seen`) once at least half of it has been on
+  screen for a second in a visible tab; rows below the scroll aren't. Seen doesn't change the
   badge. A person who isn't in the app gets the email at once. "In the app" means their bell polled
   the unread count in the last 2 minutes; an impersonated session doesn't count.
 - **A throttle caps events that can repeat**: one email per person per window, the rest stay in-app.

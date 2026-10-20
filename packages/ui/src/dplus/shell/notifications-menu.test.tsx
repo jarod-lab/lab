@@ -111,6 +111,25 @@ describe("NotificationsMenu", () => {
     h.cleanup()
   })
 
+  it("hands each row's element to rowRef, so the container can watch it come on screen", () => {
+    const attached = new Map<string, HTMLLIElement>()
+    const h = mount(
+      <NotificationsMenu
+        {...base}
+        rowRef={(item) =>
+          item.read
+            ? undefined
+            : (element) => {
+                if (element) attached.set(item.id, element)
+              }
+        }
+      />,
+    )
+    expect([...attached.keys()]).toEqual(["a"])
+    expect(attached.get("a")).toBe(byText("Approval requested").closest("li"))
+    h.cleanup()
+  })
+
   it("hides mark-all for a read-only session and disables it with nothing unread", () => {
     const h = mount(<NotificationsMenu {...base} canMarkAllRead={false} />)
     expect(document.body.textContent).not.toContain("Mark all read")

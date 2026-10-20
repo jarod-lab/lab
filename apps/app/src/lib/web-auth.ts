@@ -161,6 +161,7 @@ function inboxFetchClient(inbox: AuthClient["inbox"]): InboxFetchClient {
       unreadCount: (input) => inbox.unreadCount(input),
       markRead: ({ id }) => inbox.markRead({ id }),
       markAllRead: (input) => inbox.markAllRead(input),
+      markSeen: ({ ids }) => inbox.markSeen({ ids }),
     },
   }
 }

@@ -41,7 +41,7 @@ type Story = StoryObj<typeof meta>
 export const Default: Story = {}
 export const NoPinnedAgents: Story = { args: { pinnedAgents: [] } }
 export const NoAnnouncement: Story = { args: { announcement: undefined } }
-/** Someone who runs the product: the admin console link above Support. */
+/** Someone who runs the product: the admin console link below Support. */
 export const WithAdmin: Story = { args: { admin: { href: "#admin" } } }
 export const AdminCurrent: Story = { args: { admin: { href: "#admin" }, activeId: "admin" } }
 // A tiny inline avatar and logo, so the stories need no network.

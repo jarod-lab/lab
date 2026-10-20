@@ -52,14 +52,14 @@ describe("AppShellContainer", () => {
     expect(await screen.findByRole("menuitem", { name: /Babbage Labs/ })).toBeTruthy()
   })
 
-  it("links the admin console above Agent docs for those who run the product", async () => {
+  it("links the admin console below Agent docs for those who run the product", async () => {
     renderShell({ adminApis: adminApis("user", "org-a") })
     await loaded()
     const admin = await screen.findByRole("link", { name: "Admin" })
     expect(admin.getAttribute("href")).toBe("/admin")
     const links = screen.getAllByRole("link")
     expect(links.indexOf(admin)).toBe(
-      links.indexOf(screen.getByRole("link", { name: "Agent docs" })) - 1,
+      links.indexOf(screen.getByRole("link", { name: "Agent docs" })) + 1,
     )
   })
 

@@ -68,7 +68,7 @@ describe("AppSidebar", () => {
     h.cleanup()
   })
 
-  it("shows the admin console link only when given, above Support, and marks it current", async () => {
+  it("shows the admin console link only when given, below Support, and marks it current", async () => {
     expect(renderToStaticMarkup(frame(<AppSidebar {...props} />))).not.toContain('href="/admin"')
     const html = renderToStaticMarkup(
       frame(<AppSidebar {...props} admin={{ href: "/admin" }} activeId="admin" />),
@@ -76,7 +76,7 @@ describe("AppSidebar", () => {
     expect(html).toMatch(
       /<a[^>]*href="\/admin"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/admin"/,
     )
-    expect(html.indexOf('href="/admin"')).toBeLessThan(html.indexOf('href="/support"'))
+    expect(html.indexOf('href="/support"')).toBeLessThan(html.indexOf('href="/admin"'))
     expect(html).toContain(">Admin</a>")
     await expectNoA11yViolations(html)
   })

@@ -60,7 +60,7 @@ export type AppSidebarProps = {
   onDismissAnnouncement?: (id: string) => void
   support: { href: string; label?: string }
   /**
-   * The admin console, for the people who run the product. Set only for them: it sits above Support,
+   * The admin console, for the people who run the product. Set only for them: it sits below Support,
    * outlined so it stands out. `activeId` "admin" marks it current.
    */
   admin?: { href: string; label?: string }
@@ -111,8 +111,8 @@ function AnnouncementCard({
 }
 
 /**
- * Sidebar of the app: org picker, workspace nav, pinned agents, one announcement, the admin console
- * (for those who run the product), Support, account.
+ * Sidebar of the app: org picker, workspace nav, pinned agents, one announcement, Support, the admin
+ * console (for those who run the product), account.
  */
 export function AppSidebar({
   org,
@@ -227,12 +227,17 @@ export function AppSidebar({
             }}
           />
         )}
+        {renderLink({
+          href: support.href,
+          className: "flex h-10 items-center px-2.5 text-sidebar-foreground",
+          children: support.label ?? "Support",
+        })}
         {admin &&
           renderLink({
             href: admin.href,
             "aria-current": activeId === "admin" ? "page" : undefined,
             className: cn(
-              "mb-1 flex h-10 items-center gap-2 rounded-[10px] border-[1.5px] border-foreground px-2.5 font-semibold text-sidebar-foreground hover:bg-sidebar-accent",
+              "mt-1 flex h-10 items-center gap-2 rounded-[10px] border-[1.5px] border-foreground px-2.5 font-semibold text-sidebar-foreground hover:bg-sidebar-accent",
               activeId === "admin" && "bg-foreground text-background hover:bg-foreground",
             ),
             children: (
@@ -242,11 +247,6 @@ export function AppSidebar({
               </>
             ),
           } as LinkProps)}
-        {renderLink({
-          href: support.href,
-          className: "flex h-10 items-center px-2.5 text-sidebar-foreground",
-          children: support.label ?? "Support",
-        })}
         <div className="mt-1.5">
           <UserMenu {...account} renderLink={renderLink} />
         </div>

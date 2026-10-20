@@ -92,7 +92,7 @@ default provider never hears the new one become ready.
   journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server start, which
   the e2e stack can't know before it creates its organizations.
 
-`/admin` lands on the first tab the person may open. The sidebar's outlined **Admin** link, above
+`/admin` lands on the first tab the person may open. The sidebar's outlined **Admin** link, below
 Agent docs, shows only to someone with at least one tab. Each tab still answers "Not available" to
 anyone it isn't for, and the server decides every call.
 

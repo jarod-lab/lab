@@ -16,6 +16,7 @@ import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
+import { PRODUCT } from "./product"
 
 const logger = createLogger({ name: "api" })
 // Every reported error (5xx and unexposed ones, from REST, MCP tools, the hooks and analytics) is
@@ -135,9 +136,9 @@ const app = createApp({
   auth,
   operations: createOperations({ auth, db, meter, notifier, files, operator, flags }),
   baseURL,
-  name: "Starter API",
-  version: "0.0.0",
-  description: "The Starter API. Replace this with one sentence about what your product does.",
+  name: PRODUCT.name,
+  version: PRODUCT.version,
+  description: PRODUCT.description,
   logger,
   hooks: createApiHooks({
     db,
@@ -161,12 +162,8 @@ const app = createApp({
   ...(env.STATUS_PROVIDERS && {
     status: { providers: parseStatusProviders(env.STATUS_PROVIDERS) },
   }),
-  // The MCP registry entry (/.well-known/mcp/server.json). Rename before publishing: the name is
-  // reverse-DNS for a namespace you can prove (io.github.<owner>/<repo> or your domain).
-  registry: {
-    name: "io.github.example/starter",
-    description: "Starter API: projects, API keys, agent access and audit for people and agents.",
-  },
+  // The MCP registry entry (/.well-known/mcp/server.json), from product.ts.
+  registry: PRODUCT.registry,
 })
 
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)

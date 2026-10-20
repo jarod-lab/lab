@@ -44,6 +44,10 @@ function originOwner() {
   }
 }
 
+// The GitHub owner: the repository's owner, and the registry namespace when there is no --domain.
+const owner = (ownerArg ?? originOwner())?.toLowerCase()
+if (owner && !/^[a-z0-9][a-z0-9-]*$/.test(owner)) fail(`Not a GitHub owner: ${owner}`)
+
 let namespace
 let host
 if (domain !== undefined) {
@@ -55,8 +59,6 @@ if (domain !== undefined) {
   }
   namespace = labels.reverse().join(".")
 } else {
-  const owner = (ownerArg ?? originOwner())?.toLowerCase()
-  if (owner && !/^[a-z0-9][a-z0-9-]*$/.test(owner)) fail(`Not a GitHub owner: ${owner}`)
   if (owner) namespace = `io.github.${owner}`
 }
 const registryName = namespace && `${namespace}/${name}`
@@ -75,6 +77,18 @@ const SKIP = new Set(["node_modules", ".git", ".turbo", "dist", "pnpm-lock.yaml"
 // (.env.example, the template, is still renamed).
 const VENDORED = new Set(Object.keys(JSON.parse(readFileSync("skills-lock.json", "utf8")).skills))
 const SELF = "scripts/init-project.mjs"
+// The public API origin (product.ts) is a placeholder until the domain is known. Only the files
+// that carry it on purpose are rewritten: never a global replace, since the vendored schema, the
+// storage tests and doc comments also say example.com.
+const PLACEHOLDER_ORIGIN = "https://api.example.com"
+const PLACEHOLDER_REPOSITORY = "https://github.com/example/starter"
+const ORIGIN_FILES = new Set([
+  join("apps", "api", "src", "product.ts"),
+  join("skills", "starter", "SKILL.md"),
+  "server.json",
+  join("packages", "cli", "src", "main.ts"),
+])
+const REPOSITORY_FILES = new Set([join("apps", "api", "src", "product.ts"), "server.json"])
 // The shipped skill's frontmatter `name` and prose follow the product, and so does its folder.
 const SKILL = join("skills", "starter", "SKILL.md")
 // Template history a new project has no use for.
@@ -153,8 +167,14 @@ for (const file of walk(".")) {
   if (file === SKILL) {
     next = next.replace(/^name: starter$/m, `name: ${name}`).replace(/\bStarter\b/g, title)
   }
-  // The registry name in server.ts, its fallback and the committed server.json stay in step.
+  // The registry name in product.ts, its fallback and the committed server.json stay in step.
   if (registryName) next = next.replaceAll("io.github.example/starter", registryName)
+  if (domain !== undefined && ORIGIN_FILES.has(file)) {
+    next = next.replaceAll(PLACEHOLDER_ORIGIN, `https://api.${host}`)
+  }
+  if (owner && REPOSITORY_FILES.has(file)) {
+    next = next.replaceAll(PLACEHOLDER_REPOSITORY, `https://github.com/${owner}/${name}`)
+  }
   if (next !== text) {
     writeFileSync(file, next)
     changed++
@@ -169,8 +189,21 @@ if (registryName) console.log(`MCP registry name: ${registryName}`)
 else
   console.warn(
     "No GitHub owner or --domain (pass one, or add an origin remote): the MCP registry name stays " +
-      "io.github.example/starter. Change it in apps/api/src/server.ts before publishing.",
+      "io.github.example/starter. Change it in apps/api/src/product.ts before publishing.",
   )
+if (domain === undefined) {
+  console.warn(
+    `The public API URL stays ${PLACEHOLDER_ORIGIN} (apps/api/src/product.ts, the shipped skill, ` +
+      "server.json, packages/cli). Pass --domain <domain>, or set publicURL in " +
+      "apps/api/src/product.ts, before publishing.",
+  )
+}
+if (!owner) {
+  console.warn(
+    `The repository stays ${PLACEHOLDER_REPOSITORY}: pass a GitHub owner, or add an origin remote, ` +
+      "or set registry.repository in apps/api/src/product.ts.",
+  )
+}
 if (host) {
   console.log(
     `Before publishing, prove ${host} to the registry with a DNS TXT record (mcp-publisher login dns).`,

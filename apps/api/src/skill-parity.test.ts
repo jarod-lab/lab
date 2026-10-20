@@ -8,6 +8,7 @@ import { OAUTH_SCOPES } from "@starter/auth"
 import type { ErrorCode } from "@starter/errors"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createTestApp } from "./app.test.helpers"
+import { PRODUCT } from "./product"
 
 const SKILL = readFileSync(
   fileURLToPath(new URL("../../../skills/starter/SKILL.md", import.meta.url)),
@@ -68,6 +69,12 @@ describe("skills/starter/SKILL.md matches the server", () => {
     expect(named).toContain("whoami")
     const unknown = named.filter((s) => !names.has(s) && !notOperations.has(s))
     expect(unknown).toEqual([])
+  })
+
+  it("names its URLs under the product's public origin (product.ts)", () => {
+    const urls = [...SKILL_TEXT.matchAll(/https?:\/\/[^\s)`"'<>]+/g)].map((m) => m[0])
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) expect(url.startsWith(`${PRODUCT.publicURL}/`), url).toBe(true)
   })
 
   it("points at the install snippets, which llms.txt and llms-full.txt carry", async () => {

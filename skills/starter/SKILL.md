@@ -5,11 +5,13 @@ description: Use the Starter API from an agent: connect over MCP, sign in headle
 
 # Starter
 
+<!-- template:start -->
 <!-- Template: this file ships to your customers' agents (`npx skills add <owner>/<repo>`).
 Rename the folder and `name`, replace the description with what your product does and the
 phrases users say when they need it, and keep it short: link to llms-full.txt for detail.
 Keep it in step with apps/api: operation names, scopes and error codes here are checked by
 apps/api/src/skill-parity.test.ts. Install snippets come from llms.txt, not from this file. -->
+<!-- template:end -->
 
 Starter exposes the same operations three ways. Pick the first that fits:
 

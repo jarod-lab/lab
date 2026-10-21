@@ -19,11 +19,17 @@ export interface OrgMember {
   role: string
   name: string
   email: string
+  /** The avatar URL, when the person has one. */
+  image?: string | null
 }
 
 export interface OrgSettingsApi {
   getOrganization(organizationId: string): Promise<OrgSettings>
-  listMembers(organizationId: string): Promise<{ total: number; members: OrgMember[] }>
+  /** One page of members (better-auth's default page is 100); `limit` asks for more. */
+  listMembers(
+    organizationId: string,
+    limit?: number,
+  ): Promise<{ total: number; members: OrgMember[] }>
   updateOrganization(
     organizationId: string,
     data: { name?: string; slug?: string; metadata?: Record<string, unknown> },
@@ -83,19 +89,20 @@ export function createOrgSettingsApi(baseURL?: string, fetchImpl?: typeof fetch)
       )
       return toSettings(found)
     },
-    async listMembers(organizationId) {
+    async listMembers(organizationId, limit) {
       const listed = unwrap(
-        await org.listMembers({ query: { organizationId } }),
+        await org.listMembers({ query: { organizationId, ...(limit && { limit }) } }),
         "Could not load the members",
       )
       const members = (listed.members as Array<Record<string, unknown>>).map((member) => {
-        const user = (member.user ?? {}) as { name?: string; email?: string }
+        const user = (member.user ?? {}) as { name?: string; email?: string; image?: string | null }
         return {
           id: String(member.id),
           userId: String(member.userId),
           role: String(member.role),
           name: user.name ?? "",
           email: user.email ?? "",
+          image: user.image ?? null,
         }
       })
       return { total: listed.total, members }

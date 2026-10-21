@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@starter/ui/a11y"
+import { QueryClientProvider } from "@tanstack/react-query"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
@@ -62,6 +63,24 @@ function props(overrides: Partial<AdminPageProps> = {}): AdminPageProps {
 }
 
 describe("AdminPage", () => {
+  it("keeps a user's open actions menu on that user when the list reorders under it", async () => {
+    const actor = userEvent.setup()
+    const { rerender, queryClient } = renderWithClient(<AdminPage {...props()} />)
+    await actor.click(screen.getByRole("button", { name: "Actions for Grace Hopper" }))
+    expect(await screen.findByRole("menuitem", { name: "Ban" })).toBeTruthy()
+
+    // a search narrows the list: Grace moves from the second row to the first
+    const graceOnly = users.filter((u) => u.id === "u2")
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <AdminPage {...props({ users: graceOnly, total: 1 })} />
+      </QueryClientProvider>,
+    )
+    await actor.click(await screen.findByRole("menuitem", { name: "Ban" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText(/Grace Hopper/)).toBeTruthy()
+  })
+
   it("shows each user with their verification, role and status word", () => {
     renderWithClient(<AdminPage {...props()} />)
     const grace = screen.getByRole("row", { name: /Grace Hopper/ })

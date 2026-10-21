@@ -432,6 +432,135 @@ export const invitation = pgTable(
   ],
 )
 
+export const supportTicket = pgTable(
+  "support_ticket",
+  {
+    id: text("id").primaryKey(),
+    number: integer("number").notNull().unique(),
+    subject: text("subject").notNull(),
+    status: text("status").notNull(),
+    priority: text("priority"),
+    channel: text("channel").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    requesterEmail: text("requester_email"),
+    requesterName: text("requester_name"),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    visibility: text("visibility").notNull(),
+    assigneeId: text("assignee_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    rating: text("rating"),
+    verified: boolean("verified").notNull(),
+    mergedIntoId: text("merged_into_id"),
+    replyToken: text("reply_token").notNull().unique(),
+    requesterSeenAt: timestamp("requester_seen_at"),
+    agentSeenAt: timestamp("agent_seen_at"),
+    lastMessageAt: timestamp("last_message_at").notNull(),
+    solvedAt: timestamp("solved_at"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    index("supportTicket_status_idx").on(table.status),
+    index("supportTicket_userId_idx").on(table.userId),
+    index("supportTicket_requesterEmail_idx").on(table.requesterEmail),
+    index("supportTicket_organizationId_idx").on(table.organizationId),
+    index("supportTicket_assigneeId_idx").on(table.assigneeId),
+    index("supportTicket_mergedIntoId_idx").on(table.mergedIntoId),
+    index("supportTicket_lastMessageAt_idx").on(table.lastMessageAt),
+  ],
+)
+
+export const supportCounter = pgTable("support_counter", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: integer("value").notNull(),
+})
+
+export const supportTicketTag = pgTable(
+  "support_ticket_tag",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTicket.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+  },
+  (table) => [
+    index("supportTicketTag_ticketId_idx").on(table.ticketId),
+    index("supportTicketTag_tag_idx").on(table.tag),
+  ],
+)
+
+export const supportMessage = pgTable(
+  "support_message",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTicket.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    authorType: text("author_type").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    authorEmail: text("author_email"),
+    authorName: text("author_name"),
+    body: text("body").notNull(),
+    data: jsonb("data"),
+    mentions: jsonb("mentions"),
+    emailMessageId: text("email_message_id").unique(),
+    channel: text("channel").notNull(),
+    verified: boolean("verified").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("supportMessage_ticketId_idx").on(table.ticketId),
+    index("supportMessage_userId_idx").on(table.userId),
+    index("supportMessage_authorEmail_idx").on(table.authorEmail),
+    index("supportMessage_createdAt_idx").on(table.createdAt),
+  ],
+)
+
+export const supportCannedReply = pgTable(
+  "support_canned_reply",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [index("supportCannedReply_userId_idx").on(table.userId)],
+)
+
+export const supportDelivery = pgTable(
+  "support_delivery",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id")
+      .notNull()
+      .references(() => supportMessage.id, { onDelete: "cascade" }),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => supportTicket.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    claimedAt: timestamp("claimed_at"),
+    attempts: integer("attempts").default(0).notNull(),
+    detail: text("detail"),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("supportDelivery_messageId_idx").on(table.messageId),
+    index("supportDelivery_ticketId_idx").on(table.ticketId),
+    index("supportDelivery_status_idx").on(table.status),
+    index("supportDelivery_scheduledFor_idx").on(table.scheduledFor),
+  ],
+)
+
 export const apikey = pgTable(
   "apikey",
   {
@@ -697,7 +826,48 @@ export const notification = pgTable("notification", {
   href: text("href"),
   data: jsonb("data"),
   read: boolean("read").default(false).notNull(),
+  seenAt: timestamp("seen_at"),
   createdAt: timestamp("created_at").notNull(),
+})
+
+export const notificationDelivery = pgTable(
+  "notification_delivery",
+  {
+    id: text("id").primaryKey(),
+    notificationId: text("notification_id")
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    channel: text("channel").notNull(),
+    status: text("status").notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    claimedAt: timestamp("claimed_at"),
+    sentAt: timestamp("sent_at"),
+    detail: text("detail"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("notificationDelivery_due_idx").on(table.status, table.scheduledFor),
+    index("notificationDelivery_throttle_idx").on(
+      table.userId,
+      table.type,
+      table.channel,
+      table.sentAt,
+    ),
+  ],
+)
+
+export const inboxPresence = pgTable("inbox_presence", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
 })
 
 export const subscription = pgTable("subscription", {
@@ -739,11 +909,21 @@ export const userRelations = relations(user, ({ one, many }) => ({
   scimProjectionGrants: many(scimProjectionGrant),
   members: many(member),
   invitations: many(invitation),
+  supportTicketsByUserId: many(supportTicket, {
+    relationName: "supportTicket_userId",
+  }),
+  supportTicketsByAssigneeId: many(supportTicket, {
+    relationName: "supportTicket_assigneeId",
+  }),
+  supportMessages: many(supportMessage),
+  supportCannedReplys: many(supportCannedReply),
   oauthClients: many(oauthClient),
   oauthRefreshTokens: many(oauthRefreshToken),
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
   notifications: many(notification),
+  notificationDeliverys: many(notificationDelivery),
+  inboxPresence: one(inboxPresence),
 }))
 
 export const sessionRelations = relations(session, ({ one, many }) => ({
@@ -857,6 +1037,7 @@ export const scimGroupMemberRelations = relations(scimGroupMember, ({ one }) => 
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
+  supportTickets: many(supportTicket),
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -878,6 +1059,63 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
   user: one(user, {
     fields: [invitation.inviterId],
     references: [user.id],
+  }),
+}))
+
+export const supportTicketRelations = relations(supportTicket, ({ one, many }) => ({
+  user: one(user, {
+    fields: [supportTicket.userId],
+    references: [user.id],
+    relationName: "supportTicket_userId",
+  }),
+  organization: one(organization, {
+    fields: [supportTicket.organizationId],
+    references: [organization.id],
+  }),
+  assignee: one(user, {
+    fields: [supportTicket.assigneeId],
+    references: [user.id],
+    relationName: "supportTicket_assigneeId",
+  }),
+  supportTicketTags: many(supportTicketTag),
+  supportMessages: many(supportMessage),
+  supportDeliverys: many(supportDelivery),
+}))
+
+export const supportTicketTagRelations = relations(supportTicketTag, ({ one }) => ({
+  supportTicket: one(supportTicket, {
+    fields: [supportTicketTag.ticketId],
+    references: [supportTicket.id],
+  }),
+}))
+
+export const supportMessageRelations = relations(supportMessage, ({ one, many }) => ({
+  supportTicket: one(supportTicket, {
+    fields: [supportMessage.ticketId],
+    references: [supportTicket.id],
+  }),
+  user: one(user, {
+    fields: [supportMessage.userId],
+    references: [user.id],
+  }),
+  supportDeliverys: many(supportDelivery),
+}))
+
+export const supportCannedReplyRelations = relations(supportCannedReply, ({ one }) => ({
+  user: one(user, {
+    fields: [supportCannedReply.userId],
+    references: [user.id],
+  }),
+}))
+
+export const supportDeliveryRelations = relations(supportDelivery, ({ one }) => ({
+  supportMessage: one(supportMessage, {
+    fields: [supportDelivery.messageId],
+    references: [supportMessage.id],
+  }),
+  supportTicket: one(supportTicket, {
+    fields: [supportDelivery.ticketId],
+    references: [supportTicket.id],
   }),
 }))
 
@@ -953,9 +1191,28 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
   }),
 }))
 
-export const notificationRelations = relations(notification, ({ one }) => ({
+export const notificationRelations = relations(notification, ({ one, many }) => ({
   user: one(user, {
     fields: [notification.userId],
+    references: [user.id],
+  }),
+  notificationDeliverys: many(notificationDelivery),
+}))
+
+export const notificationDeliveryRelations = relations(notificationDelivery, ({ one }) => ({
+  notification: one(notification, {
+    fields: [notificationDelivery.notificationId],
+    references: [notification.id],
+  }),
+  user: one(user, {
+    fields: [notificationDelivery.userId],
+    references: [user.id],
+  }),
+}))
+
+export const inboxPresenceRelations = relations(inboxPresence, ({ one }) => ({
+  user: one(user, {
+    fields: [inboxPresence.userId],
     references: [user.id],
   }),
 }))

@@ -4,7 +4,8 @@ import { AppShellContainer } from "../containers/app-shell"
 import { requireSession } from "../lib/guards"
 import { getWebAuth } from "../lib/web-auth"
 
-// The account pages (profile, security) share the organization shell. They show the active org.
+// The account pages (profile, security, a support ticket) share the organization shell. They show
+// the active org.
 export const Route = createFileRoute("/account")({
   beforeLoad: async ({ context, location }) => {
     if (typeof window === "undefined") return

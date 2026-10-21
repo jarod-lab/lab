@@ -42,3 +42,13 @@ credential's account through the API, then sets `role = 'admin'` on it in `DATAB
 
 The runner also accepts `E2E_USER_ADMIN_USERNAME` and `E2E_USER_ADMIN_PASSWORD` (the credential name, uppercased);
 the stack only promotes `E2E_ADMIN_EMAIL`, so set both pairs together.
+
+## Support journeys
+
+`e2e/support-customer.e2e.ts`, `support-staff.e2e.ts` and `support-lifecycle.e2e.ts` cover customer support (`docs/support.md`). The stack sets support up for them (`e2e.config.ts`, `e2e/support/support-stack.ts`):
+
+- **Staff.** It seeds the operator organization (`OPERATOR_ORGANIZATION_ID`, a fixed id) with the `admin` credential's account as its owner, so the admin works the support queue.
+- **Thread mail.** `SUPPORT_REPLY_DELAY_MS=0` and a sweep every second, so an agent's reply is mailed into the dev mail sink at once. Desktop and phone run a stack each on one database, and either stack's sweep may send a reply, so `threadMail` reads every stack's sink. The sink keeps Reply-To, where the reply token is.
+- **Inbound mail.** Each stack makes a relay secret (`SUPPORT_INBOUND_SECRET`, support's `rawRelay`) and writes it with its URLs to `.e2e/stacks/<web port>.json`; `relayInbound` posts a raw message with it. Support threads a reply only when it carries a DKIM signature aligned with the sender's domain, checked in DNS: `dkimSigned` signs with a fresh key and writes the record to `.e2e/dkim/<selector>.txt`, and the API's preload (`scripts/e2e-dkim-dns.mjs`) answers that lookup from the file. Every other lookup goes to DNS.
+- **Keyboard.** The keyboard-only journeys run at 360x740 on both targets, moving focus only with Tab, Shift+Tab, Enter, Space, Escape and, in the staff composer's message type, an arrow key (a radio group's own keys).
+

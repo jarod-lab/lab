@@ -4,6 +4,9 @@
    node_modules). Without dplus, classes only the shell components use are missing from the build. */
 @source "../../../packages/ui/src/components/ui";
 @source "../../../packages/ui/src/dplus";
+/* The support widget and support queue (@byo-oss/support, docs/support.md) are styled with Tailwind
+   classes and shadcn tokens; their package is a direct dependency of this app. */
+@source "../node_modules/@byo-oss/support/dist";
 
 /* Run summaries: sugar-high colours each token through --sh-<type>; these map the types onto the theme's
    semantic tokens (dark mode follows the tokens), so code blocks carry no raw colours. */

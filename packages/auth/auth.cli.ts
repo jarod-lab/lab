@@ -17,4 +17,13 @@ export const auth = createAuth({
   },
   // The `rateLimit` table exists only with the database limiter on (server.ts turns it on).
   rateLimit: {},
+  // Support's `supportDelivery` table exists only with thread mail on (SUPPORT_REPLY_DOMAIN), so
+  // placeholders turn it on here. Nothing is mailed: generation sends nothing.
+  support: {
+    email: {
+      from: "Support <support@example.com>",
+      replyDomain: "support.example.com",
+      appUrl: "https://localhost:3000",
+    },
+  },
 })

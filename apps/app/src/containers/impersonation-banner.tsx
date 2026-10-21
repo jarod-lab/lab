@@ -22,7 +22,9 @@ export function ImpersonationBanner({
   const stop = useMutation({
     mutationFn: () => api.stopImpersonating(),
     onSuccess: () => {
-      queryClient.clear()
+      // reset, not clear: a page that stays mounted through the navigation (the router keeps the
+      // old page while the next one loads) must refetch as the admin, not keep the old answers
+      void queryClient.resetQueries()
       onNavigate("/admin/users")
     },
   })

@@ -12,6 +12,8 @@ export interface DevMailMessage {
   html: string
   /** Every http(s) link in the email, in order, with `&amp;` decoded. */
   links: string[]
+  /** The first Reply-To address, or "" (support's thread mail replies to support+<token>@...). */
+  replyTo: string
   sentAt: string
 }
 
@@ -22,8 +24,11 @@ export interface DevMailSink {
   messages: (to?: string) => DevMailMessage[]
 }
 
-/** Keep this many messages; older ones drop off. Enough for one e2e run, not a mailbox. */
-const CAPACITY = 100
+/**
+ * Keep this many messages; older ones drop off. Enough for one e2e run (both targets share it, and
+ * support's thread mail adds to the auth emails), not a mailbox.
+ */
+const CAPACITY = 1000
 
 const LINK = /https?:\/\/[^\s"'<>\\]+/g
 
@@ -34,6 +39,7 @@ function capture(input: unknown): Omit<DevMailMessage, "sentAt"> {
   const raw = (input ?? {}) as Record<string, unknown>
   const destination = raw.Destination as { ToAddresses?: string[] } | undefined
   const destinations = raw.Destinations as string[] | undefined
+  const replyTo = (raw.ReplyToAddresses as string[] | undefined)?.[0] ?? ""
   const message = raw.Message as
     | {
         Subject?: { Data?: unknown }
@@ -55,6 +61,7 @@ function capture(input: unknown): Omit<DevMailMessage, "sentAt"> {
       text: body,
       html: "",
       links: [...new Set(body.match(LINK) ?? [])],
+      replyTo: /^Reply-To: (.*)$/im.exec(mime)?.[1]?.trim() ?? replyTo,
     }
   }
 
@@ -67,6 +74,7 @@ function capture(input: unknown): Omit<DevMailMessage, "sentAt"> {
     text: plain,
     html,
     links: [...new Set(links.map((l) => l.replaceAll("&amp;", "&")))],
+    replyTo,
   }
 }
 

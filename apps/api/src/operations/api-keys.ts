@@ -72,7 +72,7 @@ export function apiKeyOperations({ auth, db }: Pick<OperationDeps, "auth" | "db"
           "FORBIDDEN",
           "A key can't hold owner-only permissions or person-only actions",
           {
-            hint: `Keys can't have these: ${personOnlyList}. Those are for a person signed in to the web app (owners, and admins for subscription).`,
+            hint: `Keys can't have these: ${personOnlyList}. Those are for a person signed in to the web app (owners; admins for subscription; support staff and customers for support).`,
           },
         )
       }

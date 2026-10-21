@@ -2,6 +2,7 @@
 // GET /api/dev/mail. Unset, the route does not exist.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { BASE, createTestApp } from "./app.test.helpers"
+import { createDevMailSink } from "./dev-mail"
 
 describe("dev mail sink", () => {
   describe("enabled", () => {
@@ -44,6 +45,35 @@ describe("dev mail sink", () => {
 
     it("keeps the fake SES outbox out of it: emails go to the sink, not to SES", async () => {
       expect(t.outbox).toHaveLength(0)
+    })
+  })
+
+  describe("Reply-To", () => {
+    it("keeps the first Reply-To of a structured or a raw email, else empty", async () => {
+      const sink = createDevMailSink()
+      await sink.client.send({
+        input: {
+          Destination: { ToAddresses: ["ada@example.com"] },
+          ReplyToAddresses: ["support+tok@support.example.com"],
+          Message: { Subject: { Data: "[#1] Help" }, Body: { Text: { Data: "Fixed" } } },
+        },
+      })
+      await sink.client.send({
+        input: {
+          Destinations: ["lin@example.com"],
+          RawMessage: {
+            Data: new TextEncoder().encode(
+              "Subject: Raw\r\nReply-To: support+raw@support.example.com\r\n\r\nBody",
+            ),
+          },
+        },
+      })
+      await sink.client.send({
+        input: { Destination: { ToAddresses: ["kim@example.com"] }, Message: {} },
+      })
+      expect(sink.messages("ada@example.com")[0]?.replyTo).toBe("support+tok@support.example.com")
+      expect(sink.messages("lin@example.com")[0]?.replyTo).toBe("support+raw@support.example.com")
+      expect(sink.messages("kim@example.com")[0]?.replyTo).toBe("")
     })
   })
 

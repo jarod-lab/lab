@@ -9,6 +9,7 @@ import { personalSlug } from "@starter/auth"
 import {
   auditEvent,
   member,
+  notification,
   organization,
   passkey as passkeyTable,
   session as sessionTable,
@@ -256,7 +257,9 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const again = await visitor.client.resetPassword({ newPassword: "yet-another-one", token })
       expect(again.error).toMatchObject({ status: 400, code: "INVALID_TOKEN" })
 
-      // The Wraps plugin's password-changed notice went out after the reset.
+      // The password-changed notice is the notification's email (NOTIFICATION_EMAIL_ROUTES), sent
+      // by the delivery sweep, which the server runs on a timer.
+      await t.auth.api.processDeliveries({})
       const notices = await delivered(address, 2)
       expect(notices).toHaveLength(2)
       expect(notices[1]?.subject).toMatch(/password/i)
@@ -343,6 +346,37 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         password: "a-new-passphrase",
       })
       expect(fresh.error).toBeNull()
+    })
+
+    it("emails the change, even once the notification is read in the app", async () => {
+      const { b, email: address, userId } = await signedUp()
+      const before = inbox(address).length
+
+      // An unverified address gets no notification email: the signup may have used someone else's.
+      const unverified = await b.client.changePassword({
+        currentPassword: PASSWORD,
+        newPassword: "an-interim-passphrase",
+      })
+      expect(unverified.error).toBeNull()
+      await t.auth.api.processDeliveries({})
+      expect(inbox(address)).toHaveLength(before)
+
+      await t.db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, userId))
+      const ok = await b.client.changePassword({
+        currentPassword: "an-interim-passphrase",
+        newPassword: "a-new-passphrase",
+      })
+      expect(ok.error).toBeNull()
+
+      const { data } = await b.client.inbox.list({ query: {} })
+      const notice = data?.notifications.find((n) => n.type === "account.password_changed")
+      expect(notice).toBeTruthy()
+      await b.client.inbox.markRead({ id: notice?.id ?? "" })
+
+      // a security notice goes out even if read first (cancelIfRead: false)
+      await t.auth.api.processDeliveries({})
+      const mails = await delivered(address, before + 1)
+      expect(mails.at(-1)?.subject).toMatch(/password/i)
     })
   })
 
@@ -1780,6 +1814,75 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(await memberOf(address, org)).toBeNull()
     })
 
+    it("a directory deprovisioning drops the member's notices for that organization, and keeps the rest", async () => {
+      const { org, scim } = await ownerWithScim("Notices")
+      const provision = async (address: string) => {
+        const created = await scim(
+          "/Users",
+          json({
+            schemas: [SCIM_USER],
+            userName: address,
+            emails: [{ value: address, primary: true }],
+            active: true,
+          }),
+        )
+        expect(created.status).toBe(201)
+        return ((await created.json()) as { id: string }).id
+      }
+      const leaving = email()
+      const staying = email()
+      const leavingScimId = await provision(leaving)
+      await provision(staying)
+      const idOf = async (address: string) =>
+        (
+          await t.db
+            .select({ id: userTable.id })
+            .from(userTable)
+            .where(eq(userTable.email, address))
+        )[0]?.id ?? ""
+      const leavingId = await idOf(leaving)
+      const stayingId = await idOf(staying)
+
+      // Seeding is setup: the server writes the rows the way the features do.
+      await t.auth.api.notify({
+        body: { userId: leavingId, organizationId: org, type: "approval.requested", title: "Org" },
+      })
+      await t.auth.api.notify({
+        body: { userId: leavingId, type: "account.password_changed", title: "Personal" },
+      })
+      await t.auth.api.notify({
+        body: {
+          userId: stayingId,
+          organizationId: org,
+          type: "approval.requested",
+          title: "Stays",
+        },
+      })
+      const titlesOf = async (userId: string) =>
+        (
+          await t.db
+            .select({ title: notification.title })
+            .from(notification)
+            .where(eq(notification.userId, userId))
+        )
+          .map((row) => row.title)
+          .sort()
+      expect(await titlesOf(leavingId)).toEqual(["Org", "Personal"])
+
+      const off = await scim(
+        `/Users/${leavingScimId}`,
+        json(
+          { schemas: [PATCH], Operations: [{ op: "replace", value: { active: false } }] },
+          "PATCH",
+        ),
+      )
+      expect(off.status).toBe(200)
+      expect(await memberOf(leaving, org)).toBeNull()
+      // The organization's notices go with the membership; the personal one does not.
+      expect(await titlesOf(leavingId)).toEqual(["Personal"])
+      expect(await titlesOf(stayingId)).toEqual(["Stays"])
+    })
+
     it("a directory deprovisioning removes only what it provisioned: a member an owner added by hand stays", async () => {
       const { owner, org, scim } = await ownerWithScim("Hand-made kept")
       // SCIM refuses an address that already has an account, so the directory provisions first.
@@ -2540,7 +2643,7 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
-  describe("notifications (better-inbox)", () => {
+  describe("notifications (@byo-oss/notifications)", () => {
     it("lists a notification, marks it read and the unread count drops; another user can't see or mark it", async () => {
       const ada = await signedUp("Ada notices")
       const bob = await signedUp("Bob notices")
@@ -2886,7 +2989,7 @@ describe("auth rate limit over HTTP (opted in, behind a trusted proxy)", () => {
 
 // The notices the auth layer sends (packages/auth/src/notify-hooks.ts, index.ts): each event reaches
 // the people it is about, and not the actor. Read through the recipient's own session, as the bell does.
-describe("notices from the auth flows (better-inbox)", () => {
+describe("notices from the auth flows (@byo-oss/notifications)", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   const STRIPE_WEBHOOK_SECRET = "whsec_placeholder_for_tests" // gitleaks:allow
   beforeAll(async () => {

@@ -31,30 +31,10 @@ catalog:
 packages:
   - "apps/*"
   - "packages/*"
+
 minimumReleaseAgeExclude:
-  - '@gdp-ts/core@0.1.0'
-  - '@oxlint/binding-android-arm-eabi@1.87.0'
-  - '@oxlint/binding-android-arm64@1.87.0'
-  - '@oxlint/binding-darwin-arm64@1.87.0'
-  - '@oxlint/binding-darwin-x64@1.87.0'
-  - '@oxlint/binding-freebsd-x64@1.87.0'
-  - '@oxlint/binding-linux-arm-gnueabihf@1.87.0'
-  - '@oxlint/binding-linux-arm-musleabihf@1.87.0'
-  - '@oxlint/binding-linux-arm64-gnu@1.87.0'
-  - '@oxlint/binding-linux-arm64-musl@1.87.0'
-  - '@oxlint/binding-linux-ppc64-gnu@1.87.0'
-  - '@oxlint/binding-linux-riscv64-gnu@1.87.0'
-  - '@oxlint/binding-linux-riscv64-musl@1.87.0'
-  - '@oxlint/binding-linux-s390x-gnu@1.87.0'
-  - '@oxlint/binding-linux-x64-gnu@1.87.0'
-  - '@oxlint/binding-linux-x64-musl@1.87.0'
-  - '@oxlint/binding-openharmony-arm64@1.87.0'
-  - '@oxlint/binding-win32-arm64-msvc@1.87.0'
-  - '@oxlint/binding-win32-ia32-msvc@1.87.0'
-  - '@oxlint/binding-win32-x64-msvc@1.87.0'
-  - oxlint@1.87.0
-  - better-inbox@0.5.0
-  - '@wraps.dev/better-auth@0.4.0'
+  - '@byo-oss/*'
+  - '@wraps.dev/*'
 
 allowBuilds:
   esbuild: true

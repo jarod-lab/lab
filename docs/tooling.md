@@ -56,6 +56,9 @@
   - The browser can't emulate dark mode (override `matchMedia` in an init script) or WebAuthn. Tests
     compute TOTP codes (`e2e/support/totp.ts`). Screenshots are withheld after a secret fill.
   - The e2e stack signs up and promotes the admin journey's account at startup (see `e2e/README.md`).
+  - It also seeds the operator organization with that account as owner, and runs support with
+    instant thread mail, a raw inbound relay and a DKIM DNS preload for the API
+    (`scripts/e2e-dkim-dns.mjs`), for the support journeys (`e2e/README.md`, "Support journeys").
   - CI runs it (the **e2e** job below) with `--exclude-tag visual`: the visual tests save
     screenshots to compare with the boards by hand, and their CSP check only means something under
     `e2e.dist.config.ts`.

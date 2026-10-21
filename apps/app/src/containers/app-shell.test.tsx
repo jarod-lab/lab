@@ -10,6 +10,7 @@ import { adminSessionFixture, fakeAdminApi } from "../test/fake-admin"
 import { fakeAuth } from "../test/fake-auth"
 import { fakeFeatureFlagsApi } from "../test/fake-feature-flags"
 import { renderWithClient } from "../test/render"
+import { fakeSupportClient } from "../test/fake-support"
 import type { AdminAccessApis } from "./admin-access"
 import { AppShellContainer } from "./app-shell"
 
@@ -83,12 +84,46 @@ describe("AppShellContainer", () => {
             unreadCount: vi.fn(async () => ({ data: { count: 1 }, error: null })),
             markRead: vi.fn(async () => ({ data: null, error: null })),
             markAllRead: vi.fn(async () => ({ data: null, error: null })),
+            markSeen: vi.fn(async () => ({ data: null, error: null })),
           },
         },
       }),
     })
     await loaded()
     expect(await screen.findByRole("button", { name: "Notifications, 1 unread" })).toBeTruthy()
+  })
+
+  it("puts the support widget last in the top bar, for the organization the page shows", async () => {
+    const client = fakeSupportClient()
+    renderShell({ auth: fakeAuth({ support: client }) })
+    await loaded()
+    const launcher = await screen.findByRole("button", { name: /^Support/ })
+    await waitFor(() => expect(client.support.myTickets).toHaveBeenCalled())
+    await userEvent.click(launcher)
+    const panel = await screen.findByRole("dialog", { name: "Support" })
+    expect(within(panel).getByText("Can't export runs")).toBeTruthy()
+    await userEvent.click(within(panel).getByRole("button", { name: "New ticket" }))
+    await expectNoA11yViolations(document.body.innerHTML)
+  })
+
+  it("leaves the support widget out of the admin console", async () => {
+    renderShell({ auth: fakeAuth({ support: fakeSupportClient() }), activeNav: "admin" })
+    await loaded()
+    expect(screen.queryByRole("button", { name: /^Support/ })).toBeNull()
+  })
+
+  it("leaves the support widget out while an admin acts as someone", async () => {
+    const auth = fakeAuth({
+      support: fakeSupportClient(),
+      getSession: vi.fn(async () => ({
+        user: { id: "user-1", email: "ada@example.com", name: "Ada" },
+        activeOrganizationId: "org-a",
+        impersonatedBy: "admin-1",
+      })),
+    })
+    renderShell({ auth })
+    await loaded()
+    expect(screen.queryByRole("button", { name: /^Support/ })).toBeNull()
   })
 
   it("has no accessibility violations", async () => {

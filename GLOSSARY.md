@@ -55,10 +55,12 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Steer** — a message a person sends to a running run (`steer_run`). **Defer** pushes a run's attention
   to a later time.
 - **Inbox** — the person's list of runs that need them, across the organization.
-- **Notification** — an in-app message to one person (`notification` table, better-inbox), optionally
+- **Notification** — an in-app message to one person (`notification` table, @byo-oss/notifications), optionally
   stamped with an organization, shown under the top bar's bell. Not the **Inbox**.
 - **Notification event** — one typed event (`NotificationEvent`, `packages/auth/src/notifications.ts`)
   that every notification is sent through; its recipients come from the permission catalog.
+- **Delivery** — one notification queued for another channel (email), a `notification_delivery` row.
+  It is sent, skipped (read or seen first, throttled) or failed; see `docs/notifications.md`.
 
 ## The API
 
@@ -107,6 +109,16 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
   the evidence for the **stale signals** (inactive, one value only, reclaimed but still in code).
 - **Reclaim** — the decision that ends a rollout: the flag serves one value to everyone and can no
   longer change. Then its code is removed, and after that deploy its rollout is deleted.
+
+## Support
+
+- **Support ticket** — a customer's request to the people who run the product (`@byo-oss/support`,
+  `docs/support.md`): replies, internal notes and events. Owned by its **requester**; may be shared
+  with the requester's organization. A ticket opened by email has no organization.
+- **Support staff** — the operator organization's members whose role holds `support` actions. The
+  package and its UI call them **agents**; in this app "agent" alone means a workspace agent.
+- **Support queue** — the staff's list of tickets (the package's `SupportInbox`). Not the **Inbox**.
+- **Internal note** — a staff-only message on a ticket. Never shown, mailed or notified to a customer.
 
 ## The web app
 

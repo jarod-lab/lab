@@ -10,7 +10,7 @@ import { stripe } from "@better-auth/stripe"
 import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
-import { inbox } from "better-inbox"
+import { type AuthWithContext, deleteMemberData, inbox } from "@byo-oss/notifications"
 import { type WrapsSesOptions, wraps } from "@wraps.dev/better-auth"
 import { reportError } from "@starter/errors"
 import Stripe from "stripe"
@@ -52,7 +52,13 @@ import {
 } from "./account-plugin"
 import { type LoginContext, signInOf } from "./login-method"
 import { createNotices } from "./notices"
-import { type NotificationType, type NotifyFn, createNotifier } from "./notifications"
+import { notificationEmailChannel, withDeliveryIndexes } from "./notification-email"
+import {
+  NOTIFICATION_EMAIL_ROUTES,
+  type NotificationType,
+  type NotifyFn,
+  createNotifier,
+} from "./notifications"
 import { type NotificationHooks, notificationHooks } from "./notify-hooks"
 import { securitySummaryPlugin } from "./security-summary"
 import { signInMethodsOf, signInMethodsPlugin } from "./sign-in-methods"
@@ -66,6 +72,7 @@ import { type AuthRateLimitOptions, authIpAddress, authRateLimit } from "./rate-
 import { resumeMagicLinkAuthorization } from "./resume"
 import { endProvisionalKeys } from "./signup"
 import { scimProjection } from "./scim-projection"
+import { type SupportConfig, supportPlugin } from "./support"
 import {
   type ScimConnection,
   type ScimConnectionInput,
@@ -206,6 +213,12 @@ export interface AuthOptions {
    * reported, never returned: a sign-up never fails for it.
    */
   onSignUp?: (event: { userId: string; organizationId: string }) => void
+  /**
+   * Customer support (@byo-oss/support, support.ts): the staff organization, thread mail and
+   * inbound mail. Support is always mounted, so its tables and routes don't depend on the config;
+   * unset, nobody is an agent and nothing is mailed.
+   */
+  support?: SupportConfig
 }
 
 const defaultNotificationError = (error: unknown, type: NotificationType) => {
@@ -338,10 +351,15 @@ export function createAuth(opts: AuthOptions) {
     if (!scimApi.management) throw new Error("auth is not initialised")
     await endScimTokensOf(scimApi.management, userId, organizationId)
   }
+  // The inbox package's cleanup takes the auth instance, which only exists after betterAuth returns.
+  const inboxRef: { auth?: AuthWithContext } = {}
   // A SCIM deprovision ends a person's access the way a removal does, inside the SCIM transaction: the
-  // adapter for the grants (the Drizzle handle would wait on that transaction), the tokens via the plugin.
+  // adapter for the grants (the Drizzle handle would wait on that transaction), the tokens via the plugin,
+  // and their notices for the organization (deleteMemberData picks up the open transaction itself).
   const endAccessIn = async (db: Adapter, userId: string, organizationId: string) => {
+    if (!inboxRef.auth) throw new Error("auth is not initialised")
     await revokeGrantsWith(db, { organizationId, userId }, new Date())
+    await deleteMemberData(inboxRef.auth, { userId, organizationId })
     await endScim(userId, organizationId)
   }
 
@@ -427,16 +445,17 @@ export function createAuth(opts: AuthOptions) {
     emailAndPassword: {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
-      // Wraps fills this gap only when it is unset, so the notice is sent from here. Resetting through
-      // an emailed link proves the mailbox, so the address counts as verified: provisional signups
-      // (see signup.ts) are claimed this way.
+      // Wraps fills this gap only when it is unset, so the reset's side effects run here. Resetting
+      // through an emailed link proves the mailbox, so the address counts as verified: provisional
+      // signups (see signup.ts) are claimed this way.
       onPasswordReset: async ({ user }) => {
         // Verified first: a failing notice must not leave the claim unrecorded. This write skips
         // the user update hook, so the provisional key is ended here too.
         const db = await adapter()
         await setUserFields(db, user.id, { emailVerified: true })
         await endProvisionalKeys(db, user.id)
-        await wrapsPlugin.emails.passwordChanged({ user })
+        // The "password changed" email is this notification's email route (cancelIfRead: false), as
+        // for /change-password, so it is not also sent from here.
         await notifications.personal({ type: "account.password_changed", userId: user.id })
       },
     },
@@ -626,12 +645,13 @@ export function createAuth(opts: AuthOptions) {
             })
             refuseReservedSlug(organization.slug, current?.slug)
           },
-          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`), and
-          // drops their notifications for this organization. The removed person is told (not themselves).
+          // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`). The
+          // inbox plugin drops their notifications for this organization (and on leaving, and when the
+          // organization is deleted). The removed person is told (not themselves), in a personal notice
+          // that isn't stamped with the organization, so it survives that cleanup.
           afterRemoveMember: async ({ member, user, organization }) => {
             await revokeMemberGrants(opts.db, member.userId, organization.id)
             await endScim(member.userId, organization.id)
-            await notifications.dropOrgNotices(user.id, organization.id)
             await notifications.memberRemoved({
               userId: user.id,
               organizationId: organization.id,
@@ -656,10 +676,6 @@ export function createAuth(opts: AuthOptions) {
               inviterName: inviter.name,
             })
           },
-          // Its notifications go with it (no organization is left for them to point at).
-          afterDeleteOrganization: async ({ organization }) => {
-            await notifications.dropAllOrgNotices(organization.id)
-          },
           afterAddMember: async ({ member, user, organization }) => {
             await notifications.inOrg(organization.id, {
               type: "member.joined",
@@ -672,8 +688,13 @@ export function createAuth(opts: AuthOptions) {
             if (allowed(rolePermissions(member.role), { scim: ["create"] })) return
             await endScim(member.userId, member.organizationId)
           },
+          // Support cleans up after delete, remove-member and leave with its own hooks (support.ts):
+          // its rows aren't deleted here too, or they would be deleted twice.
         },
       }),
+      // After organization(): support's tables reference `organization`, and its staff are the
+      // operator organization's members (support.ts). Its events become notifications.
+      supportPlugin({ config: opts.support ?? {}, ses: opts.ses, notifications }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
       // checks it against the creator). No defaults: a key without permissions can do nothing.
       apiKey({
@@ -747,12 +768,29 @@ export function createAuth(opts: AuthOptions) {
       signOutSession,
       // Audit events for auth activity (auth-events.ts).
       authEvents({ onAuthEvent: opts.onAuthEvent ?? (() => {}) }),
-      // In-app notifications (better-inbox): the bell. Written by the server only (auth.api.notify).
-      inbox(),
+      // In-app notifications (@byo-oss/notifications): the bell. Written by the server only (auth.api.notify).
+      // Some events also email (NOTIFICATION_EMAIL_ROUTES; the API's delivery sweep sends them).
+      withDeliveryIndexes(
+        inbox({
+          appUrl: opts.baseURL,
+          channels: {
+            email: notificationEmailChannel({
+              from: opts.emailFrom,
+              appName: opts.appName ?? "Starter",
+              ses: opts.ses,
+            }),
+          },
+          routes: NOTIFICATION_EMAIL_ROUTES,
+          // Only to a verified address: a signup (or a provisional one, by an agent) can use
+          // someone else's, and its events would otherwise mail them. A reset verifies first.
+          shouldDeliver: ({ user }) => user.emailVerified,
+        }),
+      ),
       ...(opts.stripe ? [stripeBilling(opts.stripe, adapter, notifications)] : []),
     ],
   })
   notifyRef.notify = (body) => auth.api.notify(body)
+  inboxRef.auth = auth
   scimApi.connect = (input) => auth.api.createSCIMManagedConnection(input)
   scimApi.management = {
     list: (provisioningDomainId) =>
@@ -814,6 +852,7 @@ export {
 } from "@better-auth/oauth-provider"
 export * from "./permissions"
 export { oauthIssuer, type Principal, resolvePrincipal } from "./principal"
+export { acceptSupportSession, type SupportConfig, supportMailer } from "./support"
 export { type GrantScope, revokeGrants } from "./member-grants"
 export { memberGrants, personalSlug } from "./membership"
 export {
@@ -836,4 +875,6 @@ export {
   recipientsOf,
   renderNotification,
   rolesWith,
+  SUPPORT_AGENTS,
+  supportTicketPaths,
 } from "./notifications"

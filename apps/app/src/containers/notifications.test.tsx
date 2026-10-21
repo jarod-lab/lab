@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import type { InboxFetchClient, InboxNotification } from "better-inbox/react"
+import type { InboxFetchClient, InboxNotification } from "@byo-oss/notifications/react"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { renderWithClient } from "../test/render"
 import { NotificationsContainer } from "./notifications"
@@ -41,11 +41,48 @@ function fakeInbox(notifications: InboxNotification[], unread = 0) {
   const unreadCount = vi.fn(async () => ({ data: { count: unread }, error: null }))
   const markRead = vi.fn(async () => ({ data: {}, error: null }))
   const markAllRead = vi.fn(async () => ({ data: {}, error: null }))
+  const markSeen = vi.fn(async () => ({ data: {}, error: null }))
   const client: InboxFetchClient = {
-    inbox: { list, unreadCount, markRead, markAllRead },
+    inbox: { list, unreadCount, markRead, markAllRead, markSeen },
   }
-  return { client, list, markRead, markAllRead }
+  return { client, list, markRead, markAllRead, markSeen }
 }
+
+/**
+ * jsdom has no IntersectionObserver. This one reports nothing until `show` says a row is on
+ * screen, the way a row below the scroll never would.
+ */
+function fakeIntersectionObserver() {
+  const watching = new Map<Element, (entries: Partial<IntersectionObserverEntry>[]) => void>()
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      callback: (entries: Partial<IntersectionObserverEntry>[]) => void
+      constructor(callback: (entries: Partial<IntersectionObserverEntry>[]) => void) {
+        this.callback = callback
+      }
+      observe(target: Element) {
+        watching.set(target, this.callback)
+      }
+      unobserve(target: Element) {
+        watching.delete(target)
+      }
+      disconnect() {
+        watching.clear()
+      }
+    },
+  )
+  return {
+    watching: () => [...watching.keys()],
+    show(target: Element) {
+      watching.get(target)?.([{ target, isIntersecting: true, intersectionRatio: 1 }])
+    },
+  }
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 function renderBell(overrides: Partial<Parameters<typeof NotificationsContainer>[0]> = {}) {
   const onNavigate = vi.fn()
@@ -117,6 +154,34 @@ describe("NotificationsContainer", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Approval requested/ }))
     await waitFor(() => expect(onNavigate).toHaveBeenCalledWith("/analytical/runs/run-1"))
     expect(markRead).toHaveBeenCalledWith({ id: "n1" })
+  })
+
+  it("marks an unread row seen once it has been on screen, not when it is only rendered", async () => {
+    const io = fakeIntersectionObserver()
+    const { list, markSeen } = renderBell()
+    await bell()
+    await waitFor(() => expect(list).toHaveBeenCalled())
+    await userEvent.click(await bell())
+    const rows = within(await screen.findByRole("list", { name: "Notifications list" }))
+    const first = rows.getByText("Approval requested").closest("li") as Element
+    const second = rows.getByText("Run finished").closest("li") as Element
+    expect(io.watching()).toEqual([first, second])
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    expect(markSeen).not.toHaveBeenCalled()
+
+    // only the first row is in view; the second is below the scroll
+    io.show(first)
+    await waitFor(() => expect(markSeen).toHaveBeenCalledWith({ ids: ["n1"] }), { timeout: 2000 })
+    expect(markSeen).toHaveBeenCalledTimes(1)
+  })
+
+  it("marks nothing seen for a read-only (impersonated) session", async () => {
+    const io = fakeIntersectionObserver()
+    const { markSeen } = renderBell({ readOnly: true })
+    await userEvent.click(await bell())
+    await screen.findByRole("list", { name: "Notifications list" })
+    expect(io.watching()).toEqual([])
+    expect(markSeen).not.toHaveBeenCalled()
   })
 
   it("navigates without marking read when the session is read-only (impersonation)", async () => {

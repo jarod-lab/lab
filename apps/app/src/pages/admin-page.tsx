@@ -223,7 +223,14 @@ export function AdminPage({
     [me.userId],
   )
 
-  const table = useTable({ features: tableFeaturesSet, columns, data: users })
+  // Rows keyed by user, not position: a search or refresh reorders the list, and an open actions
+  // menu must stay with its user rather than close or move to whoever now sits in that row.
+  const table = useTable({
+    features: tableFeaturesSet,
+    columns,
+    data: users,
+    getRowId: (user) => user.id,
+  })
   const rows = table.getRowModel().rows
 
   const virtual = rows.length > VIRTUAL_ROWS

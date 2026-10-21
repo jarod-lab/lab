@@ -1,5 +1,7 @@
 // The permission catalog and roles, with no server code: the browser client imports this file, so
-// it may only import better-auth's access modules. Grant math lives in ./permissions.
+// it may only import better-auth's access modules and other browser-safe entries (support's
+// `/client`). Grant math lives in ./permissions.
+import { supportRoles, supportStatements } from "@byo-oss/support/client"
 import { createAccessControl } from "better-auth/plugins/access"
 import { defaultStatements } from "better-auth/plugins/organization/access"
 
@@ -30,6 +32,11 @@ export const statements = {
   subscription: ["read", "update"],
   // Owner only: turning off another member's two-factor sign-in.
   twoFactor: ["reset"],
+  // Customer support (@byo-oss/support): held in the operator organization, its members are the
+  // support staff. `read` the queue and any ticket, `reply` (replies and internal notes), `update`
+  // (status, priority, assignee, tags, merge), `manage` canned replies, `delete` tickets. The
+  // package's own list (its browser-safe `/client` entry). A person's resource: no key or OAuth token.
+  ...supportStatements,
 } as const
 
 export type Catalog = typeof statements
@@ -42,8 +49,11 @@ const all = Object.fromEntries(
 /** Resources only the owner role holds: the admin role is built without them. */
 export const OWNER_ONLY_RESOURCES = ["sso", "scim", "twoFactor"] as const
 
-/** Resources a person holds but no API key may: the owner-only ones, and billing (owner and admin). */
-export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription"] as const
+/**
+ * Resources a person holds but no API key or OAuth token may: the owner-only ones, billing (owner
+ * and admin), and support (staff and customers use it from the web app, with a cookie session).
+ */
+export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription", "support"] as const
 
 /**
  * Actions a person holds but no API key or OAuth token may. Approving a run is a person's decision
@@ -73,6 +83,8 @@ export const roles = {
     project: ["create", "read", "update"],
     agent: ["create", "read", "update"],
     run: ["create", "read", "update", "approve", "steer"],
+    // In the operator organization: works the support queue, without canned replies or deletes.
+    ...supportRoles.member,
   }),
   viewer: ac.newRole({ project: ["read"], agent: ["read"], run: ["read"] }),
   // A reviewer: signs off on runs. Never changes agents or starts runs.

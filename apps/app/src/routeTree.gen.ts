@@ -42,6 +42,8 @@ import { Route as OrgSettingsFlagsRouteImport } from './routes/$org/settings/fla
 import { Route as OrgSettingsGeneralRouteImport } from './routes/$org/settings/general'
 import { Route as OrgSettingsMembersRouteImport } from './routes/$org/settings/members'
 import { Route as OrgSettingsSecurityRouteImport } from './routes/$org/settings/security'
+import { Route as AccountSupportChar123IdChar125RouteImport } from './routes/account/support.{-$id}'
+import { Route as AdminSupportChar123IdChar125RouteImport } from './routes/admin/support.{-$id}'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -209,6 +211,18 @@ const OrgSettingsSecurityRoute = OrgSettingsSecurityRouteImport.update({
   path: '/settings/security',
   getParentRoute: () => OrgRoute,
 } as any)
+const AccountSupportChar123IdChar125Route =
+  AccountSupportChar123IdChar125RouteImport.update({
+    id: '/support/{-$id}',
+    path: '/support/{-$id}',
+    getParentRoute: () => AccountRoute,
+  } as any)
+const AdminSupportChar123IdChar125Route =
+  AdminSupportChar123IdChar125RouteImport.update({
+    id: '/support/{-$id}',
+    path: '/support/{-$id}',
+    getParentRoute: () => AdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -243,6 +257,8 @@ export interface FileRoutesByFullPath {
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
+  '/account/support/{-$id}': typeof AccountSupportChar123IdChar125Route
+  '/admin/support/{-$id}': typeof AdminSupportChar123IdChar125Route
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -275,6 +291,8 @@ export interface FileRoutesByTo {
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
+  '/account/support/{-$id}': typeof AccountSupportChar123IdChar125Route
+  '/admin/support/{-$id}': typeof AdminSupportChar123IdChar125Route
   '/$org/settings': typeof OrgSettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -311,6 +329,8 @@ export interface FileRoutesById {
   '/$org/settings/general': typeof OrgSettingsGeneralRoute
   '/$org/settings/members': typeof OrgSettingsMembersRoute
   '/$org/settings/security': typeof OrgSettingsSecurityRoute
+  '/account/support/{-$id}': typeof AccountSupportChar123IdChar125Route
+  '/admin/support/{-$id}': typeof AdminSupportChar123IdChar125Route
   '/$org/settings/': typeof OrgSettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -348,6 +368,8 @@ export interface FileRouteTypes {
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
+    | '/account/support/{-$id}'
+    | '/admin/support/{-$id}'
     | '/$org/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -380,6 +402,8 @@ export interface FileRouteTypes {
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
+    | '/account/support/{-$id}'
+    | '/admin/support/{-$id}'
     | '/$org/settings'
   id:
     | '__root__'
@@ -415,6 +439,8 @@ export interface FileRouteTypes {
     | '/$org/settings/general'
     | '/$org/settings/members'
     | '/$org/settings/security'
+    | '/account/support/{-$id}'
+    | '/admin/support/{-$id}'
     | '/$org/settings/'
   fileRoutesById: FileRoutesById
 }
@@ -671,6 +697,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSettingsSecurityRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/account/support/{-$id}': {
+      id: '/account/support/{-$id}'
+      path: '/support/{-$id}'
+      fullPath: '/account/support/{-$id}'
+      preLoaderRoute: typeof AccountSupportChar123IdChar125RouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/admin/support/{-$id}': {
+      id: '/admin/support/{-$id}'
+      path: '/support/{-$id}'
+      fullPath: '/admin/support/{-$id}'
+      preLoaderRoute: typeof AdminSupportChar123IdChar125RouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
@@ -706,12 +746,14 @@ interface AccountRouteChildren {
   AccountProfileRoute: typeof AccountProfileRoute
   AccountSecurityRoute: typeof AccountSecurityRoute
   AccountIndexRoute: typeof AccountIndexRoute
+  AccountSupportChar123IdChar125Route: typeof AccountSupportChar123IdChar125Route
 }
 
 const AccountRouteChildren: AccountRouteChildren = {
   AccountProfileRoute: AccountProfileRoute,
   AccountSecurityRoute: AccountSecurityRoute,
   AccountIndexRoute: AccountIndexRoute,
+  AccountSupportChar123IdChar125Route: AccountSupportChar123IdChar125Route,
 }
 
 const AccountRouteWithChildren =
@@ -721,12 +763,14 @@ interface AdminRouteChildren {
   AdminFlagsRoute: typeof AdminFlagsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminSupportChar123IdChar125Route: typeof AdminSupportChar123IdChar125Route
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminFlagsRoute: AdminFlagsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminSupportChar123IdChar125Route: AdminSupportChar123IdChar125Route,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)

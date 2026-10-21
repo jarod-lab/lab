@@ -3,11 +3,13 @@
 // (API_URL), so the browser sees one origin and the session cookies apply. Both children stop when
 // this process gets a signal or either one exits.
 import { spawn } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 const webPort = process.argv[2]
 if (!webPort) throw new Error("usage: node scripts/e2e-stack.mjs <web port>")
@@ -68,7 +70,31 @@ const env = {
   STORAGE_LOCAL_DIR: storageDir,
 }
 
-start("api", ["--filter", "@starter/api-app", "exec", "tsx", "src/server.ts"], env)
+// Support's inbound mail comes through a raw relay (SUPPORT_INBOUND_SECRET) with a secret made here.
+// The targets' stacks share the database, so either one's support sweep may send a thread mail into
+// its own mail sink. Each stack writes its URLs and its secret where the support journeys read them
+// (e2e/support/support-stack.ts).
+const stacksDir = process.env.E2E_STACKS_DIR
+if (stacksDir && process.env.SUPPORT_REPLY_DOMAIN) {
+  const inboundSecret = randomBytes(24).toString("base64url")
+  env.SUPPORT_INBOUND_SECRET = inboundSecret
+  mkdirSync(stacksDir, { recursive: true })
+  const entry = join(stacksDir, `${webPort}.json`)
+  writeFileSync(
+    entry,
+    JSON.stringify({ web: `http://127.0.0.1:${webPort}`, api: apiUrl, inboundSecret }),
+  )
+  process.on("exit", () => rmSync(entry, { force: true }))
+}
+
+// Inbound support mail is checked for a DKIM signature against DNS; the journeys sign with keys they
+// publish in E2E_DKIM_DIR, which this preload answers lookups from (scripts/e2e-dkim-dns.mjs). Only
+// the API gets it.
+const dkimDns = fileURLToPath(new URL("./e2e-dkim-dns.mjs", import.meta.url))
+const apiEnv = process.env.E2E_DKIM_DIR
+  ? { ...env, NODE_OPTIONS: [env.NODE_OPTIONS, `--import=${dkimDns}`].filter(Boolean).join(" ") }
+  : env
+start("api", ["--filter", "@starter/api-app", "exec", "tsx", "src/server.ts"], apiEnv)
 
 // The web app proxies to the API, and the first sign-up needs it: wait for its liveness check.
 const deadline = Date.now() + 120_000
@@ -107,6 +133,22 @@ if (adminEmail && adminPassword && process.env.DATABASE_URL) {
   const { default: postgres } = await import(require.resolve("postgres"))
   const sql = postgres(process.env.DATABASE_URL, { max: 1 })
   await sql`update "user" set role = 'admin' where email = ${adminEmail}`
+  // The operator organization (OPERATOR_ORGANIZATION_ID): its members are the support staff, and the
+  // admin owns it, so the support journeys (e2e/support-*.e2e.ts) work the queue as the admin. Both
+  // targets' stacks run this against one database, so it is written to be idempotent.
+  const operatorId = process.env.OPERATOR_ORGANIZATION_ID
+  const operatorSlug = process.env.E2E_OPERATOR_SLUG
+  if (operatorId && operatorSlug) {
+    await sql`
+      insert into organization (id, name, slug, created_at)
+      values (${operatorId}, 'Support team', ${operatorSlug}, now())
+      on conflict (id) do nothing`
+    await sql`
+      insert into member (id, organization_id, user_id, role, created_at)
+      select ${`${operatorId}_owner`}, ${operatorId}, id, 'owner', now()
+      from "user" where email = ${adminEmail}
+      on conflict (id) do nothing`
+  }
   await sql.end()
 }
 

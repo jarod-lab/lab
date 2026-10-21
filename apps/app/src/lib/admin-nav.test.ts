@@ -17,6 +17,17 @@ describe("adminTabs", () => {
     ).toEqual(["users", "flags"])
   })
 
+  it("adds Support for the operator's members whose role makes them support staff", () => {
+    const operator = { ...none, operatorOrganizationId: "org-op" }
+    expect(adminTabs({ ...operator, supportStaff: true }).map((tab) => tab.href)).toEqual([
+      "/admin/flags",
+      "/admin/support",
+    ])
+    expect(adminTabs({ ...operator, supportStaff: false }).map((tab) => tab.id)).toEqual(["flags"])
+    // Support staff are always in the operator organization: no tab without it.
+    expect(adminTabs({ ...none, supportStaff: true })).toEqual([])
+  })
+
   it("opens nothing for anyone else", () => {
     expect(adminTabs(none)).toEqual([])
     expect(canOpenAdmin(none)).toBe(false)
@@ -37,6 +48,7 @@ describe("adminLanding", () => {
 describe("adminCrumbs", () => {
   it("names the tab after Admin", () => {
     expect(adminCrumbs("/admin/flags")).toEqual([{ label: "Admin" }, { label: "Feature flags" }])
+    expect(adminCrumbs("/admin/support/t1")).toEqual([{ label: "Admin" }, { label: "Support" }])
     expect(adminCrumbs("/admin")).toEqual([{ label: "Admin" }])
   })
 })

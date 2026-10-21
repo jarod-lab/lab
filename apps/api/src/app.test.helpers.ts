@@ -54,6 +54,8 @@ export interface SentEmail {
   subject: string
   /** The first link to the app in the email (verification, reset), or "" when it has none. */
   link: string
+  /** The first Reply-To address (support's support+<token>@...), when the email has one. */
+  replyTo?: string
 }
 
 export interface TestAppOptions {
@@ -98,6 +100,8 @@ export interface TestAppOptions {
   flagCatalog?: FlagCatalog
   /** Fetch for Client ID Metadata Documents. Defaults to the SSRF-safe transport; tests stub it. */
   clientMetadataFetch?: AuthOptions["clientMetadataFetch"]
+  /** Support's staff organization, thread mail and inbound mail. Unset, nobody is an agent. */
+  support?: AuthOptions["support"]
 }
 
 export async function createTestApp(
@@ -111,12 +115,21 @@ export async function createTestApp(
   const ses = {
     send: async (command: { input: unknown }) => {
       const raw = JSON.stringify(command.input)
-      const input = command.input as { Destination?: { ToAddresses?: string[] } }
+      const input = command.input as {
+        Destination?: { ToAddresses?: string[] }
+        ReplyToAddresses?: string[]
+      }
       const subject = /"Subject":\{"Data":"([^"]*)"/.exec(raw)?.[1] ?? ""
       // The first link back to this app, so a logo or doctype URL in a template doesn't count.
       const links = raw.match(/https?:\/\/[^"\s<>\\]+/g) ?? []
       const link = (links.find((l) => l.startsWith(BASE)) ?? "").replaceAll("&amp;", "&")
-      outbox.push({ to: input.Destination?.ToAddresses?.[0] ?? "", subject, link })
+      const replyTo = input.ReplyToAddresses?.[0]
+      outbox.push({
+        to: input.Destination?.ToAddresses?.[0] ?? "",
+        subject,
+        link,
+        ...(replyTo && { replyTo }),
+      })
       return { MessageId: `test-${outbox.length}`, $metadata: { requestId: "test" } }
     },
   }
@@ -140,6 +153,7 @@ export async function createTestApp(
     github: options.github,
     google: options.google,
     rateLimit: options.rateLimit ?? false,
+    support: options.support,
     onSignUp: analytics && ((event) => captureSignUp(analytics, event)),
     onAuthEvent:
       options.onAuthEvent ??

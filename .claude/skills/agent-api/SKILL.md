@@ -261,7 +261,7 @@ The product's own agents (the org's workers) are the `agent` resource; the conne
   belongs to another shared organization, because the second factor belongs to the account.
 - **Never by an agent**: `run:approve` is in `OAUTH_EXCLUDED`, and `create_api_key` refuses it along
   with the person-only actions (`PERSON_ONLY_ACTIONS`) and resources (`PERSON_ONLY_RESOURCES`: the
-  owner-only ones and `subscription`). `decide_approval` and `undo_approval` also require a session
+  owner-only ones, `subscription` and `support`). `decide_approval` and `undo_approval` also require a session
   (`requirePerson`).
 - **Header**: `ORGANIZATION_HEADER` (`X-Organization-Id`, `@starter/api`) is checked in
   `resolvePrincipal`: a request naming another organization gets CONFLICT with a reload hint, on

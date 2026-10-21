@@ -1,12 +1,13 @@
 // Every in-app notification the app sends. One event catalog, one pure renderer (title, body,
 // href), recipients derived from the permission catalog, and one sender that never fails its caller.
 //
-// Sends go through better-inbox's `notify` endpoint (`auth.api.notify`, server-only). Inside a
+// Sends go through @byo-oss/notifications' `notify` endpoint (`auth.api.notify`, server-only). Inside a
 // better-auth transaction the endpoint would read through the outer adapter, which waits on the
 // transaction it is inside of (PGlite has one connection; see notifications.test.ts). So `send`
 // defers to after the transaction commits, and runs at once when none is open.
 import { allowed } from "@starter/api"
 import { queueAfterTransactionHook } from "@better-auth/core/context"
+import type { DeliveryRule } from "@byo-oss/notifications"
 
 import { type Permissions, rolePermissions, roles, type RoleName } from "./permissions"
 
@@ -79,8 +80,50 @@ export type NotificationEvent =
   | { type: "account.two_factor_disabled"; userId: string }
   | { type: "account.passkey_added"; userId: string }
   | { type: "account.email_changed"; userId: string }
+  // Support (support.ts). Staff events are stamped with the operator organization, whose members
+  // are the support staff; `org` is that organization, never the ticket's.
+  | ({
+      type: "support.ticket.created"
+      ticketId: string
+      number?: number
+      actorUserId?: string
+    } & InOrg)
+  | ({ type: "support.customer.replied"; ticketId: string; actorUserId?: string } & InOrg)
+  | ({
+      type: "support.agent.mentioned"
+      ticketId: string
+      memberUserId: string
+      actorUserId?: string
+    } & InOrg)
+  /** To the requester: personal, so it survives their leaving the ticket's organization. */
+  | { type: "support.agent.replied"; ticketId: string; userId: string; actorUserId?: string }
 
 export type NotificationType = NotificationEvent["type"]
+
+/**
+ * The events that also email the person (@byo-oss/notifications delivery rules; docs/notifications.md). Types
+ * not listed stay in-app.
+ * - Security notices go out at once, even if read first: the email is the record, and it reaches
+ *   the owner when someone else is in the account.
+ * - The rest wait 15 minutes and are dropped if the notification was read or seen in the app. A
+ *   person who isn't in the app (no bell poll in the last 2 minutes) gets them at once.
+ * - Throttles cap the ones that can repeat: one email per person per window, the rest in-app only.
+ */
+export const NOTIFICATION_EMAIL_ROUTES = {
+  "account.password_changed": [{ channel: "email", cancelIfRead: false }],
+  "account.two_factor_disabled": [{ channel: "email", cancelIfRead: false }],
+  "account.passkey_added": [{ channel: "email", cancelIfRead: false }],
+  "security.two_factor_reset": [{ channel: "email", cancelIfRead: false }],
+  "api_key.created": [{ channel: "email", cancelIfRead: false }],
+  "billing.payment_failed": [
+    { channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 24 } },
+  ],
+  "usage.limit_reached": [{ channel: "email", ifUnreadAfter: { minutes: 15 } }],
+  "approval.requested": [
+    { channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 1 } },
+  ],
+  "run.failed": [{ channel: "email", ifUnreadAfter: { minutes: 15 }, throttle: { hours: 1 } }],
+} satisfies Partial<Record<NotificationType, DeliveryRule<"email">[]>>
 
 /** An org-scoped event as an emitter writes it: the org's ref is filled in by the sender. */
 export type OrgEventInput = NotificationEvent extends infer E
@@ -109,7 +152,7 @@ export type Recipients =
   | { kind: "member"; organizationId: string; userId: string }
   | { kind: "person"; userId: string }
 
-/** The body `auth.api.notify` takes (better-inbox). */
+/** The body `auth.api.notify` takes (@byo-oss/notifications). */
 export interface NotifyBody {
   userId?: string
   organizationId?: string
@@ -137,6 +180,14 @@ export const MEMBER_MANAGERS: Permissions = { member: ["update"] }
 export const KEY_MANAGERS: Permissions = { apiKey: ["create", "delete"] }
 /** Who manages the subscription and its billing (owners and admins). */
 export const BILLING_MANAGERS: Permissions = { subscription: ["update"] }
+/** Support staff, in the operator organization: who can read the queue (owners, admins, members). */
+export const SUPPORT_AGENTS: Permissions = { support: ["read"] }
+
+/** A support ticket in the web app: the staff inbox (the admin console) and the requester's page. */
+export const supportTicketPaths = {
+  staff: (ticketId: string) => `/admin/support/${encodeURIComponent(ticketId)}`,
+  requester: (ticketId: string) => `/account/support/${encodeURIComponent(ticketId)}`,
+}
 
 /** The roles whose grants cover `need`, derived from the catalog. Empty if no role does. */
 export function rolesWith(need: Permissions): RoleName[] {
@@ -149,7 +200,7 @@ const orgFanOut = (
   excludeUserIds: readonly (string | undefined)[] = [],
 ): Recipients | null => {
   const rules = rolesWith(need)
-  // An empty role list would reach every member (better-inbox ignores `roles` when it is empty).
+  // An empty role list would reach every member (@byo-oss/notifications ignores `roles` when it is empty).
   if (rules.length === 0) return null
   return {
     kind: "members",
@@ -198,6 +249,15 @@ export function recipientsOf(event: NotificationEvent): Recipients | null {
     case "account.passkey_added":
     case "account.email_changed":
     case "invitation.received":
+      return { kind: "person", userId: event.userId }
+    case "support.ticket.created":
+    case "support.customer.replied":
+      return orgFanOut(event.org.id, SUPPORT_AGENTS, [event.actorUserId])
+    case "support.agent.mentioned":
+      if (event.memberUserId === event.actorUserId) return null
+      return { kind: "member", organizationId: event.org.id, userId: event.memberUserId }
+    case "support.agent.replied":
+      if (event.userId === event.actorUserId) return null
       return { kind: "person", userId: event.userId }
   }
 }
@@ -360,6 +420,37 @@ export function renderNotification(event: NotificationEvent): RenderedNotificati
         body: `${event.inviterName ?? "Someone"} invited you to join ${event.organizationName}.`,
         href: `/accept-invitation/${event.invitationId}`,
         data: { invitationId: event.invitationId },
+      }
+    case "support.ticket.created":
+      return {
+        type,
+        title: "New support ticket",
+        body: event.number === undefined ? undefined : `Ticket #${event.number} is waiting.`,
+        href: supportTicketPaths.staff(event.ticketId),
+        data: { ticketId: event.ticketId },
+      }
+    case "support.customer.replied":
+      return {
+        type,
+        title: "Customer replied",
+        body: "A customer replied to a support ticket.",
+        href: supportTicketPaths.staff(event.ticketId),
+        data: { ticketId: event.ticketId },
+      }
+    case "support.agent.mentioned":
+      return {
+        type,
+        title: "You were mentioned",
+        body: "A teammate mentioned you on a support ticket.",
+        href: supportTicketPaths.staff(event.ticketId),
+        data: { ticketId: event.ticketId },
+      }
+    case "support.agent.replied":
+      return {
+        type,
+        title: "New reply to your support ticket",
+        href: supportTicketPaths.requester(event.ticketId),
+        data: { ticketId: event.ticketId },
       }
   }
 }

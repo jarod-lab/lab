@@ -69,7 +69,8 @@ export const IMPERSONATION_READ_GET_PATHS = [
 
 /**
  * GET endpoints an impersonated session may not call, decided one by one. Each one mints or links
- * something, consumes a single-use token, signs someone in, or ends a session.
+ * something, consumes a single-use token, signs someone in, or ends a session, or (support) is only
+ * for the person themselves.
  */
 export const IMPERSONATION_REFUSED_GET_PATHS = [
   // Store a WebAuthn challenge. A registration one would let the admin enrol their own passkey.
@@ -96,6 +97,17 @@ export const IMPERSONATION_REFUSED_GET_PATHS = [
   "/subscription/success",
   // Mints an OAuth token from the token endpoint (disabled in this app; refused anyway).
   "/token",
+  // Support (@byo-oss/support). These only read, but support is for the person themselves: a
+  // customer's own tickets or an agent's queue. Support refuses an impersonated session too
+  // (acceptSupportSession in support.ts); this guard answers first.
+  "/support/my-tickets",
+  "/support/ticket",
+  "/support/attachment",
+  "/support/agent/tickets",
+  "/support/agent/ticket",
+  "/support/agent/tags",
+  "/support/agent/canned",
+  "/support/agent/attachment",
 ] as const
 
 const readOnly = (path: string) =>

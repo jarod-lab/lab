@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs"
 
 import { runWithTransaction } from "@better-auth/core/context"
+import { deleteMemberData } from "@byo-oss/notifications"
+import { notification } from "@starter/db/schema"
+import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestAuth } from "./auth.test.helpers"
@@ -8,6 +11,7 @@ import {
   APPROVERS,
   BILLING_MANAGERS,
   createNotifier,
+  NOTIFICATION_EMAIL_ROUTES,
   type NotificationEvent,
   type NotifyBody,
   type NotifyFn,
@@ -15,6 +19,7 @@ import {
   recipientsOf,
   renderNotification,
   rolesWith,
+  SUPPORT_AGENTS,
 } from "./notifications"
 
 const org: OrgRef = { id: "org_1", slug: "acme", name: "Acme" }
@@ -95,6 +100,32 @@ const samples = {
     organizationName: "Acme",
     inviterName: "Ada",
   },
+  "support.ticket.created": {
+    type: "support.ticket.created",
+    org,
+    ticketId: "tkt_1",
+    number: 42,
+    actorUserId: "user_d",
+  },
+  "support.customer.replied": {
+    type: "support.customer.replied",
+    org,
+    ticketId: "tkt_1",
+    actorUserId: "user_d",
+  },
+  "support.agent.mentioned": {
+    type: "support.agent.mentioned",
+    org,
+    ticketId: "tkt_1",
+    memberUserId: "user_c",
+    actorUserId: "user_a",
+  },
+  "support.agent.replied": {
+    type: "support.agent.replied",
+    ticketId: "tkt_1",
+    userId: "user_d",
+    actorUserId: "user_a",
+  },
 } satisfies Record<NotificationEvent["type"], NotificationEvent>
 
 /** The catalog: the event types every emitter may send (graph/graph.md, Events). */
@@ -118,6 +149,10 @@ const CATALOG_TYPES = [
   "run.done",
   "run.failed",
   "security.two_factor_reset",
+  "support.agent.mentioned",
+  "support.agent.replied",
+  "support.customer.replied",
+  "support.ticket.created",
   "usage.limit_reached",
 ]
 
@@ -148,6 +183,20 @@ describe("renderNotification", () => {
     const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
     const documented = [...doc.matchAll(/^\| `([a-z_.]+)` \|/gm)].map((m) => m[1] ?? "").sort()
     expect(documented).toEqual(CATALOG_TYPES)
+  })
+
+  it("documents which events email, as NOTIFICATION_EMAIL_ROUTES routes them", () => {
+    const doc = readFileSync(new URL("../../../docs/notifications.md", import.meta.url), "utf8")
+    const emailCell = new Map(
+      [...doc.matchAll(/^\| `([a-z_.]+)` \|.*\| ([^|]+) \|$/gm)].map((m) => [m[1], m[2]?.trim()]),
+    )
+    const routes: Record<string, unknown> = NOTIFICATION_EMAIL_ROUTES
+    for (const type of CATALOG_TYPES) {
+      expect({ type, emails: emailCell.get(type) !== "no" }).toEqual({
+        type,
+        emails: type in routes,
+      })
+    }
   })
 
   it("renders the org-scoped copy and links explicitly", () => {
@@ -246,6 +295,44 @@ describe("recipients come from the permission catalog", () => {
       kind: "person",
       userId: "user_a",
     })
+  })
+
+  it("support staff are the roles with support:read; the requester hears agent replies", () => {
+    expect(rolesWith(SUPPORT_AGENTS)).toEqual(["owner", "admin", "member"])
+    expect(recipientsOf(samples["support.ticket.created"])).toEqual({
+      kind: "members",
+      organizationId: "org_1",
+      roles: ["owner", "admin", "member"],
+      excludeUserIds: ["user_d"],
+    })
+    expect(recipientsOf(samples["support.customer.replied"])).toMatchObject({
+      kind: "members",
+      excludeUserIds: ["user_d"],
+    })
+    expect(recipientsOf(samples["support.agent.mentioned"])).toEqual({
+      kind: "member",
+      organizationId: "org_1",
+      userId: "user_c",
+    })
+    expect(
+      recipientsOf({ ...samples["support.agent.mentioned"], memberUserId: "user_a" }),
+    ).toBeNull()
+    expect(recipientsOf(samples["support.agent.replied"])).toEqual({
+      kind: "person",
+      userId: "user_d",
+    })
+    expect(recipientsOf({ ...samples["support.agent.replied"], actorUserId: "user_d" })).toBeNull()
+    expect(renderNotification(samples["support.ticket.created"])).toEqual({
+      type: "support.ticket.created",
+      title: "New support ticket",
+      body: "Ticket #42 is waiting.",
+      href: "/admin/support/tkt_1",
+      data: { ticketId: "tkt_1" },
+    })
+    expect(
+      renderNotification({ ...samples["support.ticket.created"], number: undefined }).body,
+    ).toBeUndefined()
+    expect(renderNotification(samples["support.agent.replied"]).href).toBe("/account/support/tkt_1")
   })
 
   it("excludes the actor from fan-out", () => {
@@ -442,8 +529,6 @@ describe("against a real auth instance", () => {
 })
 
 describe("inside a better-auth transaction", () => {
-  // Hangs under PGlite if a send reads through the transaction's outer adapter (see the last test),
-  // so the hazard runs on its own database and the rest share this one.
   let h: Awaited<ReturnType<typeof createTestAuth>>
   let owner: { userId: string; cookie: string; orgId: string }
   let member: { userId: string; cookie: string; orgId: string }
@@ -520,24 +605,107 @@ describe("inside a better-auth transaction", () => {
   })
 })
 
-describe("the hazard: auth.api.notify called directly inside a transaction", () => {
-  it("hangs on PGlite's single connection, so every send defers instead", async () => {
+describe("auth.api.notify called directly inside a transaction", () => {
+  // Before @byo-oss/notifications 0.9 this hung on PGlite's single connection. It joins the
+  // transaction now, but its errors fail the transaction, so events still go through `send`.
+  it("joins it, so a rollback drops the notification", async () => {
     const h = await createTestAuth()
-    const owner = await h.signUp("Owner")
-    const adapter = (await h.auth.$context).adapter
-    const naive = runWithTransaction(adapter, async () => {
-      await h.auth.api.notify({
-        body: {
-          userId: owner.userId,
-          organizationId: owner.orgId,
-          type: "approval.requested",
-          title: "Naive",
-        },
-      })
+    try {
+      const owner = await h.signUp("Owner")
+      const adapter = (await h.auth.$context).adapter
+      const titles = async () =>
+        (
+          await h.db
+            .select({ title: notification.title })
+            .from(notification)
+            .where(eq(notification.userId, owner.userId))
+        ).map((row) => row.title)
+      const before = await titles()
+      await expect(
+        withTimeout(
+          runWithTransaction(adapter, async () => {
+            await h.auth.api.notify({
+              body: {
+                userId: owner.userId,
+                organizationId: owner.orgId,
+                type: "approval.requested",
+                title: "Direct",
+              },
+            })
+            throw new Error("the write after the notify failed")
+          }),
+          5_000,
+        ),
+      ).rejects.toThrow("the write after the notify failed")
+      expect(await titles()).toEqual(before)
+    } finally {
+      await h.close()
+    }
+  })
+})
+
+describe("deleteMemberData inside a transaction (SCIM deprovisioning)", () => {
+  // Its own database: the commit and rollback cases change the same rows, in order.
+  let h: Awaited<ReturnType<typeof createTestAuth>>
+  let owner: { userId: string; orgId: string }
+  let member: { userId: string }
+
+  beforeAll(async () => {
+    h = await createTestAuth()
+    owner = await h.signUp("Owner")
+    member = await h.signUp("Member")
+    await h.addMember(owner.orgId, member.userId, "member")
+    await h.auth.api.notify({
+      body: {
+        userId: member.userId,
+        organizationId: owner.orgId,
+        type: "approval.requested",
+        title: "Org",
+      },
     })
-    // The transaction never ends, so the database is left as it is: this test owns its database.
-    naive.catch(() => {})
-    await expect(withTimeout(naive, 1_500)).rejects.toThrow("timed out")
+    await h.auth.api.notify({
+      body: { userId: member.userId, type: "account.password_changed", title: "Personal" },
+    })
+  })
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  const titles = async () =>
+    (
+      await h.db
+        .select({ title: notification.title })
+        .from(notification)
+        .where(eq(notification.userId, member.userId))
+    )
+      .map((row) => row.title)
+      .sort()
+  const drop = () =>
+    deleteMemberData(h.auth, { userId: member.userId, organizationId: owner.orgId })
+
+  it("a rollback keeps the member's notices for the organization", async () => {
+    const adapter = (await h.auth.$context).adapter
+    await expect(
+      withTimeout(
+        runWithTransaction(adapter, async () => {
+          await drop()
+          throw new Error("the membership write failed")
+        }),
+        5_000,
+      ),
+    ).rejects.toThrow("the membership write failed")
+    expect(await titles()).toEqual(["Org", "Personal"])
+  })
+
+  it("a commit drops the member's notices for the organization and keeps the personal one", async () => {
+    const adapter = (await h.auth.$context).adapter
+    const result = await withTimeout(
+      runWithTransaction(adapter, () => drop()),
+      5_000,
+    )
+    expect(result).toEqual({ notifications: 1 })
+    expect(await titles()).toEqual(["Personal"])
   })
 })
 

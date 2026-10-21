@@ -6,17 +6,32 @@ export interface AdminAccess {
   platformAdmin: boolean
   /** The operator organization, when the person is a member of it: the Feature flags tab. */
   operatorOrganizationId: string | null
+  /**
+   * Support staff: the operator organization's role holds `support:read` (docs/support.md). The
+   * Support tab (the support queue). Unknown reads as no.
+   */
+  supportStaff?: boolean
 }
 
 export const ADMIN_SECTIONS = [
   { id: "users", label: "Users" },
   { id: "flags", label: "Feature flags" },
+  { id: "support", label: "Support" },
 ] as const
 
 export type AdminSection = (typeof ADMIN_SECTIONS)[number]["id"]
 
-const allows = (access: AdminAccess, id: AdminSection) =>
-  id === "users" ? access.platformAdmin : access.operatorOrganizationId !== null
+function allows(access: AdminAccess, id: AdminSection): boolean {
+  switch (id) {
+    case "users":
+      return access.platformAdmin
+    case "flags":
+      return access.operatorOrganizationId !== null
+    case "support":
+      // Support staff are the operator organization's members whose role holds support actions.
+      return access.operatorOrganizationId !== null && access.supportStaff === true
+  }
+}
 
 /** The tabs this person may open, with their hrefs. */
 export function adminTabs(access: AdminAccess) {

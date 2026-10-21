@@ -13,6 +13,7 @@ import { createFileStore, type FileStore } from "@starter/storage"
 import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
 import { recordAuthEvent } from "./data/audit"
+import { startDeliverySweep } from "./delivery-sweep"
 import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
@@ -20,6 +21,7 @@ import { createMeter } from "./meter"
 import { createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
 import { PRODUCT } from "./product"
+import { startSupportSweep } from "./support-sweep"
 
 const logger = createLogger({ name: "api" })
 // The agent skill (skills/starter), served at /skill.md. Read from the repo (or the image) at boot, so a
@@ -42,6 +44,17 @@ const analytics = analyticsFromEnv(env, logger)
 // Dev and e2e only (env refuses it in production): auth emails are kept in memory for GET /api/dev/mail.
 const devMail = env.DEV_MAIL_SINK ? createDevMailSink() : undefined
 if (devMail) logger.warn("DEV_MAIL_SINK is on: auth emails are not sent, they are kept in memory")
+// Support (docs/support.md): the operator organization's members are its staff. Thread mail goes
+// the auth emails' way (the dev sink under DEV_MAIL_SINK); inbound mail is Wraps'.
+const supportEmail = env.SUPPORT_REPLY_DOMAIN
+  ? {
+      from: env.SUPPORT_EMAIL_FROM ?? env.EMAIL_FROM,
+      replyDomain: env.SUPPORT_REPLY_DOMAIN,
+      // The web app's origin: apps/api serves it in production; pnpm dev and e2e run it elsewhere.
+      appUrl: env.WEB_ORIGINS[0] ?? baseURL,
+      replyDelay: env.SUPPORT_REPLY_DELAY_MS,
+    }
+  : undefined
 const auth = createAuth({
   db,
   secret: env.BETTER_AUTH_SECRET,
@@ -80,7 +93,33 @@ const auth = createAuth({
   // A notification that could not be recorded never fails the request; it is reported here.
   onNotificationError: (error, type) => reportError(error, { notification: type }),
   onSignUp: (event) => captureSignUp(analytics, event),
+  support: {
+    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
+    email: supportEmail,
+    // @starter/env has checked each source comes with the reply domain, and only one is set.
+    inbound: env.SUPPORT_INBOUND_SECRET
+      ? { secret: env.SUPPORT_INBOUND_SECRET }
+      : env.WRAPS_INBOUND_KEY && env.WRAPS_INBOUND_BUCKET
+        ? {
+            key: env.WRAPS_INBOUND_KEY,
+            bucket: env.WRAPS_INBOUND_BUCKET,
+            region: env.WRAPS_INBOUND_REGION,
+          }
+        : undefined,
+  },
 })
+// Delayed reply mail, retries and closing solved tickets (support's sweep), every minute.
+const supportSweep = startSupportSweep(auth, { logger, intervalMs: env.SUPPORT_SWEEP_INTERVAL_MS })
+
+// Notification emails (docs/notifications.md): the delayed ones and retries go out from this timer.
+const deliverySweep =
+  env.NOTIFICATION_SWEEP_MS > 0
+    ? startDeliverySweep({
+        process: () => auth.api.processDeliveries({}),
+        intervalMs: env.NOTIFICATION_SWEEP_MS,
+        logger,
+      })
+    : undefined
 
 // Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
 function fileStore(): FileStore | undefined {
@@ -138,7 +177,9 @@ const notifier = createApiNotifier({ auth, db })
 const flags = createFlagService({ db })
 const operator = { organizationId: env.OPERATOR_ORGANIZATION_ID }
 if (!operator.organizationId)
-  logger.info("OPERATOR_ORGANIZATION_ID is unset: flag rollouts are read-only")
+  logger.info(
+    "OPERATOR_ORGANIZATION_ID is unset: flag rollouts are read-only, support has no agents",
+  )
 
 const app = createApp({
   devMail,
@@ -180,9 +221,15 @@ const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)
 serve({ fetch: app.fetch, port }, (addr) => logger.info({ port: addr.port }, "api listening"))
 
 // Before the process goes (a deploy's SIGTERM, or Ctrl-C): write the flag exposures counted since
-// the last flush, and send the analytics still queued.
+// the last flush, send the analytics still queued, and let a notification or support sweep in flight
+// finish.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
-    void Promise.allSettled([flags.close(), analytics.shutdown()]).finally(() => process.exit(0))
+    void Promise.allSettled([
+      flags.close(),
+      analytics.shutdown(),
+      deliverySweep?.stop(),
+      supportSweep.stop(),
+    ]).finally(() => process.exit(0))
   })
 }

@@ -48,6 +48,11 @@ export const env = createEnv({
     /** Trust X-Forwarded-For for the client IP (signup limits). Only when a proxy overwrites that header. */
     TRUST_PROXY: z.stringbool().default(false),
     /**
+     * How often the API sends due notification emails, in ms (docs/notifications.md). 0 turns the
+     * sweep off in this process, for a deployment that runs it elsewhere.
+     */
+    NOTIFICATION_SWEEP_MS: z.coerce.number().int().min(0).default(60_000),
+    /**
      * Vendors whose own status pages `GET /status` reports (never pinged by /health). Comma-separated
      * `Name=https://status.example.com` (a Statuspage), `Name=statusio:<page id>` (status.io), or
      * `aws`, `aws@<region>`, `aws:<service>@<region>` (AWS Health). Unset: the broad default below,
@@ -117,6 +122,54 @@ export const env = createEnv({
      * change one.
      */
     OPERATOR_ORGANIZATION_ID: z.string().min(1).optional(),
+    /**
+     * Support thread mail (docs/support.md): agent replies are mailed to the requester with
+     * Reply-To support+<token>@<this domain>. A domain, not an address. Unset, nothing is mailed.
+     */
+    SUPPORT_REPLY_DOMAIN: z
+      .string()
+      .min(1)
+      .refine((value) => !value.includes("@"), {
+        message: "SUPPORT_REPLY_DOMAIN is a domain, not an address, e.g. support.example.com",
+      })
+      .optional(),
+    /** The sender of support mail, verified in SES. Unset, EMAIL_FROM. */
+    SUPPORT_EMAIL_FROM: z.string().min(1).optional(),
+    /**
+     * How long after an agent's reply it is mailed, in ms; skipped if the requester saw it first.
+     * Unset, support's default (2 minutes). The e2e stack sets 0.
+     */
+    SUPPORT_REPLY_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
+    /**
+     * How often the API runs support's sweep (delayed and retried reply mail, closing solved
+     * tickets), in ms. Default a minute. The e2e stack sweeps every second.
+     */
+    SUPPORT_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
+    /**
+     * Inbound support mail from any relay that POSTs the raw message (message/rfc822) to
+     * /api/auth/support/inbound with `Authorization: Bearer <this secret>`: Postmark, Mailgun, a
+     * Cloudflare Email Worker (support's rawRelay). Needs SUPPORT_REPLY_DOMAIN. One inbound source:
+     * not with WRAPS_INBOUND_KEY.
+     */
+    SUPPORT_INBOUND_SECRET: z
+      .string()
+      .min(16)
+      // The relay sends it as `Bearer <secret>`, which support reads up to the first space.
+      .regex(/^\S+$/, { message: "SUPPORT_INBOUND_SECRET can't contain spaces" })
+      .optional(),
+    /**
+     * Wraps inbound mail for support: the X-Wraps-Inbound-Key the Wraps EventBridge destination
+     * sends to /api/auth/support/inbound (`wraps email inbound status --reveal-secret`). With
+     * WRAPS_INBOUND_BUCKET and SUPPORT_REPLY_DOMAIN. Unset, inbound mail is off.
+     */
+    WRAPS_INBOUND_KEY: z.string().min(1).optional(),
+    /** The S3 bucket Wraps stores inbound raw mail in (`wraps email inbound status`). */
+    WRAPS_INBOUND_BUCKET: z.string().min(1).optional(),
+    /**
+     * The region of that bucket. The raw mail is read with the AWS SDK's default credential chain
+     * (the one SES sends with), which needs s3:GetObject and s3:ListBucket on the bucket.
+     */
+    WRAPS_INBOUND_REGION: z.string().min(1).default("us-east-1"),
     /**
      * The file store uploads (avatars, organization logos) go to: `local` (a directory this API
      * serves at /files), `s3`, `r2` (Cloudflare) or `vercel-blob`. Unset, uploads are off. Each one's
@@ -205,6 +258,32 @@ if (env.STORAGE_DRIVER) {
   if (missing.length > 0) {
     throw new Error(
       `STORAGE_DRIVER=${env.STORAGE_DRIVER} needs ${missing.join(", ")}. Set them, or unset STORAGE_DRIVER to turn uploads off (docs/storage.md).`,
+    )
+  }
+}
+
+// Inbound support mail needs the key, the bucket and the reply domain it threads replies on; a
+// partial setup would drop every message, so say what is missing at startup. A relay's secret is
+// the other inbound source: one or the other.
+if (env.SUPPORT_INBOUND_SECRET !== undefined) {
+  if (env.WRAPS_INBOUND_KEY !== undefined || env.WRAPS_INBOUND_BUCKET !== undefined) {
+    throw new Error(
+      "Inbound support mail takes one source: SUPPORT_INBOUND_SECRET (a relay) or WRAPS_INBOUND_KEY and WRAPS_INBOUND_BUCKET (Wraps), not both (docs/support.md).",
+    )
+  }
+  if (env.SUPPORT_REPLY_DOMAIN === undefined) {
+    throw new Error(
+      "Inbound support mail needs SUPPORT_REPLY_DOMAIN. Set it, or unset SUPPORT_INBOUND_SECRET to turn it off (docs/support.md).",
+    )
+  }
+}
+if (env.WRAPS_INBOUND_KEY !== undefined || env.WRAPS_INBOUND_BUCKET !== undefined) {
+  const missing = (
+    ["WRAPS_INBOUND_KEY", "WRAPS_INBOUND_BUCKET", "SUPPORT_REPLY_DOMAIN"] as const
+  ).filter((name) => env[name] === undefined)
+  if (missing.length > 0) {
+    throw new Error(
+      `Inbound support mail needs ${missing.join(", ")}. Set them, or unset WRAPS_INBOUND_KEY and WRAPS_INBOUND_BUCKET to turn it off (docs/support.md).`,
     )
   }
 }

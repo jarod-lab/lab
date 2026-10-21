@@ -50,6 +50,40 @@ describe("createClient", () => {
     ])
   })
 
+  // Support's widget and support queue call these through the typed client (@byo-oss/support).
+  it("calls the support endpoints with their methods", async () => {
+    const calls: string[] = []
+    const client = createClient("http://localhost:3000", {
+      customFetchImpl: async (url, init) => {
+        const href = url instanceof Request ? url.url : String(url)
+        calls.push(`${init?.method ?? "GET"} ${href.replace("http://localhost:3000/api/auth", "")}`)
+        return new Response("{}", { headers: { "content-type": "application/json" } })
+      },
+    })
+    await client.support.myTickets({ query: { status: "open" } })
+    await client.support.ticket({ query: { id: "t1" } })
+    await client.support.createTicket({ subject: "Help", body: "Please" })
+    await client.support.reply({ ticketId: "t1", body: "More" })
+    await client.support.agent.tickets({ query: { assignee: "me" } })
+    await client.support.agent.reply({ ticketId: "t1", body: "Done", internal: true })
+    await client.support.agent.update({ ids: ["t1"], status: "solved" })
+    await client.support.agent.tags()
+    await client.support.agent.canned()
+    await client.support.agent.canned.save({ title: "Hi", body: "Hello" })
+    expect(calls).toEqual([
+      "GET /support/my-tickets?status=open",
+      "GET /support/ticket?id=t1",
+      "POST /support/create-ticket",
+      "POST /support/reply",
+      "GET /support/agent/tickets?assignee=me",
+      "POST /support/agent/reply",
+      "POST /support/agent/update",
+      "GET /support/agent/tags",
+      "GET /support/agent/canned",
+      "POST /support/agent/canned/save",
+    ])
+  })
+
   it("re-exports the personal organization slug rule", () => {
     expect(personalSlug("u1")).toBe("personal-u1")
   })
@@ -57,7 +91,7 @@ describe("createClient", () => {
   // The client ships to browsers: no server code (@starter/api, the DB, ./permissions) may reach it.
   it("imports only browser-safe modules", () => {
     const browserSafe =
-      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|better-inbox\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
+      /^(better-auth\/client(\/plugins)?|better-auth\/plugins\/(organization\/)?access|@better-auth\/oauth-provider\/client|@better-auth\/passkey\/client|@better-auth\/sso\/client|@better-auth\/stripe\/client|@wraps\.dev\/better-auth\/client|@byo-oss\/notifications\/client|@byo-oss\/support\/client|\.\/access|\.\/reserved-slugs|\.\/constants|\.\/membership|\.\/sign-in-methods-shared)$/
     const imports = [...importsOf("./client.ts"), ...importsOf("./access.ts")]
     expect(imports.filter((i) => !browserSafe.test(i ?? ""))).toEqual([])
   })

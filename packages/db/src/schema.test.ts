@@ -14,6 +14,12 @@ import {
   run,
   runStep,
   steerMessage,
+  supportCannedReply,
+  supportCounter,
+  supportDelivery,
+  supportMessage,
+  supportTicket,
+  supportTicketTag,
   user,
   usageDaily,
 } from "./index"
@@ -37,6 +43,8 @@ describe("db", () => {
     ["steer_message", steerMessage],
     ["feature_flag", featureFlag],
     ["feature_flag_target", featureFlagTarget],
+    // Nullable: a ticket opened by email has no organization (docs/database.md, 0014_support).
+    ["support_ticket", supportTicket],
   ])("%s belongs to an organization and cascades when it is deleted", (name, table) => {
     const config = getTableConfig(table)
     expect(config.name).toBe(name)
@@ -52,6 +60,33 @@ describe("db", () => {
     const indexed = config.indexes.some((i) => isOrgColumn(i.config.columns[0]))
     const unique = config.uniqueConstraints.some((u) => isOrgColumn(u.columns[0]))
     expect(indexed || unique).toBe(true)
+  })
+
+  // Support's tables (@byo-oss/support, generated) are the documented exception: the thread rows
+  // belong to an organization through their ticket, and go with it.
+  it.each([
+    ["support_message", supportMessage],
+    ["support_ticket_tag", supportTicketTag],
+    ["support_delivery", supportDelivery],
+  ])("%s belongs to a support ticket and cascades when it is deleted", (name, table) => {
+    const config = getTableConfig(table)
+    expect(config.name).toBe(name)
+    const fk = config.foreignKeys.find((f) => f.reference().columns[0]?.name === "ticket_id")
+    expect(fk?.onDelete).toBe("cascade")
+    expect(fk?.reference().foreignTable).toBe(supportTicket)
+    expect(config.columns.some((c) => c.name === "organization_id")).toBe(false)
+  })
+
+  it("keeps support's staff-wide tables out of any customer organization", () => {
+    // Canned replies and the ticket counter belong to the support staff (the operator organization),
+    // not to a customer: they have no organization_id.
+    for (const table of [supportCannedReply, supportCounter]) {
+      expect(getTableConfig(table).columns.some((c) => c.name === "organization_id")).toBe(false)
+    }
+    const organizationId = getTableConfig(supportTicket).columns.find(
+      (c) => c.name === "organization_id",
+    )
+    expect(organizationId?.notNull).toBe(false)
   })
 
   it("requires DATABASE_URL", () => {

@@ -1,6 +1,6 @@
 import { useState } from "react"
-import type { InboxFetchClient } from "better-inbox/react"
-import { useInbox } from "better-inbox/react"
+import type { InboxFetchClient } from "@byo-oss/notifications/react"
+import { useInbox, useSeenOnView } from "@byo-oss/notifications/react"
 
 import {
   type NotificationItem,
@@ -11,7 +11,7 @@ import {
 import type { WebOrganization } from "../lib/web-auth"
 
 export type NotificationsContainerProps = {
-  /** The better-inbox client (the auth client's `inbox` actions). */
+  /** The @byo-oss/notifications client (the auth client's `inbox` actions). */
   client: InboxFetchClient
   /** The organizations the shell loaded; a notification's organization is labelled from these. */
   organizations: WebOrganization[]
@@ -56,9 +56,17 @@ export function NotificationsContainer({
     organizationName: n.organizationId ? (names.get(n.organizationId) ?? null) : null,
   }))
 
+  // An unread row counts as seen once at least half of it has been on screen for a second, which
+  // drops an "email if unread" still pending for it (docs/notifications.md). Rows below the scroll
+  // don't count. An impersonated session isn't the person; it marks none.
+  const seenRef = useSeenOnView(inbox.markSeen)
+  const seenAt = new Map(rows.map((n) => [n.id, n.seenAt]))
+  const rowRef = (item: NotificationItem) =>
+    readOnly || item.read || seenAt.get(item.id) ? undefined : seenRef(item.id)
+
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    // Opening the bell always refreshes the list, as better-inbox's own panel does: the poll only
+    // Opening the bell always refreshes the list, as @byo-oss/notifications' own panel does: the poll only
     // tracks the unread count, so the rows can be older than the badge.
     if (next) void inbox.refresh().catch(() => undefined)
   }
@@ -99,6 +107,7 @@ export function NotificationsContainer({
       onLoadMore={handleLoadMore}
       loading={inbox.isLoading}
       failed={Boolean(inbox.error)}
+      rowRef={rowRef}
     />
   )
 }

@@ -24,6 +24,14 @@ const OPTIONAL_UNDER_TEST = [
   "ANALYTICS_PROVIDER",
   "POSTHOG_API_KEY",
   "POSTHOG_HOST",
+  "SUPPORT_REPLY_DOMAIN",
+  "SUPPORT_EMAIL_FROM",
+  "WRAPS_INBOUND_KEY",
+  "WRAPS_INBOUND_BUCKET",
+  "WRAPS_INBOUND_REGION",
+  "SUPPORT_REPLY_DELAY_MS",
+  "SUPPORT_SWEEP_INTERVAL_MS",
+  "SUPPORT_INBOUND_SECRET",
 ]
 
 /** A valid environment with every optional variable under test unset, and a fresh module. */
@@ -313,6 +321,70 @@ describe("env", () => {
       base()
       vi.stubEnv("ANALYTICS_PROVIDER", "segment")
       await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+    })
+  })
+
+  describe("support mail", () => {
+    it("is off when unset; the inbound region defaults to us-east-1", async () => {
+      base()
+      const { env } = await import("./index")
+      expect(env.SUPPORT_REPLY_DOMAIN).toBeUndefined()
+      expect(env.WRAPS_INBOUND_KEY).toBeUndefined()
+      expect(env.WRAPS_INBOUND_REGION).toBe("us-east-1")
+    })
+
+    it("refuses an address as the reply domain", async () => {
+      base()
+      vi.stubEnv("SUPPORT_REPLY_DOMAIN", "support@example.com")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+    })
+
+    it("names what inbound mail is missing, and accepts a complete setup", async () => {
+      base()
+      vi.stubEnv("WRAPS_INBOUND_KEY", "key")
+      await expect(import("./index")).rejects.toThrow(
+        /needs WRAPS_INBOUND_BUCKET, SUPPORT_REPLY_DOMAIN/,
+      )
+      base()
+      vi.stubEnv("WRAPS_INBOUND_KEY", "key")
+      vi.stubEnv("WRAPS_INBOUND_BUCKET", "bucket")
+      vi.stubEnv("SUPPORT_REPLY_DOMAIN", "support.example.com")
+      expect((await import("./index")).env.WRAPS_INBOUND_BUCKET).toBe("bucket")
+    })
+
+    it("sweeps every minute and leaves the reply delay to support unless set", async () => {
+      base()
+      const { env } = await import("./index")
+      expect(env.SUPPORT_SWEEP_INTERVAL_MS).toBe(60_000)
+      expect(env.SUPPORT_REPLY_DELAY_MS).toBeUndefined()
+      base()
+      vi.stubEnv("SUPPORT_REPLY_DELAY_MS", "0")
+      vi.stubEnv("SUPPORT_SWEEP_INTERVAL_MS", "1000")
+      const set = (await import("./index")).env
+      expect(set.SUPPORT_REPLY_DELAY_MS).toBe(0)
+      expect(set.SUPPORT_SWEEP_INTERVAL_MS).toBe(1000)
+      base()
+      vi.stubEnv("SUPPORT_SWEEP_INTERVAL_MS", "10")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+    })
+
+    it("takes a relay's secret as the inbound source, with a reply domain and not beside Wraps", async () => {
+      base()
+      vi.stubEnv("SUPPORT_INBOUND_SECRET", "s".repeat(32))
+      await expect(import("./index")).rejects.toThrow(/needs SUPPORT_REPLY_DOMAIN/)
+      base()
+      vi.stubEnv("SUPPORT_INBOUND_SECRET", "s".repeat(32))
+      vi.stubEnv("SUPPORT_REPLY_DOMAIN", "support.example.com")
+      vi.stubEnv("WRAPS_INBOUND_KEY", "key")
+      await expect(import("./index")).rejects.toThrow(/takes one source/)
+      base()
+      vi.stubEnv("SUPPORT_INBOUND_SECRET", "a relay secret with spaces")
+      vi.stubEnv("SUPPORT_REPLY_DOMAIN", "support.example.com")
+      await expect(import("./index")).rejects.toThrow(/Invalid environment variables/)
+      base()
+      vi.stubEnv("SUPPORT_INBOUND_SECRET", "s".repeat(32))
+      vi.stubEnv("SUPPORT_REPLY_DOMAIN", "support.example.com")
+      expect((await import("./index")).env.SUPPORT_INBOUND_SECRET).toBe("s".repeat(32))
     })
   })
 })

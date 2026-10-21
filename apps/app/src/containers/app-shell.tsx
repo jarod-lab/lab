@@ -18,6 +18,7 @@ import { NotificationsContainer } from "./notifications"
 import { paletteAction, paletteGroups } from "./palette-items"
 import { RouterLink } from "./router-link"
 import { ShortcutsDialog } from "./shortcuts-dialog"
+import { SupportWidgetContainer } from "./support-widget"
 import { useShellHotkeys } from "./hotkeys"
 import {
   activeOrganization,
@@ -171,19 +172,37 @@ export function AppShellContainer({
     />
   )
 
+  const bell = auth.notifications ? (
+    <NotificationsContainer
+      client={auth.notifications}
+      organizations={orgs}
+      readOnly={Boolean(session.data?.impersonatedBy)}
+      onNavigate={onNavigate}
+    />
+  ) : null
+  // The customer's support widget, once the session is known: not in the admin console, where the
+  // staff work the support queue, and not while an admin acts as someone (support refuses that
+  // session). Last in the bar: its panel opens leftwards from the launcher's right edge.
+  const support =
+    auth.support && session.data && !session.data.impersonatedBy && activeNav !== "admin" ? (
+      <SupportWidgetContainer
+        client={auth.support}
+        organizationId={current?.id}
+        onNavigate={onNavigate}
+      />
+    ) : null
+
   const topbar = (
     <Topbar
       crumbs={crumbs}
       onOpenSearch={() => setPaletteOpen(true)}
       modifierKey={modifierKeyLabel()}
       notifications={
-        auth.notifications ? (
-          <NotificationsContainer
-            client={auth.notifications}
-            organizations={orgs}
-            readOnly={Boolean(session.data?.impersonatedBy)}
-            onNavigate={onNavigate}
-          />
+        bell || support ? (
+          <>
+            {bell}
+            {support}
+          </>
         ) : undefined
       }
       showMenuButton

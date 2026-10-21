@@ -172,6 +172,8 @@ Every step that resumes an authorization carries `oauth_query`. The magic link c
   stop-impersonating and sign-out. A GET passes only if it is listed as a read; each GET the plugins
   mount is classified in `packages/auth/src/guards.test.ts`.
 - The product API gives it read-only grants (`IMPERSONATION_GRANTS`).
+- Support's GETs are refused to an impersonated session too, though they only read: support is for
+  the person themselves (`docs/support.md`).
 
 ## sso, scim, stripe
 
@@ -180,7 +182,8 @@ Every step that resumes an authorization carries `oauth_query`. The magic link c
 - Provisioned users join as `member` (`SCIM_MEMBER_ROLE`); a role given later is kept while they stay
   active (`packages/auth/src/scim-projection.ts`).
 - Deprovisioning (active false, or the SCIM user deleted) removes only a membership the directory
-  created (`member.source = "scim"`) and ends the user's grants and SCIM tokens in that org. A member
+  created (`member.source = "scim"`) and ends the user's grants, SCIM tokens and notifications for that
+  org (the notifications in the same transaction; see `docs/notifications.md`). A member
   added by hand or invited stays (logged as `scim.deprovision.hand_made_kept`). An owner is never
   removed (`scim.deprovision.owner_kept`): change the role first. Admins are removed.
 - `list_scim_tokens` and `revoke_scim_token` are owner-only (`scim` resource). Revoking keeps the
@@ -227,7 +230,8 @@ stale one fails.
 - `personalSlug(userId)` (`packages/auth/src/membership.ts`) builds a personal organization's slug.
   It is used by `apps/api/src/data/members.ts`.
 - `PERSON_ONLY_ACTIONS` (`packages/auth/src/access.ts`) lists the actions no API key may hold:
-  `run: ["approve"]`. `PERSON_ONLY_RESOURCES` is the owner-only resources plus `subscription`.
+  `run: ["approve"]`. `PERSON_ONLY_RESOURCES` is the owner-only resources plus `subscription` and
+  `support` (`docs/support.md`).
 - `provisionalSignup` (`packages/auth/src/signup.ts`) reads the database from `auth.db`. It has no
   WeakMap registry.
 - JWKS are cached for 60 seconds per auth instance (`JWKS_TTL_MS` in

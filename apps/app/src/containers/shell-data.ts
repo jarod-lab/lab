@@ -70,7 +70,12 @@ export function useSignOut(auth: WebAuth) {
   return useMutation({
     mutationFn: () => auth.signOut(),
     // Nothing from the signed-in session may stay cached for the next person on this browser.
-    onSettled: () => queryClient.clear(),
+    // reset, not clear: clear drops the queries without telling mounted components, which keep
+    // showing what they last had. Not awaited: the caller's onSuccess (the way to /sign-in) runs
+    // after this, and must not wait for the page's queries to fail as signed out.
+    onSettled: () => {
+      void queryClient.resetQueries()
+    },
   })
 }
 

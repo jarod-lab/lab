@@ -1,6 +1,7 @@
 import { TWO_FACTOR_PATH, createClient } from "@starter/auth/client"
 import type { SignInMethods, SocialProvider } from "@starter/auth/client"
-import type { InboxFetchClient } from "better-inbox/react"
+import type { InboxFetchClient } from "@byo-oss/notifications/react"
+import type { SupportFetchClient } from "@byo-oss/support/react"
 
 import { rawSearch } from "./navigation"
 
@@ -104,10 +105,15 @@ export interface WebAuth {
    */
   requestPasswordReset?(input: { email: string; redirectTo: string }): Promise<void>
   /**
-   * The person's notifications and unread count (better-inbox's `inbox.*` endpoints), for the bell in
+   * The person's notifications and unread count (@byo-oss/notifications' `inbox.*` endpoints), for the bell in
    * the top bar. Optional so pages and tests without it show no bell.
    */
   notifications?: InboxFetchClient
+  /**
+   * Support's endpoints (@byo-oss/support, `/api/auth/support/*`), for the support widget and the
+   * support queue. Optional so pages and tests without it show no widget.
+   */
+  support?: SupportFetchClient
   device: {
     lookup(userCode: string): Promise<DeviceLookup>
     approve(userCode: string): Promise<void>
@@ -151,7 +157,7 @@ export function makeAuthClient(baseURL?: string, fetchImpl?: typeof fetch): Auth
 }
 
 /**
- * better-inbox's hook takes its own client shape. This adapts the better-auth client's inbox
+ * @byo-oss/notifications' hook takes its own client shape. This adapts the better-auth client's inbox
  * actions to it, so the page never needs a cast.
  */
 function inboxFetchClient(inbox: AuthClient["inbox"]): InboxFetchClient {
@@ -161,6 +167,7 @@ function inboxFetchClient(inbox: AuthClient["inbox"]): InboxFetchClient {
       unreadCount: (input) => inbox.unreadCount(input),
       markRead: ({ id }) => inbox.markRead({ id }),
       markAllRead: (input) => inbox.markAllRead(input),
+      markSeen: ({ ids }) => inbox.markSeen({ ids }),
     },
   }
 }
@@ -175,6 +182,8 @@ export function createWebAuth(baseURL?: string, fetchImpl?: typeof fetch): WebAu
 
   return {
     notifications: inboxFetchClient(client.inbox),
+    // The typed client already has support's shape (supportClient in @starter/auth/client).
+    support: client,
     async getSession() {
       const result = await client.getSession()
       if (!result.data) return null

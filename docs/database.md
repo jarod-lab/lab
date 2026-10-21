@@ -22,14 +22,14 @@
 - `0004_auth_plugins` (passkey, two_factor, admin fields), `0005_sso_scim_stripe`, `0006_agent_runs`
   (agent, run, run_step, approval, steer_message; tenant tables), `0007_session_login_method`,
   `0008_sso_domain_verification` and `0009_steer_message_org_index`.
-- `0010_notifications` adds better-inbox's `notification` table. The table is generated into
+- `0010_notifications` adds @byo-oss/notifications' `notification` table. The table is generated into
   `auth-schema.ts`, and the migration appends two custom statements: the
   `(user_id, organization_id, created_at)` index, and a cascading foreign key from
-  `organization_id` to `organization`. better-inbox's schema option can't declare either. Neither
+  `organization_id` to `organization`. @byo-oss/notifications' schema option can't declare either. Neither
   is in the Drizzle snapshot, so `db:generate` leaves them alone; `drizzle-kit push` would drop
   them. `organization_id` is nullable: a personal notice (account security, removal from an org)
-  belongs to the user, not to a tenant. It is the one customer-data column allowed to be null. See
-  `docs/notifications.md`.
+  belongs to the user, not to a tenant. With `support_ticket.organization_id` (0013), it is one of
+  the two customer-data columns allowed to be null. See `docs/notifications.md`.
 - `0011_auth_hardening` adds:
   - `rate_limit`, the counts for the auth rate limits (`packages/auth/src/rate-limit.ts`);
   - composite indexes for the OAuth grant check (`oauth_consent` and `oauth_refresh_token`, by
@@ -40,6 +40,27 @@
     `clientId` indexes on those tables are now redundant;
   - `member.source`: `"scim"` for a membership the directory created, else null. SCIM
     deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).
+- `0013_notification_email` adds better-inbox 0.6's email delivery: `notification.seen_at`, the
+  `notification_delivery` queue (indexed by status and due time, and by person, type and channel
+  for throttling; declared in `withDeliveryIndexes()` so `auth generate` keeps them) and
+  `inbox_presence` (when each person's bell last polled). See `docs/notifications.md`.
+  @byo-oss/notifications 0.8 declares `onDelete: "cascade"` on its references; the generated schema
+  already had it, so 0.8 needs no migration.
+- `0014_support` adds `@byo-oss/support`'s tables, generated into `auth-schema.ts`:
+  `support_ticket`, `support_message`, `support_ticket_tag`, `support_canned_reply`,
+  `support_counter` and `support_delivery` (`docs/support.md`). They are the documented exception to
+  "every customer-data table has `organizationId`", checked in `packages/db/src/schema.test.ts`:
+  - `support_ticket.organization_id` cascades from `organization` but is nullable: a ticket opened
+    by email has no organization, and a requester keeps their own tickets.
+  - `support_message`, `support_ticket_tag` and `support_delivery` have no `organization_id`. They
+    belong to a ticket and cascade from it.
+  - `support_canned_reply` and `support_counter` belong to the support staff (the operator
+    organization), not to a customer.
+  - Don't query or write them from app code: go through `auth.api.*` and the package's functions.
+  - `support_delivery` exists only with thread mail on, so `auth.cli.ts` turns it on with
+    placeholders. `support_attachment` (attachments) is not generated: attachments are off.
+  - `support_ticket.merged_into_id` (a merged ticket's target) has no foreign key: support clears
+    it when it deletes the target, and a link to a ticket that is gone stays on the merged ticket.
 <!-- template:start -->
 - Migrations `0003` through `0011` are not applied until the user runs them.
 <!-- template:end -->

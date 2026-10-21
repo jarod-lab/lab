@@ -48,7 +48,7 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   `docs/database.md`.
 - `packages/auth` — better-auth with organizations, org API keys (`sk_`), OAuth 2.1, device grant.
   `packages/auth/src/access.ts` is the permission catalog (browser-safe). See `docs/auth.md`.
-  In-app notifications (better-inbox): send only through the catalog in
+  In-app notifications (@byo-oss/notifications): send only through the catalog in
   `packages/auth/src/notifications.ts`, never `auth.api.notify`. See `docs/notifications.md`.
 - `packages/auth-proofs` — gdp-ts proofs (`lib/ids.ts`, `proofs/`,
   `packages/auth-proofs/src/mistakes.types.ts`).
@@ -66,7 +66,8 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   Vitest base.
 - `scripts/` — `scripts/worktree.mjs` (`pnpm wt`), `scripts/init-project.mjs`,
   `scripts/generate-stories.mjs`, `scripts/release.mjs` (applies migrations),
-  `scripts/e2e-stack.mjs`, `scripts/seed-demo-run.mjs`, `scripts/flags.mjs` (`pnpm flags`).
+  `scripts/e2e-stack.mjs` (with `scripts/e2e-dkim-dns.mjs`), `scripts/seed-demo-run.mjs`,
+  `scripts/flags.mjs` (`pnpm flags`).
 - `Dockerfile`, `docker-compose.yml` — the API image; compose's `migrate` runs `scripts/release.mjs`
   first.
 - `skills/starter` — the template skill for customers' agents, served at `/skill.md`; `server.json`
@@ -115,7 +116,9 @@ fixes formatting.
   floating or misused promises are errors, so a promise you mean to drop takes `void`. Biome skips
   `.claude/` and lockfiles, and does not format Markdown.
 - **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`).
-  Don't hand-edit `minimumReleaseAgeExclude`.
+  Don't hand-edit `minimumReleaseAgeExclude`. It lists only our own packages (`@byo-oss/*`,
+  `@wraps.dev/*`), by name, so our releases install the day they publish. Every other package
+  waits out the 24-hour release age.
 - **Vendored shadcn:** `packages/ui/src/components/ui/` and `src/hooks/` come from the shadcn CLI
   (`base-sera`). Add with `npx shadcn@latest add`, never by hand, then restyle to the D+ system.
   Details and stories: `docs/ui.md`.
@@ -161,7 +164,8 @@ gating, targeting, ramping, reclaiming and removing a flag, and `pnpm flags stal
 Details: `docs/web-app.md`.
 
 - Routes: `/:org` (with `/runs/:runId` and `/settings/*`), `/account/*`, `/new`, `/admin/*` (the
-  admin console: users, feature flags), and the OAuth pages. Theme: `lib/theme.ts`.
+  admin console: users, feature flags, the support queue), and the OAuth pages. Theme:
+  `lib/theme.ts`.
 - Route files are thin. Data and mutations live in `src/containers`; presentational pages in
   `src/pages` take props and callbacks.
 - Call the product API through `@starter/sdk` (`productClient(orgId)`, `lib/product-client.ts`).

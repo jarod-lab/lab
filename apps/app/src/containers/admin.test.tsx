@@ -8,6 +8,7 @@ import { WebError } from "../lib/web-auth"
 import { fakeAdminApi } from "../test/fake-admin"
 import { notFresh, renderWithReauth } from "../test/reauth"
 import { AdminContainer } from "./admin"
+import { ImpersonationBanner } from "./impersonation-banner"
 
 const admin: AdminSession = {
   userId: "me",
@@ -48,6 +49,41 @@ const renderAdmin = (api: AdminApi, onNavigate = vi.fn()) =>
       )}
     />,
   )
+
+describe("AdminContainer across a change of identity", () => {
+  // The router can keep /admin rendered while the next page loads, so the container may still be
+  // mounted when the session changes under it. It must follow the new session, not keep the old one.
+  it("shows the admin page after Stop, even if it stayed mounted through the impersonation", async () => {
+    let session: AdminSession = { ...admin, role: "user", impersonatedBy: "me" }
+    const api = fakeApi({
+      getSession: vi.fn(async () => session),
+      stopImpersonating: vi.fn(async () => {
+        session = admin
+      }),
+    })
+    const user = userEvent.setup()
+    renderWithReauth(
+      <>
+        <ImpersonationBanner api={api} onNavigate={vi.fn()} />
+        <AdminContainer
+          api={api}
+          tabs={[{ id: "users", label: "Users", href: "/admin/users" }]}
+          onNavigate={vi.fn()}
+          renderLink={({ href, children, ...rest }) => (
+            <a href={href} {...rest}>
+              {children}
+            </a>
+          )}
+        />
+      </>,
+    )
+    expect(await screen.findByRole("heading", { name: "Not available" })).toBeTruthy()
+
+    await user.click(await screen.findByRole("button", { name: "Stop" }))
+    expect(await screen.findByRole("heading", { name: "Admin" })).toBeTruthy()
+    expect(await screen.findByRole("row", { name: /Grace Hopper/ })).toBeTruthy()
+  })
+})
 
 describe("AdminContainer", () => {
   it("lists users for a platform admin, sorted newest first by the server", async () => {

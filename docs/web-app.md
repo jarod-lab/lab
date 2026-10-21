@@ -10,8 +10,9 @@
 - `/:org/runs/:runId`
 - `/:org/settings/{general,members,api-keys,billing,agents,security}` (`/:org/settings/flags`
   redirects to `/admin/flags`)
-- `/account/{profile,security}`
-- `/admin/{users,flags}`, the admin console (see below)
+- `/account/{profile,security}`, `/account/support` and `/account/support/:id` (the person's support
+  tickets and one ticket's thread, `docs/support.md`)
+- `/admin/{users,flags,support}` and `/admin/support/:id`, the admin console (see below)
 - `/new`, `/two-factor`
 - the OAuth, device, claim, reset and `/accept-invitation/:id` pages (`/invite/:id` is an alias;
   `/settings/agents` redirects)
@@ -91,6 +92,10 @@ default provider never hears the new one become ready.
   rollout operations answer only to it. Rollouts, targets, reclaim, delete. It has no board or e2e
   journey: the operator organization is set by `OPERATOR_ORGANIZATION_ID` at server start, which
   the e2e stack can't know before it creates its organizations.
+
+- **Support** (`/admin/support`, `/admin/support/:id`): support staff, the operator organization's
+  members whose role holds `support:read`. The support queue (`docs/support.md`). The session stays
+  on its organization: support checks the operator membership itself.
 
 `/admin` lands on the first tab the person may open. The sidebar's outlined **Admin** link, below
 Agent docs, shows only to someone with at least one tab. Each tab still answers "Not available" to

@@ -2,6 +2,14 @@ import type { E2EConfig } from "e2e"
 import { web } from "@e2e-dev/web"
 import { gateway } from "ai"
 
+import {
+  DKIM_DIR,
+  OPERATOR_ORGANIZATION_ID,
+  OPERATOR_SLUG,
+  STACKS_DIR,
+  SUPPORT_REPLY_DOMAIN,
+} from "./e2e/support/support-stack"
+
 // Port 0: the runner picks a free port and passes it to the stack as {port}, so runs never clash. A
 // running `pnpm dev` (portless, https) is not reused; portless serves https://app.starter.localhost
 // and the runner needs plain http on its own port.
@@ -26,6 +34,18 @@ const stackEnv: Record<string, string> = {
   DATABASE_URL: process.env.DATABASE_URL ?? "",
   E2E_ADMIN_EMAIL: ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
+  // Support (docs/support.md, e2e/support-*.e2e.ts): the stack seeds the operator organization with
+  // the admin as owner. Thread mail goes out at once (a sweep a second) into the mail sink, and
+  // inbound mail comes in through a raw relay whose secret the stack makes; DKIM keys come from
+  // DKIM_DIR (scripts/e2e-dkim-dns.mjs).
+  OPERATOR_ORGANIZATION_ID,
+  E2E_OPERATOR_SLUG: OPERATOR_SLUG,
+  SUPPORT_REPLY_DOMAIN,
+  SUPPORT_REPLY_DELAY_MS: "0",
+  SUPPORT_SWEEP_INTERVAL_MS: "1000",
+  E2E_DKIM_DIR: DKIM_DIR,
+  // Each stack makes its own inbound relay secret and writes it here with its URLs (support-stack.ts).
+  E2E_STACKS_DIR: STACKS_DIR,
 }
 for (const [key, value] of Object.entries(stackEnv)) if (value === "") delete stackEnv[key]
 

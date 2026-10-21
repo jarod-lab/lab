@@ -57,8 +57,8 @@ is the channel.
 - **A send never fails its request.** `send` catches every error and reports it. In the API that
   goes to `reportError`; in auth it goes to `onNotificationError`.
 - **Sends wait for the transaction to commit** (`queueAfterTransactionHook`). They are dropped on
-  rollback. Calling `auth.api.notify` inside a better-auth transaction hangs on PGlite, which has a
-  single connection.
+  rollback. `auth.api.notify` called directly inside a better-auth transaction joins it
+  (@byo-oss/notifications 0.9), but its errors would fail the transaction, so go through `send`.
 - **Recipients come from the permission catalog, not role names.** Approvers are the roles with
   `run: ["approve"]`. Member managers have `member: ["update"]`, key managers
   `apiKey: ["create", "delete"]`, billing managers `subscription: ["update"]`. If the catalog
@@ -75,7 +75,7 @@ is the channel.
   stamped with the organization, so it survives. SCIM deprovisioning is outside those endpoints: it
   removes the membership inside the directory's transaction, so `endAccessIn` (`packages/auth/src/index.ts`)
   calls `deleteMemberData` there, and the rows commit or roll back with the membership. That needs
-  @byo-oss/notifications 0.8.2: 0.8.0's cleanup used the outer adapter and hangs on PGlite inside the
+  @byo-oss/notifications 0.9: earlier cleanup used the outer adapter and hangs on PGlite inside the
   transaction. The tests are in `apps/api/src/auth-flows.test.ts` (over HTTP) and
   `packages/auth/src/notifications.test.ts` (commit and rollback).
 - **Adding an event:** add it to `NotificationEvent`, `renderNotification` and `recipientsOf`, then

@@ -460,8 +460,6 @@ describe("against a real auth instance", () => {
 })
 
 describe("inside a better-auth transaction", () => {
-  // Hangs under PGlite if a send reads through the transaction's outer adapter (see the last test),
-  // so the hazard runs on its own database and the rest share this one.
   let h: Awaited<ReturnType<typeof createTestAuth>>
   let owner: { userId: string; cookie: string; orgId: string }
   let member: { userId: string; cookie: string; orgId: string }
@@ -538,24 +536,42 @@ describe("inside a better-auth transaction", () => {
   })
 })
 
-describe("the hazard: auth.api.notify called directly inside a transaction", () => {
-  it("hangs on PGlite's single connection, so every send defers instead", async () => {
+describe("auth.api.notify called directly inside a transaction", () => {
+  // Before @byo-oss/notifications 0.9 this hung on PGlite's single connection. It joins the
+  // transaction now, but its errors fail the transaction, so events still go through `send`.
+  it("joins it, so a rollback drops the notification", async () => {
     const h = await createTestAuth()
-    const owner = await h.signUp("Owner")
-    const adapter = (await h.auth.$context).adapter
-    const naive = runWithTransaction(adapter, async () => {
-      await h.auth.api.notify({
-        body: {
-          userId: owner.userId,
-          organizationId: owner.orgId,
-          type: "approval.requested",
-          title: "Naive",
-        },
-      })
-    })
-    // The transaction never ends, so the database is left as it is: this test owns its database.
-    naive.catch(() => {})
-    await expect(withTimeout(naive, 1_500)).rejects.toThrow("timed out")
+    try {
+      const owner = await h.signUp("Owner")
+      const adapter = (await h.auth.$context).adapter
+      const titles = async () =>
+        (
+          await h.db
+            .select({ title: notification.title })
+            .from(notification)
+            .where(eq(notification.userId, owner.userId))
+        ).map((row) => row.title)
+      const before = await titles()
+      await expect(
+        withTimeout(
+          runWithTransaction(adapter, async () => {
+            await h.auth.api.notify({
+              body: {
+                userId: owner.userId,
+                organizationId: owner.orgId,
+                type: "approval.requested",
+                title: "Direct",
+              },
+            })
+            throw new Error("the write after the notify failed")
+          }),
+          5_000,
+        ),
+      ).rejects.toThrow("the write after the notify failed")
+      expect(await titles()).toEqual(before)
+    } finally {
+      await h.close()
+    }
   })
 })
 

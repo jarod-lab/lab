@@ -68,6 +68,19 @@ describe("AppSidebar", () => {
     h.cleanup()
   })
 
+  it("shows the admin console link only when given, below Support, and marks it current", async () => {
+    expect(renderToStaticMarkup(frame(<AppSidebar {...props} />))).not.toContain('href="/admin"')
+    const html = renderToStaticMarkup(
+      frame(<AppSidebar {...props} admin={{ href: "/admin" }} activeId="admin" />),
+    )
+    expect(html).toMatch(
+      /<a[^>]*href="\/admin"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/admin"/,
+    )
+    expect(html.indexOf('href="/support"')).toBeLessThan(html.indexOf('href="/admin"'))
+    expect(html).toContain(">Admin</a>")
+    await expectNoA11yViolations(html)
+  })
+
   it("supports an announcement with no link or badge", () => {
     const html = renderToStaticMarkup(
       frame(<AppSidebar {...props} announcement={{ id: "y", title: "Plain news" }} />),

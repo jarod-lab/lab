@@ -75,6 +75,7 @@ describe("CORS on bearer surfaces", () => {
       "/openapi.json",
       "/llms.txt",
       "/llms-full.txt",
+      "/skill.md",
     ]) {
       const res = await t.req(path, { headers: { origin: ORIGIN } })
       expect(res.headers.get("access-control-allow-origin"), path).toBe("*")

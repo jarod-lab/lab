@@ -4,7 +4,8 @@ import { credentials, expect } from "e2e"
 import { PASSWORD, signUpUi } from "./support/invitations"
 import { uniqueId } from "./support/unique"
 
-// The platform admin page (/admin, not on the boards): who may open it, and the admin's actions on a user.
+// The admin console's Users tab (/admin/users, not on the boards): who may open it, and the
+// admin's actions on a user.
 // Promotion to admin is a database change the suite can't make, so the e2e stack signs up and promotes
 // the `admin` credential's account when it starts (scripts/e2e-stack.mjs, e2e/README.md).
 
@@ -70,12 +71,12 @@ test("an admin finds a user, bans and unbans them, and impersonates them", async
   await screen.getByRole("dialog").getByRole("button", "Unban").tap()
   await expect(screen.getByRole("row", name, { exact: false })).toContainText("Active")
 
-  // Impersonate: the banner names them, Stop returns to /admin.
+  // Impersonate: the banner names them, Stop returns to the console's Users tab.
   await screen.getByRole("button", `Actions for ${name}`).tap()
   await screen.getByRole("menuitem", "Impersonate").tap()
   await screen.getByRole("dialog").getByRole("button", "Impersonate").tap()
   await expect(screen.getByText(new RegExp(`You are impersonating ${name}`))).toBeVisible()
   await screen.getByRole("button", "Stop").tap()
-  await expect(browser).toHaveURL(/\/admin$/)
+  await expect(browser).toHaveURL(/\/admin\/users$/)
   await expect(screen.getByRole("heading", "Admin")).toBeVisible()
 })

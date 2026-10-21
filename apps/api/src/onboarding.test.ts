@@ -5,6 +5,7 @@
 //   C. The CLI against a live server on a real socket, approved in a browser.
 // The steps under test never call auth.api.*; the human's steps go through the browser helper.
 import { type ChildProcess, spawn } from "node:child_process"
+import { readFileSync } from "node:fs"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -87,6 +88,11 @@ async function ok(res: Response): Promise<Json> {
   return body
 }
 
+const SKILL = readFileSync(
+  fileURLToPath(new URL("../../../skills/starter/SKILL.md", import.meta.url)),
+  "utf8",
+)
+
 describe("onboarding journey A: headless agent, human approves", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   const j: Partial<Journey> = {}
@@ -94,7 +100,7 @@ describe("onboarding journey A: headless agent, human approves", () => {
   let grace: ReturnType<typeof browser>
 
   beforeAll(async () => {
-    t = await createTestApp()
+    t = await createTestApp([], { skill: SKILL })
   })
   afterAll(() => t.close())
 
@@ -381,6 +387,19 @@ describe("onboarding journey A: headless agent, human approves", () => {
     const llms = await (await t.req("/llms.txt")).text()
     expect(llms).toMatch(/add `admin`/i)
   }, 60_000)
+
+  // An agent that starts from llms.txt finds the skill in its Docs section, fetches it, and reads the
+  // same text the repo ships.
+  it("finds the agent skill from llms.txt and fetches it", async () => {
+    const llms = await (await t.req("/llms.txt")).text()
+    const link = /\[Agent skill\]\((https?:\/\/[^)]+)\)/.exec(llms)?.[1]
+    expect(link).toBeDefined()
+    const path = new URL(link ?? "").pathname
+    const res = await t.req(path)
+    expect(res.status).toBe(200)
+    expect(res.headers.get("content-type")).toContain("text/markdown")
+    expect(await res.text()).toBe(SKILL)
+  })
 })
 
 describe("onboarding journey B: self-signup and claim", () => {

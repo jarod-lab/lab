@@ -59,7 +59,7 @@ describe("ImpersonationBanner", () => {
     const user = userEvent.setup()
     renderWithClient(<ImpersonationBanner api={api} onNavigate={navigate} />)
     await user.click(await screen.findByRole("button", { name: "Stop" }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/admin"))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/admin/users"))
     expect(api.stopImpersonating).toHaveBeenCalledTimes(1)
   })
 })

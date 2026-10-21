@@ -10,6 +10,7 @@ import Ajv from "ajv"
 import addFormats from "ajv-formats"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { BASE, createTestApp } from "./app.test.helpers"
+import { PRODUCT } from "./product"
 
 const ROOT_SERVER_JSON = fileURLToPath(new URL("../../../server.json", import.meta.url))
 const REGISTRY_SCHEMA = JSON.parse(
@@ -19,13 +20,13 @@ const REGISTRY_SCHEMA = JSON.parse(
   ),
 ) as object
 
-// The info server.ts publishes (title, version, description are the same values), with the
-// placeholder baseURL the committed root server.json uses.
+// The info server.ts publishes, from product.ts, with its public origin as the baseURL: this is
+// what the committed root server.json is generated from.
 const ROOT_INFO = {
-  title: "Starter API",
-  version: "0.0.0",
-  description: "The Starter API. Replace this with one sentence about what your product does.",
-  baseURL: "https://api.example.com",
+  title: PRODUCT.name,
+  version: PRODUCT.version,
+  description: PRODUCT.description,
+  baseURL: PRODUCT.publicURL,
 }
 
 const ajv = new Ajv({ strict: false, allErrors: true })
@@ -84,7 +85,7 @@ describe("registry record (server.json)", () => {
 })
 
 describe("committed root server.json", () => {
-  const generated = serverJson(ROOT_INFO, DEFAULT_REGISTRY_META)
+  const generated = serverJson(ROOT_INFO, PRODUCT.registry)
 
   it("matches the generator, and is regenerated with UPDATE_SERVER_JSON=1", () => {
     if (process.env.UPDATE_SERVER_JSON) {

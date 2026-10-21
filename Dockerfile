@@ -18,9 +18,11 @@ COPY . .
 RUN pnpm dlx turbo@2.11.7 prune @starter/api-app @starter/app --docker
 
 # The root `prepare` script installs git hooks, which the image has no repo for, so scripts are skipped
-# and only the dependency build approved in pnpm-workspace.yaml (esbuild) is run.
+# and only the dependency build approved in pnpm-workspace.yaml (esbuild) is run. turbo prune leaves
+# out .pnpmfile.mjs, whose checksum the lockfile records, so a frozen install needs it copied in.
 FROM base AS deps
 COPY --from=prepare /app/out/json/ ./
+COPY --from=prepare /app/.pnpmfile.mjs ./
 RUN pnpm install --frozen-lockfile --ignore-scripts && pnpm rebuild esbuild
 
 # The web build prerenders by serving itself on `localhost` and fetching it. The container's
@@ -36,6 +38,9 @@ ENV NODE_ENV=production \
     WEB_DIST_DIR=/app/apps/app/dist
 COPY --from=builder --chown=node:node /app /app
 COPY --chown=node:node scripts/release.mjs /app/scripts/release.mjs
+# The agent skill, served at /skill.md (apps/api/src/server.ts reads it). Not a workspace package, so
+# turbo prune leaves it out of out/full.
+COPY --chown=node:node skills /app/skills
 USER node
 WORKDIR /app/apps/api
 EXPOSE 3000

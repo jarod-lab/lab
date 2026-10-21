@@ -62,7 +62,7 @@ export function memberOperations({ db, notifier }: Pick<OperationDeps, "db" | "n
       userId: z.string().describe("The member's user id, from list_member_security"),
     }),
     output: z.object({ reset: z.literal(true) }),
-    hints: { destructive: true },
+    hints: { readOnly: false, destructive: true },
     examples: [{ input: { userId: "00000000-0000-0000-0000-000000000000" }, error: "NOT_FOUND" }],
     handler: ({ userId }, { caller }) =>
       inCallerOrg(caller, (org, proof) =>

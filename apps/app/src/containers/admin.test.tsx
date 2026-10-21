@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { AdminApi, AdminSession, AdminUser } from "../lib/admin-api"
 import { WebError } from "../lib/web-auth"
+import { fakeAdminApi } from "../test/fake-admin"
 import { notFresh, renderWithReauth } from "../test/reauth"
 import { AdminContainer } from "./admin"
 import { ImpersonationBanner } from "./impersonation-banner"
@@ -29,27 +30,17 @@ const grace: AdminUser = {
   createdAt: "2026-10-01T00:00:00.000Z",
 }
 
-function fakeApi(
-  overrides: Partial<AdminApi> = {},
-  session: AdminSession | null = admin,
-): AdminApi {
-  return {
-    getSession: vi.fn(async () => session),
-    listUsers: vi.fn(async () => ({ users: [grace], total: 1 })),
-    banUser: vi.fn(async () => {}),
-    unbanUser: vi.fn(async () => {}),
-    impersonateUser: vi.fn(async () => {}),
-    stopImpersonating: vi.fn(async () => {}),
-    revokeUserSessions: vi.fn(async () => {}),
-    setRole: vi.fn(async () => {}),
-    ...overrides,
-  }
-}
+const fakeApi = (overrides: Partial<AdminApi> = {}, session: AdminSession | null = admin) =>
+  fakeAdminApi(
+    { listUsers: vi.fn(async () => ({ users: [grace], total: 1 })), ...overrides },
+    session,
+  )
 
 const renderAdmin = (api: AdminApi, onNavigate = vi.fn()) =>
   renderWithReauth(
     <AdminContainer
       api={api}
+      tabs={[{ id: "users", label: "Users", href: "/admin/users" }]}
       onNavigate={onNavigate}
       renderLink={({ href, children, ...rest }) => (
         <a href={href} {...rest}>
@@ -76,6 +67,7 @@ describe("AdminContainer across a change of identity", () => {
         <ImpersonationBanner api={api} onNavigate={vi.fn()} />
         <AdminContainer
           api={api}
+          tabs={[{ id: "users", label: "Users", href: "/admin/users" }]}
           onNavigate={vi.fn()}
           renderLink={({ href, children, ...rest }) => (
             <a href={href} {...rest}>

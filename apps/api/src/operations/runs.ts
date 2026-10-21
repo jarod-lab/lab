@@ -167,6 +167,7 @@ export function runOperations({
       "starts as queued; the agent moves it to running with update_run, then adds steps with " +
       "append_run_step. Returns NOT_FOUND for agents outside this organization.",
     permissions: { run: ["create"] },
+    hints: { readOnly: false, destructive: false },
     input: agentRef.extend({
       title: z.string().trim().min(1).max(200).describe("What the run is for"),
       summary: z.string().trim().max(2000).optional().describe("Markdown, optional"),
@@ -278,6 +279,7 @@ export function runOperations({
       "CONFLICT while an approval still blocks the run: wait until get_run shows it approved or denied. " +
       "Finished runs take no more updates.",
     permissions: { run: ["update"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend({
       status: z.enum(["running", "done", "failed"]).optional(),
       summary: z.string().max(20_000).nullable().optional(),
@@ -321,6 +323,7 @@ export function runOperations({
       "draft or test), a title, optional detail, and progress (progressDone of progressTotal). Status " +
       "defaults to queued. Change it later with update_run_step. Refused once the run has finished.",
     permissions: { run: ["update"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend(stepInput.shape),
     output: stepOutputSchema,
     examples: [
@@ -353,6 +356,7 @@ export function runOperations({
       "A step waiting for a person is set by request_approval, not here. Returns NOT_FOUND for steps " +
       "that aren't part of this run.",
     permissions: { run: ["update"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend({
       stepId: z.string().describe("Step id from get_run"),
       title: z.string().trim().min(1).max(200).optional(),
@@ -394,6 +398,7 @@ export function runOperations({
       "Sends a message from a person to a run while it works: an instruction or a correction. The agent reads " +
       "it with get_run. Refused once the run has finished.",
     permissions: { run: ["steer"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend({
       body: z.string().trim().min(1).max(5000).describe("What to tell the agent"),
     }),
@@ -429,6 +434,7 @@ export function runOperations({
       "Defers a run until a time (ISO 8601, after now): it shows as queued with that time, and the agent picks " +
       "it up after. Use it to run work in a low-carbon window or after hours. Refused once the run has finished.",
     permissions: { run: ["steer"] },
+    hints: { readOnly: false, destructive: false },
     input: runRef.extend({
       until: z.iso.datetime().describe("When the run may start again, e.g. 2026-10-17T02:00:00Z"),
     }),

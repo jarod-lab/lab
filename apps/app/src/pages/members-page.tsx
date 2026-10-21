@@ -87,8 +87,6 @@ export interface InviteOutcome {
 }
 
 export interface MembersPageProps {
-  /** The operator organization: its settings tabs add Feature flags. */
-  operator?: boolean
   organization: { id: string; name: string; slug: string }
   /** "Owner", "Admin", "Member" or "Viewer": the caller's role here. */
   roleLabel: string
@@ -126,7 +124,6 @@ type MemberAction = { kind: "remove" | "reset"; member: MemberView }
 
 /** The members page (board OrgMembers). Props in, callbacks out. */
 export function MembersPage({
-  operator = false,
   organization,
   roleLabel,
   canInvite,
@@ -145,7 +142,7 @@ export function MembersPage({
   onCancel,
   renderLink = anchorLink,
 }: MembersPageProps) {
-  const tabs = settingsTabs(organization.slug, operator)
+  const tabs = settingsTabs(organization.slug)
   const when = useMemo(() => now ?? new Date(), [now])
   const [showAll, setShowAll] = useState(false)
   const [action, setAction] = useState<MemberAction | null>(null)

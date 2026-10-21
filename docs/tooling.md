@@ -110,6 +110,51 @@ an input there when a test reads a file no dependency reaches.
   failure. It needs no secrets, so it runs on fork PRs.
 - **Docker image**: builds without pushing.
 
+## Releasing
+
+`.github/workflows/release.yml` publishes `@starter/cli` and `@starter/sdk` to npm, with provenance,
+and then `server.json` to the MCP registry with `mcp-publisher`. It runs on a `v*` tag push or a
+manual dispatch, and it refuses any ref that is not `v<version>` of both packages and of `server.json`.
+Nothing publishes until someone runs it.
+
+To release version `X`:
+
+1. Set the version in `apps/api/src/product.ts`, `packages/cli/package.json` and
+   `packages/sdk/package.json`.
+2. Regenerate the registry record:
+   `UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app exec vitest run src/discovery.test.ts`.
+3. Commit the bump and push it to `main`.
+4. Tag the commit and push the tag: `git tag vX && git push origin vX`. The `release` environment
+   may ask for a reviewer before the job runs.
+
+Set up once, by a person:
+
+- **npm**: the `@starter` scope must exist on npm. Publish with a granular automation token in the
+  repository secret `NPM_TOKEN`, scoped to publish both packages. The workflow passes it as
+  `NODE_AUTH_TOKEN`; the job fails without it. Tarballs are published with `npm publish`, which
+  can use npm trusted publishing (no token) once it is configured on each package for
+  `release.yml` and the `release` environment. The workflow would then need its token check removed.
+- **Re-runs**: a package whose version is already on npm is skipped, so a run that failed at the
+  registry step can be re-run from the tag. The registry step is pinned: `MCP_PUBLISHER_VERSION` and
+  `MCP_PUBLISHER_SHA256` in `release.yml` (the sha256 comes from the release's
+  `registry_<version>_checksums.txt`). Bump both together.
+- **GitHub environment** `release`: add required reviewers and limit deployment to version tags.
+- **MCP registry namespace**: `server.json` is named `io.github.<owner>/<name>`. The workflow logs
+  in with `mcp-publisher login github-oidc`, which proves the `<owner>` is the repository's owner,
+  so no secret is needed. A custom domain namespace needs DNS authentication instead
+  (`mcp-publisher login dns` with an Ed25519 key in DNS), and the workflow must change to match.
+- **Repository URL**: npm provenance refuses a package whose `repository.url` doesn't match the
+  repository the workflow runs in. Keep it equal in both package.json files and `product.ts`.
+<!-- template:start -->
+- **Scope rename**: `pnpm init-project` renames `@starter` in the packages, `server.json` and the
+  registry name, so a new project publishes under its own scope. It sets the repository URL to
+  `github.com/<owner>/<name>`, so a repository named differently needs it edited by hand, and
+  `--domain` rewrites the public origin.
+<!-- template:end -->
+
+The CLI's default origin is the product's public URL (`PRODUCT.publicURL` in
+`apps/api/src/product.ts`). Local development sets `STARTER_URL` or `--base-url`.
+
 ## Catalog and lefthook
 
 - Dependencies are aligned through the pnpm `catalog:` in `pnpm-workspace.yaml`. TypeScript is

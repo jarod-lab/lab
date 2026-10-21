@@ -30,8 +30,6 @@ const org = (orgId: string) => {
     /** Every run in this org, and the single-run keys below it. */
     runs: () => [...base, "runs"] as const,
     run: (runId: string) => [...base, "runs", requireId("run id", runId)] as const,
-    /** Whether this is the operator organization (whoami's `operator`). */
-    operator: () => [...base, "operator"] as const,
     /** Feature flag rollouts (operator only), and one flag's detail below the prefix. */
     featureFlags: () => [...base, "feature-flags"] as const,
     featureFlag: (key: string) => [...base, "feature-flags", requireId("flag key", key)] as const,

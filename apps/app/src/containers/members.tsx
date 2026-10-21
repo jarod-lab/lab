@@ -33,7 +33,6 @@ import {
   MembersPage,
 } from "../pages/members-page"
 import { invalidateSession, memberRoleQuery, orgRoleLabel, useSessionQuery } from "./shell-data"
-import { useIsOperator } from "../lib/operator"
 
 export interface MembersContainerProps {
   auth: WebAuth
@@ -58,7 +57,6 @@ export function MembersContainer({
   renderLink,
   now,
 }: MembersContainerProps) {
-  const operator = useIsOperator()
   const queryClient = useQueryClient()
   // Inviting, changing a role, removing a member and resetting two-factor need a recent sign-in.
   const guard = useReauthGuard()
@@ -237,7 +235,6 @@ export function MembersContainer({
 
   return (
     <MembersPage
-      operator={operator}
       organization={{ id: organizationId, name: organization.name, slug: organization.slug }}
       roleLabel={orgRoleLabel(roleText)}
       canInvite={canInvite}

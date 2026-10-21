@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.7",
+    "@better-auth/cimd": "catalog:",
     "@better-auth/core": "1.7.7",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/passkey": "catalog:",

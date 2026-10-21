@@ -6,15 +6,20 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { Analytics } from "@starter/analytics"
 import type { AnyOperation } from "@starter/api"
-import { type AuthEvent, type AuthRateLimitOptions, createAuth } from "@starter/auth"
+import {
+  type AuthEvent,
+  type AuthOptions,
+  type AuthRateLimitOptions,
+  createAuth,
+} from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
-import { createLogger, type Logger } from "@starter/logger"
 import type { FlagCatalog } from "@starter/flags"
+import { createLogger, type Logger } from "@starter/logger"
 import { createMemoryStore, type FileStore } from "@starter/storage"
 import { captureSignUp } from "./analytics"
 import { type AppOptions, createApp } from "./app"
-import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
+import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter, type MeterLimits } from "./meter"
@@ -58,6 +63,8 @@ export interface TestAppOptions {
   trustProxy?: boolean
   /** A built web app to serve (see static.test.ts). */
   webDistDir?: string
+  /** The agent skill text, served at /skill.md (the route is absent without it). */
+  skill?: string
   /** Defaults to a silent logger; pass one with a destination to read the access log. */
   logger?: Logger
   /** Serve GET /status for these vendors (see app.ts). */
@@ -89,6 +96,8 @@ export interface TestAppOptions {
   operator?: boolean
   /** The flags the app declares. Defaults to the product's catalog (packages/flags). */
   flagCatalog?: FlagCatalog
+  /** Fetch for Client ID Metadata Documents. Defaults to the SSRF-safe transport; tests stub it. */
+  clientMetadataFetch?: AuthOptions["clientMetadataFetch"]
 }
 
 export async function createTestApp(
@@ -119,6 +128,7 @@ export async function createTestApp(
     baseURL: BASE,
     emailFrom: "Test <auth@example.com>",
     oauthResources: [BASE, `${BASE}/mcp`],
+    clientMetadataFetch: options.clientMetadataFetch,
     ses: { client: devMail?.client ?? ses },
     stripe: options.stripe,
     // Senders swallow failures; a test must not pass because an email silently failed.
@@ -173,6 +183,7 @@ export async function createTestApp(
     analytics,
     trustProxy: options.trustProxy ?? false,
     webDistDir: options.webDistDir,
+    skill: options.skill,
     status: options.status,
     devMail,
     auth,

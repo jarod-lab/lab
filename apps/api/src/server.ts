@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+
 import { serve } from "@hono/node-server"
 import { createAuth, parseStripePlans } from "@starter/auth"
 import { createDb } from "@starter/db"
@@ -9,16 +12,23 @@ import { createFileStore, type FileStore } from "@starter/storage"
 
 import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
-import { createDevMailSink } from "./dev-mail"
 import { recordAuthEvent } from "./data/audit"
 import { startDeliverySweep } from "./delivery-sweep"
+import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
 import { createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
+import { PRODUCT } from "./product"
 
 const logger = createLogger({ name: "api" })
+// The agent skill (skills/starter), served at /skill.md. Read from the repo (or the image) at boot, so a
+// missing file stops startup instead of serving nothing.
+const skill = readFileSync(
+  fileURLToPath(new URL("../../../skills/starter/SKILL.md", import.meta.url)),
+  "utf8",
+)
 // Every reported error (5xx and unexposed ones, from REST, MCP tools, the hooks and analytics) is
 // logged here, once. To add an error tracker (Sentry and the like), call it here too and keep the log.
 setErrorReporter((error, context) => {
@@ -146,9 +156,9 @@ const app = createApp({
   auth,
   operations: createOperations({ auth, db, meter, notifier, files, operator, flags }),
   baseURL,
-  name: "Starter API",
-  version: "0.0.0",
-  description: "The Starter API. Replace this with one sentence about what your product does.",
+  name: PRODUCT.name,
+  version: PRODUCT.version,
+  description: PRODUCT.description,
   logger,
   hooks: createApiHooks({
     db,
@@ -162,6 +172,7 @@ const app = createApp({
   analytics,
   trustProxy: env.TRUST_PROXY,
   webDistDir: env.WEB_DIST_DIR,
+  skill,
   files,
   // Social sign-in fills user.image with the provider's avatar URL; pages show it.
   imageOrigins: [
@@ -172,12 +183,8 @@ const app = createApp({
   ...(env.STATUS_PROVIDERS && {
     status: { providers: parseStatusProviders(env.STATUS_PROVIDERS) },
   }),
-  // The MCP registry entry (/.well-known/mcp/server.json). Rename before publishing: the name is
-  // reverse-DNS for a namespace you can prove (io.github.<owner>/<repo> or your domain).
-  registry: {
-    name: "io.github.example/starter",
-    description: "Starter API: projects, API keys, agent access and audit for people and agents.",
-  },
+  // The MCP registry entry (/.well-known/mcp/server.json), from product.ts.
+  registry: PRODUCT.registry,
 })
 
 const port = env.PORT ?? (Number(new URL(baseURL).port) || 3000)

@@ -10,6 +10,8 @@ export interface RegistryMeta {
   name: string
   /** Up to 100 characters: what the server does, not how. */
   description: string
+  /** The source repository, for registry users to inspect. Omitted when unknown. */
+  repository?: { url: string; source: string }
 }
 
 /** Placeholder until a deployment names itself. The registry rejects this namespace on publish. */
@@ -31,5 +33,6 @@ export function serverJson(info: ApiInfo, meta: RegistryMeta = DEFAULT_REGISTRY_
     version: info.version,
     websiteUrl: `${info.baseURL}/llms.txt`,
     remotes: [{ type: "streamable-http" as const, url: `${info.baseURL}/mcp` }],
+    ...(meta.repository && { repository: meta.repository }),
   }
 }

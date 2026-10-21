@@ -8,7 +8,7 @@ import { adminSessionQuery } from "./admin-data"
 /**
  * A persistent strip across the app while an admin is acting as someone else (the session carries
  * `impersonatedBy`). Renders nothing otherwise, including while signed out. Stop returns the admin to
- * /admin, with a fresh cache so nothing from the impersonated session stays visible.
+ * /admin/users, with a fresh cache so nothing from the impersonated session stays visible.
  */
 export function ImpersonationBanner({
   api,
@@ -25,7 +25,7 @@ export function ImpersonationBanner({
       // reset, not clear: a page that stays mounted through the navigation (the router keeps the
       // old page while the next one loads) must refetch as the admin, not keep the old answers
       void queryClient.resetQueries()
-      onNavigate("/admin")
+      onNavigate("/admin/users")
     },
   })
 

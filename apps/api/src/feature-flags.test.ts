@@ -69,6 +69,28 @@ describe("feature flags", () => {
     expect((await owner("/v1/whoami")).body.operator).toBe(true)
   })
 
+  it("names the operator organization to its members, whatever organization they are on", async () => {
+    const path = "/v1/me/operator-organization"
+    expect((await owner(path)).body).toEqual({ organizationId: t.owner.orgId })
+    // The viewer's session moves to their own organization; acme is still theirs to manage.
+    const setActive = (organizationId: string) =>
+      t.auth.api.setActiveOrganization({
+        headers: new Headers({ cookie: t.viewer.cookie }),
+        body: { organizationId },
+      })
+    await setActive(t.viewer.orgId)
+    try {
+      expect((await send(t.viewer.cookie, path, "GET")).body).toEqual({
+        organizationId: t.owner.orgId,
+      })
+    } finally {
+      await setActive(t.owner.orgId)
+    }
+    expect((await send(t.other.cookie, path, "GET")).body).toEqual({ organizationId: null })
+    // A person's question: keys are refused before the handler.
+    expect((await send(t.fullKey, path, "GET")).status).toBe(403)
+  })
+
   it("lists every declared flag, off with no rollout", async () => {
     const { status, body } = await owner("/v1/feature-flags")
     expect(status).toBe(200)
@@ -246,6 +268,8 @@ describe("feature flags with no operator organization", () => {
     const t = await createTestApp([], { operator: false, flagCatalog: catalog })
     try {
       expect((await t.req("/v1/feature-flags", t.as(t.owner.cookie))).status).toBe(403)
+      const me = await t.req("/v1/me/operator-organization", t.as(t.owner.cookie))
+      expect(await me.json()).toEqual({ organizationId: null })
       const res = await t.req(
         "/ofrep/v1/evaluate/flags/new-checkout",
         t.as(t.owner.cookie, { method: "POST", body: "{}" }),

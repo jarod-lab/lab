@@ -3,6 +3,7 @@ import { useDebouncedValue } from "@tanstack/react-pacer"
 import { useState } from "react"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
+import type { SettingsTab } from "@starter/ui/dplus/shell/settings-header"
 
 import { useReauthGuard } from "../components/reauth-dialog"
 import type { AdminApi } from "../lib/admin-api"
@@ -14,16 +15,18 @@ import { type AdminAction, adminSessionQuery, isPlatformAdmin, runAdminAction } 
 
 export interface AdminContainerProps {
   api: AdminApi
+  /** The admin console's tabs this person may open. */
+  tabs: SettingsTab[]
   /** Client navigation (the router's navigate), used after impersonating and for the app links. */
   onNavigate: (href: string) => void
   renderLink: RenderLink
 }
 
 /**
- * The /admin page's data: the session (who may open it), the paged and searched user list, and the
+ * The admin console's Users tab (/admin/users): the session (who may open it), the paged and searched user list, and the
  * actions. The server decides every call; this only shows what it answers.
  */
-export function AdminContainer({ api, onNavigate, renderLink }: AdminContainerProps) {
+export function AdminContainer({ api, tabs, onNavigate, renderLink }: AdminContainerProps) {
   const queryClient = useQueryClient()
   // Impersonating and changing a role need a recent sign-in; the other actions are guarded alike.
   const guard = useReauthGuard()
@@ -70,6 +73,7 @@ export function AdminContainer({ api, onNavigate, renderLink }: AdminContainerPr
   return (
     <AdminPage
       me={session.data}
+      tabs={tabs}
       users={users.data?.users ?? []}
       total={users.data?.total ?? 0}
       loading={users.isPending}

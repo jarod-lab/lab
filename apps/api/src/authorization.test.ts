@@ -19,6 +19,7 @@ const PUBLIC: ReadonlySet<string> = new Set([
   "get_upload_limits", // describes this server, no organization's data
   "set_my_avatar", // the person's own avatar; requirePerson refuses keys and tokens
   "remove_my_avatar", // likewise
+  "get_my_operator_organization", // the person's own membership; requirePerson refuses keys
 ])
 
 type Json = Record<string, unknown>

@@ -17,9 +17,9 @@ import {
 import { type Credentials, credentialsPath, loadCredentials, saveCredentials } from "./config"
 import { buildRequest, findOperation, listOperations, type OpenApiDocument } from "./spec"
 
-// The local-dev fallback; STARTER_URL or --base-url point at a deployment.
-// baseline:allow-next-line no-http-links
-export const DEFAULT_BASE_URL = "http://localhost:3000"
+// The product's public API origin (PRODUCT.publicURL in apps/api/src/product.ts), used when nothing
+// else names one. Local dev sets STARTER_URL or --base-url.
+export const DEFAULT_BASE_URL = "https://api.example.com"
 
 export interface Io {
   stdout: (text: string) => void

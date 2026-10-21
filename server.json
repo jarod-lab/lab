@@ -10,5 +10,9 @@
       "type": "streamable-http",
       "url": "https://api.example.com/mcp"
     }
-  ]
+  ],
+  "repository": {
+    "url": "https://github.com/example/starter",
+    "source": "github"
+  }
 }

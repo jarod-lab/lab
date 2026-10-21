@@ -59,7 +59,14 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
      next, and what to confirm with the user first if it's destructive. `.describe()` input fields.
    - `permissions`: the least it needs, e.g. `{ project: ["read"] }`. `{}` = any authenticated
      caller.
-   - `hints`: `readOnly`, `destructive`, `idempotent` become MCP annotations; be honest. `readOnly`
+   - `hints`: `readOnly`, `destructive`, `idempotent` become MCP annotations; be honest. Every write
+     sets `readOnly: false` and `destructive` explicitly: the MCP spec defaults `destructiveHint` to
+     true when absent (it only matters when `readOnly` is false), so an unset one is advertised as
+     destructive and clients over-prompt. `apps/api/src/tool-annotations.test.ts` fails otherwise.
+     `destructive: true` when the call deletes, revokes, removes access, or overwrites data the API
+     can't restore (e.g. `set_organization_logo` deletes the old file); `false` for additive writes
+     and reversible state changes (pause/resume, ramp, undo). `idempotent` only where a repeat is a
+     no-op. `readOnly`
      also decides whether a call is audited and takes an idempotency key (see Invoke hooks). Calls
      are metered once they pass the permission and input checks.
    - `examples`: at least one. Contract tests run each as an org owner over REST and MCP: give

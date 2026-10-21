@@ -158,6 +158,14 @@ describe("llms.txt", () => {
     expect(llmsTxt(ops, info)).not.toContain("Skill")
   })
 
+  it("links the same docs entries in llms-full.txt, above the install snippets", () => {
+    const links = { docs: [{ title: "Agent skill", url: "https://x/skill.md" }] }
+    const full = llmsFullTxt(ops, info, links)
+    expect(full).toContain("## Docs\n\n- [Agent skill](https://x/skill.md)\n")
+    expect(full.indexOf("## Docs")).toBeLessThan(full.indexOf("## Install"))
+    expect(llmsFullTxt(ops, info)).not.toContain("## Docs")
+  })
+
   it("renders the full reference with schemas and curl examples", () => {
     const full = llmsFullTxt(ops, info)
     expect(full).toContain("## update_note")

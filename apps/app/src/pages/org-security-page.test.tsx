@@ -49,16 +49,6 @@ describe("OrgSecurityPage", () => {
     expect(within(row).getByText("https://login.acme.com")).toBeTruthy()
   })
 
-  it("adds the Feature flags tab only for the operator organization", () => {
-    const { unmount } = render(<OrgSecurityPage {...props()} />)
-    expect(screen.queryByRole("link", { name: "Feature flags" })).toBeNull()
-    unmount()
-    render(<OrgSecurityPage {...props({ operator: true })} />)
-    expect(screen.getByRole("link", { name: "Feature flags" }).getAttribute("href")).toBe(
-      "/acme/settings/flags",
-    )
-  })
-
   it("says so when there are no providers yet", () => {
     render(<OrgSecurityPage {...props({ providers: [] })} />)
     expect(screen.getByText(/No providers yet/)).toBeTruthy()

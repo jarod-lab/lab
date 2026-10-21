@@ -1,8 +1,20 @@
 {
   "name": "@starter/cli",
-  "private": true,
   "version": "0.0.0",
+  "description": "Command-line client for the Starter API: sign in, list its operations and call them.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/example/starter.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "bin": {
     "starter": "./dist/bin.js"
   },
@@ -18,12 +30,9 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"
   },
-  "dependencies": {
-    "@starter/sdk": "workspace:*"
-  },
   "devDependencies": {
-    "@starter/cli": "link:.",
     "@starter/config": "workspace:*",
+    "@starter/sdk": "workspace:*",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "esbuild": "^0.28.2",

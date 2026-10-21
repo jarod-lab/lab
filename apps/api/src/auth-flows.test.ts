@@ -3395,3 +3395,268 @@ describe("notices from the auth flows (@byo-oss/notifications)", () => {
     expect(again.error).toBeNull()
   })
 })
+
+describe("client ID metadata documents (CIMD) over HTTP", () => {
+  let t: Awaited<ReturnType<typeof createTestApp>>
+  const open = () => browser((url, init) => t.app.request(url, init))
+  /** Metadata documents the stub transport serves, by URL. Anything else is a 404. */
+  const served = new Map<string, unknown>()
+  /** The URLs the server asked for: a request that is refused before fetching never appears. */
+  const fetched: string[] = []
+  const stubFetch = async (input: string | URL | Request): Promise<Response> => {
+    const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input
+    fetched.push(url)
+    const doc = served.get(url)
+    if (doc === undefined) return new Response("not found", { status: 404 })
+    return new Response(JSON.stringify(doc), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+  beforeAll(async () => {
+    t = await createTestApp([], { clientMetadataFetch: stubFetch })
+  })
+  afterAll(() => t.close())
+
+  /** An authorization request whose client_id is a metadata document URL, as an MCP client sends. */
+  const authorize = (clientId: string) =>
+    t.req(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        scope: "openid offline_access read",
+        state: "s1",
+        code_challenge: createHash("sha256").update("verifier").digest("base64url"),
+        code_challenge_method: "S256",
+        resource: MCP,
+      })}`,
+      { redirect: "manual" } as RequestInit,
+    )
+
+  /** The OAuth error an authorization answers with: in the redirect, or in a JSON body. */
+  const refusal = async (res: Response): Promise<{ error?: string; description?: string }> => {
+    if (res.status === 302) {
+      const location = new URL(res.headers.get("location") ?? "", BASE)
+      return {
+        error: location.searchParams.get("error") ?? undefined,
+        description: location.searchParams.get("error_description") ?? undefined,
+      }
+    }
+    const body = (await res.json()) as { error?: string; error_description?: string }
+    return { error: body.error, description: body.error_description }
+  }
+
+  it("advertises client_id_metadata_document_supported and keeps dynamic registration", async () => {
+    const res = await t.req("/.well-known/oauth-authorization-server/api/auth")
+    expect(res.status).toBe(200)
+    const meta = (await res.json()) as Record<string, unknown>
+    expect(meta.client_id_metadata_document_supported).toBe(true)
+    expect(meta.registration_endpoint).toBe(`${BASE}/api/auth/oauth2/register`)
+  })
+
+  it("refuses a client_id URL that is not HTTPS, without fetching it", async () => {
+    expect(await refusal(await authorize("http://client.example.com/metadata.json"))).toMatchObject(
+      {
+        error: "invalid_client",
+      },
+    )
+  })
+
+  it("refuses a client_id URL on a private or loopback address before fetching it", async () => {
+    for (const url of ["https://127.0.0.1/metadata.json", "https://10.0.0.5/metadata.json"]) {
+      expect(await refusal(await authorize(url))).toMatchObject({
+        error: "invalid_client",
+        description: "client_id URL must not target a private or reserved address",
+      })
+    }
+  })
+
+  it("accepts an HTTPS client_id whose metadata document is fetched and matches it", async () => {
+    const clientId = "https://client.example/metadata.json"
+    served.set(clientId, {
+      client_id: clientId,
+      client_name: "Agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    })
+    const res = await authorize(clientId)
+    expect(fetched).toContain(clientId)
+    expect(res.status).toBe(302)
+    // No session yet, so the authorization goes on to sign-in: it was accepted, not refused.
+    expect(new URL(res.headers.get("location") ?? "", BASE).pathname).toBe("/sign-in")
+  })
+
+  it("refuses an HTTPS client_id whose metadata document names a different client_id", async () => {
+    const clientId = "https://client.example/mismatch.json"
+    served.set(clientId, {
+      client_id: "https://client.example/someone-else.json",
+      client_name: "Agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+    })
+    const res = await authorize(clientId)
+    expect(fetched).toContain(clientId)
+    expect(await refusal(res)).toMatchObject({
+      error: "invalid_client",
+      description: expect.stringMatching(/does not match/),
+    })
+  })
+
+  it("runs the whole journey for a metadata-document client: sign-in to revoke", async () => {
+    const CLIENT = "https://client.example/journey.json"
+    served.set(CLIENT, {
+      client_id: CLIENT,
+      client_name: "Journey agent",
+      redirect_uris: [REDIRECT],
+      token_endpoint_auth_method: "none",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+    })
+    const address = `cimd-journey-${Date.now()}@example.com`
+    const signup = await open().client.signUp.email({
+      email: address,
+      password: PASSWORD,
+      name: "Journey",
+    })
+    expect(signup.error).toBeNull()
+    const orgId = await (async () => {
+      const b = open()
+      await b.client.signIn.email({ email: address, password: PASSWORD })
+      return ((await (await b.request("/v1/whoami")).json()) as { organizationId: string })
+        .organizationId
+    })()
+
+    const verifier = b64(randomBytes(32))
+    const query = new URLSearchParams({
+      response_type: "code",
+      client_id: CLIENT,
+      redirect_uri: REDIRECT,
+      scope: "openid offline_access read write admin",
+      state: "journey",
+      code_challenge: b64(createHash("sha256").update(verifier).digest()),
+      code_challenge_method: "S256",
+      resource: MCP,
+    })
+
+    // Sign in: the authorization goes to sign-in first, and the password sign-in resumes it.
+    const c = open()
+    const toLogin = await c.request(`/api/auth/oauth2/authorize?${query}`)
+    const login = new URL(toLogin.headers.get("location") ?? "", BASE)
+    expect(login.pathname).toBe("/sign-in")
+    const oauthQuery = signedQuery(login.search)
+    const signIn = await c.request("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: address, password: PASSWORD, oauth_query: oauthQuery }),
+    })
+    expect(signIn.status).toBe(200)
+    expect((await c.request("/v1/whoami")).status).toBe(200)
+
+    // Select organization: with no valid active org, the authorization goes to the picker first.
+    await c.request("/api/auth/organization/set-active", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationId: null }),
+    })
+    const picker = new URL(
+      (await c.request(`/api/auth/oauth2/authorize?${query}`)).headers.get("location") ?? "",
+      BASE,
+    )
+    expect(picker.pathname).toBe("/select-organization")
+    await c.request("/api/auth/organization/set-active", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ organizationId: orgId }),
+    })
+    const cont = await c.request("/api/auth/oauth2/continue", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ postLogin: true, oauth_query: picker.search.slice(1) }),
+    })
+    const consentPage = new URL(((await cont.json()) as { url: string }).url, BASE)
+    expect(consentPage.pathname).toBe("/consent")
+
+    // Consent, then the token exchange with PKCE and the resource.
+    const consent = await c.request("/api/auth/oauth2/consent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accept: true, oauth_query: consentPage.search.slice(1) }),
+    })
+    const code = new URL(((await consent.json()) as { url: string }).url).searchParams.get("code")
+    expect(code).toBeTruthy()
+    const exchange = await t.req("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code ?? "",
+        redirect_uri: REDIRECT,
+        client_id: CLIENT,
+        code_verifier: verifier,
+        resource: MCP,
+      }),
+    })
+    const tokens = (await exchange.json()) as { access_token: string; refresh_token: string }
+    expect(tokens.access_token).toBeTruthy()
+    expect(tokens.refresh_token).toBeTruthy()
+    const auth = bearer(tokens.access_token)
+
+    // MCP: the tool list works, and a call acts in the chosen organization.
+    const mcp = await t.mcpClient(auth)
+    try {
+      const { tools } = await mcp.listTools()
+      expect(tools.map((tool) => tool.name)).toContain("list_connected_agents")
+      const who = await mcp.callTool({ name: "whoami", arguments: {} })
+      expect(who.isError ?? false).toBe(false)
+      expect(JSON.stringify(who)).toContain(orgId)
+    } finally {
+      await mcp.close()
+    }
+
+    // REST: the connected agent is listed under its client id, then revoked by that id.
+    const listed = await t.req("/v1/agents", { headers: auth })
+    expect(listed.status).toBe(200)
+    const { agents } = (await listed.json()) as {
+      agents: { id: string; clientId: string | null }[]
+    }
+    const agent = agents.find((a) => a.clientId === CLIENT)
+    expect(agent?.id).toBe(`client_${CLIENT}`)
+    const revoked = await t.req(`/v1/agents/${encodeURIComponent(agent?.id ?? "")}`, {
+      method: "DELETE",
+      headers: auth,
+    })
+    expect(revoked.status).toBe(200)
+    expect(await revoked.json()).toEqual({ revoked: true })
+
+    // Revoked: the refresh token is refused, and so is the access token it held.
+    const refreshed = await t.req("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: CLIENT,
+        resource: MCP,
+      }),
+    })
+    expect(refreshed.status).toBe(400)
+    expect(((await refreshed.json()) as { error: string }).error).toBe("invalid_grant")
+    expect((await t.req("/v1/whoami", { headers: auth })).status).toBe(401)
+  })
+})
+
+/** The signed query the sign-in page sends back (as the web app's client builds it). */
+function signedQuery(search: string): string {
+  const params = new URLSearchParams(search)
+  const names = new Set(params.getAll("ba_param"))
+  const out = new URLSearchParams()
+  for (const [k, v] of params) if (k === "sig" || k === "ba_param" || names.has(k)) out.append(k, v)
+  return out.toString()
+}
+const b64 = (buf: Buffer) => buf.toString("base64url")
+const bearer = (token: string) => ({ authorization: `Bearer ${token}` })

@@ -13,7 +13,6 @@ import { OrgFeatures } from "../containers/org-features"
 import { OrgGate } from "../containers/org-gate"
 import { RouterLink } from "../containers/router-link"
 import { useOrganizationsQuery } from "../containers/shell-data"
-import { getFeatureFlagsApi } from "../lib/feature-flags-api"
 import { requireSession } from "../lib/guards"
 import { activeNavFor, settingsCrumbs } from "../lib/org-nav"
 import { getWorkspaceAgentsApi } from "../lib/workspace-agents-api"
@@ -58,7 +57,7 @@ function OrgLayout() {
           organization={organization}
           signInHref={`/sign-in?next=${encodeURIComponent(pathname)}`}
         >
-          <OrgFeatures organizationId={organization.id} api={getFeatureFlagsApi()}>
+          <OrgFeatures organizationId={organization.id}>
             <Outlet />
           </OrgFeatures>
         </OrgGate>

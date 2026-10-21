@@ -1,25 +1,27 @@
 import { getConnInfo } from "@hono/node-server/conninfo"
 import {
+  ANALYTICS_EVENTS_PATH,
+  type Analytics,
+  clientEventBatchSchema,
+  noopAnalytics,
+} from "@starter/analytics"
+import {
   type AnyOperation,
   type ApiInfo,
   type Caller,
   covers,
-  invoke,
   DEFAULT_REGISTRY_META,
+  type DocsLinks,
+  invoke,
   llmsFullTxt,
   llmsTxt,
   type OperationContext,
   openApiDocument,
   type PublicContext,
   type RegistryMeta,
+  serverInstructions,
   serverJson,
 } from "@starter/api"
-import {
-  ANALYTICS_EVENTS_PATH,
-  type Analytics,
-  clientEventBatchSchema,
-  noopAnalytics,
-} from "@starter/analytics"
 import {
   AUTH_BASE_PATH,
   type Auth,
@@ -45,10 +47,10 @@ import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 
 import { BEARER_PATHS, bearerCors } from "./cors"
-import type { FlagService } from "./flags"
-import { mountOfrep } from "./ofrep"
-import type { ApiHooks } from "./hooks"
 import { type DevMailSink, devMailRoute } from "./dev-mail"
+import type { FlagService } from "./flags"
+import type { ApiHooks } from "./hooks"
+import { mountOfrep } from "./ofrep"
 import { mountWeb } from "./static"
 
 export interface AppOptions {
@@ -69,6 +71,11 @@ export interface AppOptions {
   trustProxy?: boolean
   /** The built web app to serve from this origin (apps/app/dist). */
   webDistDir?: string
+  /**
+   * The agent skill, served at GET /skill.md and linked from llms.txt (server.ts reads it from
+   * skills/). Unset, the route is absent and the docs don't link it.
+   */
+  skill?: string
   /** The MCP registry's name and description for this server (server.json). */
   registry?: RegistryMeta
   /**
@@ -228,8 +235,21 @@ export function createApp(opts: AppOptions) {
     },
   }
   const openapi = openApiDocument(operations, info)
-  const llms = llmsTxt(operations, info)
-  const llmsFull = llmsFullTxt(operations, info)
+  const skill = opts.skill
+  const docLinks: DocsLinks = {
+    docs:
+      skill === undefined
+        ? []
+        : [
+            {
+              title: "Agent skill",
+              url: `${baseURL}/skill.md`,
+              note: "how to connect, sign in, and call operations safely (read it first)",
+            },
+          ],
+  }
+  const llms = llmsTxt(operations, info, docLinks)
+  const llmsFull = llmsFullTxt(operations, info, docLinks)
   const health = createHealthHandler({})
   const registryRecord = serverJson(info, opts.registry ?? DEFAULT_REGISTRY_META)
 
@@ -239,7 +259,7 @@ export function createApp(opts: AppOptions) {
   const mcp = createMcpHandler({
     name: opts.name,
     version: opts.version,
-    instructions: `${opts.description} Full reference: ${baseURL}/llms-full.txt`,
+    instructions: serverInstructions(info, operations, { skill: skill !== undefined }),
     operations,
     authenticate,
     resourceMetadataUrl: `${baseURL}/.well-known/oauth-protected-resource/mcp`,
@@ -334,6 +354,7 @@ export function createApp(opts: AppOptions) {
     new Response(body, { headers: { "content-type": "text/markdown; charset=utf-8" } })
   app.get("/llms.txt", markdown(llms))
   app.get("/llms-full.txt", markdown(llmsFull))
+  if (skill !== undefined) app.get("/skill.md", markdown(skill))
   app.get("/openapi.json", (c) => c.json(openapi))
   app.get("/.well-known/mcp/server.json", (c) => c.json(registryRecord))
   // Liveness only: it says this process answers, and pings no dependency. /status reports the

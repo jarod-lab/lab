@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { type Credentials, credentialsPath, loadCredentials, saveCredentials } from "./config"
 import { BASE, fakeApi, type FakeApi, TOKENS } from "./fake-api.test-helpers"
-import { main } from "./main"
+import { DEFAULT_BASE_URL, main, resolveBaseUrl } from "./main"
 
 interface Harness {
   api: FakeApi
@@ -684,5 +684,27 @@ describe("arguments and help", () => {
     })
     const text = await readFile(credentialsPath({ STARTER_CONFIG_DIR: harness.dir }), "utf8")
     expect(JSON.parse(text)).toEqual({ profiles: {} })
+  })
+})
+
+describe("default base URL", () => {
+  it("is the product's public origin, not a local server", () => {
+    expect(DEFAULT_BASE_URL).toBe("https://api.example.com")
+    expect(resolveBaseUrl({}, {}, { profiles: {} })).toBe("https://api.example.com")
+  })
+
+  it("is overridden by STARTER_URL, then by the last login", () => {
+    expect(resolveBaseUrl({}, { STARTER_URL: BASE }, { profiles: {} })).toBe(BASE)
+    expect(resolveBaseUrl({}, {}, { current: "http://localhost:3000", profiles: {} })).toBe(
+      "http://localhost:3000",
+    )
+  })
+
+  it("is what a credential-less call names when nothing is set", async () => {
+    const result = await harness.run(["whoami"], { STARTER_URL: "" })
+    expect(result.code).toBe(1)
+    expect(errorOf(result.stderr)).toMatchObject({
+      error: { code: "NOT_LOGGED_IN", message: "No saved login for https://api.example.com" },
+    })
   })
 })

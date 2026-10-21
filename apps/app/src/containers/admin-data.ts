@@ -1,11 +1,26 @@
 import type { AdminApi, AdminRole, AdminSession } from "../lib/admin-api"
 import { adminKeys } from "../lib/admin-keys"
+import type { FeatureFlagsApi } from "../lib/feature-flags-api"
 
 // Query functions are plain objects so the route guard and the containers share one definition.
 
 export const adminSessionQuery = (api: AdminApi) => ({
   queryKey: adminKeys.session(),
   queryFn: (): Promise<AdminSession | null> => api.getSession(),
+})
+
+/** The operator organization's id when the person belongs to it. A failed lookup reads as none. */
+export const operatorOrganizationQuery = (api: FeatureFlagsApi) => ({
+  queryKey: adminKeys.operatorOrganization(),
+  queryFn: async (): Promise<string | null> => {
+    try {
+      return await api.operatorOrganization()
+    } catch {
+      // The console's tabs are a convenience: the operator operations refuse everyone else anyway.
+      return null
+    }
+  },
+  staleTime: 5 * 60_000,
 })
 
 /** Whether the session may open the admin page: an admin and not acting as someone else. */

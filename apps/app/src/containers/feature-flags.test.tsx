@@ -3,7 +3,6 @@ import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
-import { OperatorContext } from "../lib/operator"
 import { fakeAuth } from "../test/fake-auth"
 import { detailFixture, fakeFeatureFlagsApi, flagFixture } from "../test/fake-feature-flags"
 import { renderWithClient } from "../test/render"
@@ -11,13 +10,13 @@ import { FeatureFlagsContainer } from "./feature-flags"
 
 const acme = { id: "org-a", name: "Acme Inc", slug: "acme" }
 
-function renderContainer(api = fakeFeatureFlagsApi(), operator = true) {
+const tabs = [{ id: "flags", label: "Feature flags", href: "/admin/flags" }]
+
+function renderContainer(api = fakeFeatureFlagsApi()) {
   return {
     api,
     ...renderWithClient(
-      <OperatorContext.Provider value={operator}>
-        <FeatureFlagsContainer auth={fakeAuth()} api={api} organization={acme} />
-      </OperatorContext.Provider>,
+      <FeatureFlagsContainer auth={fakeAuth()} api={api} organization={acme} tabs={tabs} />,
     ),
   }
 }
@@ -30,7 +29,7 @@ describe("FeatureFlagsContainer", () => {
     expect(await screen.findByRole("region", { name: "new-search" })).toBeTruthy()
     expect(api.list).toHaveBeenCalledWith("org-a")
     expect(api.get).toHaveBeenCalledWith("org-a", "new-search")
-    expect(await screen.findByText("Acme Inc · you are Owner")).toBeTruthy()
+    expect(await screen.findByText("As Acme Inc · you are Owner")).toBeTruthy()
   })
 
   it("refreshes the list and the flag after a write", async () => {
@@ -66,12 +65,6 @@ describe("FeatureFlagsContainer", () => {
     )
     await waitFor(() => expect(api.remove).toHaveBeenCalledWith("org-a", "old-banner"))
     await waitFor(() => expect(screen.queryByRole("region", { name: "old-banner" })).toBeNull())
-  })
-
-  it("asks nothing outside the operator organization", async () => {
-    const { api } = renderContainer(fakeFeatureFlagsApi(), false)
-    expect(await screen.findByText(/managed by the operator organization/)).toBeTruthy()
-    expect(api.list).not.toHaveBeenCalled()
   })
 
   it("shows a failed list", async () => {

@@ -1,8 +1,9 @@
 // CORS for bearer-token surfaces only, so browser-based MCP clients and cross-origin web apps can
 // call them with a token. No credentials: cookies are never accepted cross-origin, and the auth
 // routes (/api/auth/*) get no CORS headers at all.
-import { cors } from "hono/cors"
+
 import type { MiddlewareHandler } from "hono"
+import { cors } from "hono/cors"
 
 /** The paths that accept bearer tokens or API keys. Everything else (pages, auth) stays same-origin. */
 export const BEARER_PATHS = [
@@ -11,6 +12,7 @@ export const BEARER_PATHS = [
   "/openapi.json",
   "/llms.txt",
   "/llms-full.txt",
+  "/skill.md",
   "/v1/*",
   "/ofrep/*",
 ] as const

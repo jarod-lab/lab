@@ -13,6 +13,7 @@ import { contentSecurityPolicy, inlineScriptHashes, mountWeb } from "./static"
 
 // apps/app's generated route tree: every route it declares must be served an app page. Read as text,
 // since this package has no React or TanStack dependencies to import it with.
+const SKILL = "---\nname: test\n---\n\n# Test skill\n"
 const routeTreeSource = readFileSync(
   new URL("../../app/src/routeTree.gen.ts", import.meta.url),
   "utf8",
@@ -47,7 +48,7 @@ describe("web app serving", () => {
     )
     writeFileSync(join(dist, "assets", "app.js"), "console.log('app')")
     writeFileSync(join(dist, "assets", "app.css"), "body{}")
-    t = await createTestApp([], { webDistDir: dist })
+    t = await createTestApp([], { webDistDir: dist, skill: SKILL })
   })
   afterAll(async () => {
     await t.close()
@@ -140,6 +141,15 @@ describe("web app serving", () => {
     expect(await (await t.req("/")).text()).toMatch(/^# Test API/)
     const browser = await t.req("/", { headers: { accept: "text/html" } })
     expect(browser.headers.get("location")).toBe("/llms.txt")
+  })
+
+  it("serves /skill.md as markdown, not the SPA, to agents and browsers", async () => {
+    for (const accept of ["text/markdown", "text/html"]) {
+      const res = await t.req("/skill.md", { headers: { accept } })
+      expect(res.status, accept).toBe(200)
+      expect(res.headers.get("content-type"), accept).toContain("text/markdown")
+      expect(await res.text(), accept).toBe(SKILL)
+    }
   })
 })
 

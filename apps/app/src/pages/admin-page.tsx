@@ -31,6 +31,8 @@ import {
   TableRow,
 } from "@starter/ui/components/ui/table"
 import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
+import { PageBody } from "@starter/ui/dplus/shell/page-header"
+import { type SettingsTab, SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
 import { Status } from "@starter/ui/dplus/status"
 
 import type { AdminAction } from "../containers/admin-data"
@@ -56,12 +58,15 @@ type OpenDialog = { kind: DialogKind; user: AdminUser }
 const tableFeaturesSet = tableFeatures({})
 const helper = createColumnHelper<typeof tableFeaturesSet, AdminUser>()
 
-// On a phone the table drops the columns it can't fit, so it never scrolls sideways.
-const PHONE_HIDDEN = new Set(["verified", "createdAt"])
+// On a phone the table drops the columns it can't fit, so it never scrolls sideways: the email
+// moves under the name, and the role shows in the actions menu (Make admin / Change role to user).
+const PHONE_HIDDEN = new Set(["email", "verified", "role", "createdAt"])
 
 export interface AdminPageProps {
   /** The signed-in admin. Used to stop them acting on their own account. */
   me: AdminSession
+  /** The admin console's tabs this person may open (adminTabs). */
+  tabs: SettingsTab[]
   users: AdminUser[]
   total: number
   loading: boolean
@@ -75,9 +80,13 @@ export interface AdminPageProps {
   renderLink?: RenderLink
 }
 
-/** The admin page: a users table with search, paging and per-user actions. Props in, callbacks out. */
+/**
+ * The admin console's Users tab: every user, with search, paging and per-user actions. Props in,
+ * callbacks out.
+ */
 export function AdminPage({
   me,
+  tabs,
   users,
   total,
   loading,
@@ -99,7 +108,15 @@ export function AdminPage({
       helper.columns([
         helper.accessor("name", {
           header: "Name",
-          cell: (info) => info.getValue() || "—",
+          cell: (info) => (
+            <span className="flex flex-col gap-0.5 whitespace-normal">
+              <span className="break-words">{info.getValue() || "—"}</span>
+              <span className="break-all text-muted-foreground md:hidden">
+                {info.row.original.email}
+                {info.row.original.id === me.userId ? " (you)" : null}
+              </span>
+            </span>
+          ),
         }),
         helper.accessor("email", {
           header: "Email",
@@ -237,142 +254,152 @@ export function AdminPage({
   const last = Math.min(offset + limit, total)
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 md:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-extrabold">Admin</h1>
-        {renderLink({
-          href: "/",
-          children: "Back to the app",
-          className: "min-h-11 inline-flex items-center font-bold underline underline-offset-4",
-        })}
-      </header>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SettingsHeader
+        title="Admin"
+        context="Every user on this server"
+        tabs={tabs}
+        activeTab="users"
+        renderLink={renderLink}
+      />
+      <PageBody className="gap-6">
+        {dialog ? (
+          <ActionDialog
+            key={`${dialog.kind}-${dialog.user.id}`}
+            dialog={dialog}
+            onClose={() => setDialog(null)}
+            onAction={onAction}
+          />
+        ) : null}
 
-      {dialog ? (
-        <ActionDialog
-          key={`${dialog.kind}-${dialog.user.id}`}
-          dialog={dialog}
-          onClose={() => setDialog(null)}
-          onAction={onAction}
-        />
-      ) : null}
-
-      <section aria-labelledby="users-heading" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 id="users-heading" className="text-base font-bold">
-            Users
-          </h2>
-          <Field className="w-full max-w-xs">
-            <FieldLabel htmlFor={searchId}>Search by email</FieldLabel>
-            <Input
-              id={searchId}
-              type="search"
-              value={search}
-              placeholder="ada@example.com"
-              onChange={(event) => onSearch(event.target.value)}
-              className="min-h-11"
-            />
-          </Field>
-        </div>
-
-        <FormError message={error} />
-
-        <div
-          ref={scrollRef}
-          role={virtual ? "region" : undefined}
-          aria-label={virtual ? "Users, scrollable" : undefined}
-          tabIndex={virtual ? 0 : undefined}
-          className={virtual ? "max-h-[560px] overflow-y-auto" : undefined}
-        >
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                {table.getHeaderGroups()[0]?.headers.map((header) => (
-                  <TableHead key={header.id} className={phoneClass(header.column.id)}>
-                    {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paddingTop > 0 ? (
-                <TableRow aria-hidden="true" className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={columns.length}
-                    className="p-0"
-                    style={{ height: paddingTop }}
-                  />
-                </TableRow>
-              ) : null}
-              {shown.map((index) => {
-                const row = rows[index]
-                if (!row) return null
-                return (
-                  <TableRow key={row.id}>
-                    {row.getAllCells().map((cell) => (
-                      <TableCell key={cell.id} className={phoneClass(cell.column.id)}>
-                        <table.FlexRender cell={cell} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                )
-              })}
-              {paddingBottom > 0 ? (
-                <TableRow aria-hidden="true" className="hover:bg-transparent">
-                  <TableCell
-                    colSpan={columns.length}
-                    className="p-0"
-                    style={{ height: paddingBottom }}
-                  />
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-          {!loading && users.length === 0 && !error ? (
-            <p className="border-t border-border py-4 text-sm text-muted-foreground">
-              {search ? "No users match that email." : "No users yet."}
-            </p>
-          ) : null}
-          {loading && users.length === 0 ? (
-            <output className="block border-t border-border py-4 text-sm text-muted-foreground">
-              Loading users…
-            </output>
-          ) : null}
-        </div>
-
-        <nav aria-label="Pages" className="flex items-center justify-between gap-3">
-          <span className="text-sm text-muted-foreground" aria-live="polite">
-            {total === 0 ? "No users" : `Showing ${first}–${last} of ${total}`}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={offset === 0}
-              onClick={() => onPage(Math.max(0, offset - limit))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              disabled={offset + limit >= total}
-              onClick={() => onPage(offset + limit)}
-            >
-              Next
-            </Button>
+        <section aria-labelledby="users-heading" className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="users-heading" className="text-base font-bold">
+              Users
+            </h2>
+            <Field className="w-full max-w-xs">
+              <FieldLabel htmlFor={searchId}>Search by email</FieldLabel>
+              <Input
+                id={searchId}
+                type="search"
+                value={search}
+                placeholder="ada@example.com"
+                onChange={(event) => onSearch(event.target.value)}
+                className="min-h-11"
+              />
+            </Field>
           </div>
-        </nav>
-      </section>
+
+          <FormError message={error} />
+
+          <div
+            ref={scrollRef}
+            role={virtual ? "region" : undefined}
+            aria-label={virtual ? "Users, scrollable" : undefined}
+            tabIndex={virtual ? 0 : undefined}
+            className={virtual ? "max-h-[560px] overflow-y-auto" : undefined}
+          >
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  {table.getHeaderGroups()[0]?.headers.map((header) => (
+                    <TableHead key={header.id} className={phoneClass(header.column.id)}>
+                      {header.isPlaceholder ? null : <table.FlexRender header={header} />}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paddingTop > 0 ? (
+                  <TableRow aria-hidden="true" className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={columns.length}
+                      className="p-0"
+                      style={{ height: paddingTop }}
+                    />
+                  </TableRow>
+                ) : null}
+                {shown.map((index) => {
+                  const row = rows[index]
+                  if (!row) return null
+                  return (
+                    <TableRow key={row.id}>
+                      {row.getAllCells().map((cell) => (
+                        <TableCell key={cell.id} className={phoneClass(cell.column.id)}>
+                          <table.FlexRender cell={cell} />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  )
+                })}
+                {paddingBottom > 0 ? (
+                  <TableRow aria-hidden="true" className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={columns.length}
+                      className="p-0"
+                      style={{ height: paddingBottom }}
+                    />
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+            {!loading && users.length === 0 && !error ? (
+              <p className="border-t border-border py-4 text-sm text-muted-foreground">
+                {search ? "No users match that email." : "No users yet."}
+              </p>
+            ) : null}
+            {loading && users.length === 0 ? (
+              <output className="block border-t border-border py-4 text-sm text-muted-foreground">
+                Loading users…
+              </output>
+            ) : null}
+          </div>
+
+          <nav aria-label="Pages" className="flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground" aria-live="polite">
+              {total === 0 ? "No users" : `Showing ${first}–${last} of ${total}`}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={offset === 0}
+                onClick={() => onPage(Math.max(0, offset - limit))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                disabled={offset + limit >= total}
+                onClick={() => onPage(offset + limit)}
+              >
+                Next
+              </Button>
+            </div>
+          </nav>
+        </section>
+      </PageBody>
     </div>
   )
 }
 
-/** Shown to anyone who isn't a platform admin (and to an admin acting as someone else). */
-export function AdminNotAvailable({ renderLink = anchorLink }: { renderLink?: RenderLink }) {
+/**
+ * Shown to anyone a console tab isn't for: Users to anyone but a platform admin (and to an admin
+ * acting as someone else), Feature flags to anyone outside the operator organization.
+ */
+export function AdminNotAvailable({
+  forWhom = "platform admins",
+  renderLink = anchorLink,
+}: {
+  /** Who the page is for, e.g. "members of the operator organization". */
+  forWhom?: string
+  renderLink?: RenderLink
+}) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-16">
       <h1 className="text-2xl font-extrabold">Not available</h1>
       <p className="text-muted-foreground">
-        This page is for platform admins. If you think you should have access, ask the team that
-        runs this app.
+        This page is for {forWhom}. If you think you should have access, ask the team that runs this
+        app.
       </p>
       {renderLink({
         href: "/",

@@ -1,8 +1,8 @@
 import { payload, productClient, type RequestBody, type ResponseBody } from "./product-client"
 
 // Feature flag rollouts (list_feature_flags and friends, /v1/feature-flags). Operator operations:
-// only the operator organization may call them, and whoami says whether this is it. Every call
-// names its organization and sends X-Organization-Id.
+// only the operator organization may call them, and get_my_operator_organization says which one it
+// is. Every rollout call names its organization and sends X-Organization-Id.
 
 /** One flag with its rollout, as list_feature_flags returns it. */
 export type FeatureFlag = ResponseBody<"list_feature_flags">["flags"][number]
@@ -17,8 +17,8 @@ export type FlagTarget = FeatureFlagDetail["targets"][number]
 export type FlagPatch = Omit<RequestBody<"update_feature_flag">, "key">
 
 export interface FeatureFlagsApi {
-  /** Whether the organization is the operator organization (whoami). */
-  isOperator(organizationId: string): Promise<boolean>
+  /** The operator organization's id when the signed-in person belongs to it, else null. */
+  operatorOrganization(): Promise<string | null>
   list(organizationId: string): Promise<FeatureFlag[]>
   get(organizationId: string, key: string): Promise<FeatureFlagDetail>
   update(organizationId: string, key: string, patch: FlagPatch): Promise<FeatureFlag>
@@ -39,8 +39,11 @@ export function createFeatureFlagsApi(fetchImpl?: typeof fetch): FeatureFlagsApi
   const forOrg = (organizationId: string) => productClient(organizationId, fetchImpl)
   const key = (flag: string) => ({ params: { path: { key: flag } } })
   return {
-    async isOperator(organizationId) {
-      return (await payload(forOrg(organizationId).GET("/v1/whoami"))).operator
+    async operatorOrganization() {
+      // About the person, not an organization: no X-Organization-Id.
+      return (
+        await payload(productClient(undefined, fetchImpl).GET("/v1/me/operator-organization"))
+      ).organizationId
     },
     async list(organizationId) {
       return (await payload(forOrg(organizationId).GET("/v1/feature-flags"))).flags

@@ -6,15 +6,25 @@ import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { THEME_STORAGE_KEY, setThemeChoice } from "../lib/theme"
+import { adminSessionFixture, fakeAdminApi } from "../test/fake-admin"
 import { fakeAuth } from "../test/fake-auth"
+import { fakeFeatureFlagsApi } from "../test/fake-feature-flags"
 import { renderWithClient } from "../test/render"
+import type { AdminAccessApis } from "./admin-access"
 import { AppShellContainer } from "./app-shell"
+
+/** Who the console is for: `role` is the user's platform role, `operator` the operator org's id. */
+const adminApis = (role: string, operator: string | null): AdminAccessApis => ({
+  admin: fakeAdminApi({}, adminSessionFixture({ role })),
+  flags: fakeFeatureFlagsApi({ operatorOrganization: vi.fn(async () => operator) }),
+})
 
 function renderShell(overrides: Partial<Parameters<typeof AppShellContainer>[0]> = {}) {
   const props = {
     auth: fakeAuth(),
     slug: "analytical",
     activeNav: "home" as const,
+    adminApis: adminApis("user", null),
     crumbs: [{ label: "Analytical Ltd" }],
     onNavigate: vi.fn(),
     onSignedOut: vi.fn(),
@@ -40,6 +50,28 @@ describe("AppShellContainer", () => {
     expect(agents.getAttribute("href")).toBe("/analytical/settings/agents")
     await userEvent.click(screen.getByRole("button", { name: /Switch organization/ }))
     expect(await screen.findByRole("menuitem", { name: /Babbage Labs/ })).toBeTruthy()
+  })
+
+  it("links the admin console below Agent docs for those who run the product", async () => {
+    renderShell({ adminApis: adminApis("user", "org-a") })
+    await loaded()
+    const admin = await screen.findByRole("link", { name: "Admin" })
+    expect(admin.getAttribute("href")).toBe("/admin")
+    const links = screen.getAllByRole("link")
+    expect(links.indexOf(admin)).toBe(
+      links.indexOf(screen.getByRole("link", { name: "Agent docs" })) + 1,
+    )
+  })
+
+  it("shows the admin console link to a platform admin", async () => {
+    renderShell({ adminApis: adminApis("admin", null) })
+    expect(await screen.findByRole("link", { name: "Admin" })).toBeTruthy()
+  })
+
+  it("hides the admin console link from everyone else", async () => {
+    renderShell()
+    await loaded()
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull()
   })
 
   it("puts the notifications bell in the top bar when the auth client has an inbox", async () => {

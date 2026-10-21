@@ -128,6 +128,27 @@ Code: `packages/auth/src/passkey-signup.ts`.
 - Gaps: a password reset is never stored (it has no session, so no account), and `audit_event` has no
   `ip` column, so the client IP is not kept.
 
+## Client ID metadata documents
+
+- The `cimd` plugin (`@better-auth/cimd`, pinned in the catalog with the other better-auth packages)
+  is on, so an MCP client may use an HTTPS URL as its `client_id`. The server fetches that document,
+  validates it and creates the client. The authorization server metadata advertises
+  `client_id_metadata_document_supported: true`. Dynamic registration (`/oauth2/register`) stays on as
+  the fallback for clients that don't use metadata documents.
+- The fetch goes through `fetchClientMetadataResource` from `@better-auth/cimd/node`, which keeps
+  the plugin's defaults: HTTPS only, every resolved address must be public-routable (the connection
+  is pinned to the address checked), and redirects are refused. A `client_id` on a private, loopback
+  or link-local address is refused before any fetch. `originBoundFields` and the metadata fetch
+  limits keep the plugin defaults. Don't swap in a plain `fetch` (it resolves DNS after the check).
+- `AuthOptions.clientMetadataFetch` is the seam tests use (`createTestApp` forwards it). Production
+  leaves it unset, so the Node transport is used.
+- Tests: `apps/api/src/auth-flows.test.ts` ("client ID metadata documents"). They prove the
+  advertised flag, the refusals before any fetch, a stubbed document that is accepted, and one whose
+  `client_id` doesn't match the URL that is refused.
+- `metadataProfile` stays at the default. The `mcp-2026-07-28` profile only adds requirements
+  (`client_name`, `redirect_uris`) and pins draft-00, while the MCP SDK here (`@modelcontextprotocol/sdk`
+  1.32.1) speaks 2025-11-25 as its latest revision.
+
 ## OAuth resume
 
 Every step that resumes an authorization carries `oauth_query`. The magic link callbackURL holds it

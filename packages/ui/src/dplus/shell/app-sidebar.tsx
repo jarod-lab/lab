@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { XIcon } from "lucide-react"
+import { ShieldIcon, XIcon } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
 import { Badge } from "../../components/ui/badge"
@@ -59,6 +59,11 @@ export type AppSidebarProps = {
   announcement?: Announcement
   onDismissAnnouncement?: (id: string) => void
   support: { href: string; label?: string }
+  /**
+   * The admin console, for the people who run the product. Set only for them: it sits below Support,
+   * outlined so it stands out. `activeId` "admin" marks it current.
+   */
+  admin?: { href: string; label?: string }
   account: Omit<UserMenuProps, "renderLink">
   renderLink?: RenderLink
   className?: string
@@ -105,7 +110,10 @@ function AnnouncementCard({
   )
 }
 
-/** Sidebar of the app: org picker, workspace nav, pinned agents, one announcement, Support, account. */
+/**
+ * Sidebar of the app: org picker, workspace nav, pinned agents, one announcement, Support, the admin
+ * console (for those who run the product), account.
+ */
 export function AppSidebar({
   org,
   nav,
@@ -114,6 +122,7 @@ export function AppSidebar({
   announcement,
   onDismissAnnouncement,
   support,
+  admin,
   account,
   renderLink: renderLinkProp,
   className,
@@ -223,6 +232,21 @@ export function AppSidebar({
           className: "flex h-10 items-center px-2.5 text-sidebar-foreground",
           children: support.label ?? "Support",
         })}
+        {admin &&
+          renderLink({
+            href: admin.href,
+            "aria-current": activeId === "admin" ? "page" : undefined,
+            className: cn(
+              "mt-1 flex h-10 items-center gap-2 rounded-[10px] border-[1.5px] border-foreground px-2.5 font-semibold text-sidebar-foreground hover:bg-sidebar-accent",
+              activeId === "admin" && "bg-foreground text-background hover:bg-foreground",
+            ),
+            children: (
+              <>
+                <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
+                {admin.label ?? "Admin"}
+              </>
+            ),
+          } as LinkProps)}
         <div className="mt-1.5">
           <UserMenu {...account} renderLink={renderLink} />
         </div>

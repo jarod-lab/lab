@@ -48,7 +48,7 @@ describe("feature flag helpers", () => {
 describe("createFeatureFlagsApi", () => {
   it("calls each operation for the organization", async () => {
     const { fetchImpl, sent } = productFetch((request) => {
-      if (request.path === "/v1/whoami") return json({ operator: true })
+      if (request.path === "/v1/me/operator-organization") return json({ organizationId: "org-1" })
       if (request.path === "/v1/feature-flags") return json({ flags: [{ key: "f" }] })
       if (request.method === "DELETE" && request.path === "/v1/feature-flags/f") {
         return json({ deleted: true })
@@ -56,7 +56,7 @@ describe("createFeatureFlagsApi", () => {
       return json({ key: "f" })
     })
     const api = createFeatureFlagsApi(fetchImpl)
-    expect(await api.isOperator("org-1")).toBe(true)
+    expect(await api.operatorOrganization()).toBe("org-1")
     expect(await api.list("org-1")).toEqual([{ key: "f" }])
     await api.get("org-1", "f")
     await api.update("org-1", "f", { percentage: 5 })
@@ -65,7 +65,7 @@ describe("createFeatureFlagsApi", () => {
     await api.reclaim("org-1", "f", true)
     await api.remove("org-1", "f")
     expect(sent.map((s) => `${s.method} ${s.path}`)).toEqual([
-      "GET /v1/whoami",
+      "GET /v1/me/operator-organization",
       "GET /v1/feature-flags",
       "GET /v1/feature-flags/f",
       "PATCH /v1/feature-flags/f",
@@ -74,7 +74,9 @@ describe("createFeatureFlagsApi", () => {
       "POST /v1/feature-flags/f/reclaim",
       "DELETE /v1/feature-flags/f",
     ])
-    expect(sent.every((s) => s.organization === "org-1")).toBe(true)
+    // The operator lookup is about the person; every rollout call names its organization.
+    expect(sent[0]?.organization).toBeNull()
+    expect(sent.slice(1).every((s) => s.organization === "org-1")).toBe(true)
     expect(sent[3]?.body).toEqual({ percentage: 5 })
     expect(sent[4]?.body).toEqual({ organizations: ["acme"], value: false })
     expect(sent[6]?.body).toEqual({ value: true })

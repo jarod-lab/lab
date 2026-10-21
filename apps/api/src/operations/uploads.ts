@@ -128,6 +128,7 @@ export function uploadOperations({ db, files }: Pick<OperationDeps, "db" | "file
       "Stores the image and makes it the caller's organization's logo, replacing any earlier one. " +
       "Returns the logo's public URL. Send a square image. CONFLICT means uploads are off on this server.",
     permissions: { organization: ["update"] },
+    hints: { readOnly: false, destructive: true },
     input: z.object({ image: imageInput }),
     output: logoOutput,
     examples: [{ input: { image: EXAMPLE_PNG } }],
@@ -152,7 +153,7 @@ export function uploadOperations({ db, files }: Pick<OperationDeps, "db" | "file
     permissions: { organization: ["update"] },
     input: z.object({}),
     output: logoOutput,
-    hints: { destructive: true, idempotent: true },
+    hints: { readOnly: false, destructive: true, idempotent: true },
     examples: [{ input: {}, output: { logo: null } }],
     handler: (_input, { caller }) =>
       inCallerOrg(caller, async (org, proof) => {

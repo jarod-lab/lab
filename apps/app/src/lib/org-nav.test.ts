@@ -21,17 +21,9 @@ describe("activeNavFor", () => {
   })
 })
 
-describe("the operator's settings tab", () => {
-  it("is listed only for the operator organization, and has its crumb", () => {
+describe("settings tabs", () => {
+  it("leave feature flags to the admin console", () => {
     expect(settingsTabs("acme").map((tab) => tab.id)).not.toContain("flags")
-    expect(settingsTabs("acme", true).at(-1)).toEqual({
-      id: "flags",
-      label: "Feature flags",
-      href: "/acme/settings/flags",
-    })
-    expect(settingsCrumbs("/acme/settings/flags", "acme")).toEqual([
-      { label: "Settings" },
-      { label: "Feature flags" },
-    ])
+    expect(settingsCrumbs("/acme/settings/flags", "acme")).toEqual([])
   })
 })

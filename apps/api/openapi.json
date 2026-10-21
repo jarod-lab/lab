@@ -287,6 +287,78 @@
         "x-required-permissions": []
       }
     },
+    "/v1/me/operator-organization": {
+      "get": {
+        "operationId": "get_my_operator_organization",
+        "summary": "Find the operator organization, if you belong to it",
+        "description": "Returns the id of the operator organization (the one that runs the product and manages feature flags) when the signed-in person is a member of it, whatever organization the session is on; null otherwise. The web app uses it for the admin console. Only a person in the web app can call it: API keys and AI clients get FORBIDDEN.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizationId": {
+                      "description": "The operator organization's id, or null when you are not a member of it",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "organizationId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-required-permissions": [],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
     "/v1/projects": {
       "get": {
         "operationId": "list_projects",
@@ -533,7 +605,11 @@
         ],
         "x-required-permissions": [
           "project:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/projects/{id}": {
@@ -632,6 +708,7 @@
           "project:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -789,7 +866,11 @@
         ],
         "x-required-permissions": [
           "apiKey:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       },
       "get": {
         "operationId": "list_api_keys",
@@ -1179,6 +1260,7 @@
           "scim:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -1415,6 +1497,7 @@
           "apiKey:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -1961,7 +2044,11 @@
         ],
         "x-required-permissions": [
           "agent:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/workspace-agents/{id}": {
@@ -2346,7 +2433,12 @@
         ],
         "x-required-permissions": [
           "agent:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": true
+        }
       },
       "delete": {
         "operationId": "delete_agent",
@@ -2443,6 +2535,7 @@
           "agent:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -2691,7 +2784,11 @@
         ],
         "x-required-permissions": [
           "run:create"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs": {
@@ -3673,7 +3770,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/steps": {
@@ -3932,7 +4033,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/steps/{stepId}": {
@@ -4188,7 +4293,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/approvals": {
@@ -4405,7 +4514,11 @@
         ],
         "x-required-permissions": [
           "run:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/approvals/{id}/decision": {
@@ -4603,6 +4716,7 @@
           "run:approve"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -4774,7 +4888,11 @@
         ],
         "x-required-permissions": [
           "run:approve"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/messages": {
@@ -4907,7 +5025,11 @@
         ],
         "x-required-permissions": [
           "run:steer"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/runs/{id}/defer": {
@@ -5149,7 +5271,11 @@
         ],
         "x-required-permissions": [
           "run:steer"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false
+        }
       }
     },
     "/v1/inbox": {
@@ -5441,6 +5567,7 @@
           "twoFactor:reset"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         }
       }
@@ -5648,7 +5775,11 @@
         ],
         "x-required-permissions": [
           "organization:update"
-        ]
+        ],
+        "x-agent-hints": {
+          "readOnly": false,
+          "destructive": true
+        }
       },
       "delete": {
         "operationId": "remove_organization_logo",
@@ -5739,6 +5870,7 @@
           "organization:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true,
           "idempotent": true
         }
@@ -6792,6 +6924,8 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false,
           "idempotent": true
         },
         "x-audience": "operator"
@@ -6893,6 +7027,7 @@
           "featureFlag:delete"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         },
         "x-audience": "operator"
@@ -7188,6 +7323,8 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
+          "destructive": false,
           "idempotent": true
         },
         "x-audience": "operator"
@@ -7460,8 +7597,9 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
-          "idempotent": true,
-          "destructive": true
+          "readOnly": false,
+          "destructive": true,
+          "idempotent": true
         },
         "x-audience": "operator"
       }
@@ -7742,6 +7880,7 @@
           "featureFlag:update"
         ],
         "x-agent-hints": {
+          "readOnly": false,
           "destructive": true
         },
         "x-audience": "operator"

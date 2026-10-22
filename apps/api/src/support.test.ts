@@ -85,7 +85,11 @@ describe("support", () => {
     const queue = await call(agent.cookie, "/agent/tickets")
     expect(queue.status).toBe(200)
     expect((queue.body.tickets as { id: string }[]).map((x) => x.id)).toContain(ticket.id)
-    expect(queue.body.features).toEqual({ attachments: false, merge: true })
+    expect(queue.body.features).toEqual({
+      attachments: false,
+      merge: true,
+      categories: ["question", "bug", "feature", "sales"],
+    })
   })
 
   it("refuses the queue to staff without support:read and to customers", async () => {

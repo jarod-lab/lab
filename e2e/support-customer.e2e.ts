@@ -129,8 +129,11 @@ test("keyboard only at 360 px: open the widget, create a ticket, open its thread
   await expect(panel).toBeVisible()
   expect(await overflowsSideways(browser)).toBe(false)
 
-  // New ticket: Tab to it, Enter, then fill the form with typing and submit with Enter.
+  // New ticket: Tab to it, Enter, pick a kind of support, then fill the form with typing and submit
+  // with Enter.
   await tabTo(browser, (el) => el.text === "New ticket")
+  await browser.keyboard.press("Enter")
+  await tabTo(browser, (el) => el.tag === "BUTTON" && el.text.startsWith("Ask a question"))
   await browser.keyboard.press("Enter")
   await tabTo(browser, (el) => el.label === "Subject")
   await browser.keyboard.type(subject)

@@ -83,7 +83,7 @@ export function fakeSupportClient(
     support: {
       createTicket: vi.fn(async () => ok({ ticket: customerTicket() })),
       myTickets: vi.fn(async () =>
-        ok({ tickets, nextCursor: null, features: { attachments: false } }),
+        ok({ tickets, nextCursor: null, features: { attachments: false, categories: [] } }),
       ),
       ticket: vi.fn(async ({ query }: { query: { id: string } }) => {
         const ticket = tickets.find((row) => row.id === query.id)
@@ -100,7 +100,7 @@ export function fakeSupportClient(
             tickets: queue,
             nextCursor: null,
             counts: { open: queue.length, pending: 0, unassigned: queue.length, mine: 0 },
-            features: { attachments: false, merge: false },
+            features: { attachments: false, merge: false, categories: [] },
           }),
         ),
         ticket: vi.fn(async ({ query }: { query: { id: string } }) => {

@@ -41,7 +41,9 @@ export function SupportAdminPage({
         activeTab="support"
         renderLink={renderLink}
       />
-      <PageBody className="gap-4">
+      {/* A work queue: the full width, and the height that is left, so the queue, the thread and
+          the details panel each scroll on their own and the composer stays in view. */}
+      <PageBody className="min-h-0 max-w-none flex-1 gap-4 pb-4 md:pb-6">
         {notice}
         {children}
       </PageBody>

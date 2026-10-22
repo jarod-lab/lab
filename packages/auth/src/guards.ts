@@ -25,6 +25,10 @@ export const IMPERSONATION_READ_GET_PATHS = [
   "/admin/oauth2/resources/:identifier",
   "/api-key/get",
   "/api-key/list",
+  // Entitlements (@byo-oss/entitlements): the organization's plan, and the staff's override list.
+  // The package itself refuses an impersonated session on the staff list (acceptSession).
+  "/entitlements/get",
+  "/entitlements/overrides",
   "/error",
   "/get-session",
   "/inbox/list",

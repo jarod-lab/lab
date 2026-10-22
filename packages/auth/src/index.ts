@@ -11,6 +11,8 @@ import type { Database } from "@starter/db"
 import * as schema from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
 import { type AuthWithContext, deleteMemberData, inbox } from "@byo-oss/notifications"
+import { createEntitlements, deleteOrganizationData } from "@byo-oss/entitlements"
+import { stripePlans } from "@byo-oss/entitlements/stripe"
 import { type WrapsSesOptions, wraps } from "@wraps.dev/better-auth"
 import { reportError } from "@starter/errors"
 import Stripe from "stripe"
@@ -34,6 +36,16 @@ import {
 import { authEvents, type AuthEvent } from "./auth-events"
 import { PASSWORD_COMPROMISED_MESSAGE } from "./constants"
 import { type DeviceInterval, deviceAuthorizationPlugin } from "./device"
+import {
+  assertSeatAvailable,
+  catalog,
+  type EntitlementsConfig,
+  entitlementsPlugin,
+  type PlanEntitlements,
+  seatsTaken,
+  takesNewSeat,
+  takesSeat,
+} from "./entitlements"
 import { impersonationGuard } from "./guards"
 import { FRESH_AGE_SECONDS, freshSessionGuard } from "./fresh-session"
 import { endGrantsOnLeave, revokeGrantsWith, revokeMemberGrants } from "./member-grants"
@@ -91,6 +103,14 @@ export {
 export { isReservedOrgSlug, RESERVED_ORG_SLUGS } from "./reserved-slugs"
 export { isClaimed, type ProvisionalSignup, provisionalSignup } from "./signup"
 export { parseStripePlans, type StripePlanConfig } from "./stripe-plans"
+// Everything entitlements stores for an organization, as JSON pages (support exports, migrations).
+export { exportEntitlementsData } from "@byo-oss/entitlements"
+export {
+  acceptEntitlementsSession,
+  type EntitlementsConfig,
+  PLAN_LIMIT_CODE,
+  type PlanEntitlements,
+} from "./entitlements"
 export { type SignInMethods, type SocialProvider } from "./sign-in-methods"
 export {
   type AuthEvent,
@@ -219,6 +239,12 @@ export interface AuthOptions {
    * unset, nobody is an agent and nothing is mailed.
    */
   support?: SupportConfig
+  /**
+   * Plan entitlements (@byo-oss/entitlements, entitlements.ts): the staff organization that manages
+   * overrides and the unclaimed organizations' request limit. Always mounted; with Stripe and plans
+   * the stripe plugin's subscriptions decide each organization's plan, else everyone is on Free.
+   */
+  entitlements?: EntitlementsConfig
 }
 
 const defaultNotificationError = (error: unknown, type: NotificationType) => {
@@ -341,6 +367,26 @@ export function createAuth(opts: AuthOptions) {
   const webOrigins = opts.webOrigins ?? []
   const apiOrigin = new URL(opts.baseURL).origin
   const billing = !!opts.stripe
+  // Subscriptions exist only with plans (stripeBilling); only then is the stripe plugin a billing source.
+  const billingSource = billing && (opts.stripe?.plans?.length ?? 0) > 0
+  // The typed entitlements API (createEntitlements) needs the auth instance, so hooks read it here.
+  const gateRef: { current?: PlanEntitlements } = {}
+  const gate = (): PlanEntitlements => {
+    if (!gateRef.current) throw new Error("auth is not initialised")
+    return gateRef.current
+  }
+  // Verifying an owner's email claims their organizations: the higher request limit applies at once
+  // in this process (other processes within cacheTtlMs).
+  const invalidateOwned = async (db: Adapter, userId: string) => {
+    const memberships = await db.findMany<{ organizationId: string; role: string }>({
+      model: "member",
+      where: [{ field: "userId", value: userId }],
+    })
+    for (const m of memberships) {
+      if (m.role.split(",").some((r) => r.trim() === "owner"))
+        await gate().invalidate(m.organizationId)
+    }
+  }
   // The SCIM plugin's managed-connection endpoint is server-only; it is called on the instance built below.
   const scimApi: {
     connect?: (input: ScimConnectionInput) => Promise<ScimConnection>
@@ -454,6 +500,7 @@ export function createAuth(opts: AuthOptions) {
         const db = await adapter()
         await setUserFields(db, user.id, { emailVerified: true })
         await endProvisionalKeys(db, user.id)
+        await invalidateOwned(db, user.id)
         // The "password changed" email is this notification's email route (cancelIfRead: false), as
         // for /change-password, so it is not also sent from here.
         await notifications.personal({ type: "account.password_changed", userId: user.id })
@@ -489,7 +536,10 @@ export function createAuth(opts: AuthOptions) {
             where: [{ field: "userId", value: user.id }],
           })
           for (const { organizationId } of memberships) await endScim(user.id, organizationId)
-          await removePersonalOrganization(db, user.id, billing)
+          // Its entitlements rows go too: the organization is deleted raw, so no org hook runs.
+          await removePersonalOrganization(db, user.id, billing, (organizationId) =>
+            deleteOrganizationData(auth, organizationId),
+          )
         },
       },
       // Set when two-factor is switched on, cleared when it is switched off (see databaseHooks).
@@ -540,7 +590,10 @@ export function createAuth(opts: AuthOptions) {
           after: async (user) => {
             if (!user) return
             const db = await adapter()
-            if (user.emailVerified) await endProvisionalKeys(db, user.id)
+            if (user.emailVerified) {
+              await endProvisionalKeys(db, user.id)
+              await invalidateOwned(db, user.id)
+            }
             // The date two-factor was switched on: stamped once, cleared when it is switched off.
             const stamped = (user as { twoFactorEnabledAt?: Date | null }).twoFactorEnabledAt
             // Stamped once per switch-on, so the stamp marks each transition: the notice goes out with it.
@@ -612,7 +665,10 @@ export function createAuth(opts: AuthOptions) {
         connections: [],
         managedConnections: { credentialHashSecret: scimCredentialHashSecret(opts.secret) },
         // Provisioned users become members of the token's organization (scim-projection.ts).
-        projection: scimProjection(endAccessIn, logger),
+        // A provisioned member takes a seat: refused over the plan's limit (entitlements.ts).
+        projection: scimProjection(endAccessIn, logger, async (db, organizationId) =>
+          assertSeatAvailable(gate(), organizationId, await seatsTaken(db, organizationId)),
+        ),
       }),
       scimTokenPlugin({
         connect: async (input) => {
@@ -644,6 +700,29 @@ export function createAuth(opts: AuthOptions) {
               where: [{ field: "id", value: member.organizationId }],
             })
             refuseReservedSlug(organization.slug, current?.slug)
+          },
+          // Seats (entitlements.ts): every role but viewer takes one, up to the plan's limit. An
+          // invitation holds its seat while pending; accepting counts the members only.
+          beforeCreateInvitation: async ({ invitation }) => {
+            if (!takesSeat(invitation.role)) return
+            const db = await adapter()
+            const count = await seatsTaken(db, invitation.organizationId, { invitations: true })
+            await assertSeatAvailable(gate(), invitation.organizationId, count)
+          },
+          beforeAcceptInvitation: async ({ invitation, organization }) => {
+            if (!takesSeat(invitation.role ?? "member")) return
+            const count = await seatsTaken(await adapter(), organization.id)
+            await assertSeatAvailable(gate(), organization.id, count)
+          },
+          beforeAddMember: async ({ member }) => {
+            if (!takesSeat(member.role)) return
+            const count = await seatsTaken(await adapter(), member.organizationId)
+            await assertSeatAvailable(gate(), member.organizationId, count)
+          },
+          beforeUpdateMemberRole: async ({ member, newRole }) => {
+            if (!takesNewSeat(member.role, newRole)) return
+            const count = await seatsTaken(await adapter(), member.organizationId)
+            await assertSeatAvailable(gate(), member.organizationId, count)
           },
           // Removal ends the agent access the member granted here (leaving: `endGrantsOnLeave`). The
           // inbox plugin drops their notifications for this organization (and on leaving, and when the
@@ -695,6 +774,9 @@ export function createAuth(opts: AuthOptions) {
       // After organization(): support's tables reference `organization`, and its staff are the
       // operator organization's members (support.ts). Its events become notifications.
       supportPlugin({ config: opts.support ?? {}, ses: opts.ses, notifications }),
+      // After organization(): its tables reference `organization`. Stripe (last) is its billing
+      // source when mounted with plans; the source finds the stripe plugin at init, in any order.
+      entitlementsPlugin({ config: opts.entitlements ?? {}, billing: billingSource, adapter }),
       // Keys belong to an organization and carry an explicit permission subset (`create_api_key`
       // checks it against the creator). No defaults: a key without permissions can do nothing.
       apiKey({
@@ -799,8 +881,10 @@ export function createAuth(opts: AuthOptions) {
     revokeCredential: (input) => auth.api.revokeSCIMManagedCredential({ body: input }),
   }
   ref.context = auth.$context
-  // The app's Drizzle handle, for the tables better-auth doesn't own (signup_attempt, see signup.ts).
-  return Object.assign(auth, { db: opts.db })
+  gateRef.current = createEntitlements(auth, catalog)
+  // The app's Drizzle handle, for the tables better-auth doesn't own (signup_attempt, see signup.ts),
+  // and the typed entitlements API (hasFeature, consumeUsage, checkCapacity, ...).
+  return Object.assign(auth, { db: opts.db, entitlements: gateRef.current })
 }
 
 /** The stripe plugin, in test mode. Organizations are the billing customers; owners and admins may manage one. */
@@ -809,7 +893,12 @@ function stripeBilling(
   adapter: () => Promise<Adapter>,
   notifications: NotificationHooks,
 ) {
-  const plans = config.plans ?? []
+  // The plugin's plans come from the catalog (stripePlans): names are plan keys, so STRIPE_PLANS can
+  // only name a plan the catalog has (boot fails otherwise); the price ids stay in the environment.
+  const plans = stripePlans(
+    catalog,
+    Object.fromEntries((config.plans ?? []).map((plan) => [plan.name, { priceId: plan.priceId }])),
+  )
   return stripe({
     stripeClient: new Stripe(config.secretKey, { typescript: true }),
     stripeWebhookSecret: config.webhookSecret,

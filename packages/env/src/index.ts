@@ -41,8 +41,7 @@ export const env = createEnv({
     /** Set by portless under `pnpm dev`: the app's https://<name>.localhost URL. */
     PORTLESS_URL: z.url().optional(),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional(),
-    /** Requests per organization per UTC day, for an organization whose owner has verified the email. */
-    ORG_DAILY_REQUEST_LIMIT: z.coerce.number().int().positive().default(10_000),
+    // The claimed daily request limit is the plan's (`requests` in packages/plans/src/catalog.ts).
     /** Requests per organization per UTC day while the owner's email is unverified (provisional signups). */
     UNCLAIMED_ORG_DAILY_REQUEST_LIMIT: z.coerce.number().int().positive().default(500),
     /** Trust X-Forwarded-For for the client IP (signup limits). Only when a proxy overwrites that header. */

@@ -45,6 +45,9 @@ export const OAUTH_SCOPE_GRANTS = {
     agent: ["read"],
     run: ["read"],
     featureFlag: ["read"],
+    // The organization's plan, features, limits and usage (better-auth's /entitlements/get, which
+    // only a session reaches in this app; whoami reports the same through the API).
+    entitlements: ["read"],
   },
   write: {
     project: ["create", "read", "update", "delete"],

@@ -1,4 +1,5 @@
 import { memberGrants, provisionalSignup } from "@starter/auth"
+import { AppError } from "@starter/errors"
 import { z } from "zod"
 
 import { actsForOperator } from "../tenant"
@@ -9,6 +10,26 @@ export const signupInput = z.object({
   email: z.email().describe("Address that claims the account; one claim email is sent to it"),
   name: z.string().trim().min(1).max(100).optional().describe("Display name"),
 })
+
+/** whoami's `entitlements`: the organization's plan as the API enforces it (@starter/plans). */
+const entitlementsOutput = z
+  .object({
+    plan: z.string().describe("The plan key: free, pro or team"),
+    status: z
+      .string()
+      .nullable()
+      .describe("The subscription's status (active, trialing, past_due, ...); null without one"),
+    features: z
+      .record(z.string(), z.boolean())
+      .describe("What the plan includes: apiKeys, budgets, sso, auditExport, customRoles"),
+    limits: z
+      .record(z.string(), z.union([z.number().int(), z.literal("unlimited")]))
+      .describe("requests (per UTC day), seats (viewers are free), agents, runHistoryDays"),
+    degraded: z
+      .boolean()
+      .describe("True when the plan could not be read and this is the Free plan as a fallback"),
+  })
+  .describe("The organization's plan, features and limits")
 
 export function accountOperations({
   auth,
@@ -24,7 +45,8 @@ export function accountOperations({
       "Returns the organization this credential acts for, who is acting (a user or an API key), " +
       "how it authenticated, its permission grants (a request is allowed when one grant covers all " +
       "of it), today's usage against the daily limit, and whether the owner has claimed the " +
-      "account (verified the email), and whether this is the operator organization. Call this first to check a credential.",
+      "account (verified the email), whether this is the operator organization, and the " +
+      "organization's plan with its features and limits. Call this first to check a credential.",
     permissions: {},
     input: z.object({}),
     output: z.object({
@@ -35,12 +57,17 @@ export function accountOperations({
       usage: z.object({
         day: z.string().describe("The UTC day the counter covers (YYYY-MM-DD)"),
         total: z.number().int().describe("Requests so far today, including this one"),
-        limit: z.number().int().describe("Requests allowed per day for this organization"),
+        limit: z
+          .number()
+          .int()
+          .nullable()
+          .describe("Requests allowed per day for this organization; null when unlimited (Team)"),
       }),
       claimed: z.boolean().describe("False while the owner's email is unverified (lower limit)"),
       operator: z
         .boolean()
         .describe("True in the operator organization, which runs the product (feature flags)"),
+      entitlements: entitlementsOutput,
     }),
     hints: { readOnly: true, idempotent: true },
     examples: [
@@ -54,11 +81,28 @@ export function accountOperations({
           usage: { day: "2026-10-15", total: 3, limit: 500 },
           claimed: false,
           operator: false,
+          entitlements: {
+            plan: "free",
+            status: null,
+            features: {
+              apiKeys: true,
+              budgets: false,
+              sso: false,
+              auditExport: false,
+              customRoles: false,
+            },
+            limits: { requests: 500, seats: 3, agents: 2, runHistoryDays: 30 },
+            degraded: false,
+          },
         },
       },
     ],
     handler: async (_input, { caller }) => {
-      const [status, usage] = await Promise.all([meter.status(caller), meter.usageToday(caller)])
+      const [status, usage, plan] = await Promise.all([
+        meter.status(caller),
+        meter.usageToday(caller),
+        auth.entitlements.get(caller.organizationId),
+      ])
       return {
         organizationId: caller.organizationId,
         actor: actorOf(caller),
@@ -66,12 +110,27 @@ export function accountOperations({
         grants: caller.grants.map((g) =>
           Object.fromEntries(Object.entries(g).map(([r, a]) => [r, [...a]])),
         ),
-        usage: { day: usage.day, total: usage.total, limit: status.limit },
+        usage: { day: usage.day, total: usage.total, limit: usage.limit },
         claimed: status.claimed,
         operator: actsForOperator(operator)(caller),
+        entitlements: {
+          plan: plan.plan.key,
+          status: plan.status,
+          features: { ...plan.features },
+          limits: { ...plan.limits },
+          degraded: plan.degraded,
+        },
       }
     },
   })
+
+  /** An unclaimed organization always has a finite limit (resolveEntitlements caps every plan). */
+  async function newOrganizationLimit(organizationId: string): Promise<number> {
+    const limit = await meter.limitOf(organizationId)
+    if (limit === null)
+      throw new AppError("INTERNAL", "A new organization is unclaimed, so its limit is finite")
+    return limit
+  }
 
   const signup = defineOperation({
     name: "signup",
@@ -116,7 +175,8 @@ export function accountOperations({
         apiKey: created.apiKey,
         claimUrlSentTo: input.email.trim().toLowerCase(),
         apiKeyEndsWhenClaimed: true as const,
-        limits: { requestsPerDay: meter.limits.unclaimed },
+        // The new organization's limit now: nobody has claimed it, so the unclaimed one.
+        limits: { requestsPerDay: await newOrganizationLimit(created.organizationId) },
       }
     },
   })

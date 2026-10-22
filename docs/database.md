@@ -61,6 +61,14 @@
     placeholders. `support_attachment` (attachments) is not generated: attachments are off.
   - `support_ticket.merged_into_id` (a merged ticket's target) has no foreign key: support clears
     it when it deletes the target, and a link to a ticket that is gone stays on the merged ticket.
+- `0015_entitlements` adds `@byo-oss/entitlements`' tables, generated into `auth-schema.ts`:
+  `entitlement_snapshot` (one row per organization: the cached billing state), `entitlement_override`
+  (staff grants, kept after they end) and `entitlement_usage` (the metered counters, the daily
+  `requests` meter among them). Each `organization_id` cascades from `organization` through a
+  foreign key the plugin schema declares (no hand-appended statement, unlike 0010); the override's
+  `created_by`/`removed_by` are `set null` on user delete. Don't read them from app code: go through
+  `auth.entitlements` and `auth.api.*` (`packages/auth/src/entitlements.ts`). `usage_daily` (0003) is
+  no longer written: the meter moved to `entitlement_usage`.
 <!-- template:start -->
 - Migrations `0003` through `0011` are not applied until the user runs them.
 <!-- template:end -->

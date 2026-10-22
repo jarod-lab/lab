@@ -1,5 +1,6 @@
 // Cross-cutting behaviour for every operation call, REST and MCP alike, wired through `invoke`'s hooks:
-//   - metering: every call counts toward its organization's daily limit (lower while unclaimed)
+//   - metering: every call counts toward its organization's daily limit (the plan's, lower while
+//     unclaimed; @byo-oss/entitlements consumeUsage, so a refused call counts nothing)
 //   - idempotency: a non-readOnly call with an Idempotency-Key runs once; retries replay its response
 //   - audit: every non-readOnly call is recorded with its outcome (including refusals made here)
 //   - permission hints: a FORBIDDEN names the OAuth scope or API key permission that would allow it
@@ -30,25 +31,15 @@ import {
   releaseIdempotencyKey,
   reserveIdempotencyKey,
 } from "./data/idempotency"
-import { claimNotice } from "./data/usage"
-import { type Meter, type MeterLimits, secondsUntilReset } from "./meter"
+import { type Meter, type Reading, secondsUntil, utcDay } from "./meter"
 import type { ApiNotifier } from "./notifications"
 import { actsForOperator, inCallerOrg, type Operator } from "./tenant"
 
 export interface ApiHooks {
   /** Pass to `invoke` (REST) and `createMcpHandler` (MCP). */
   invokeOptions: InvokeOptions
-  /** The daily request limits in force (claimed and unclaimed organizations). */
-  limits: MeterLimits
   /** RateLimit-* headers for a call that was metered; empty otherwise. Read after `invoke` returns. */
   rateLimitHeaders(ctx: OperationContext): Record<string, string>
-}
-
-interface Reading {
-  limit: number
-  total: number
-  claimed: boolean
-  resetIn: number
 }
 
 const isMutating = (op: AnyOperation) => op.hints?.readOnly !== true
@@ -165,43 +156,51 @@ export function createApiHooks({
 
   /**
    * Tells the organization's billing managers that today's limit was reached: once per organization per
-   * UTC day. The first refused call claims the day's notice marker (a conflict-free insert, see
-   * claimNotice), so concurrent refusals send one notice between them. Never fails the refusal.
+   * UTC day. Entitlements marks the first refusal of the period (`firstRefusal`, counted in the same
+   * guarded write as the refusal), so concurrent refusals send one notice between them. Never fails
+   * the refusal.
    */
-  async function noticeLimitReached(caller: Caller, limit: number, day: string): Promise<void> {
+  async function noticeLimitReached(caller: Caller, limit: number): Promise<void> {
     if (!notifier) return
     try {
-      await inCallerOrg(caller, async (org, proof) => {
-        if (!(await claimNotice(db, org, proof, "usage.limit_reached", day))) return
-        await notifier.inOrg(org, proof, { type: "usage.limit_reached", limit })
-      })
+      await inCallerOrg(caller, (org, proof) =>
+        notifier.inOrg(org, proof, { type: "usage.limit_reached", limit }),
+      )
     } catch (error) {
       reportError(error, { phase: "notify", notification: "usage.limit_reached" })
     }
   }
 
   /** Counts the call against the organization's day, refusing it over the limit. */
-  async function consume(op: AnyOperation, ctx: OperationContext): Promise<void> {
-    const now = new Date()
-    const { limit, total, claimed, day } = await meter.consume(ctx.caller, op.name, now)
-    const resetIn = secondsUntilReset(now)
-    readings.set(ctx, { limit, total, claimed, resetIn })
-    if (total > limit) {
-      await noticeLimitReached(ctx.caller, limit, day)
-      throw new AppError(
-        "RATE_LIMITED",
-        `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,
-        {
-          hint: claimed
+  async function consume(_op: AnyOperation, ctx: OperationContext): Promise<void> {
+    const reading = await meter.consume(ctx.caller)
+    readings.set(ctx, reading)
+    if (reading.allowed) return
+    const { resetAt } = reading
+    // A refusal always has a number: an unlimited plan is never refused.
+    const limit = reading.limit ?? 0
+    const day = utcDay(new Date(resetAt.getTime() - 1))
+    const resetIn = secondsUntil(resetAt)
+    if (reading.firstRefusal) await noticeLimitReached(ctx.caller, limit)
+    const { claimed } = await meter.status(ctx.caller)
+    const raised =
+      reading.planLimit === null
+        ? "lift the limit"
+        : `raise the limit to ${reading.planLimit} per day`
+    throw new AppError(
+      "RATE_LIMITED",
+      `Daily request limit of ${limit} reached for this organization (${day}, UTC)`,
+      {
+        hint:
+          claimed || (reading.planLimit !== null && reading.planLimit <= limit)
             ? "The counter resets at 00:00 UTC. Retry after the Retry-After seconds."
             : `The owner has not verified their email yet, so the limit is ${limit} per day. ` +
-              `Verify it (the claim link from signup) to raise the limit to ${meter.limits.claimed} ` +
-              "per day, or retry after the Retry-After seconds.",
-          headers: { "retry-after": String(resetIn) },
-          context: { limit, day },
-        },
-      )
-    }
+              `Verify it (the claim link from signup) to ${raised}, ` +
+              "or retry after the Retry-After seconds.",
+        headers: { "retry-after": String(resetIn) },
+        context: { limit, day },
+      },
+    )
   }
 
   async function before(e: InvokeEvent): Promise<{ result: unknown } | undefined> {
@@ -282,14 +281,14 @@ export function createApiHooks({
       permissionHint,
       isOperator: operator ? actsForOperator(operator) : undefined,
     },
-    limits: meter.limits,
     rateLimitHeaders(ctx): Record<string, string> {
-      const r = readings.get(ctx)
-      if (!r) return {}
+      const r: Reading | undefined = readings.get(ctx)
+      // No pair for an unlimited plan: there is no limit or remaining count to report.
+      if (!r || r.limit === null || r.remaining === null) return {}
       return {
         "ratelimit-limit": String(r.limit),
-        "ratelimit-remaining": String(Math.max(0, r.limit - r.total)),
-        "ratelimit-reset": String(r.resetIn),
+        "ratelimit-remaining": String(Math.max(0, r.remaining)),
+        "ratelimit-reset": String(secondsUntil(r.resetAt)),
       }
     },
   }

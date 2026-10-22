@@ -1,4 +1,6 @@
 // Test-only: an auth instance on in-process Postgres (PGlite), with helpers for users and orgs.
+import { memorySource } from "./testing"
+import type { PlanId } from "@starter/plans"
 import { createTestDb } from "@starter/db/testing"
 import { type AuthOptions, createAuth } from "./index"
 import { firstMembership } from "./membership"
@@ -27,6 +29,8 @@ export async function createTestAuth(
       return { MessageId: `test-${outbox.length}`, $metadata: { requestId: "test" } }
     },
   }
+  // Every organization is on Free until a test puts it on a plan (`onPlan`).
+  const plans = memorySource()
   const auth = createAuth({
     db: t.db,
     secret: "a-test-secret-that-is-long-enough-123456", // gitleaks:allow
@@ -38,6 +42,7 @@ export async function createTestAuth(
     rateLimit: options.rateLimit ?? false,
     onNotificationError: options.onNotificationError,
     onSignUp: options.onSignUp,
+    entitlements: { source: plans },
   })
   let n = 0
 
@@ -63,5 +68,9 @@ export async function createTestAuth(
   const setActive = (cookie: string, organizationId: string) =>
     auth.api.setActiveOrganization({ headers: new Headers({ cookie }), body: { organizationId } })
 
-  return { auth, db: t.db, signUp, addMember, setActive, outbox, close: t.close }
+  /** Put an organization on a plan, as an active subscription would. */
+  const onPlan = (organizationId: string, plan: PlanId) =>
+    plans.set(organizationId, { planKey: plan, status: "active" })
+
+  return { auth, db: t.db, signUp, addMember, setActive, onPlan, outbox, close: t.close }
 }

@@ -15,7 +15,7 @@
       "get": {
         "operationId": "whoami",
         "summary": "Show the caller, its organization, permissions and usage",
-        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), and whether this is the operator organization. Call this first to check a credential.",
+        "description": "Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), whether this is the operator organization, and the organization's plan with its features and limits. Call this first to check a credential.",
         "responses": {
           "200": {
             "description": "OK",
@@ -80,10 +80,17 @@
                           "description": "Requests so far today, including this one"
                         },
                         "limit": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "description": "Requests allowed per day for this organization"
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Requests allowed per day for this organization; null when unlimited (Team)"
                         }
                       },
                       "required": [
@@ -100,6 +107,65 @@
                     "operator": {
                       "type": "boolean",
                       "description": "True in the operator organization, which runs the product (feature flags)"
+                    },
+                    "entitlements": {
+                      "type": "object",
+                      "properties": {
+                        "plan": {
+                          "type": "string",
+                          "description": "The plan key: free, pro or team"
+                        },
+                        "status": {
+                          "description": "The subscription's status (active, trialing, past_due, ...); null without one",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "features": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "boolean"
+                          },
+                          "description": "What the plan includes: apiKeys, budgets, sso, auditExport, customRoles"
+                        },
+                        "limits": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "string",
+                                "const": "unlimited"
+                              }
+                            ]
+                          },
+                          "description": "requests (per UTC day), seats (viewers are free), agents, runHistoryDays"
+                        },
+                        "degraded": {
+                          "type": "boolean",
+                          "description": "True when the plan could not be read and this is the Free plan as a fallback"
+                        }
+                      },
+                      "required": [
+                        "plan",
+                        "status",
+                        "features",
+                        "limits",
+                        "degraded"
+                      ],
+                      "additionalProperties": false,
+                      "description": "The organization's plan, features and limits"
                     }
                   },
                   "required": [
@@ -109,7 +175,8 @@
                     "grants",
                     "usage",
                     "claimed",
-                    "operator"
+                    "operator",
+                    "entitlements"
                   ],
                   "additionalProperties": false
                 }
@@ -1826,7 +1893,7 @@
       "post": {
         "operationId": "create_agent",
         "summary": "Create a workspace agent",
-        "description": "Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent.",
+        "description": "Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent. The plan limits how many agents an organization has (Free: 2); over it the call is FORBIDDEN, and the hint names the plan that allows more.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -7945,7 +8012,7 @@
             "authorizationUrl": "http://localhost:3000/api/auth/oauth2/authorize",
             "tokenUrl": "http://localhost:3000/api/auth/oauth2/token",
             "scopes": {
-              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"],\"agent\":[\"read\"],\"run\":[\"read\"],\"featureFlag\":[\"read\"]}",
+              "read": "read: {\"project\":[\"read\"],\"apiKey\":[\"read\"],\"agent\":[\"read\"],\"run\":[\"read\"],\"featureFlag\":[\"read\"],\"entitlements\":[\"read\"]}",
               "write": "write: {\"project\":[\"create\",\"read\",\"update\",\"delete\"],\"apiKey\":[\"read\"],\"agent\":[\"create\",\"read\",\"update\",\"delete\"],\"run\":[\"create\",\"read\",\"update\",\"steer\"],\"featureFlag\":[\"read\",\"update\"]}",
               "admin": "admin: {\"organization\":[\"update\"],\"member\":[\"create\",\"read\",\"update\",\"delete\"],\"invitation\":[\"create\",\"cancel\"],\"apiKey\":[\"create\",\"read\",\"update\",\"delete\"],\"featureFlag\":[\"read\",\"update\",\"delete\"]}"
             }

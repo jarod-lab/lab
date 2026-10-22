@@ -35,6 +35,8 @@ describe("rolePermissions matches better-auth's hasPermission (real Postgres via
     t = await createTestAuth()
     const owner = await t.signUp("Owner")
     orgId = owner.orgId
+    // One member per role takes more seats than Free's 3 (viewers are free; the rest aren't).
+    await t.onPlan(orgId, "team")
     cookies.owner = owner.cookie
     for (const role of ROLES.filter((r) => r !== "owner")) {
       const u = await t.signUp(role)
@@ -85,13 +87,18 @@ describe("fixed capability roles", () => {
       run: ["read", "approve"],
       project: ["read"],
       agent: ["read"],
+      entitlements: ["read"],
     })
     expect(roles.operator.statements).toEqual({
       project: ["read"],
       agent: ["read"],
       run: ["create", "read", "update", "steer"],
+      entitlements: ["read"],
     })
-    expect(roles.billing.statements).toEqual({ subscription: ["read", "update"] })
+    expect(roles.billing.statements).toEqual({
+      subscription: ["read", "update"],
+      entitlements: ["read"],
+    })
   })
 
   it("let an approver approve but not steer, start or change anything", () => {
@@ -193,12 +200,13 @@ describe("OAuth scopes", () => {
       agent: ["read"],
       run: ["read"],
       featureFlag: ["read"],
+      entitlements: ["read"],
     })
   })
 
   it("narrow each role to the token's scopes, dropping roles left with nothing", () => {
     const grants = narrow(rolePermissions("viewer,member"), scopePermissions(["read"]))
-    const read = { agent: ["read"], project: ["read"], run: ["read"] }
+    const read = { agent: ["read"], project: ["read"], run: ["read"], entitlements: ["read"] }
     expect(grants).toEqual([read, { apiKey: ["read"], ...read }])
     expect(narrow(rolePermissions("viewer"), scopePermissions(["admin"]))).toEqual([])
   })

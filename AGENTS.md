@@ -57,6 +57,10 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
 - `packages/observability` — `observe`, health and status handlers. See `docs/observability.md`.
 - `packages/flags` — `@starter/flags`: the feature flag catalog (`src/catalog.ts`), evaluator and
   stale signals; browser-safe. See `docs/feature-flags.md`.
+- `packages/plans` — `@starter/plans`: the plan catalog (`src/catalog.ts`, @byo-oss/entitlements'
+  `defineEntitlements`): Free, Pro and Team, their features and limits and their copy. Browser-safe;
+  the API (`auth.entitlements`, `packages/auth/src/entitlements.ts`), the web app's billing page and
+  the pricing site all read it.
 - `packages/storage` — `@starter/storage`, the file store uploads go to (S3, R2, Vercel Blob or a
   local directory, by `STORAGE_DRIVER`) and image checks. See `docs/storage.md`.
 - `packages/analytics` — `@starter/analytics`, product analytics: the event catalog (browser-safe at

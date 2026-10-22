@@ -43,7 +43,8 @@ Every credential acts in one organization (workspace) and sees only that organiz
   Refresh with the refresh token.
   The token acts in the organization the approving person had active. The full sequence is in llms.txt.
 
-Check a credential first. `whoami` names the organization, the grants and today's usage:
+Check a credential first. `whoami` names the organization, the grants, today's usage and the plan
+with its features and limits:
 
 ```sh
 curl -s https://api.example.com/v1/whoami -H "x-api-key: $STARTER_API_KEY"
@@ -87,7 +88,8 @@ and a working example. Don't guess parameters: the schemas are exact.
   `nextCursor` back as `cursor`; it is `null` on the last page. Don't assume one call returns everything.
 - **Rate limits and quota**: a `429` is `RATE_LIMITED`. Read the `Retry-After` header (seconds) and wait that
   long before retrying. The `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers show the
-  daily count. `whoami` reports the same usage.
+  daily count. `whoami` reports the same usage. The daily limit depends on the plan (Free 10,000, Pro 100,000,
+  Team unlimited): on an unlimited plan the headers are not sent and the usage limit in `whoami` is null.
 
 ## Workspace agents and runs
 
@@ -118,6 +120,8 @@ Every error is `{ "error": { "code", "message", "hint?" } }`. Read the `hint`: i
 - `BAD_REQUEST`: fix the input; the message names the field.
 - `UNAUTHORIZED`: no valid credential. Send an API key or OAuth access token.
 - `FORBIDDEN`: the credential lacks the permission. The hint names the scope or key permission.
+  Or the plan doesn't include it (for example a third workspace agent on Free): the hint names the
+  plan that does. Tell the person; only an owner or admin changes the plan, in the web app.
 - `NOT_FOUND`: also returned for another organization's ids. Don't retry the same id.
 - `CONFLICT`: the Idempotency-Key is in use or was used with another body. Use a new key only for a new action.
 - `RATE_LIMITED`: back off for `Retry-After` seconds, then retry.

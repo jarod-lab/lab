@@ -229,10 +229,20 @@ describe("invocation hooks (real Postgres via PGlite)", () => {
     })
 
     it("lifts to the claimed limit once the owner verifies their email", async () => {
-      await t.db.update(user).set({ emailVerified: true }).where(eq(user.id, t.owner.userId))
-      const body = (await json(await t.req("/v1/whoami", t.as(t.readKey)))).body
-      expect(body).toMatchObject({ claimed: true, usage: { limit: 10_000 } })
-      await t.db.update(user).set({ emailVerified: false }).where(eq(user.id, t.owner.userId))
+      // acme is on Team in the test app, whose claimed limit is unlimited (null); put it on Free to
+      // see a number, and put everything back whatever happens.
+      await t.onPlan(t.owner.orgId, "free")
+      try {
+        // A raw write skips the claim hooks, which clear the cached plan; clear it as they would.
+        await t.db.update(user).set({ emailVerified: true }).where(eq(user.id, t.owner.userId))
+        await t.auth.entitlements.invalidate(t.owner.orgId)
+        const body = (await json(await t.req("/v1/whoami", t.as(t.readKey)))).body
+        expect(body).toMatchObject({ claimed: true, usage: { limit: 10_000 } })
+      } finally {
+        await t.db.update(user).set({ emailVerified: false }).where(eq(user.id, t.owner.userId))
+        await t.onPlan(t.owner.orgId, "team")
+        await t.auth.entitlements.invalidate(t.owner.orgId)
+      }
     })
 
     it("sends RateLimit headers on success", async () => {

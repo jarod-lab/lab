@@ -93,6 +93,12 @@ const auth = createAuth({
   // A notification that could not be recorded never fails the request; it is reported here.
   onNotificationError: (error, type) => reportError(error, { notification: type }),
   onSignUp: (event) => captureSignUp(analytics, event),
+  // Plan entitlements (packages/auth/src/entitlements.ts): the operator organization's members
+  // manage overrides; unclaimed organizations get the lower daily request limit.
+  entitlements: {
+    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
+    unclaimedRequestLimit: env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT,
+  },
   support: {
     staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
     email: supportEmail,
@@ -161,13 +167,9 @@ function fileStore(): FileStore | undefined {
 }
 const files = fileStore()
 
-const meter = createMeter({
-  db,
-  limits: {
-    claimed: env.ORG_DAILY_REQUEST_LIMIT,
-    unclaimed: env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT,
-  },
-})
+// The daily request limit is the plan's (@starter/plans), through entitlements; unclaimed
+// organizations get UNCLAIMED_ORG_DAILY_REQUEST_LIMIT (createAuth's `entitlements` option).
+const meter = createMeter({ db, entitlements: auth.entitlements })
 
 // One notifier for operations and the invoke hooks (usage.limit_reached).
 const notifier = createApiNotifier({ auth, db })

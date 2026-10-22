@@ -90,12 +90,10 @@ describe("env", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
     vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
-    vi.stubEnv("ORG_DAILY_REQUEST_LIMIT", "")
     vi.stubEnv("UNCLAIMED_ORG_DAILY_REQUEST_LIMIT", "")
     vi.stubEnv("TRUST_PROXY", "")
     vi.stubEnv("WEB_DIST_DIR", "/srv/web")
     const { env } = await import("./index")
-    expect(env.ORG_DAILY_REQUEST_LIMIT).toBe(10_000)
     expect(env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT).toBe(500)
     expect(env.TRUST_PROXY).toBe(false)
     expect(env.WEB_DIST_DIR).toBe("/srv/web")
@@ -108,12 +106,10 @@ describe("env", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", "x".repeat(32))
     vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000")
     vi.stubEnv("EMAIL_FROM", "App <auth@example.com>")
-    vi.stubEnv("ORG_DAILY_REQUEST_LIMIT", "25000")
     vi.stubEnv("UNCLAIMED_ORG_DAILY_REQUEST_LIMIT", "50")
     vi.stubEnv("TRUST_PROXY", "true")
     const { env } = await import("./index")
     expect(env).toMatchObject({
-      ORG_DAILY_REQUEST_LIMIT: 25_000,
       UNCLAIMED_ORG_DAILY_REQUEST_LIMIT: 50,
       TRUST_PROXY: true,
     })

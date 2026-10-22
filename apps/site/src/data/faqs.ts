@@ -19,7 +19,7 @@ export const homeFaqs: Faq[] = [
   },
   {
     q: "How does per-seat pricing work?",
-    a: "You pay for people, not agents. Viewers are free on paid plans. [Confirm before publishing.]",
+    a: "You pay for people, not agents. Viewers are free on every plan. [Confirm before publishing.]",
   },
   {
     q: "How do you estimate energy use?",
@@ -34,7 +34,7 @@ export const homeFaqs: Faq[] = [
 export const billingFaqs: Faq[] = [
   {
     q: "What counts as a seat?",
-    a: "Anyone who can start runs or approve actions. Viewers can see everything and are free on paid plans.",
+    a: "Anyone who can start runs or approve actions. Viewers can see everything and are free on every plan.",
   },
   {
     q: "Can I change plans or seats anytime?",

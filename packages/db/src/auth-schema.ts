@@ -561,6 +561,89 @@ export const supportDelivery = pgTable(
   ],
 )
 
+export const entitlementSnapshot = pgTable(
+  "entitlement_snapshot",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .unique()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    planKey: text("plan_key"),
+    status: text("status"),
+    periodStart: timestamp("period_start"),
+    periodEnd: timestamp("period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+    seats: integer("seats"),
+    pastDueSince: timestamp("past_due_since"),
+    sourceRef: text("source_ref"),
+    version: integer("version").default(0).notNull(),
+    syncedAt: timestamp("synced_at").notNull(),
+    nextSyncAt: timestamp("next_sync_at").notNull(),
+    syncState: text("sync_state").default("idle").notNull(),
+    syncClaimedAt: timestamp("sync_claimed_at"),
+    syncAttempts: integer("sync_attempts").default(0).notNull(),
+    syncError: text("sync_error"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [index("entitlementSnapshot_nextSyncAt_idx").on(table.nextSyncAt)],
+)
+
+export const entitlementOverride = pgTable(
+  "entitlement_override",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    reason: text("reason").notNull(),
+    permanent: boolean("permanent").notNull(),
+    expiresAt: timestamp("expires_at"),
+    endedAt: timestamp("ended_at"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    removedBy: text("removed_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("entitlementOverride_organizationId_idx").on(table.organizationId),
+    index("entitlementOverride_status_idx").on(table.status),
+    index("entitlementOverride_createdBy_idx").on(table.createdBy),
+    index("entitlementOverride_removedBy_idx").on(table.removedBy),
+  ],
+)
+
+export const entitlementUsage = pgTable(
+  "entitlement_usage",
+  {
+    id: text("id").primaryKey(),
+    bucket: text("bucket").notNull().unique(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    periodStart: timestamp("period_start").notNull(),
+    periodEnd: timestamp("period_end").notNull(),
+    used: integer("used").default(0).notNull(),
+    refused: integer("refused").default(0).notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    index("entitlementUsage_organizationId_idx").on(table.organizationId),
+    index("entitlementUsage_periodEnd_idx").on(table.periodEnd),
+  ],
+)
+
 export const apikey = pgTable(
   "apikey",
   {
@@ -917,6 +1000,12 @@ export const userRelations = relations(user, ({ one, many }) => ({
   }),
   supportMessages: many(supportMessage),
   supportCannedReplys: many(supportCannedReply),
+  entitlementOverridesByCreatedBy: many(entitlementOverride, {
+    relationName: "entitlementOverride_createdBy",
+  }),
+  entitlementOverridesByRemovedBy: many(entitlementOverride, {
+    relationName: "entitlementOverride_removedBy",
+  }),
   oauthClients: many(oauthClient),
   oauthRefreshTokens: many(oauthRefreshToken),
   oauthAccessTokens: many(oauthAccessToken),
@@ -1034,10 +1123,13 @@ export const scimGroupMemberRelations = relations(scimGroupMember, ({ one }) => 
   }),
 }))
 
-export const organizationRelations = relations(organization, ({ many }) => ({
+export const organizationRelations = relations(organization, ({ one, many }) => ({
   members: many(member),
   invitations: many(invitation),
   supportTickets: many(supportTicket),
+  entitlementSnapshot: one(entitlementSnapshot),
+  entitlementOverrides: many(entitlementOverride),
+  entitlementUsages: many(entitlementUsage),
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -1116,6 +1208,37 @@ export const supportDeliveryRelations = relations(supportDelivery, ({ one }) => 
   supportTicket: one(supportTicket, {
     fields: [supportDelivery.ticketId],
     references: [supportTicket.id],
+  }),
+}))
+
+export const entitlementSnapshotRelations = relations(entitlementSnapshot, ({ one }) => ({
+  organization: one(organization, {
+    fields: [entitlementSnapshot.organizationId],
+    references: [organization.id],
+  }),
+}))
+
+export const entitlementOverrideRelations = relations(entitlementOverride, ({ one }) => ({
+  organization: one(organization, {
+    fields: [entitlementOverride.organizationId],
+    references: [organization.id],
+  }),
+  createdBy: one(user, {
+    fields: [entitlementOverride.createdBy],
+    references: [user.id],
+    relationName: "entitlementOverride_createdBy",
+  }),
+  removedBy: one(user, {
+    fields: [entitlementOverride.removedBy],
+    references: [user.id],
+    relationName: "entitlementOverride_removedBy",
+  }),
+}))
+
+export const entitlementUsageRelations = relations(entitlementUsage, ({ one }) => ({
+  organization: one(organization, {
+    fields: [entitlementUsage.organizationId],
+    references: [organization.id],
   }),
 }))
 

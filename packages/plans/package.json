@@ -1,0 +1,30 @@
+{
+  "name": "@starter/plans",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "oxlint --type-aware -c ../../.oxlintrc.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@better-auth/core": "1.7.7",
+    "@byo-oss/entitlements": "0.1.0-rc.3",
+    "better-auth": "catalog:",
+    "better-call": "1.4.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@starter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "oxlint": "catalog:",
+    "vitest": "catalog:"
+  }
+}

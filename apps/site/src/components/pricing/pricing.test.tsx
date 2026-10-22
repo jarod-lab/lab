@@ -44,4 +44,11 @@ describe("CompareTable", () => {
     expect(document.body.textContent).toContain("Not included")
     await expectNoA11yViolations(html)
   })
+
+  it("compares API requests per day: Free 10,000, Pro 100,000, Team Unlimited", () => {
+    const row = comparison.flatMap((g) => g.rows).find((r) => r.label === "API requests / day")
+    expect(row?.cells).toEqual(["10,000", "100,000", "Unlimited"])
+    render(<CompareTable />)
+    expect(document.body.textContent).toContain("API requests / day")
+  })
 })

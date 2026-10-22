@@ -112,8 +112,8 @@ shows up in review, and contract tests run every documented example over REST an
    - required: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (the public origin, no trailing slash), `EMAIL_FROM`.
    - `WEB_DIST_DIR`: the image sets `/app/apps/app/dist`; set it only to serve another build.
    - `TRUST_PROXY=true` only behind a proxy that overwrites `X-Forwarded-For` (signup limits use the client IP).
-   - `ORG_DAILY_REQUEST_LIMIT` (default 10000) and `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (default 500): requests per
-     organization per UTC day, the second while its owner's email is unverified.
+   - `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (default 500): requests per organization per UTC day while its owner's
+     email is unverified. Once claimed, the plan's limit applies (`packages/plans/src/catalog.ts`).
    - optional: `WRAPS_API_KEY`, `PORT` (the image listens on 3000), `LOG_LEVEL`.
    - `API_URL` is for the web dev server's proxy only; leave it unset in production.
 

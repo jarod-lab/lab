@@ -36,7 +36,7 @@ describe("fixtureBillingAdapter", () => {
     first.plans[0]?.features.push("changed")
     first.invoices?.pop()
     const second = fixtureSnapshot()
-    expect(second.plans[0]?.features).toEqual(["3 seats · 2 agents · community support"])
+    expect(second.plans[0]?.features).toEqual(["3 seats · 2 agents · API keys · community support"])
     expect(second.invoices).toHaveLength(3)
   })
 

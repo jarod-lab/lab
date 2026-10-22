@@ -13,7 +13,8 @@ export const auth = createAuth({
   stripe: {
     secretKey: placeholder("sk_test"),
     webhookSecret: placeholder("whsec"),
-    plans: [{ name: "placeholder", priceId: placeholder("price") }],
+    // A catalog plan (stripePlans refuses any other name).
+    plans: [{ name: "pro", priceId: placeholder("price") }],
   },
   // The `rateLimit` table exists only with the database limiter on (server.ts turns it on).
   rateLimit: {},

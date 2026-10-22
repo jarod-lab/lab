@@ -32,6 +32,12 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# @byo-oss/entitlements release candidate (dogfood): the one place its tarball is named. A catalog
+# entry can't use file: (ERR_PNPM_CATALOG_ENTRY_INVALID_SPEC), so the packages ask for the version
+# and this override points it at the tarball.
+overrides:
+  "@byo-oss/entitlements": "file:/home/jarod/Projects/byo-pm/entitlements/pack/byo-oss-entitlements-0.1.0-rc.3.tgz"
+
 minimumReleaseAgeExclude:
   - '@byo-oss/*'
   - '@wraps.dev/*'

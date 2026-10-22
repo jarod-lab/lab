@@ -1,6 +1,7 @@
 // The permission catalog and roles, with no server code: the browser client imports this file, so
-// it may only import better-auth's access modules and other browser-safe entries (support's
-// `/client`). Grant math lives in ./permissions.
+// it may only import better-auth's access modules and other browser-safe entries (support's and
+// entitlements' `/client`). Grant math lives in ./permissions.
+import { entitlementsStatements } from "@byo-oss/entitlements/client"
 import { supportRoles, supportStatements } from "@byo-oss/support/client"
 import { createAccessControl } from "better-auth/plugins/access"
 import { defaultStatements } from "better-auth/plugins/organization/access"
@@ -37,6 +38,11 @@ export const statements = {
   // (status, priority, assignee, tags, merge), `manage` canned replies, `delete` tickets. The
   // package's own list (its browser-safe `/client` entry). A person's resource: no key or OAuth token.
   ...supportStatements,
+  // Plan entitlements (@byo-oss/entitlements): `read` the organization's plan, features, limits
+  // and usage (every role); `override` comps a feature, raises a limit or changes the plan of any
+  // organization, and is only ever checked in the operator organization (the staff organization).
+  // A person's action: no key or OAuth token (PERSON_ONLY_ACTIONS).
+  ...entitlementsStatements,
 } as const
 
 export type Catalog = typeof statements
@@ -57,10 +63,10 @@ export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription", "
 
 /**
  * Actions a person holds but no API key or OAuth token may. Approving a run is a person's decision
- * (the approval is theirs, not an agent's). Keys are refused these in create_api_key, and OAuth
+ * (the approval is theirs, not an agent's); so is a staff override of another organization's plan. Keys are refused these in create_api_key, and OAuth
  * scopes never reach them (OAUTH_EXCLUDED in permissions.ts is built from this).
  */
-export const PERSON_ONLY_ACTIONS = { run: ["approve"] } as const
+export const PERSON_ONLY_ACTIONS = { run: ["approve"], entitlements: ["override"] } as const
 
 const adminStatements = Object.fromEntries(
   Object.entries(all).filter(
@@ -85,18 +91,25 @@ export const roles = {
     run: ["create", "read", "update", "approve", "steer"],
     // In the operator organization: works the support queue, without canned replies or deletes.
     ...supportRoles.member,
+    entitlements: ["read"],
   }),
-  viewer: ac.newRole({ project: ["read"], agent: ["read"], run: ["read"] }),
+  viewer: ac.newRole({ project: ["read"], agent: ["read"], run: ["read"], entitlements: ["read"] }),
   // A reviewer: signs off on runs. Never changes agents or starts runs.
-  approver: ac.newRole({ run: ["read", "approve"], project: ["read"], agent: ["read"] }),
+  approver: ac.newRole({
+    run: ["read", "approve"],
+    project: ["read"],
+    agent: ["read"],
+    entitlements: ["read"],
+  }),
   // Runs and steers agents, without deciding approvals or changing their configuration.
   operator: ac.newRole({
     project: ["read"],
     agent: ["read"],
     run: ["create", "read", "update", "steer"],
+    entitlements: ["read"],
   }),
   // Finance: the subscription and its billing, without admin rights over members or agents.
-  billing: ac.newRole({ subscription: ["read", "update"] }),
+  billing: ac.newRole({ subscription: ["read", "update"], entitlements: ["read"] }),
 } as const
 
 export type RoleName = keyof typeof roles

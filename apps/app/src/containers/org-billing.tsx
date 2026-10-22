@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
+
+import { takesSeat } from "@starter/plans"
 
 import type { RenderLink } from "@starter/ui/dplus/shell/link"
 
-import { type BillingAdapter, type BillingRedirect } from "../lib/billing/adapter"
+import {
+  type BillingAdapter,
+  type BillingRedirect,
+  CHECKOUT_RETURN_PARAM,
+} from "../lib/billing/adapter"
 import { getBillingAdapter } from "../lib/billing/select"
 import { billingKeys } from "../lib/billing-keys"
 import { type OrgSettingsApi } from "../lib/org-settings-api"
@@ -76,6 +83,23 @@ export function OrgBillingContainer({
     enabled: canView && adapter !== undefined,
   })
 
+  // Back from checkout (?checkout=success): the webhook may still be on its way, so the plan is
+  // re-read from the provider now, then the page's billing data is loaded again.
+  const refreshAdapter = canChange ? adapter : undefined
+  useEffect(() => {
+    if (!refreshAdapter?.refresh || typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get(CHECKOUT_RETURN_PARAM) !== "success") return
+    url.searchParams.delete(CHECKOUT_RETURN_PARAM)
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+    void refreshAdapter
+      .refresh(organizationId)
+      .catch(() => {})
+      .finally(() => {
+        void queryClient.invalidateQueries({ queryKey: billingKeys.snapshot(organizationId) })
+      })
+  }, [refreshAdapter, organizationId, queryClient])
+
   const members = useQuery({
     queryKey: qk.org(organizationId).members(),
     queryFn: () => api.listMembers(organizationId),
@@ -129,7 +153,7 @@ export function OrgBillingContainer({
       mode={adapter.mode}
       snapshot={snapshot.data}
       usage={usage.data ?? null}
-      seatsUsed={members.data.total}
+      seatsUsed={members.data.members.filter((member) => takesSeat(member.role)).length}
       pending={open.isPending}
       actionError={actionError}
       onOpenPortal={() => open.mutate(() => adapter.openPortal(organizationId))}

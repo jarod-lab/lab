@@ -117,8 +117,11 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
 `createMcpHandler`, so REST and MCP behave the same:
 
 - **Before** (`invoke` runs it after the permission and input checks): meters the call against the
-  org's daily limit (`apps/api/src/meter.ts`, UTC day). Over the limit is `RATE_LIMITED` with
-  `Retry-After` and `RateLimit-*` headers. Read-only session calls (the web app's polling) are not
+  org's daily limit (`apps/api/src/meter.ts`, UTC day: the plan's `requests` limit, counted by
+  @byo-oss/entitlements' `consumeUsage`, so a refused call counts nothing). Over the limit is `RATE_LIMITED` with
+  `Retry-After` and `RateLimit-*` headers. The `requests` limit is per plan (Free 10,000, Pro 100,000,
+  Team `"unlimited"`): an unlimited reading is `null` in `Reading`/`whoami` and sends no `RateLimit-*`
+  headers (there is no number to send). Read-only session calls (the web app's polling) are not
   metered, so they can't spend the agents' budget; writes count for every caller. For a non-readOnly
   call with an idempotency key, it reserves the key: a finished key replays its stored response, a
   running or reused-for-another-request key is `CONFLICT`.
@@ -138,9 +141,14 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
   `response` is sealed with AES-256-GCM under a key derived from the secret, the org and the
   client's raw key (`data/idempotency.ts`), so a replayed `create_api_key` still returns its key but
   a table dump doesn't. `createApiHooks` takes `secret`.
-- **Metering**: `ORG_DAILY_REQUEST_LIMIT` (claimed) and `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (until
-  an owner verifies their email), counted in `usage_daily` per org per UTC day. `whoami` returns
-  usage and `claimed`.
+- **Metering**: the plan's `requests` limit (`packages/plans/src/catalog.ts`; claimed orgs) and
+  `UNCLAIMED_ORG_DAILY_REQUEST_LIMIT` (until an owner verifies their email, `resolveEntitlements` in
+  `packages/auth/src/entitlements.ts`), counted in `entitlement_usage` per org per UTC day. `whoami`
+  returns usage, `claimed` and the plan (`entitlements`).
+- **Plan limits**: capacity checks (`auth.entitlements.checkCapacity`) with the app's own count:
+  agents in `create_agent` (`assertCapacity`, `apps/api/src/plan-limits.ts`: FORBIDDEN with a hint
+  naming the plan), seats in the organization hooks (`packages/auth/src/entitlements.ts`; viewers are
+  free). Never read the entitlement tables from app code.
 - Errors thrown by the hooks are `AppError`s like any other; `after` errors are reported and
   dropped.
 - **Pagination.** Lists take `cursor` and `limit` and return `nextCursor`. `readCursor` and `cut` in

@@ -7,12 +7,14 @@ import {
   AUTONOMY,
   type Autonomy,
   agentActivity,
+  countAgents,
   createAgent,
   deleteAgent,
   getAgent,
   listAgents,
   updateAgent,
 } from "../data/agents"
+import { assertCapacity } from "../plan-limits"
 import { inCallerOrg, orNotFound, requireInOrg } from "../tenant"
 import { agentRef, defineOperation, type OperationDeps } from "./shared"
 
@@ -82,7 +84,11 @@ const toAgentOutput = (r: Agent, activity: AgentActivity) => ({
   updatedAt: r.updatedAt.toISOString(),
 })
 
-export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" | "now">) {
+export function workspaceAgentOperations({
+  auth,
+  db,
+  now,
+}: Pick<OperationDeps, "auth" | "db" | "now">) {
   const list_agents = defineOperation({
     name: "list_agents",
     method: "GET",
@@ -143,7 +149,9 @@ export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" |
     summary: "Create a workspace agent",
     description:
       "Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three " +
-      "always-ask actions on. Start its work with start_run. Returns the agent.",
+      "always-ask actions on. Start its work with start_run. Returns the agent. The plan limits how " +
+      "many agents an organization has (Free: 2); over it the call is FORBIDDEN, and the hint names " +
+      "the plan that allows more.",
     permissions: { agent: ["create"] },
     hints: { readOnly: false, destructive: false },
     input: agentSettingsInput,
@@ -151,6 +159,13 @@ export function workspaceAgentOperations({ db, now }: Pick<OperationDeps, "db" |
     examples: [{ input: { name: "Release triage", description: "Groups release blockers" } }],
     handler: (input, { caller }) =>
       inCallerOrg(caller, async (org, proof) => {
+        // Capacity: a count the app supplies (entitlements' checkCapacity). Two concurrent creates
+        // can both pass at the limit; the plan is a commercial limit, not a security one.
+        const count = await countAgents(db, org, proof)
+        assertCapacity(
+          await auth.entitlements.checkCapacity(caller.organizationId, "agents", { count }),
+          "agents",
+        )
         const row = await createAgent(db, org, proof, input, now())
         return toAgentOutput(row, "idle")
       }),

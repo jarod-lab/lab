@@ -1,7 +1,13 @@
 import type { createClient } from "@starter/auth/client"
 
+import { catalogPlans } from "./plans"
 import { fetchBillingUsage } from "./usage"
-import { type BillingAdapter, type BillingSnapshot, type BillingSubscription } from "./adapter"
+import {
+  type BillingAdapter,
+  type BillingSnapshot,
+  type BillingSubscription,
+  CHECKOUT_RETURN_PARAM,
+} from "./adapter"
 
 type Client = ReturnType<typeof createClient>
 
@@ -32,7 +38,10 @@ const dateText = (value: Date | string | null | undefined): string | null => {
   }).format(date)
 }
 
-const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
+/** The page to come back to after checkout, marked so the page refreshes the plan on arrival. */
+export function checkoutReturnUrl(page: string): string {
+  return `${page}${page.includes("?") ? "&" : "?"}${CHECKOUT_RETURN_PARAM}=success`
+}
 
 /**
  * The billing adapter over better-auth's stripe client (test mode, server-gated: only chosen when
@@ -59,17 +68,17 @@ export function createStripeBillingAdapter(
         "Could not load the subscription",
       )
       const active = rows.find((row) => row.status === "active" || row.status === "trialing")
+      // The plans are the product catalog's (@starter/plans), the ones the API enforces; prices
+      // live in Stripe, so none is shown here.
       const snapshot: BillingSnapshot = {
         sample: false,
-        plans: [],
+        plans: catalogPlans(null),
         subscription: null,
         paymentMethod: null,
         invoiceEmail: null,
         invoices: null,
       }
       if (!active) return snapshot
-      // The plan catalogue lives on the server (STRIPE_PLANS) and isn't listed to the browser, so
-      // the only plan the page can name is the one the organization holds.
       const current: BillingSubscription = {
         planId: active.plan,
         renewsOn: dateText(active.periodEnd),
@@ -77,16 +86,6 @@ export function createStripeBillingAdapter(
         cancelAtPeriodEnd: active.cancelAtPeriodEnd === true,
       }
       snapshot.subscription = current
-      snapshot.plans = [
-        {
-          id: active.plan,
-          name: titleCase(active.plan),
-          price: null,
-          perSeat: false,
-          features: [],
-          seatCap: null,
-        },
-      ]
       return snapshot
     },
     async openPortal(organizationId) {
@@ -107,7 +106,8 @@ export function createStripeBillingAdapter(
           plan: planId,
           referenceId: organizationId,
           customerType: "organization",
-          successUrl: here(),
+          // Back on this page with ?checkout=success: the page refreshes the plan (refresh below).
+          successUrl: checkoutReturnUrl(here()),
           cancelUrl: here(),
           returnUrl: here(),
           disableRedirect: true,
@@ -115,6 +115,10 @@ export function createStripeBillingAdapter(
         "Could not change the plan",
       )
       return { url: result.url }
+    },
+    // After checkout the webhook may not have arrived yet: resync the plan from Stripe now.
+    async refresh(organizationId) {
+      unwrap(await client.entitlements.refresh({ organizationId }), "Could not refresh the plan")
     },
     async cancel(organizationId) {
       const result = unwrap(

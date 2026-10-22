@@ -1,8 +1,7 @@
+import type { createClient } from "@starter/auth/client"
 import { describe, expect, it, vi } from "vitest"
 
-import type { createClient } from "@starter/auth/client"
-
-import { createStripeBillingAdapter } from "./stripe"
+import { checkoutReturnUrl, createStripeBillingAdapter } from "./stripe"
 
 type Client = ReturnType<typeof createClient>
 
@@ -46,8 +45,11 @@ describe("createStripeBillingAdapter", () => {
       seats: 15,
       cancelAtPeriodEnd: false,
     })
-    expect(snapshot.plans).toEqual([
-      { id: "pro", name: "Pro", price: null, perSeat: false, features: [], seatCap: null },
+    // Every plan in the product catalog (@starter/plans), with no price: prices live in Stripe.
+    expect(snapshot.plans.map((plan) => [plan.id, plan.seatCap, plan.price])).toEqual([
+      ["free", 3, null],
+      ["pro", 25, null],
+      ["team", null, null],
     ])
   })
 
@@ -89,10 +91,29 @@ describe("createStripeBillingAdapter", () => {
       url: "https://billing.test/checkout",
     })
     expect(upgrade).toHaveBeenCalledWith(
-      expect.objectContaining({ plan: "team", disableRedirect: true }),
+      expect.objectContaining({
+        plan: "team",
+        disableRedirect: true,
+        // Back from checkout, the page refreshes the plan (?checkout=success).
+        successUrl: "https://app.test/acme/settings/billing?checkout=success",
+        cancelUrl: "https://app.test/acme/settings/billing",
+      }),
     )
 
     expect(await adapter.cancel("org-a")).toEqual({ url: "https://billing.test/cancel" })
+  })
+
+  it("refreshes the organization's plan through entitlements", async () => {
+    const refresh = vi.fn(async () => ({ data: { plan: { key: "pro" } }, error: null }))
+    const client = { subscription: {}, entitlements: { refresh } } as unknown as Client
+    await createStripeBillingAdapter(client).refresh?.("org-a")
+    expect(refresh).toHaveBeenCalledWith({ organizationId: "org-a" })
+  })
+
+  it("marks a relative return page for the refresh too", () => {
+    expect(checkoutReturnUrl("/acme/settings/billing?tab=x")).toBe(
+      "/acme/settings/billing?tab=x&checkout=success",
+    )
   })
 
   it("throws the server's message when a call is refused", async () => {

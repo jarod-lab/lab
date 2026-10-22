@@ -13,10 +13,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@better-auth/core": "1.7.7",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@better-auth/sso": "catalog:",
     "@better-auth/stripe": "catalog:",
+    "@byo-oss/entitlements": "0.1.0-rc.3",
     "@byo-oss/notifications": "^0.9.0",
     "@byo-oss/support": "^0.1.0",
     "@openfeature/core": "^1.12.0",
@@ -26,6 +28,7 @@
     "@starter/analytics": "workspace:*",
     "@starter/auth": "workspace:*",
     "@starter/flags": "workspace:*",
+    "@starter/plans": "workspace:*",
     "@starter/sdk": "workspace:*",
     "@starter/ui": "workspace:*",
     "@tanstack/react-form": "^1.33.5",

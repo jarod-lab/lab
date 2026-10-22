@@ -1795,6 +1795,33 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       expect(await memberOf(address, org)).toEqual({ role: "member" })
     })
 
+    // Seats (packages/auth/src/entitlements.ts): the projection checks the plan inside the
+    // directory's transaction; a refusal fails the SCIM write and leaves nothing behind.
+    it("refuses provisioning past the Free plan's seats, and keeps neither the member nor the user", async () => {
+      const { org, scim } = await ownerWithScim("Full")
+      for (const name of ["Second", "Third"]) {
+        const extra = await signedUp(`Full ${name}`)
+        await t.auth.api.addMember({
+          body: { organizationId: org, userId: extra.userId, role: "member" },
+        })
+      }
+      const address = email()
+      const created = await scim(
+        "/Users",
+        json({
+          schemas: [SCIM_USER],
+          userName: address,
+          displayName: "One Too Many",
+          emails: [{ value: address, primary: true }],
+          active: true,
+        }),
+      )
+      expect(created.status).toBeGreaterThanOrEqual(400)
+      expect(await memberOf(address, org)).toBeNull()
+      const users = await t.db.select().from(userTable).where(eq(userTable.email, address))
+      expect(users).toEqual([])
+    })
+
     it("a DELETE of the SCIM user removes the membership", async () => {
       const { org, scim } = await ownerWithScim("Delete")
       const address = email()
@@ -2342,6 +2369,32 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       const confirm = await mailed(email, CONFIRM_DELETE)
       await b.request(confirm.link)
       expect(await keysLeft()).toBe(0)
+    })
+
+    // The personal organization is deleted raw (no organization hooks), so removePersonalOrganization
+    // runs entitlements' cleanup itself: the snapshot and the usage counters go with it.
+    it("removes the personal organization's entitlements rows with it", async () => {
+      const { b, email } = await signedUp("Metered")
+      const orgId = (await b.client.getSession()).data?.session.activeOrganizationId ?? ""
+      await t.auth.entitlements.get(orgId)
+      await t.auth.entitlements.consumeUsage(orgId, "requests")
+      const adapter = (await t.auth.$context).adapter
+      const rows = async () => ({
+        snapshots: await adapter.count({
+          model: "entitlementSnapshot",
+          where: [{ field: "organizationId", value: orgId }],
+        }),
+        usage: await adapter.count({
+          model: "entitlementUsage",
+          where: [{ field: "organizationId", value: orgId }],
+        }),
+      })
+      expect(await rows()).toEqual({ snapshots: 1, usage: 1 })
+
+      expect((await b.client.deleteUser({})).error).toBeNull()
+      const confirm = await mailed(email, CONFIRM_DELETE)
+      await b.request(confirm.link)
+      expect(await rows()).toEqual({ snapshots: 0, usage: 0 })
     })
 
     it("never lets an organization pass for someone's personal one", async () => {

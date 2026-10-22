@@ -23,7 +23,7 @@ export function Plans() {
         </h1>
         <p className="max-w-155 type-lead text-secondary-foreground">
           Every plan includes unlimited runs within fair use, approvals, and the full run history.
-          Viewers are free on paid plans.
+          Viewers are free on every plan.
         </p>
         <fieldset className="mt-1.5 flex overflow-hidden rounded-[10px] border-2 border-foreground">
           <legend className="sr-only">Billing period</legend>

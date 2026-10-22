@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc",
@@ -25,6 +26,7 @@
     "@better-auth/scim": "1.7.7",
     "@better-auth/sso": "catalog:",
     "@better-auth/stripe": "catalog:",
+    "@byo-oss/entitlements": "0.1.0-rc.3",
     "@byo-oss/notifications": "^0.9.0",
     "@byo-oss/core": "^0.1.0",
     "@byo-oss/mailer": "^0.1.0",
@@ -34,9 +36,11 @@
     "@starter/env": "workspace:*",
     "@starter/errors": "workspace:*",
     "@starter/logger": "workspace:*",
+    "@starter/plans": "workspace:*",
     "@wraps.dev/better-auth": "^0.4.0",
     "@wraps.dev/email": "^0.15.0",
     "better-auth": "catalog:",
+    "better-call": "1.4.0",
     "drizzle-orm": "catalog:",
     "jose": "catalog:",
     "stripe": "^23.0.0",

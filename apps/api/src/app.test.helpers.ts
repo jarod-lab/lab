@@ -1,5 +1,6 @@
 // Test-only: the real app on in-process Postgres (PGlite) with two organizations:
-//   - "acme": owner (session), a viewer member (session), a full key and a read-only key
+//   - "acme": owner (session), a viewer member (session), a full key and a read-only key; on the
+//     Team plan unless a test says otherwise (`plan`)
 //   - "other": a separate user's personal org, for cross-tenant checks
 // acme is the operator organization (feature flag rollouts) unless a test says otherwise.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
@@ -13,6 +14,8 @@ import {
   createAuth,
 } from "@starter/auth"
 import { createTestDb } from "@starter/db/testing"
+import { memorySource } from "@starter/auth/testing"
+import type { PlanId } from "@starter/plans"
 import type { FlagCatalog } from "@starter/flags"
 import { createLogger, type Logger } from "@starter/logger"
 import { createMemoryStore, type FileStore } from "@starter/storage"
@@ -22,7 +25,7 @@ import { recordAuthEvent } from "./data/audit"
 import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
-import { createMeter, type MeterLimits } from "./meter"
+import { createMeter } from "./meter"
 import { type ApiNotifier, createApiNotifier } from "./notifications"
 import { createOperations } from "./operations"
 import type { Operator } from "./tenant"
@@ -59,8 +62,18 @@ export interface SentEmail {
 }
 
 export interface TestAppOptions {
-  /** Daily request limits. Test users are unverified, so `unclaimed` is the one that applies. */
-  limits?: Partial<MeterLimits>
+  /**
+   * Daily request limits. Test users are unverified, so `unclaimed` is the one that applies (the
+   * claimed one is the plan's, from the catalog).
+   */
+  limits?: { unclaimed?: number }
+  /**
+   * acme's plan. Default `team`, so suites can add members and agents freely; the entitlements
+   * tests pass `free` to meet Free's limits. Every other organization is on Free.
+   */
+  plan?: PlanId
+  /** Entitlements' staff organization (overrides). Unset, nobody can set an override. */
+  staffOrganizationId?: string
   /** Trust X-Forwarded-For (as behind a proxy), for signup rate-limit tests. */
   trustProxy?: boolean
   /** A built web app to serve (see static.test.ts). */
@@ -135,6 +148,7 @@ export async function createTestApp(
   }
   const devMail = options.devMail ? createDevMailSink() : undefined
   const { analytics } = options
+  const plans = memorySource()
   const auth = createAuth({
     db: t.db,
     secret: SECRET,
@@ -154,6 +168,13 @@ export async function createTestApp(
     google: options.google,
     rateLimit: options.rateLimit ?? false,
     support: options.support,
+    // Every organization is on Free until a test puts it on a plan (`onPlan`). With Stripe plans,
+    // the stripe plugin's subscriptions are the source instead, as in production.
+    entitlements: {
+      source: options.stripe?.plans?.length ? undefined : plans,
+      unclaimedRequestLimit: options.limits?.unclaimed ?? 500,
+      staffOrganizationId: options.staffOrganizationId,
+    },
     onSignUp: analytics && ((event) => captureSignUp(analytics, event)),
     onAuthEvent:
       options.onAuthEvent ??
@@ -161,10 +182,7 @@ export async function createTestApp(
         await recordAuthEvent(t.db, event)
       }),
   })
-  const meter = createMeter({
-    db: t.db,
-    limits: { claimed: 10_000, unclaimed: 500, ...options.limits },
-  })
+  const meter = createMeter({ db: t.db, entitlements: auth.entitlements })
   const notifier = options.notifier ?? createApiNotifier({ auth, db: t.db })
   const files =
     options.files === false
@@ -227,6 +245,8 @@ export async function createTestApp(
   }
 
   const owner = await signUp("Owner")
+  // (With Stripe plans acme is on Free unless a test seeds a subscription for it.)
+  await plans.set(owner.orgId, { planKey: options.plan ?? "team", status: "active" })
   if (options.operator !== false) operator.organizationId = owner.orgId
   const viewer = await signUp("Viewer")
   await auth.api.addMember({
@@ -282,9 +302,18 @@ export async function createTestApp(
     return client
   }
 
+  /** Put an organization on a plan, as an active subscription would. */
+  const onPlan = (organizationId: string, plan: PlanId) => {
+    // With Stripe plans the source is the subscription table: seed a `subscription` row instead.
+    if (options.stripe?.plans?.length) throw new Error("onPlan: this test app bills through Stripe")
+    return plans.set(organizationId, { planKey: plan, status: "active" })
+  }
+
   return {
     app,
     auth,
+    onPlan,
+    plans,
     operations,
     files,
     req,

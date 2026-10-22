@@ -71,7 +71,23 @@ export interface BillingUsage {
   /** The UTC day the counter covers (YYYY-MM-DD). */
   day: string
   total: number
-  limit: number
+  /** Requests allowed per day; null when the plan is unlimited (Team). */
+  limit: number | null
+  /** The plan the API enforces (whoami's `entitlements`), the same in both modes. */
+  plan?: BillingEntitlements
+}
+
+/** What the organization's plan allows, as the API enforces it. Real data, never a sample. */
+export interface BillingEntitlements {
+  planId: string
+  /** The plan's name from the catalog ("Free"). */
+  planName: string
+  /** Seats the plan allows (viewers are free); null when unlimited. */
+  seatLimit: number | null
+  /** Workspace agents the plan allows; null when unlimited. */
+  agentLimit: number | null
+  /** The plan could not be read; this is Free as a fallback. */
+  degraded: boolean
 }
 
 /** A change that the provider completes on its own page: the URL to open in a new tab. */
@@ -91,7 +107,15 @@ export interface BillingAdapter {
   changePlan(organizationId: string, planId: string): Promise<BillingRedirect>
   /** Cancel at the end of the period (the provider confirms it on its own page). */
   cancel(organizationId: string): Promise<BillingRedirect>
+  /**
+   * Re-read the plan from the provider now (the page calls it on return from checkout, as the
+   * webhook may arrive later). Absent when there is no provider.
+   */
+  refresh?(organizationId: string): Promise<void>
 }
+
+/** The query parameter the checkout's success page carries back (`?checkout=success`). */
+export const CHECKOUT_RETURN_PARAM = "checkout"
 
 /** Thrown by any fixture action: nothing can be charged or changed without a provider. */
 export class BillingNotConnectedError extends Error {

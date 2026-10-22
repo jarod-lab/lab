@@ -1,7 +1,8 @@
 import type { SCIMProjection } from "@better-auth/scim"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
-import { type Adapter, findMember } from "./membership"
 import { createTestAuth } from "./auth.test.helpers"
+import { assertSeatAvailable, seatsTaken } from "./entitlements"
+import { type Adapter, findMember } from "./membership"
 import { scimProjection } from "./scim-projection"
 
 type Reconcile = NonNullable<SCIMProjection["reconcileUser"]>
@@ -18,6 +19,8 @@ describe("scimProjection (real Postgres via PGlite)", () => {
     const signed = await t.signUp("Owner")
     org = signed.orgId
     owner = signed.userId
+    // The suite adds more members than Free's 3 seats; the seat check has its own tests.
+    await t.onPlan(org, "team")
   })
   afterAll(() => t.close())
 
@@ -146,5 +149,46 @@ describe("scimProjection (real Postgres via PGlite)", () => {
     await provision(active)
     expect(await findMember(await adapter(), active, org)).not.toBeNull()
     expect(endAccess).not.toHaveBeenCalled()
+  })
+})
+
+describe("scimProjection's seat check (real Postgres via PGlite)", () => {
+  let t: Awaited<ReturnType<typeof createTestAuth>>
+  beforeAll(async () => {
+    t = await createTestAuth()
+  })
+  afterAll(() => t.close())
+
+  it("refuses provisioning a member past the plan's seats, inside the directory's transaction", async () => {
+    const { orgId } = await t.signUp("Directory owner")
+    for (const name of ["Two", "Three"])
+      await t.addMember(orgId, (await t.signUp(name)).userId, "member")
+    const projection = scimProjection(
+      async () => {},
+      { info: () => {}, warn: () => {} },
+      async (db, organizationId) =>
+        assertSeatAvailable(
+          t.auth.entitlements,
+          organizationId,
+          await seatsTaken(db, organizationId),
+        ),
+    )
+    const newcomer = (await t.signUp("Fourth")).userId
+    const database = (await t.auth.$context).adapter as unknown as Context["database"]
+    await expect(
+      projection.reconcileUser(
+        {
+          provisioningDomainId: orgId,
+          userId: newcomer,
+          active: true,
+          sources: [
+            { id: "src-seat", connectionId: "conn", provisioningDomainId: orgId, active: true },
+          ],
+          grants: [],
+        },
+        { database },
+      ),
+    ).rejects.toMatchObject({ body: { code: "PLAN_LIMIT_REACHED" } })
+    expect(await findMember((await t.auth.$context).adapter, newcomer, orgId)).toBeNull()
   })
 })

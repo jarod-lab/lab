@@ -10,7 +10,7 @@ export interface paths {
         };
         /**
          * Show the caller, its organization, permissions and usage
-         * @description Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), and whether this is the operator organization. Call this first to check a credential.
+         * @description Returns the organization this credential acts for, who is acting (a user or an API key), how it authenticated, its permission grants (a request is allowed when one grant covers all of it), today's usage against the daily limit, and whether the owner has claimed the account (verified the email), whether this is the operator organization, and the organization's plan with its features and limits. Call this first to check a credential.
          */
         get: operations["whoami"];
         put?: never;
@@ -244,7 +244,7 @@ export interface paths {
         put?: never;
         /**
          * Create a workspace agent
-         * @description Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent.
+         * @description Creates a workspace agent in the caller's organization. Defaults: ask_first autonomy, and the three always-ask actions on. Start its work with start_run. Returns the agent. The plan limits how many agents an organization has (Free: 2); over it the call is FORBIDDEN, and the hint names the plan that allows more.
          */
         post: operations["create_agent"];
         delete?: never;
@@ -775,13 +775,30 @@ export interface operations {
                             day: string;
                             /** @description Requests so far today, including this one */
                             total: number;
-                            /** @description Requests allowed per day for this organization */
-                            limit: number;
+                            /** @description Requests allowed per day for this organization; null when unlimited (Team) */
+                            limit: number | null;
                         };
                         /** @description False while the owner's email is unverified (lower limit) */
                         claimed: boolean;
                         /** @description True in the operator organization, which runs the product (feature flags) */
                         operator: boolean;
+                        /** @description The organization's plan, features and limits */
+                        entitlements: {
+                            /** @description The plan key: free, pro or team */
+                            plan: string;
+                            /** @description The subscription's status (active, trialing, past_due, ...); null without one */
+                            status: string | null;
+                            /** @description What the plan includes: apiKeys, budgets, sso, auditExport, customRoles */
+                            features: {
+                                [key: string]: boolean;
+                            };
+                            /** @description requests (per UTC day), seats (viewers are free), agents, runHistoryDays */
+                            limits: {
+                                [key: string]: number | "unlimited";
+                            };
+                            /** @description True when the plan could not be read and this is the Free plan as a fallback */
+                            degraded: boolean;
+                        };
                     };
                 };
             };

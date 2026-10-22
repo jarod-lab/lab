@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+
+import type { createClient } from "@starter/auth/client"
+import { expectNoA11yViolations } from "@starter/ui/a11y"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { expectNoA11yViolations } from "@starter/ui/a11y"
-import type { createClient } from "@starter/auth/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingAdapter, BillingSnapshot, BillingUsage } from "../lib/billing/adapter"
@@ -212,5 +213,38 @@ describe("OrgBillingContainer when the billing mode cannot be checked", () => {
     expect(screen.queryByText("[SAMPLE DATA]")).toBeNull()
     expect(signInMethods).toHaveBeenCalledTimes(2)
     expect(list).toHaveBeenCalled()
+  })
+})
+
+describe("OrgBillingContainer and the plan the API enforces", () => {
+  it("shows the plan, its seats (viewers free) and agents beside today's requests", async () => {
+    const usage: BillingUsage = {
+      ...USAGE,
+      plan: { planId: "free", planName: "Free", seatLimit: 3, agentLimit: 2, degraded: false },
+    }
+    const adapter = { ...fixtureBillingAdapter, usage: vi.fn(async () => usage) }
+    setup({ adapter })
+    const card = await screen.findByRole("region", { name: "Plan usage" })
+    expect(within(card).getByText("Free")).toBeTruthy()
+    expect(
+      within(card).getByText("1 of 3 seats used · viewers are free · up to 2 agents"),
+    ).toBeTruthy()
+  })
+
+  it("refreshes the plan on return from checkout, then drops the marker from the address", async () => {
+    window.history.replaceState(null, "", "/acme/settings/billing?checkout=success")
+    const refresh = vi.fn(async () => {})
+    const adapter = { ...stripeAdapter(), refresh }
+    setup({ adapter })
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith("org-a"))
+    expect(window.location.search).toBe("")
+  })
+
+  it("doesn't refresh on an ordinary visit", async () => {
+    window.history.replaceState(null, "", "/acme/settings/billing")
+    const refresh = vi.fn(async () => {})
+    setup({ adapter: { ...stripeAdapter(), refresh } })
+    await screen.findByRole("heading", { name: "Pro" })
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

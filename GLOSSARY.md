@@ -110,6 +110,18 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Reclaim** — the decision that ends a rollout: the flag serves one value to everyone and can no
   longer change. Then its code is removed, and after that deploy its rollout is deleted.
 
+## Plans
+
+- **Plan** — what an organization's subscription includes: Free, Pro or Team, declared once in
+  `packages/plans/src/catalog.ts` (`@starter/plans`) for the API, the web app and the pricing page.
+  Without a subscription an organization is on Free. Prices are in Stripe, not in the catalog.
+- **Entitlement** — what the plan allows an organization: a **feature** (on or off) or a **limit**
+  (requests per UTC day, seats, agents, run history days), checked through
+  `@byo-oss/entitlements` (`auth.entitlements`). A refusal names the plan that would allow it.
+- **Seat** — a member who holds any role but viewer. Viewers are free on every plan.
+- **Override** — a staff grant for one organization (a feature, a limit or another plan), with a
+  reason and an optional expiry, set only by the operator organization's owners and admins.
+
 ## Support
 
 - **Support ticket** — a customer's request to the people who run the product (`@byo-oss/support`,

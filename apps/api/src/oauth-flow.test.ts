@@ -227,6 +227,7 @@ describe("OAuth authorization code flow (real tokens)", () => {
         agent: ["read"],
         run: ["read"],
         featureFlag: ["read"],
+        entitlements: ["read"],
       },
     ])
     const mint = await t.req("/v1/api-keys", {

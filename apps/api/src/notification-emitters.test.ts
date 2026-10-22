@@ -2,25 +2,15 @@
 // starter minus the decider, owners and admins for key events, the member for two-factor resets), that
 // run.done fires once, that usage.limit_reached fires once per organization per day, and that a
 // notifier that throws never changes an operation's response.
-import type { Caller } from "@starter/api"
 import { user } from "@starter/db"
 import { AppError } from "@starter/errors"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createTestApp } from "./app.test.helpers"
-import { claimNotice } from "./data/usage"
-import { inCallerOrg } from "./tenant"
 
 type Json = Record<string, unknown>
 type App = Awaited<ReturnType<typeof createTestApp>>
-
-const callerOf = (organizationId: string, userId: string): Caller => ({
-  organizationId,
-  actor: { type: "user", userId },
-  grants: [],
-  via: "session",
-})
 
 describe("notification emitters", () => {
   let t: App
@@ -497,21 +487,6 @@ describe("usage.limit_reached", () => {
         query: { filter: "all", limit: 100 },
       })
       expect(viewer.notifications.filter((n) => n.type === "usage.limit_reached")).toHaveLength(0)
-    } finally {
-      await t.close()
-    }
-  })
-
-  it("claims one notice per organization per UTC day (the day is the key)", async () => {
-    const t = await createTestApp()
-    try {
-      const org = callerOf(t.owner.orgId, t.owner.userId)
-      const claim = (day: string) =>
-        inCallerOrg(org, (o, proof) => claimNotice(t.db, o, proof, "usage.limit_reached", day))
-      expect(await claim("2026-10-18")).toBe(true)
-      expect(await claim("2026-10-18")).toBe(false)
-      expect(await claim("2026-10-18")).toBe(false)
-      expect(await claim("2026-10-19")).toBe(true)
     } finally {
       await t.close()
     }

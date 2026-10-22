@@ -42,7 +42,7 @@ export interface OrgBillingPageProps {
   snapshot: BillingSnapshot
   /** Today's metered requests, or null while they load. Real data, so no sample label. */
   usage: BillingUsage | null
-  /** Members in the organization: the seats in use. */
+  /** Members who take a seat (every role but viewer: viewers are free). */
   seatsUsed: number
   /** A change is in flight: its controls are disabled. */
   pending: boolean
@@ -248,7 +248,7 @@ export function OrgBillingPage({
           </div>
         </div>
 
-        {usage ? <UsageCard usage={usage} /> : null}
+        {usage ? <UsageCard usage={usage} seatsUsed={seatsUsed} /> : null}
 
         <section aria-labelledby="plans-h" className="flex flex-col gap-2">
           <h3 id="plans-h" className="flex items-center gap-2 text-base font-bold">
@@ -299,13 +299,39 @@ export function OrgBillingPage({
   )
 }
 
-/** Today's requests against the daily limit. Not on the board: a real figure from the API. */
-function UsageCard({ usage }: { usage: BillingUsage }) {
-  const percent = usage.limit > 0 ? Math.min(100, (usage.total / usage.limit) * 100) : 0
+/**
+ * The plan the API enforces and today's requests against its daily limit. Not on the board: real
+ * figures from the API (whoami), so never labelled as samples, even in the fixture.
+ */
+function UsageCard({ usage, seatsUsed }: { usage: BillingUsage; seatsUsed: number }) {
+  const { limit } = usage
+  const percent = limit !== null && limit > 0 ? Math.min(100, (usage.total / limit) * 100) : 0
+  const plan = usage.plan
   return (
-    <section aria-label="Requests today" className="rounded-xl border border-border p-3.5 md:px-4">
+    <section aria-label="Plan usage" className="rounded-xl border border-border p-3.5 md:px-4">
+      {plan ? (
+        <div className="mb-3 flex flex-col gap-0.5">
+          <span className="text-[13px] text-muted-foreground">Your plan</span>
+          <span className="font-semibold">
+            {plan.degraded ? `${plan.planName} (the plan could not be read)` : plan.planName}
+          </span>
+          <span className="text-[13px] text-muted-foreground">
+            {[
+              plan.seatLimit === null
+                ? `${seatsUsed} seats used (unlimited)`
+                : `${seatsUsed} of ${plan.seatLimit} seats used`,
+              "viewers are free",
+              plan.agentLimit === null ? "unlimited agents" : `up to ${plan.agentLimit} agents`,
+            ].join(" · ")}
+          </span>
+        </div>
+      ) : null}
       <Progress value={percent}>
-        <ProgressLabel>{`Requests today: ${usage.total} of ${usage.limit}`}</ProgressLabel>
+        <ProgressLabel>
+          {limit === null
+            ? `Requests today: ${usage.total} (unlimited)`
+            : `Requests today: ${usage.total} of ${limit}`}
+        </ProgressLabel>
       </Progress>
       <p className="mt-1.5 text-[13px] text-muted-foreground">
         Counted per UTC day ({usage.day}). Resets at midnight UTC.

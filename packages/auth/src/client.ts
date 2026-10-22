@@ -5,6 +5,7 @@ import {
 import { passkeyClient } from "@better-auth/passkey/client"
 import { ssoClient } from "@better-auth/sso/client"
 import { stripeClient } from "@better-auth/stripe/client"
+import { entitlementsClient } from "@byo-oss/entitlements/client"
 import { inboxClient } from "@byo-oss/notifications/client"
 import { supportClient } from "@byo-oss/support/client"
 import { wrapsClient } from "@wraps.dev/better-auth/client"
@@ -89,6 +90,8 @@ export const createClient = (
       inboxClient(),
       // Customer support (support.ts): the widget's and the support queue's endpoints.
       supportClient(),
+      // Plan entitlements (entitlements.ts): the organization's plan, and a refresh after checkout.
+      entitlementsClient(),
       signInMethodsClient(),
       twoFactorClient({
         // The page keeps its query: a pending OAuth authorization rides on it into the code entry.

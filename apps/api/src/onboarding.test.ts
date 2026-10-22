@@ -545,7 +545,7 @@ describe("onboarding journey C: the CLI against a live server", () => {
         client: { send: async () => ({ MessageId: "live", $metadata: { requestId: "live" } }) },
       },
     })
-    const meter = createMeter({ db: t.db, limits: { claimed: 10_000, unclaimed: 500 } })
+    const meter = createMeter({ db: t.db, entitlements: auth.entitlements })
     const flags = createFlagService({ db: t.db, autoFlush: false })
     const app = createApp({
       hooks: createApiHooks({ db: t.db, meter, secret: SECRET }),

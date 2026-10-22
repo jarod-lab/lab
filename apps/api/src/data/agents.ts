@@ -39,6 +39,15 @@ export async function listAgents<O>(
     .orderBy(asc(agent.createdAt), asc(agent.id))
 }
 
+/** How many workspace agents the organization has (the plan's `agents` limit counts them). */
+export async function countAgents<O>(
+  db: Database,
+  org: Named<O, OrganizationId>,
+  _proof: CallerActsFor<O>,
+): Promise<number> {
+  return db.$count(agent, eq(agent.organizationId, org.value))
+}
+
 export async function createAgent<O>(
   db: Database,
   org: Named<O, OrganizationId>,

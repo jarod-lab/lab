@@ -39,6 +39,11 @@ export interface ProjectionLogger {
 export const scimProjection = (
   endAccess: (db: Adapter, userId: string, organizationId: string) => Promise<void>,
   logger: ProjectionLogger,
+  /**
+   * Refuses a new membership over the plan's seats (throws): the directory's write rolls back and
+   * it is answered the error, so the IdP shows the provisioning failed. Inside the transaction.
+   */
+  assertSeat: (db: Adapter, organizationId: string) => Promise<void> = async () => {},
 ): SCIMProjection => ({
   async reconcileUser(state, { database }) {
     const organizationId = state.provisioningDomainId
@@ -57,6 +62,7 @@ export const scimProjection = (
       // An existing membership keeps its source: a hand-made member the directory also provisions
       // stays hand-made, so a later deprovisioning leaves them in place.
       if (member) return
+      await assertSeat(database, organizationId)
       await database.create({
         model: "member",
         data: {

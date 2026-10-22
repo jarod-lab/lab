@@ -28,6 +28,20 @@ describe("fetchBillingUsage", () => {
     expect(new Headers(init.headers).get("X-Organization-Id")).toBe("org-a")
   })
 
+  it("passes an unlimited plan's null limit through", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ usage: { day: "2026-10-16", total: 9, limit: null } }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    )
+    expect(await fetchBillingUsage("org-a")).toEqual({ day: "2026-10-16", total: 9, limit: null })
+  })
+
   it("throws a WebError with the server's message when the call is refused", async () => {
     vi.stubGlobal(
       "fetch",

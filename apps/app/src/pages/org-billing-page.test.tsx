@@ -44,6 +44,13 @@ describe("OrgBillingPage", () => {
     expect(screen.queryByText(/Requests today/)).toBeNull()
   })
 
+  it("says unlimited, with an empty bar, when the plan has no request cap", () => {
+    renderWithClient(
+      <OrgBillingPage {...props({ usage: { day: "2026-10-16", total: 12_345, limit: null } })} />,
+    )
+    expect(screen.getByText("Requests today: 12345 (unlimited)")).toBeTruthy()
+  })
+
   it("keeps the screen-reader text for the arrow in the intro", () => {
     renderWithClient(<OrgBillingPage {...props()} />)
     expect(screen.getByText("with an arrow")).toBeTruthy()

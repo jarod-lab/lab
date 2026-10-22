@@ -16,6 +16,7 @@
   "dependencies": {
     "@astrojs/react": "^7.1.0",
     "@astrojs/rss": "^4.0.19",
+    "@starter/plans": "workspace:*",
     "@starter/ui": "workspace:*",
     "astro": "^7.4.0",
     "cn": "catalog:",

@@ -126,6 +126,7 @@ function SupportQueue({
         }
         onNavigate={onNavigate}
         labels={SUPPORT_QUEUE_LABELS}
+        className="min-h-0 flex-1"
         {...(pollInterval === undefined ? {} : { pollInterval })}
       />
     </SupportAdminPage>

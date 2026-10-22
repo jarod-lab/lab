@@ -28,7 +28,7 @@
     "@byo-oss/notifications": "^0.9.0",
     "@byo-oss/core": "^0.1.0",
     "@byo-oss/mailer": "^0.1.0",
-    "@byo-oss/support": "^0.1.0",
+    "@byo-oss/support": "^0.3.0",
     "@starter/api": "workspace:*",
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",

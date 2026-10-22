@@ -359,9 +359,10 @@ export async function openWidget(screen: Screen): Promise<Locator> {
   return panel
 }
 
-/** In an open widget (popover or inline): a new ticket, which opens its thread. */
+/** In an open widget (popover or inline): a new question ticket, which opens its thread. */
 export async function newTicketInWidget(panel: Locator, subject: string, body: string) {
   await panel.getByRole("button", "New ticket").tap()
+  await panel.getByRole("button", /^Ask a question/).tap()
   await panel.getByLabel("Subject").fill(subject)
   await panel.getByLabel("Message").fill(body)
   await panel.getByRole("button", "Submit ticket").tap()

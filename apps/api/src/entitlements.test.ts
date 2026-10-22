@@ -391,7 +391,7 @@ describe("entitlements in the product (real Postgres via PGlite)", () => {
     it("puts a customer on another plan; the plan override takes no value", async () => {
       const customer = await t.signUp("Upgraded")
       const body = { organizationId: customer.orgId, kind: "plan", key: "team", reason: "Comp" }
-      // rc.3: "a plan override takes no value". Leaving it out is the whole body.
+      // A plan override takes no value. Leaving it out is the whole body.
       const set = await call(t, staff.cookie, "/api/auth/entitlements/override/set", "POST", body)
       expect(set.status).toBe(200)
       expect((await t.auth.entitlements.get(customer.orgId)).plan.key).toBe("team")
@@ -407,7 +407,7 @@ describe("entitlements in the product (real Postgres via PGlite)", () => {
       expect(res.status).toBe(404)
     })
 
-    // rc.3 validates after the staff gate: whatever the body, a non-staff caller sees 404.
+    // Entitlements validates after the staff gate: whatever the body, a non-staff caller sees 404.
     it("answers 404 to a non-staff caller whatever the body (the gate runs before validation)", async () => {
       for (const body of [{}, { organizationId: 7 }, { kind: "nonsense", reason: "" }]) {
         const res = await call(

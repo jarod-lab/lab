@@ -16,7 +16,7 @@ const plan: PlanKey<PlanCatalog> = "team"
 // @ts-expect-error not a plan
 const noPlan: PlanId = "enterprise"
 
-// rc.3: each plan's `display` keeps its own type, so the catalog is the one copy of the plan copy.
+// Each plan's `display` keeps its own type, so the catalog is the one copy of the plan copy.
 const copy: string = catalog.plans.pro.display.name
 const support: "Priority" = catalog.plans.team.display.support
 

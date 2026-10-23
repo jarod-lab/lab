@@ -21,7 +21,8 @@ export interface PlanDisplay {
   items: readonly string[]
 }
 
-export const catalog = defineEntitlements({
+// One display shape for every plan: a plan missing a field, or with an unknown one, fails to compile.
+export const catalog = defineEntitlements<PlanDisplay>()({
   features: ["apiKeys", "budgets", "sso", "auditExport", "customRoles"],
   limits: {
     // Product API calls per organization per UTC day (the invoke hooks in apps/api consume it):
@@ -61,7 +62,7 @@ export const catalog = defineEntitlements({
           "Passkeys and two-factor",
           "Community support",
         ],
-      } satisfies PlanDisplay,
+      },
     },
     pro: {
       features: {
@@ -87,7 +88,7 @@ export const catalog = defineEntitlements({
           "Budgets and footprint reports",
           "Email support",
         ],
-      } satisfies PlanDisplay,
+      },
     },
     team: {
       features: { apiKeys: true, budgets: true, sso: true, auditExport: true, customRoles: true },
@@ -111,7 +112,7 @@ export const catalog = defineEntitlements({
           "Custom roles",
           "Priority support",
         ],
-      } satisfies PlanDisplay,
+      },
     },
   },
   defaultPlan: "free",

@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@better-auth/core": "1.7.7",
-    "@byo-oss/entitlements": "^0.1.0",
+    "@byo-oss/entitlements": "^0.2.0",
     "better-auth": "catalog:",
     "better-call": "1.4.0",
     "zod": "catalog:"

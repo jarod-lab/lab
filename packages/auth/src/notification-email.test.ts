@@ -78,12 +78,127 @@ describe("notificationEmailChannel", () => {
       ses: {
         client: {
           send: async () => {
-            throw new Error("Throttling")
+            throw Object.assign(new Error("Throttling"), {
+              name: "Throttling",
+              $metadata: { requestId: "r" },
+            })
           },
         },
       },
     })
-    await expect(channel.deliver(context("/x"))).rejects.toThrow()
+    const failure = channel.deliver(context("/x"))
+    await expect(failure).rejects.toThrow()
+    const error = await failure.catch((e: unknown) => e)
+    expect((error as { permanent?: unknown }).permanent).not.toBe(true)
+  })
+
+  it("sends a non-ASCII display name in From RFC 2047 encoded", async () => {
+    const ses = fakeSes()
+    const channel = notificationEmailChannel({
+      from: "Zoë <auth@example.com>",
+      appName: "Acme",
+      ses: { client: ses.client },
+    })
+    await channel.deliver(context("/x"))
+
+    const source = /"Source":"([^"]*)"/.exec(ses.sent[0]?.raw ?? "")?.[1] ?? ""
+    expect(source).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/]+=*\?= <auth@example\.com>$/)
+    const encoded = source.slice("=?UTF-8?B?".length, source.indexOf("?="))
+    expect(Buffer.from(encoded, "base64").toString("utf8")).toBe("Zoë")
+  })
+
+  it("rejects an invalid recipient address as permanent, without calling SES", async () => {
+    const ses = fakeSes()
+    const channel = notificationEmailChannel({
+      from: "Test <auth@example.com>",
+      appName: "Acme",
+      ses: { client: ses.client },
+    })
+    const ctx = context("/x")
+    const failure = channel.deliver({ ...ctx, user: { ...ctx.user, email: "not an address" } })
+
+    await expect(failure).rejects.toMatchObject({ permanent: true })
+    expect(ses.sent).toHaveLength(0)
+  })
+
+  it("rejects an SES MessageRejected as permanent", async () => {
+    const channel = notificationEmailChannel({
+      from: "Test <auth@example.com>",
+      appName: "Acme",
+      ses: {
+        client: {
+          send: async () => {
+            throw Object.assign(new Error("Illegal address"), {
+              name: "MessageRejected",
+              $metadata: { requestId: "r" },
+            })
+          },
+        },
+      },
+    })
+    await expect(channel.deliver(context("/x"))).rejects.toMatchObject({ permanent: true })
+  })
+
+  it("rejects an SES InvalidParameterValue as permanent", async () => {
+    const channel = notificationEmailChannel({
+      from: "Test <auth@example.com>",
+      appName: "Acme",
+      ses: {
+        client: {
+          send: async () => {
+            throw Object.assign(new Error("Invalid parameter"), {
+              name: "InvalidParameterValue",
+              $metadata: { requestId: "r" },
+            })
+          },
+        },
+      },
+    })
+    await expect(channel.deliver(context("/x"))).rejects.toMatchObject({ permanent: true })
+  })
+
+  it("lets an unverified identity through as a retried sandbox error, not permanent", async () => {
+    const channel = notificationEmailChannel({
+      from: "Test <auth@example.com>",
+      appName: "Acme",
+      ses: {
+        client: {
+          send: async () => {
+            throw Object.assign(
+              new Error(
+                "Email address is not verified. The following identities failed the check in region us-east-1: ada@example.com",
+              ),
+              { name: "MessageRejected", $metadata: { requestId: "r" } },
+            )
+          },
+        },
+      },
+    })
+    const failure = channel.deliver(context("/x"))
+    await expect(failure).rejects.toMatchObject({ name: "SandboxError" })
+    const error = await failure.catch((e: unknown) => e)
+    expect((error as { permanent?: unknown }).permanent).not.toBe(true)
+  })
+
+  it("builds no AWS client until it delivers", async () => {
+    const ses = fakeSes()
+    let accessed = 0
+    const sesOptions = {
+      get client() {
+        accessed += 1
+        return ses.client
+      },
+    }
+    const channel = notificationEmailChannel({
+      from: "Test <auth@example.com>",
+      appName: "Acme",
+      ses: sesOptions,
+    })
+    expect(accessed).toBe(0)
+
+    await channel.deliver(context("/x"))
+    expect(accessed).toBeGreaterThan(0)
+    expect(ses.sent).toHaveLength(1)
   })
 })
 

@@ -13,11 +13,11 @@
 import { type ByoEvent, type ByoEventHandler, createEventBus } from "@byo-oss/core"
 import type { Mailer } from "@byo-oss/mailer"
 import { type DkimResolver, type SupportOptions, rawRelay, support } from "@byo-oss/support"
-import { wrapsInbound, wrapsMailer } from "@byo-oss/support/wraps"
+import { wrapsInbound } from "@byo-oss/support/wraps"
 import type { WrapsSesOptions } from "@wraps.dev/better-auth"
-import { WrapsEmail } from "@wraps.dev/email"
 import { reportError } from "@starter/errors"
 
+import { authMailer } from "./mailer"
 import { isImpersonated } from "./guards"
 import type { NotificationHooks } from "./notify-hooks"
 import { supportTicketPaths } from "./notifications"
@@ -86,24 +86,9 @@ export const acceptSupportSession: NonNullable<SupportOptions["acceptSession"]> 
   headers,
 }) => !CREDENTIAL_HEADERS.some((name) => headers.has(name)) && !isImpersonated(session)
 
-/**
- * Thread mail through Wraps on the auth emails' SES options: the dev mail sink's client, the
- * tests' fake, or the default AWS client. The Wraps client is made on the first send, so building
- * this needs no AWS credentials. `wrapsMailer` maps SES errors to retry or permanent failure.
- */
+/** Thread mail through `authMailer` (mailer.ts), on the auth emails' SES options. */
 export function supportMailer({ from, ses }: { from: string; ses?: WrapsSesOptions }): Mailer {
-  let client: WrapsEmail | undefined
-  // The sink and the fake have the one method WrapsEmail calls; its type asks for the full client.
-  type Config = NonNullable<ConstructorParameters<typeof WrapsEmail>[0]>
-  return wrapsMailer({
-    from,
-    client: {
-      send: (params) => {
-        client ??= new WrapsEmail(ses as Config | undefined)
-        return client.send(params)
-      },
-    },
-  })
+  return authMailer({ from, ses })
 }
 
 const stringOf = (value: unknown) => (typeof value === "string" && value ? value : undefined)

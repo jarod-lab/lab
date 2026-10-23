@@ -65,10 +65,14 @@ is the typed client the components take as is.
 | `SUPPORT_REPLY_DELAY_MS` | The delay before an agent's reply is mailed. Unset: support's 2 minutes. |
 | `SUPPORT_SWEEP_INTERVAL_MS` | How often the API runs the sweep (below). Default a minute. |
 
-- Thread mail goes the auth emails' way (`supportMailer`): through SES with Wraps, or into the dev
+- Thread mail goes the auth emails' way (`supportMailer`, the same `authMailer` builder as the
+  notification email, `packages/auth/src/mailer.ts`): through SES with Wraps, or into the dev
   mail sink under `DEV_MAIL_SINK`. Mail goes only to a verified address, two minutes after the reply,
   and is skipped if the requester saw the reply first. Its ticket link is
-  `<web origin>/account/support/<id>`.
+  `<web origin>/account/support/<id>`. It has the notification email's sending rules: a non-ASCII
+  sender display name is sent RFC 2047 encoded, and a bad address or an SES `MessageRejected` or
+  `InvalidParameterValue` fails the send at once (a `PermanentMailError` in support), except an
+  unverified identity, which retries.
 - Inbound: point the Wraps EventBridge API destination at `/api/auth/support/inbound` with the
   header `X-Wraps-Inbound-Key: <WRAPS_INBOUND_KEY>`, and route the reply domain's mail (plus-addresses
   included) and the public support address to Wraps. The raw message is read from the bucket with the

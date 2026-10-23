@@ -1,31 +1,26 @@
-// The email half of notifications: @byo-oss/notifications' delivery channel, sent through the user's own SES
-// with Wraps like the auth emails, in the same layout. Which events email, and when, is
-// NOTIFICATION_EMAIL_ROUTES in notifications.ts; the API process sends them (support-sweep.ts, `sweepAll`).
+// The email half of notifications: @byo-oss/notifications' mailer channel, sent through the user's own SES
+// with Wraps like the auth emails (authMailer, mailer.ts), in the same layout. Which events email, and when,
+// is NOTIFICATION_EMAIL_ROUTES in notifications.ts; the API process sends them (support-sweep.ts, `sweepAll`).
+// The mailer sorts failures: an SDK ValidationError, or an SES MessageRejected or InvalidParameterValue,
+// fails the delivery at once. Throttling, network errors and an unverified identity (the SDK's
+// SandboxError) retry.
 import { renderLayout, type WrapsSesOptions } from "@wraps.dev/better-auth"
-import { WrapsEmail } from "@wraps.dev/email"
 import type { InboxChannel, inbox } from "@byo-oss/notifications"
-import { notificationUrl, type WrapsEmailSender, wrapsEmail } from "@byo-oss/notifications/wraps"
+import { mailerChannel, notificationUrl } from "@byo-oss/notifications/mailer"
+
+import { authMailer } from "./mailer"
 
 export interface NotificationEmailOptions {
   /** "Name <addr@domain>", the auth emails' sender. */
   from: string
   appName: string
-  /** The auth emails' `WrapsEmail` options, so a test's fake client gets these too. */
+  /** The auth emails' SES options, so a test's fake client gets these too. */
   ses?: WrapsSesOptions
 }
 
 export function notificationEmailChannel(opts: NotificationEmailOptions): InboxChannel {
-  // Built on the first send, as @wraps.dev/better-auth does, so creating auth never touches AWS.
-  // WrapsSesOptions types `client` structurally (a test fake has only `send`); the plugin passes the
-  // same options to WrapsEmail untyped, so this does too.
-  const config = (opts.ses ?? {}) as ConstructorParameters<typeof WrapsEmail>[0]
-  let client: WrapsEmail | undefined
-  const sender: WrapsEmailSender = {
-    send: (params) => (client ??= new WrapsEmail(config)).send(params),
-  }
-  return wrapsEmail({
-    from: opts.from,
-    client: sender,
+  return mailerChannel({
+    mailer: authMailer({ from: opts.from, ses: opts.ses }),
     render: (ctx) => {
       const { title, body } = ctx.notification
       const url = notificationUrl(ctx)

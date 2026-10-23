@@ -30,9 +30,10 @@ that need you.
 ## Email
 
 Some events also email the person, through their own SES with Wraps, in the auth emails' layout.
-The **email** column below says which. `NOTIFICATION_EMAIL_ROUTES` in
-`packages/auth/src/notifications.ts` holds the rules; `packages/auth/src/notification-email.ts`
-is the channel.
+The **email** column below says which. `packages/auth/src/notification-email.ts` is the channel:
+`mailerChannel` (@byo-oss/notifications/mailer) over `wrapsMailer` (@byo-oss/mailer/wraps), built by
+`authMailer` (`packages/auth/src/mailer.ts`). `NOTIFICATION_EMAIL_ROUTES` in
+`packages/auth/src/notifications.ts` holds the rules.
 
 - **Security notices go out at once, even if read first.** The email is the record, and it reaches
   the owner when someone else is in the account.
@@ -46,8 +47,12 @@ is the channel.
   the due ones with `sweepAll` from `@byo-oss/core` every `SUPPORT_SWEEP_INTERVAL_MS` (60 s;
   `apps/api/src/support-sweep.ts`, which runs every BYO plugin's sweep, notifications' included).
   Every replica can run the sweep: each delivery is claimed before it is sent. A failed send retries with backoff
-  and gives up after 5 attempts (`status: "failed"`, the error in `detail`). Delivery is
-  at-least-once: a crash after SES accepted an email can send it again.
+  and gives up after 5 attempts (`status: "failed"`, the error in `detail`). An SDK validation error
+  (a malformed recipient or sender address) and an SES `MessageRejected` or `InvalidParameterValue`
+  fail the delivery at once, except an unverified identity (the sender, or a recipient while the
+  account is in the SES sandbox), which retries like throttling and network errors. A non-ASCII
+  sender display name is sent RFC 2047 encoded. Delivery is at-least-once: a crash after SES
+  accepted an email can send it again.
 - **Adding an email:** add the type to `NOTIFICATION_EMAIL_ROUTES` and fill in its **email** cell
   below; `notifications.test.ts` checks the two agree. Leave out events another email already
   covers: `invitation.received` (the invitation email) and `account.email_changed` (the old address

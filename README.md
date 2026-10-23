@@ -11,7 +11,7 @@ OAuth 2.1 for agents.
 # template:start
 gh repo create my-app --template <owner>/<repo> --private --clone && cd my-app
 # template:end
-mise trust && mise install        # Node 24, pnpm 11, gitleaks
+mise trust && mise install        # Node 24, pnpm 12, gitleaks
 pnpm install
 # template:start
 # Renames the scope, database (my_app), CLI, SDK names, skill and MCP registry name, removes the

@@ -7,7 +7,7 @@ ARG NODE_IMAGE=node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d
 
 FROM ${NODE_IMAGE} AS base
 # pnpm at the packageManager version, from corepack (bundled with Node 24).
-RUN corepack enable && corepack prepare pnpm@11.3.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 ENV TURBO_TELEMETRY_DISABLED=1 CI=1
 WORKDIR /app
 

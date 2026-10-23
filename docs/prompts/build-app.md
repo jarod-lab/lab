@@ -71,7 +71,7 @@ Every page ships light and dark from the same tokens and works at phone width.
    - Charts, markdown and code highlighting: run footprint and usage, the run summary, keys and code.
 
    If TanStack has no package for something, say so in `progress.md` and pick the smallest
-   well-known one. pnpm 11 needs build scripts approved in `pnpm-workspace.yaml`.
+   well-known one. pnpm 12 needs build scripts approved in `pnpm-workspace.yaml`.
 2. **Decide the route scheme once.** Ask me whether to use the board's `/:org/settings/*` and
    `/account/*` URLs or the app's existing `/settings/*`. Don't guess. The OAuth and device pages
    keep their current paths either way.

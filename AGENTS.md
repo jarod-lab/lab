@@ -1,6 +1,6 @@
 # starter
 
-Turborepo + pnpm 11 monorepo, TypeScript. `apps/api` is a reference Hono API; add apps beside it.
+Turborepo + pnpm 12 monorepo, TypeScript. `apps/api` is a reference Hono API; add apps beside it.
 Reference detail is in `docs/` and `.claude/skills/agent-api/SKILL.md`; sections link to it.
 `GLOSSARY.md` names the concepts (organization, grant, operation, run, approval, ...); use those
 words in code, docs and UI, and add a line there before introducing a new one.
@@ -8,7 +8,7 @@ words in code, docs and UI, and add a line there before introducing a new one.
 ## Setup
 
 ```bash
-mise trust && mise install   # Node 24, pnpm 11, gitleaks; a fresh clone is untrusted until this
+mise trust && mise install   # Node 24, pnpm 12, gitleaks; a fresh clone is untrusted until this
 pnpm install
 # template:start
 # new project only: renames the template (scope, DB, CLI, SDK, skill, MCP registry names), drops
@@ -119,7 +119,7 @@ fixes formatting.
 - **Formatting and lint:** Biome formats (no semicolons, 100 columns); Oxlint lints, type-aware:
   floating or misused promises are errors, so a promise you mean to drop takes `void`. Biome skips
   `.claude/` and lockfiles, and does not format Markdown.
-- **pnpm 11:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`).
+- **pnpm 12:** dependency build scripts must be approved in `pnpm-workspace.yaml` (`allowBuilds`).
   Don't hand-edit `minimumReleaseAgeExclude`. It lists only our own packages (`@byo-oss/*`,
   `@wraps.dev/*`), by name, so our releases install the day they publish. Every other package
   waits out the 24-hour release age.

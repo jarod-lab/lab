@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0 }
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-      # mise-action installs pnpm 11. mise reads .mise.toml without `mise trust` when CI and
+      # mise-action installs pnpm 12. mise reads .mise.toml without `mise trust` when CI and
       # GITHUB_ACTIONS are set (checked locally with those variables set; a plain run is refused).
       - name: Resolve the pnpm store path
         id: pnpm-store

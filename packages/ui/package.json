@@ -47,10 +47,10 @@
   "devDependencies": {
     "@shadcn/lint": "catalog:",
     "@starter/config": "workspace:*",
-    "@storybook/addon-a11y": "^10.6.1",
-    "@storybook/addon-docs": "^10.6.1",
-    "@storybook/addon-mcp": "^10.6.1",
-    "@storybook/react-vite": "^10.6.1",
+    "@storybook/addon-a11y": "^10.6.3",
+    "@storybook/addon-docs": "^10.6.3",
+    "@storybook/addon-mcp": "^10.6.3",
+    "@storybook/react-vite": "^10.6.3",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
@@ -58,7 +58,7 @@
     "axe-core": "^4.14.0",
     "jsdom": "catalog:",
     "oxlint": "catalog:",
-    "storybook": "^10.6.1",
+    "storybook": "^10.6.3",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

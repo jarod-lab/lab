@@ -24,7 +24,7 @@
     "@biomejs/biome": "^2.0.0",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
-    "@e2e-dev/web": "^0.15.1",
+    "@e2e-dev/web": "^0.15.2",
     "@gdp-ts/core": "catalog:",
     "@shadcn/lint": "catalog:",
     "@tanstack/eslint-plugin-query": "catalog:",

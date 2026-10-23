@@ -24,13 +24,21 @@ catalog:
   "react-dom": "^19.3.0"
   "tailwindcss": "^4.3.3"
   "typescript": "^7.0.2"
-  "vite": "^8.3.2"
+  "vite": "^8.3.5"
   "vitest": "^5.0.3"
   "zod": "^4.6.5"
 
 packages:
   - "apps/*"
   - "packages/*"
+
+# Transitive packages pinned below their fixed release by a dependency that has not moved yet. Each
+# is a minor or patch of the version it replaces; drop the entry once its parent ships the fix.
+overrides:
+  # e2e (the test runner) pins 2.2.0 (GHSA: shared transport, bearer auth): fixed in 2.3.0.
+  "@modelcontextprotocol/server": ">=2.3.0"
+  # socks (through the shadcn CLI's registry client) pins 10.7.3: fixed in 10.7.4.
+  ip-address: ">=10.7.4"
 
 minimumReleaseAgeExclude:
   - '@byo-oss/*'

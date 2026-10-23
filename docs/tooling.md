@@ -134,8 +134,8 @@ Set up once, by a person:
 
 - **npm**: the `@starter` scope must exist on npm. Publish with a granular automation token in the
   repository secret `NPM_TOKEN`, scoped to publish both packages. The workflow passes it as
-  `NODE_AUTH_TOKEN`; the job fails without it. Tarballs are published with `npm publish`, which
-  can use npm trusted publishing (no token) once it is configured on each package for
+  `NODE_AUTH_TOKEN`; the job fails without it. `pnpm publish` can use npm trusted publishing
+  (no token) once it is configured on each package for
   `release.yml` and the `release` environment. The workflow would then need its token check removed.
 - **Re-runs**: a package whose version is already on npm is skipped, so a run that failed at the
   registry step can be re-run from the tag. The registry step is pinned: `MCP_PUBLISHER_VERSION` and

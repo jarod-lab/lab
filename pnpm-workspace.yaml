@@ -54,6 +54,7 @@ auditConfig:
     # esbuild's dev server (GHSA-67mh-4wv8-2f99): dev-only, through drizzle-kit's @esbuild-kit; we
     # never run esbuild's server. The Dependabot alert is dismissed too (docs/tooling.md).
     - GHSA-67mh-4wv8-2f99
-    # braces stack exhaustion (GHSA-vfj7-8cjw-p6xm): through the shadcn CLI's fast-glob, dev-time
-    # only. No patched braces (>=3.0.4) is published yet; drop this when one is.
-    - GHSA-vfj7-8cjw-p6xm
+
+# `pnpm audit --fix` drops an ignored advisory above once it no longer appears in the report.
+audit:
+  ignorePrune: true

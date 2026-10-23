@@ -72,10 +72,9 @@ jobs:
           printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
           chmod 600 "$HOME/.npmrc"
 
-      # pnpm 11's publish has no --provenance flag (pnpm publish --help), so each package is packed
-      # with pnpm, which rewrites workspace: and catalog: ranges, and the tarball is published with
-      # npm, which generates the provenance statement from this job's OIDC token. A package whose
-      # version is already on npm is skipped, so a re-run after a later failure is safe.
+      # pnpm publish rewrites workspace: and catalog: ranges and generates the provenance statement
+      # from this job's OIDC token. --no-git-checks: a tag checkout is not on the publish branch.
+      # A package whose version is already on npm is skipped, so a re-run after a failure is safe.
       - name: Publish the packages to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -88,11 +87,7 @@ jobs:
               echo "$name@$version is already on npm, skipping"
               continue
             fi
-            packs="$RUNNER_TEMP/packs/$dir"
-            mkdir -p "$packs"
-            pnpm --filter "$name" pack --pack-destination "$packs"
-            tarball=$(ls "$packs"/*.tgz)
-            npm publish "$tarball" --provenance --access public
+            pnpm --filter "$name" publish --provenance --access public --no-git-checks
           done
 
       # Retried on its own: the packages above are skipped when they already exist. The binary is

@@ -30,7 +30,7 @@
     "@byo-oss/notifications": "^0.10.0",
     "@byo-oss/core": "^0.1.0",
     "@byo-oss/mailer": "^0.1.0",
-    "@byo-oss/support": "^0.3.0",
+    "@byo-oss/support": "^0.3.1",
     "@starter/api": "workspace:*",
     "@starter/db": "workspace:*",
     "@starter/env": "workspace:*",

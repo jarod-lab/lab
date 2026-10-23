@@ -1,6 +1,6 @@
 // The email half of notifications: @byo-oss/notifications' delivery channel, sent through the user's own SES
 // with Wraps like the auth emails, in the same layout. Which events email, and when, is
-// NOTIFICATION_EMAIL_ROUTES in notifications.ts; the API process sends them (delivery-sweep.ts).
+// NOTIFICATION_EMAIL_ROUTES in notifications.ts; the API process sends them (support-sweep.ts, `sweepAll`).
 import { renderLayout, type WrapsSesOptions } from "@wraps.dev/better-auth"
 import { WrapsEmail } from "@wraps.dev/email"
 import type { InboxChannel, inbox } from "@byo-oss/notifications"

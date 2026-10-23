@@ -27,7 +27,7 @@
     "@better-auth/sso": "catalog:",
     "@better-auth/stripe": "catalog:",
     "@byo-oss/entitlements": "^0.1.0",
-    "@byo-oss/notifications": "^0.9.0",
+    "@byo-oss/notifications": "^0.10.0",
     "@byo-oss/core": "^0.1.0",
     "@byo-oss/mailer": "^0.1.0",
     "@byo-oss/support": "^0.3.0",

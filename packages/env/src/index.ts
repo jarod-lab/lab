@@ -47,11 +47,6 @@ export const env = createEnv({
     /** Trust X-Forwarded-For for the client IP (signup limits). Only when a proxy overwrites that header. */
     TRUST_PROXY: z.stringbool().default(false),
     /**
-     * How often the API sends due notification emails, in ms (docs/notifications.md). 0 turns the
-     * sweep off in this process, for a deployment that runs it elsewhere.
-     */
-    NOTIFICATION_SWEEP_MS: z.coerce.number().int().min(0).default(60_000),
-    /**
      * Vendors whose own status pages `GET /status` reports (never pinged by /health). Comma-separated
      * `Name=https://status.example.com` (a Statuspage), `Name=statusio:<page id>` (status.io), or
      * `aws`, `aws@<region>`, `aws:<service>@<region>` (AWS Health). Unset: the broad default below,

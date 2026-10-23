@@ -153,6 +153,8 @@ describe("supportEvents", () => {
       "support.ticket.status_changed",
       "support.ticket.assigned",
       "support.ticket.merged",
+      // notify refuses types that start with "notifications." (0.10); none is ever forwarded.
+      "notifications.delivery.failed",
     ]) {
       await route(event(type, { userId: "user_requester" }))
     }

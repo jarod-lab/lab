@@ -82,8 +82,8 @@ is the typed client the components take as is.
 ## Scheduled work
 
 `apps/api/src/support-sweep.ts` runs `sweepAll` from `@byo-oss/core` every minute
-(`SUPPORT_SWEEP_INTERVAL_MS`) in the API process: delayed and retried reply mail, and closing
-tickets solved a week ago. A run has a 20-second budget (or the interval, if shorter) and never
+(`SUPPORT_SWEEP_INTERVAL_MS`) in the API process: delayed and retried reply mail, closing
+tickets solved a week ago, and (notifications' sweep) delayed and retried notification emails. A run has a 20-second budget (or the interval, if shorter) and never
 overlaps the last one; the timer is stopped on SIGTERM. Several replicas are safe: support claims
 each delivery with a lease.
 

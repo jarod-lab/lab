@@ -13,7 +13,6 @@ import { createFileStore, type FileStore } from "@starter/storage"
 import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
 import { recordAuthEvent } from "./data/audit"
-import { startDeliverySweep } from "./delivery-sweep"
 import { createDevMailSink } from "./dev-mail"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
@@ -114,18 +113,9 @@ const auth = createAuth({
         : undefined,
   },
 })
-// Delayed reply mail, retries and closing solved tickets (support's sweep), every minute.
+// Every BYO plugin's sweep (@byo-oss/core sweepAll), every minute: support's delayed reply mail,
+// retries and closing solved tickets, and the notification emails that are delayed or retried.
 const supportSweep = startSupportSweep(auth, { logger, intervalMs: env.SUPPORT_SWEEP_INTERVAL_MS })
-
-// Notification emails (docs/notifications.md): the delayed ones and retries go out from this timer.
-const deliverySweep =
-  env.NOTIFICATION_SWEEP_MS > 0
-    ? startDeliverySweep({
-        process: () => auth.api.processDeliveries({}),
-        intervalMs: env.NOTIFICATION_SWEEP_MS,
-        logger,
-      })
-    : undefined
 
 // Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
 function fileStore(): FileStore | undefined {
@@ -227,11 +217,8 @@ serve({ fetch: app.fetch, port }, (addr) => logger.info({ port: addr.port }, "ap
 // finish.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
-    void Promise.allSettled([
-      flags.close(),
-      analytics.shutdown(),
-      deliverySweep?.stop(),
-      supportSweep.stop(),
-    ]).finally(() => process.exit(0))
+    void Promise.allSettled([flags.close(), analytics.shutdown(), supportSweep.stop()]).finally(
+      () => process.exit(0),
+    )
   })
 }

@@ -423,8 +423,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(ce9c38d4f7f7adaf1caf5a5a8b4c8325)
       '@byo-oss/notifications':
-        specifier: ^0.9.0
-        version: 0.9.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)
+        specifier: ^0.10.0
+        version: 0.10.0(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)
       '@byo-oss/support':
         specifier: ^0.3.0
         version: 0.3.0(@aws-sdk/client-s3@3.1146.0)(@aws-sdk/client-sesv2@3.1146.0)(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)(zod@4.6.5)
@@ -727,8 +727,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(@aws-sdk/client-sesv2@3.1146.0)(@wraps.dev/email@0.15.0(react@19.3.0))(vitest@5.0.3)
       '@byo-oss/notifications':
-        specifier: ^0.9.0
-        version: 0.9.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)
+        specifier: ^0.10.0
+        version: 0.10.0(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)
       '@byo-oss/support':
         specifier: ^0.3.0
         version: 0.3.0(@aws-sdk/client-s3@3.1146.0)(@aws-sdk/client-sesv2@3.1146.0)(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)(zod@4.6.5)
@@ -1981,11 +1981,12 @@ packages:
       vitest:
         optional: true
 
-  '@byo-oss/notifications@0.9.0':
-    resolution: {integrity: sha512-MKiT1V3nrHRkP7mWoFgIpS3q3f3ODHiHkrCY5EoXhMAY2DxmpMifAXKua2i9jxYqvpaacg0dLxUUDtgAIeSe1w==}
+  '@byo-oss/notifications@0.10.0':
+    resolution: {integrity: sha512-ZWpZT3/3dznXbBAfISuJXg0+hxS3k+ApHYli40Zt3lrtkyz6wFFDTh5fMNm7IYNv5rYuYXnlzOKJ7dxr2+p5MQ==}
     peerDependencies:
+      '@better-auth/core': ^1.7.7
       '@wraps.dev/email': '>=0.15.0'
-      better-auth: ^1.6.23
+      better-auth: ^1.7.7
       react: '>=18'
       vitest: '>=3'
     peerDependenciesMeta:
@@ -9924,8 +9925,10 @@ snapshots:
       '@wraps.dev/email': 0.15.0(react@19.3.0)
       vitest: 5.0.3(@types/node@24.19.1)(@vitest/coverage-v8@5.0.3)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
-  '@byo-oss/notifications@0.9.0(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)':
+  '@byo-oss/notifications@0.10.0(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.0(react@19.3.0))(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)':
     dependencies:
+      '@better-auth/core': 1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-call@1.4.0(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4)
+      '@byo-oss/core': 0.1.0(better-auth@1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))
       better-auth: 1.7.7(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3)
       zod: 4.6.7
     optionalDependencies:

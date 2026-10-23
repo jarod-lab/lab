@@ -43,8 +43,9 @@ is the channel.
   the unread count in the last 2 minutes; an impersonated session doesn't count.
 - **A throttle caps events that can repeat**: one email per person per window, the rest stay in-app.
 - **Sending**: each routed notification gets a `notification_delivery` row. The API process sends
-  the due ones every `NOTIFICATION_SWEEP_MS` (60 s; `apps/api/src/delivery-sweep.ts`). Every replica
-  can run the sweep: each delivery is claimed before it is sent. A failed send retries with backoff
+  the due ones with `sweepAll` from `@byo-oss/core` every `SUPPORT_SWEEP_INTERVAL_MS` (60 s;
+  `apps/api/src/support-sweep.ts`, which runs every BYO plugin's sweep, notifications' included).
+  Every replica can run the sweep: each delivery is claimed before it is sent. A failed send retries with backoff
   and gives up after 5 attempts (`status: "failed"`, the error in `detail`). Delivery is
   at-least-once: a crash after SES accepted an email can send it again.
 - **Adding an email:** add the type to `NOTIFICATION_EMAIL_ROUTES` and fill in its **email** cell

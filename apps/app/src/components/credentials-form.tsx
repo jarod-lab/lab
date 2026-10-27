@@ -43,6 +43,7 @@ export function CredentialsForm({
   pending,
   error,
   defaultEmail = "",
+  lockEmail = false,
   submitLabel,
   onSubmit,
 }: {
@@ -50,6 +51,8 @@ export function CredentialsForm({
   pending: boolean
   error: string | null
   defaultEmail?: string
+  /** The address is fixed to `defaultEmail` (an invitation names who it is for). */
+  lockEmail?: boolean
   submitLabel: string
   onSubmit: (values: CredentialValues) => void
 }) {
@@ -115,6 +118,7 @@ export function CredentialsForm({
                 onBlur={field.handleBlur}
                 aria-invalid={field.state.meta.errors.length > 0 || undefined}
                 required
+                readOnly={lockEmail}
                 disabled={pending}
               />
               {field.state.meta.errors.length > 0 ? (

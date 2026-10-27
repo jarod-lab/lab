@@ -42,6 +42,7 @@ export type ClientEvent = z.infer<typeof clientEventSchema>
 /** The auth events (packages/auth/src/auth-events.ts) worth counting, when they succeed. */
 export const TRACKED_AUTH_EVENTS = [
   "auth.sign_up_started",
+  "auth.invitation_accepted",
   "auth.sign_in",
   "auth.sign_out",
   "auth.two_factor_enabled",

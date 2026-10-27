@@ -2622,6 +2622,35 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
     })
   })
 
+  describe("accepting an invitation is audited", () => {
+    it("writes auth.invitation_accepted in the invited organization, not the personal one", async () => {
+      const { b: owner } = await signedUp("Inviter")
+      const { data: org } = await owner.client.organization.create({
+        name: "Joined",
+        slug: `joined-${n}`,
+      })
+      if (!org) throw new Error("no organization")
+      const invitee = await signedUp("Invitee")
+      const sent = await owner.client.organization.inviteMember({
+        email: invitee.email,
+        role: "member",
+        organizationId: org.id,
+      })
+      const invitationId = sent.data?.id ?? ""
+      const accepted = await invitee.b.client.organization.acceptInvitation({ invitationId })
+      expect(accepted.error).toBeNull()
+
+      // Audit writes run after the response (auth-events.ts), so wait for them to land.
+      await vi.waitFor(async () => {
+        const rows = await t.db
+          .select({ operation: auditEvent.operation, outcome: auditEvent.outcome })
+          .from(auditEvent)
+          .where(and(eq(auditEvent.organizationId, org.id), eq(auditEvent.actorId, invitee.userId)))
+        expect(rows).toContainEqual({ operation: "auth.invitation_accepted", outcome: "ok" })
+      })
+    })
+  })
+
   describe("passkey sign-up (the mailbox is proven before any credential)", () => {
     const startSignUp = (b: ReturnType<typeof open>, address: string) =>
       b.request("/api/auth/passkey-signup/start", {

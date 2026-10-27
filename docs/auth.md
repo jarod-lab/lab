@@ -119,6 +119,9 @@ Code: `packages/auth/src/passkey-signup.ts`.
   account, by every sign-up path, from the user-create hook, with the account's personal
   organization. `apps/api` counts it in analytics (`account.created`, `docs/analytics.md`). It
   never fails the sign-up.
+- `auth.invitation_accepted` belongs to the invited organization, read from the result (a new
+  account has no active one). The invitation page's funnel is the `invitation` table (sent against
+  accepted) plus this event; a visit before sign-in has no session, so it is not counted.
 - A refused call, including a validation failure (`isAPIError`), is an event whose outcome is its
   error code. Failed social and SSO callbacks are not
   recorded.

@@ -6,14 +6,16 @@ import { Button } from "@starter/ui/components/ui/button"
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { NotYou } from "../components/not-you"
 import { SignInOrUp } from "../components/sign-in-or-up"
+import type { InvitationPreview } from "../lib/invitation-preview"
 import { messageOf } from "../lib/messages"
 import { type Permission, roleLabelOf } from "../lib/members"
 import { getOrgSettingsApi } from "../lib/org-settings-api"
-import type { WebAuth, WebInvitation } from "../lib/web-auth"
+import { type WebAuth, type WebInvitation, WebError } from "../lib/web-auth"
 
 type State =
   | { status: "loading" }
-  | { status: "signed-out" }
+  | { status: "signed-out"; preview: InvitationPreview | null }
+  | { status: "wrong-account"; preview: InvitationPreview; signedInAs: string }
   | { status: "error"; message: string }
   | { status: "ready"; invitation: WebInvitation; signedInAs: string }
   | { status: "accepted"; organizationName: string }
@@ -49,11 +51,38 @@ function expiryLine(expiresAt: string | undefined, now: number): string | null {
   return `This invitation expires in ${days} days.`
 }
 
-/** The page's first state: the invitation for a signed-in person, or why there isn't one. */
-async function loadInvitation(auth: WebAuth, invitationId: string): Promise<State> {
+/** Reads the invitation from the link alone, with no session. */
+type LoadPreview = (invitationId: string) => Promise<InvitationPreview>
+
+/** Whether the invitation was sent to this address (addresses compare without case). */
+const sentTo = (invited: string | null, address: string) =>
+  invited === null || invited.toLowerCase() === address.toLowerCase()
+
+/**
+ * The page's first state: the invitation for a signed-in person, or why there isn't one. The
+ * preview needs no session, so it names the organization and the invited address before sign-in and
+ * catches a wrong account before the person tries to accept.
+ */
+async function loadInvitation(
+  auth: WebAuth,
+  invitationId: string,
+  loadPreview: LoadPreview | undefined,
+): Promise<State> {
   try {
+    let preview: InvitationPreview | null = null
+    if (loadPreview) {
+      try {
+        preview = await loadPreview(invitationId)
+      } catch (caught) {
+        // No such invitation is final; any other failure leaves the plain page.
+        if (caught instanceof WebError && caught.status === 404) throw caught
+      }
+    }
     const session = await auth.getSession()
-    if (!session) return { status: "signed-out" }
+    if (!session) return { status: "signed-out", preview }
+    if (preview && !sentTo(preview.email, session.user.email)) {
+      return { status: "wrong-account", preview, signedInAs: session.user.email }
+    }
     const invitation = await auth.getInvitation(invitationId)
     return { status: "ready", invitation, signedInAs: session.user.email }
   } catch (caught) {
@@ -61,11 +90,35 @@ async function loadInvitation(auth: WebAuth, invitationId: string): Promise<Stat
   }
 }
 
+/** Why a preview that is no longer open can't be accepted, as the page says it. */
+function closedLine(preview: InvitationPreview): string {
+  switch (preview.status) {
+    case "expired":
+      return "This invitation has expired."
+    case "accepted":
+      return "This invitation has already been accepted."
+    case "rejected":
+      return "This invitation was declined."
+    default:
+      return "This invitation was canceled."
+  }
+}
+
 /**
- * The link in an invitation email. The invitation can only be read by a signed-in person, so the
- * page signs them in or up first (with the invited address), then shows the invitation to accept.
+ * The link in an invitation email. Accepting needs a signed-in person with the invited address, so
+ * the page shows who invited them to what (the preview), opens on sign-up or sign-in with that
+ * address filled in, then shows the invitation to accept.
  */
-export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitationId: string }) {
+export function InvitationPage({
+  auth,
+  invitationId,
+  loadPreview,
+}: {
+  auth: WebAuth
+  invitationId: string
+  /** Reads the invitation without a session; without it the signed-out card stays generic. */
+  loadPreview?: LoadPreview
+}) {
   const [state, setState] = useState<State>({ status: "loading" })
   const [reloads, setReloads] = useState(0)
   const [pending, setPending] = useState(false)
@@ -73,13 +126,13 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
 
   useEffect(() => {
     let live = true
-    void loadInvitation(auth, invitationId).then((next) => {
+    void loadInvitation(auth, invitationId, loadPreview).then((next) => {
       if (live) setState(next)
     })
     return () => {
       live = false
     }
-  }, [auth, invitationId, reloads])
+  }, [auth, invitationId, loadPreview, reloads])
 
   async function accept(invitation: WebInvitation) {
     setPending(true)
@@ -110,16 +163,71 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
   if (state.status === "loading") return <AuthCard title="Loading" />
 
   if (state.status === "signed-out") {
+    const { preview } = state
+    if (preview && preview.status !== "pending") {
+      return (
+        <AuthCard
+          title={preview.organizationName}
+          description={
+            preview.status === "accepted"
+              ? closedLine(preview)
+              : `${closedLine(preview)} Ask ${preview.inviterName ?? "the person who invited you"} to send a new one.`
+          }
+          footer={
+            preview.status === "accepted" ? (
+              <a href="/sign-in" className="underline underline-offset-4">
+                Sign in
+              </a>
+            ) : undefined
+          }
+        />
+      )
+    }
     return (
       <AuthCard
-        title="Accept your invitation"
-        description="Sign in or create an account with the email address the invitation was sent to."
+        title={preview ? `Join ${preview.organizationName}` : "Accept your invitation"}
+        description={
+          preview
+            ? `${preview.inviterName ?? "Someone"} invited you as ${roleLabelOf(preview.role)}. Create your account to accept, or sign in if you already have one.`
+            : "Sign in or create an account with the email address the invitation was sent to."
+        }
       >
         <SignInOrUp
           auth={auth}
-          hint="You will then be asked to accept the invitation."
+          email={preview?.email ?? undefined}
+          initialMode={preview?.email ? "sign-up" : "sign-in"}
+          hint={
+            preview?.email
+              ? `This invitation was sent to ${preview.email}, so that address is used. You will then be asked to accept.`
+              : "You will then be asked to accept the invitation."
+          }
           onSignedIn={() => setReloads((n) => n + 1)}
         />
+      </AuthCard>
+    )
+  }
+
+  if (state.status === "wrong-account") {
+    const { preview, signedInAs } = state
+    return (
+      <AuthCard
+        title={preview.organizationName}
+        description={`${preview.inviterName ?? "Someone"} invited you to join as ${roleLabelOf(preview.role)}.`}
+      >
+        <p role="alert" className="rounded-[10px] border border-border p-3.5 text-sm">
+          This invitation was sent to {preview.email}, but you are signed in as {signedInAs}. Sign
+          in with {preview.email} to accept it.
+        </p>
+        <Button
+          type="button"
+          size="lg"
+          className="h-12"
+          onClick={() => {
+            void auth.signOut().then(() => setReloads((n) => n + 1))
+          }}
+        >
+          Sign out and use {preview.email}
+        </Button>
       </AuthCard>
     )
   }
@@ -160,7 +268,9 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
 
   const { invitation, signedInAs } = state
   const expiry = expiryLine(invitation.expiresAt, Date.now())
-  const notPending = invitation.status !== "pending"
+  const expired =
+    invitation.expiresAt !== undefined && Date.parse(invitation.expiresAt) <= Date.now()
+  const notPending = invitation.status !== "pending" || expired
   const api = getOrgSettingsApi()
 
   return (
@@ -195,7 +305,11 @@ export function InvitationPage({ auth, invitationId }: { auth: WebAuth; invitati
         })}
       </ul>
       {notPending ? (
-        <p className="text-sm text-destructive">This invitation is {invitation.status}.</p>
+        <p className="text-sm text-destructive">
+          {expired && invitation.status === "pending"
+            ? "This invitation has expired."
+            : `This invitation is ${invitation.status}.`}
+        </p>
       ) : null}
       <ErrorAlert message={error} />
       <div className="flex gap-2">

@@ -16,6 +16,10 @@
 - `/new`, `/two-factor`
 - the OAuth, device, claim, reset and `/accept-invitation/:id` pages (`/invite/:id` is an alias;
   `/settings/agents` redirects)
+- the invitation page reads `get_invitation_preview` (public: the link's id is the credential) before
+  sign-in, so a logged-out visitor sees the organization, role and inviter, lands on sign-up (or
+  sign-in when that address has an account) with the invited address locked in, and a signed-in
+  person on another address is told so before they can accept
 
 Org slugs can't take a reserved first segment (`RESERVED_ORG_SLUGS`, enforced server-side).
 `apps/api/src/static.ts` serves every route; `apps/api/src/static.test.ts` derives the

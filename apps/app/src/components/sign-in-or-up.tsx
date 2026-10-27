@@ -9,17 +9,24 @@ import { type CredentialValues, CredentialsForm } from "./credentials-form"
 /**
  * Signs the person in or up in place, for pages that need a session but are not an OAuth step (the
  * invitation and device pages). The caller reloads its own state once `onSignedIn` fires.
+ *
+ * `email` fixes the address (an invitation is for one), and `initialMode` opens on sign-up for
+ * someone known to have no account yet.
  */
 export function SignInOrUp({
   auth,
   hint,
+  email,
+  initialMode = "sign-in",
   onSignedIn,
 }: {
   auth: WebAuth
   hint: string
+  email?: string
+  initialMode?: "sign-in" | "sign-up"
   onSignedIn: () => void
 }) {
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in")
+  const [mode, setMode] = useState<"sign-in" | "sign-up">(initialMode)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,6 +75,8 @@ export function SignInOrUp({
         mode={mode}
         pending={pending}
         error={error}
+        defaultEmail={email}
+        lockEmail={email !== undefined}
         submitLabel={mode === "sign-in" ? "Sign in" : "Create account"}
         onSubmit={submit}
       />

@@ -33,6 +33,7 @@ export const AUTH_EVENT_NAMES = [
   "auth.sso_provider_registered",
   "auth.member_role_changed",
   "auth.member_removed",
+  "auth.invitation_accepted",
   "auth.impersonation_started",
   "auth.impersonation_stopped",
   "auth.user_deleted",
@@ -206,6 +207,19 @@ const RULES: Record<string, Rule> = {
   "/sso/register": inOrganization("auth.sso_provider_registered"),
   "/organization/update-member-role": inOrganization("auth.member_role_changed"),
   "/organization/remove-member": inOrganization("auth.member_removed"),
+  // The invited person joins: the organization is the invitation's, which the session may not have
+  // active (a new account has none), so it comes from the result.
+  "/organization/accept-invitation": async (call) => {
+    const member = returnedRecord(call)?.member as { organizationId?: unknown } | undefined
+    return {
+      name: "auth.invitation_accepted",
+      userId: actingUser(call),
+      organizationId:
+        typeof member?.organizationId === "string"
+          ? member.organizationId
+          : activeOrganization(call),
+    }
+  },
   "/admin/impersonate-user": async (call) => ({
     name: "auth.impersonation_started",
     userId: actingUser(call),

@@ -161,6 +161,22 @@ describe("mapAuthEvent", () => {
     expect(fromSession).toMatchObject({ name: "auth.member_removed", organizationId: "org_active" })
   })
 
+  it("records an accepted invitation in the organization the invitation was for", async () => {
+    const event = await mapAuthEvent(
+      call("/organization/accept-invitation", {
+        session: session("u_new", null),
+        body: { invitationId: "inv_1" },
+        returned: { invitation: { id: "inv_1" }, member: { organizationId: "org_invited" } },
+      }),
+    )
+    expect(event).toMatchObject({
+      name: "auth.invitation_accepted",
+      userId: "u_new",
+      organizationId: "org_invited",
+      outcome: "ok",
+    })
+  })
+
   it("uses the organization the key was created for as the API key's organization", async () => {
     const event = await mapAuthEvent(
       call("/api-key/create", {
@@ -320,6 +336,7 @@ describe("path coverage", () => {
     "/sso/register",
     "/organization/update-member-role",
     "/organization/remove-member",
+    "/organization/accept-invitation",
     "/admin/impersonate-user",
     "/admin/stop-impersonating",
     "/delete-user",

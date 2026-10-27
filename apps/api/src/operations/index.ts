@@ -56,6 +56,7 @@ export function createOperations({
   return defineRegistry([
     account.whoami,
     account.signup,
+    account.get_invitation_preview,
     account.get_my_operator_organization,
     projects.list_projects,
     projects.create_project,

@@ -354,6 +354,119 @@
         "x-required-permissions": []
       }
     },
+    "/v1/invitations/{id}/preview": {
+      "get": {
+        "operationId": "get_invitation_preview",
+        "summary": "Preview an invitation from its link, before signing in",
+        "description": "Returns the organization, role, inviter and state of an invitation, and, while it can still be accepted, the invited address. The invitation id from the emailed link is the only credential. Accepting still needs a signed-in person with the invited address. An unknown id is NOT_FOUND.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "description": "The invitation id from the link"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "organizationName": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "description": "The role the person joins with"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "accepted",
+                        "rejected",
+                        "canceled",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "description": "ISO time the invitation stops working"
+                    },
+                    "inviterName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "email": {
+                      "description": "The invited address; null once it is no longer open",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "organizationName",
+                    "role",
+                    "status",
+                    "expiresAt",
+                    "inviterName",
+                    "email"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-required-permissions": [],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
+    },
     "/v1/me/operator-organization": {
       "get": {
         "operationId": "get_my_operator_organization",

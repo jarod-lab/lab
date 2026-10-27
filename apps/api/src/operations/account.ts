@@ -2,6 +2,7 @@ import { memberGrants, provisionalSignup } from "@starter/auth"
 import { AppError } from "@starter/errors"
 import { z } from "zod"
 
+import { invitationPreview } from "../data/invitations"
 import { actsForOperator } from "../tenant"
 import { actorOf, defineOperation, type OperationDeps, requirePerson } from "./shared"
 
@@ -33,9 +34,11 @@ const entitlementsOutput = z
 
 export function accountOperations({
   auth,
+  db,
   meter,
+  now,
   operator,
-}: Pick<OperationDeps, "auth" | "meter" | "operator">) {
+}: Pick<OperationDeps, "auth" | "db" | "meter" | "now" | "operator">) {
   const whoami = defineOperation({
     name: "whoami",
     method: "GET",
@@ -181,6 +184,41 @@ export function accountOperations({
     },
   })
 
+  const get_invitation_preview = defineOperation({
+    name: "get_invitation_preview",
+    method: "GET",
+    path: "/v1/invitations/:id/preview",
+    // Public: the invitation page shows who invited the person before they have an account.
+    auth: "none",
+    summary: "Preview an invitation from its link, before signing in",
+    description:
+      "Returns the organization, role, inviter and state of an invitation, and, while it can " +
+      "still be accepted, the invited address. The " +
+      "invitation id from the emailed link is the only credential. Accepting still needs a " +
+      "signed-in person with the invited address. An unknown id is NOT_FOUND.",
+    permissions: {},
+    input: z.object({ id: z.string().min(1).max(255).describe("The invitation id from the link") }),
+    output: z.object({
+      organizationName: z.string(),
+      role: z.string().describe("The role the person joins with"),
+      status: z.enum(["pending", "accepted", "rejected", "canceled", "expired"]),
+      expiresAt: z.string().describe("ISO time the invitation stops working"),
+      inviterName: z.string().nullable(),
+      email: z.string().nullable().describe("The invited address; null once it is no longer open"),
+    }),
+    hints: { readOnly: true, idempotent: true },
+    examples: [{ input: { id: "inv_unknown" }, error: "NOT_FOUND" }],
+    handler: async (input) => {
+      const preview = await invitationPreview(db, input.id, now())
+      if (!preview) {
+        throw new AppError("NOT_FOUND", "This invitation could not be found", {
+          hint: "Ask the person who invited you to send it again.",
+        })
+      }
+      return { ...preview, expiresAt: preview.expiresAt.toISOString() }
+    },
+  })
+
   const get_my_operator_organization = defineOperation({
     name: "get_my_operator_organization",
     method: "GET",
@@ -215,6 +253,7 @@ export function accountOperations({
   return {
     whoami,
     signup,
+    get_invitation_preview,
     get_my_operator_organization,
   }
 }

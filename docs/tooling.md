@@ -64,11 +64,13 @@
     `e2e.dist.config.ts`.
 - Dependabot commits (signed off by `dependabot[bot]`) are exempt from commitlint, since they are
   written "Bump x from a to b".
-- **Dependabot** runs weekly (npm, GitHub Actions and the Docker base image) and groups minor and
-  patch updates. Major bumps arrive as separate PRs to evaluate. `@types/node` majors are ignored to
-  stay on the pinned Node 24. `better-auth`, `@better-auth/*` and `auth` are pinned exactly and get
-  their own `better-auth` group (any update type), so a break shows up as its own red PR. Bump them
-  together, never one alone.
+- **Dependency updates** are not run by Dependabot version updates any more: they used about 30% of
+  the repo's Actions minutes. The software factory will run them on its own box (not built yet; until
+  it is, bump by hand). Security alerts stay on. The rules the old `dependabot.yml` held still apply:
+  minor and patch updates go together, major bumps are evaluated separately, `@types/node` majors are
+  ignored to stay on the pinned Node 24, and the Dockerfile base image is pinned by digest and bumped
+  by hand. `better-auth`, `@better-auth/*` and `auth` are pinned exactly and move together in their
+  own PR, any update type, so a break shows up as its own red PR. Never bump one alone.
 - The `esbuild` alert is dismissed. It is a dev-only transitive dependency of `drizzle-kit`, and the
   advisory concerns esbuild's dev server, which we don't run.
 - **`pnpm audit`** skips the advisories in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`), each

@@ -1,0 +1,255 @@
+# Task: merge. Trigger: a CI or Factory review run finishes. Idempotent: for each PR in the run it
+# evaluates the gate and merges only when every condition holds; otherwise it holds and a later run retries.
+#
+# Intent (read before changing the gate):
+# - The model's review verdict (the `factory/review` status) is ONE input, never the only gate.
+#   It is checked on the exact head commit, together with deterministic gates on the actual PR diff.
+# - Deterministic gates: changed paths must be on an allowlist (package.json files, pnpm-lock.yaml,
+#   nothing else; pnpm-workspace.yaml is deliberately not allowed, because its catalog, overrides and
+#   release-age exclusions are policy, so a PR that touches it waits for a human); the lockfile diff
+#   must not add install scripts (requiresBuild: true) or non-registry sources; no package may be added or removed; no package may change major version
+#   (0.x: minor). The PR title is read only as an extra check, never as the only check.
+# - Human review is deliberately skipped for this narrow class: Dependabot PRs whose changes are
+#   limited to dependency versions in package.json and pnpm-lock.yaml and pass
+#   the gates above. The brakes are the daily cap (counted from GitHub merges, not labels), the
+#   concurrency group (runs are serialized), the kill switch (repo variable FACTORY_MERGE) and
+#   --match-head-commit (a head that moved after the checks is not merged).
+# - Recommended, not done here (this file cannot change the target repo): add a Dependabot
+#   `cooldown` (for example `default-days: 7` under the npm ecosystem in the target repo's
+#   .github/dependabot.yml, if the installed Dependabot supports it) so a version is not merged on the
+#   day it is published.
+#
+# Trust: this workflow runs from the default branch, checks out nothing and runs no PR code. It only
+# calls the GitHub API.
+# Needs: secret FACTORY_MERGE_TOKEN (fine-grained PAT, starter only, Contents + Pull requests: write)
+# so the merge push triggers ci.yml and release.yml; a GITHUB_TOKEN merge would trigger neither.
+# Kill switch: set repo variable FACTORY_MERGE to anything but `on`.
+name: Factory merge
+
+on:
+  workflow_run:
+    workflows: [CI, Factory review]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+# One merge run at a time, so two runs cannot both read the daily count before either merges.
+concurrency:
+  group: factory-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    # CI reports workflow_run.event `pull_request`; Factory review (pull_request_target) reports `pull_request_target`.
+    if: >-
+      vars.FACTORY_MERGE == 'on'
+      && github.event.workflow_run.conclusion == 'success'
+      && (github.event.workflow_run.event == 'pull_request'
+          || github.event.workflow_run.event == 'pull_request_target')
+    runs-on: [self-hosted, factory]
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.FACTORY_MERGE_TOKEN }}
+      MAX_PER_DAY: 3
+      PRS: ${{ join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+    steps:
+      - name: Merge every PR that passes the gate
+        run: |
+          set -euo pipefail
+          REPO=$GITHUB_REPOSITORY
+          MAX_PER_DAY=${MAX_PER_DAY:-3}
+          today=$(date -u +%F)
+
+          # Dependabot merges made today, counted from GitHub. Read once up front; each cap check
+          # uses max(live count, this baseline + merges this run), so a search that lags a merge made
+          # seconds ago cannot undercount. A failed label add is irrelevant to the count.
+          base=$(gh pr list --state merged --search "merged:>=$today author:app/dependabot" --limit 200 --json number --jq length) \
+            || { echo "cannot count today's merges; merging nothing"; exit 1; }
+          [[ "$base" =~ ^[0-9]+$ ]] || { echo "cannot count today's merges; merging nothing"; exit 1; }
+          merged_this_run=0
+          SHA=""
+
+          hold() { echo "hold: $*"; }
+
+          # package.json semantic check, run with --argjson b (base file) and --argjson h (head file).
+          # Passes only when everything outside the four dependency maps is unchanged, each map keeps
+          # the same key set, and every changed value is a plain version spec (no URL, git, file, tarball).
+          # shellcheck disable=SC2016  # $b and $h are jq variables, not shell expansions
+          PKG_PROGRAM='
+            def deps: ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+            def strip: del(.dependencies, .devDependencies, .peerDependencies, .optionalDependencies);
+            (($b | strip) == ($h | strip))
+            and ([deps[] as $k | (($b[$k] // {}) | keys) == (($h[$k] // {}) | keys)] | all)
+            and ([deps[] as $k
+                  | (($b[$k] // {}) | to_entries[]) as $e
+                  | (($h[$k] // {})[$e.key]) as $nv
+                  | select($nv != $e.value) | $nv]
+                 | map(test("^[\\^~>=<]*[0-9][0-9A-Za-z.+*x-]*$")) | all)'
+
+          # Entry keys of pnpm-lock.yaml (v9) in a patch, one line per +/- key:
+          #   side <TAB> name <TAB> version <TAB> major key
+          # Keys are lines indented exactly two spaces that end in ':' or ': {}' (the `packages:` and
+          # `snapshots:` sections), e.g. `  '@scope/name@1.2.3':` or `  '@babel/core@7.24.0(peer@1.0.0)': {}`.
+          # Peer suffixes in parentheses are dropped; the version is what follows the last '@'.
+          # Major key: the major number, or `0.<minor>` for 0.x (0.x minor bumps are breaking).
+          lock_entries() {
+            awk '
+              /^[+-]  [^ ].*:( [{][}])?$/ {
+                side = substr($0, 1, 1)
+                k = substr($0, 4)
+                sub(/:( [{][}])?$/, "", k)
+                gsub("\047", "", k)
+                sub(/\(.*$/, "", k)
+                ver = k; sub(/.*@/, "", ver)
+                name = k; sub(/@[^@]*$/, "", name)
+                if (ver == k || name == "") next
+                v = ver; sub(/[-+_].*$/, "", v)
+                split(v, p, /\./)
+                if (p[1] !~ /^[0-9]+$/) key = "unparsed"
+                else if (p[1] == "0") key = "0." p[2]
+                else key = p[1]
+                print side "\t" name "\t" ver "\t" key
+              }'
+          }
+
+          # Reads lock_entries output, prints one line per problem (empty output means the diff is clean).
+          lock_diff_problems() {
+            awk -F'\t' '
+              $1 == "-" { rn[$2] = 1; rk[$2 "\t" $4] = 1; if ($4 == "unparsed") bad = 1 }
+              $1 == "+" { an[$2] = 1; ak[$2 "\t" $4] = 1; if ($4 == "unparsed") bad = 1 }
+              END {
+                if (bad) print "unparseable version"
+                for (n in an) if (!(n in rn)) print "package added: " n
+                for (n in rn) if (!(n in an)) print "package removed: " n
+                for (x in ak) { split(x, p, "\t"); if ((p[1] in rn) && !(x in rk)) print "major bump: " p[1] " to major " p[2] }
+                for (x in rk) { split(x, p, "\t"); if ((p[1] in an) && !(x in ak)) print "major bump: " p[1] " from major " p[2] }
+              }'
+          }
+
+          # Returns 0 and sets SHA when every gate passes. Every check holds with an explicit return, so
+          # nothing depends on `set -e` (which is suspended inside a function called from `if`).
+          gate_pr() {
+            local pr=$1 j sha base_sha title st_all state runs n eff files_json n_files paths bad
+            local lock_count lock_patch want got problems pkgs pf pstatus ppatch pchanges pgot rem_names add_names
+            local base_json head_json
+            j=$(gh pr view "$pr" --json state,isDraft,author,title,labels,headRefOid,baseRefOid) || { hold "cannot read PR"; return 1; }
+            sha=$(jq -r .headRefOid <<<"$j")
+            base_sha=$(jq -r .baseRefOid <<<"$j")
+            title=$(jq -r .title <<<"$j")
+            [ "$(jq -r .state <<<"$j")" = OPEN ] || { hold "not open"; return 1; }
+            [ "$(jq -r .isDraft <<<"$j")" = false ] || { hold "draft"; return 1; }
+            [ "$(jq -r .author.login <<<"$j")" = "app/dependabot" ] || { hold "author not dependabot (v1 scope)"; return 1; }
+            if jq -e '[.labels[].name] | any(. == "needs-human")' <<<"$j" >/dev/null; then hold "needs-human"; return 1; fi
+
+            # Extra check only (titles can be wrong or hide a major bump): the diff gates below decide.
+            if [[ "$title" =~ from\ ([0-9]+)\.[^\ ]*\ to\ ([0-9]+)\. ]]; then
+              [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[2]}" ] || { hold "title says major version bump (extra check)"; return 1; }
+            elif [[ ! "$title" =~ [Bb]ump\ the\ (minor-and-patch|actions)\ group ]]; then
+              hold "title not a recognised bump (extra check)"; return 1
+            fi
+
+            # Changed paths, from the API (not the title). Renames count both names.
+            files_json=$(gh api --paginate "repos/$REPO/pulls/$pr/files" --jq '.[]' | jq -s '.') \
+              || { hold "cannot list PR files"; return 1; }
+            n_files=$(jq 'length' <<<"$files_json")
+            if [ "$n_files" -eq 0 ] || [ "$n_files" -ge 3000 ]; then hold "file list empty or at the API limit ($n_files)"; return 1; fi
+            paths=$(jq -r '.[] | .filename, (.previous_filename // empty)' <<<"$files_json")
+            if grep -qE '(^|/)\.github/' <<<"$paths"; then hold "touches .github/"; return 1; fi
+            if grep -qE '(^|/)\.' <<<"$paths"; then hold "touches a dot path (allowlist: package.json, pnpm-lock.yaml)"; return 1; fi
+            bad=$(grep -vE '^(pnpm-lock\.yaml|([^/]+/)*package\.json)$' <<<"$paths" || true)
+            if [ -n "$bad" ]; then hold "path outside allowlist: $(head -n1 <<<"$bad")"; return 1; fi
+
+            # package.json files. Each needs a complete patch (same rule as the lockfile) whose +/- lines are
+            # all `"name": "spec"` pairs, with no added scripts/install/git/file/url line and the same
+            # dependency names removed and added. Then the full files at base and head must agree: nothing
+            # outside the dependency maps changed, no key added or removed, and every changed spec is plain.
+            pkgs=$(jq -r '.[] | select(.filename | test("(^|/)package[.]json$")) | .filename' <<<"$files_json")
+            while IFS= read -r pf; do
+              [ -n "$pf" ] || continue
+              pstatus=$(jq -r --arg f "$pf" '.[] | select(.filename == $f) | .status' <<<"$files_json")
+              [ "$pstatus" = modified ] || { hold "$pf is added, removed or renamed"; return 1; }
+              ppatch=$(jq -r --arg f "$pf" '.[] | select(.filename == $f) | .patch // empty' <<<"$files_json")
+              [ -n "$ppatch" ] || { hold "package.json patch missing ($pf, too large for the API)"; return 1; }
+              pchanges=$(jq -r --arg f "$pf" '.[] | select(.filename == $f) | .changes' <<<"$files_json")
+              pgot=$(grep -cE '^[+-]' <<<"$ppatch" || true)
+              [ "$pgot" = "$pchanges" ] || { hold "package.json patch incomplete ($pf: $pgot of $pchanges changed lines)"; return 1; }
+              if grep -qiE '^\+.*(scripts|install|prepare|git\+|git@|github:|gitlab:|bitbucket:|file:|link:|https?:|tarball|url)' <<<"$ppatch"; then
+                hold "package.json adds a scripts, install, git, file or url line ($pf)"; return 1
+              fi
+              bad=$(grep -E '^[+-]' <<<"$ppatch" | grep -vE '^[+-][[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*"[^"]*",?[[:space:]]*$' || true)
+              [ -z "$bad" ] || { hold "package.json changes a line that is not a key: version pair ($pf)"; return 1; }
+              rem_names=$(grep -E '^-' <<<"$ppatch" | sed -nE 's/^-[[:space:]]*"([^"]+)".*/\1/p' | sort -u || true)
+              add_names=$(grep -E '^\+' <<<"$ppatch" | sed -nE 's/^\+[[:space:]]*"([^"]+)".*/\1/p' | sort -u || true)
+              [ "$rem_names" = "$add_names" ] || { hold "package.json dependency names changed ($pf)"; return 1; }
+              base_json=$(gh api "repos/$REPO/contents/$pf?ref=$base_sha" --jq .content | tr -d '\n' | base64 -d) \
+                || { hold "cannot read $pf at base"; return 1; }
+              head_json=$(gh api "repos/$REPO/contents/$pf?ref=$sha" --jq .content | tr -d '\n' | base64 -d) \
+                || { hold "cannot read $pf at head"; return 1; }
+              jq -e -n --argjson b "$base_json" --argjson h "$head_json" "$PKG_PROGRAM" >/dev/null 2>&1 \
+                || { hold "package.json changed outside dependency version specs, or unreadable ($pf)"; return 1; }
+            done <<<"$pkgs"
+
+            # The lockfile diff must be present and complete (the API omits patches that are too large).
+            lock_count=$(jq '[.[] | select(.filename == "pnpm-lock.yaml" and .status == "modified")] | length' <<<"$files_json")
+            [ "$lock_count" = 1 ] || { hold "pnpm-lock.yaml not modified exactly once"; return 1; }
+            lock_patch=$(jq -r '.[] | select(.filename == "pnpm-lock.yaml") | .patch // empty' <<<"$files_json")
+            [ -n "$lock_patch" ] || { hold "lockfile patch missing (too large for the API)"; return 1; }
+            want=$(jq -r '.[] | select(.filename == "pnpm-lock.yaml") | .changes' <<<"$files_json")
+            got=$(grep -cE '^[+-]' <<<"$lock_patch" || true)
+            [ "$got" = "$want" ] || { hold "lockfile patch incomplete ($got of $want changed lines)"; return 1; }
+
+            # Gate (b): no added install-script marker or non-registry source in the lockfile.
+            if grep -qE '^\+.*(requiresBuild: *true|tarball:|git\+|file:)' <<<"$lock_patch"; then
+              hold "lockfile diff adds requiresBuild, a tarball, git or file source"; return 1
+            fi
+
+            # Gates (c) and (d): package set and major versions, from the removed and added entry keys.
+            problems=$(lock_entries <<<"$lock_patch" | lock_diff_problems) || { hold "lockfile analysis failed"; return 1; }
+            if [ -n "$problems" ]; then hold "lockfile diff: $(tr '\n' ';' <<<"$problems")"; return 1; fi
+
+            # The review verdict: latest factory/review status on this exact head commit must be success.
+            st_all=$(gh api --paginate "repos/$REPO/commits/$sha/statuses" --jq '.[] | select(.context == "factory/review") | .state') \
+              || { hold "cannot read statuses on $sha"; return 1; }
+            state=$(head -n1 <<<"$st_all")
+            [ "$state" = success ] || { hold "no passing factory/review on $sha (latest: ${state:-none})"; return 1; }
+
+            # CI's `check` must be green on this commit; nothing failed or pending. The job's own check run
+            # (named `merge`) is excluded, since it is running while this gate runs.
+            runs=$(gh api --paginate "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs[] | [.name, .status, .conclusion] | @tsv') \
+              || { hold "cannot read check runs on $sha"; return 1; }
+            awk -F'\t' '$1 == "check" && $2 == "completed" && $3 == "success" { ok = 1 } END { exit ok ? 0 : 1 }' <<<"$runs" \
+              || { hold "CI check not green on $sha"; return 1; }
+            if awk -F'\t' '$1 != "merge" && ($2 != "completed" || ($3 != "success" && $3 != "skipped" && $3 != "neutral")) { bad = 1 } END { exit bad ? 0 : 1 }' <<<"$runs"; then
+              hold "a check is pending or failed on $sha"; return 1
+            fi
+
+            # Daily cap, counted from GitHub merges (never from labels).
+            n=$(gh pr list --state merged --search "merged:>=$today author:app/dependabot" --limit 200 --json number --jq length) \
+              || { hold "cannot count today's merges"; return 1; }
+            [[ "$n" =~ ^[0-9]+$ ]] || { hold "cannot count today's merges"; return 1; }
+            eff=$n
+            if [ $((base + merged_this_run)) -gt "$eff" ]; then eff=$((base + merged_this_run)); fi
+            if [ "$eff" -ge "$MAX_PER_DAY" ]; then hold "daily cap ($MAX_PER_DAY) reached: $eff merged today"; return 1; fi
+
+            SHA=$sha
+            return 0
+          }
+
+          for pr in $PRS; do
+            echo "== PR #$pr"
+            if ! [[ "$pr" =~ ^[0-9]+$ ]]; then echo "hold: not a PR number: $pr"; continue; fi
+            if ! gate_pr "$pr"; then continue; fi
+            if gh pr merge "$pr" --squash --delete-branch --match-head-commit "$SHA"; then
+              merged_this_run=$((merged_this_run + 1))
+              # Courtesy label only: nothing above reads it.
+              gh pr edit "$pr" --add-label factory-merged >/dev/null 2>&1 \
+                || echo "courtesy label not added to #$pr (not a gate input)"
+              echo "merged #$pr"
+            else
+              echo "hold: merge failed or head moved on #$pr"
+            fi
+          done

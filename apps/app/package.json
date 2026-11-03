@@ -19,7 +19,7 @@
     "@better-auth/sso": "catalog:",
     "@better-auth/stripe": "catalog:",
     "@byo-oss/entitlements": "^0.2.0",
-    "@byo-oss/notifications": "^0.11.1",
+    "@byo-oss/notifications": "^0.12.0",
     "@byo-oss/support": "^0.3.2",
     "@openfeature/core": "^1.12.0",
     "@openfeature/ofrep-web-provider": "^0.4.3",

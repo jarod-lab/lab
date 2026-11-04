@@ -107,7 +107,11 @@ export function notificationHooks(options: NotificationHooksOptions): Notificati
   }
 
   const personal = async (event: PersonalEvent) => {
-    await notifier.send(event)
+    try {
+      await notifier.send(event)
+    } catch (error) {
+      report(error, event.type)
+    }
   }
 
   const billing = async (

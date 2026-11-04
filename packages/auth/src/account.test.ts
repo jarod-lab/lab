@@ -113,6 +113,42 @@ describe("account rules", () => {
       )
     })
 
+    it('reads a stored role list the way better-auth does: "admin, owner" is an owner', async () => {
+      const user = await h.signUp("Padded")
+      const org = await db.create<{ name: string; slug: string; createdAt: Date }, { id: string }>({
+        model: "organization",
+        data: { name: "Padded Co", slug: `padded-${user.userId}`, createdAt: new Date() },
+      })
+      await db.create({
+        model: "member",
+        data: {
+          organizationId: org.id,
+          userId: user.userId,
+          role: "admin, owner",
+          createdAt: new Date(),
+        },
+      })
+      expect((await blockingOrganizations(db, user.userId)).map((o) => o.id)).toContain(org.id)
+      await expect(assertCanDelete(db, user.userId, false)).rejects.toMatchObject({
+        body: { code: OWNS_ORGANIZATION_CODE },
+      })
+
+      // The personal organization is found by its owner the same way.
+      const solo = await h.signUp("Padded solo")
+      await db.updateMany({
+        model: "member",
+        where: [
+          { field: "organizationId", value: solo.orgId },
+          { field: "userId", value: solo.userId },
+        ],
+        update: { role: "member, owner" },
+      })
+      await removePersonalOrganization(db, solo.userId, false)
+      expect(
+        await db.findOne({ model: "organization", where: [{ field: "id", value: solo.orgId }] }),
+      ).toBeNull()
+    })
+
     it("removes the personal organization and its keys", async () => {
       const user = await h.signUp("Leaver")
       await removePersonalOrganization(db, user.userId, false)

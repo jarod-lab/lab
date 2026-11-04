@@ -112,7 +112,7 @@ The **email** column below says which. `packages/auth/src/notification-email.ts`
 | `account.two_factor_enabled` | two-factor turned on | the user | no | no |
 | `account.two_factor_disabled` | two-factor turned off | the user | no | at once |
 | `account.passkey_added` | `/passkey/verify-registration` | the user | no | at once |
-| `account.email_changed` | a change-email link is verified | the user | no | no |
+| `account.email_changed` | a change-email link is used and the address changes (verified account or not; `account-plugin.ts`) | the user | no | no |
 | `support.ticket.created` | a customer opens a support ticket (in the app or by mail) | support staff (the operator organization's roles with `support: ["read"]`), minus the requester | the operator organization | no |
 | `support.customer.replied` | a customer replies to a ticket | support staff, minus the customer | the operator organization | no |
 | `support.agent.mentioned` | an agent @mentions another agent | the agent mentioned, unless they mentioned themselves | the operator organization | no |

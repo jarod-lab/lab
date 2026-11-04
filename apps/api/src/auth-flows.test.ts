@@ -5,6 +5,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { and, eq } from "drizzle-orm"
+import { SignJWT } from "jose"
 import { personalSlug } from "@starter/auth"
 import {
   auditEvent,
@@ -17,7 +18,7 @@ import {
   verification,
 } from "@starter/db/schema"
 import { createLogger } from "@starter/logger"
-import { BASE, createTestApp } from "./app.test.helpers"
+import { BASE, createTestApp, SECRET } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
 
 const PASSWORD = "correct-horse-battery"
@@ -3349,6 +3350,159 @@ describe("notices from the auth flows (@byo-oss/notifications)", () => {
       expect.objectContaining({ organizationId: null, title: "Sign-in email changed" }),
     ])
     expect(ofType(await inboxOf(other), "account.email_changed")).toEqual([])
+  })
+
+  describe("the email-changed notice, verified or not", () => {
+    /** The verification link mailed to an address, once it has arrived. */
+    const linkTo = (address: string) =>
+      vi.waitFor(() => {
+        const mail = t.outbox.find((m) => m.to === address && m.link?.includes("/verify-email"))
+        if (!mail?.link) throw new Error(`waiting for the link to ${address}`)
+        return mail.link
+      })
+    const verified = async (p: { b: ReturnType<typeof open> }) =>
+      (await p.b.client.getSession({ query: { disableCookieCache: true } })).data?.user
+        .emailVerified
+    /** A change-of-email token as better-auth signs one, with these claims and expiry. */
+    const changeToken = (
+      claims: { email: string; updateTo: string; userId: string },
+      opts: { secret: string; exp: number },
+    ) =>
+      new SignJWT({ ...claims, requestType: "change-email-verification" })
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt(opts.exp - 3600)
+        .setExpirationTime(opts.exp)
+        .sign(new TextEncoder().encode(opts.secret))
+
+    it("a verified account gets exactly one, and its new address stays verified", async () => {
+      const p = await person("Verified mover")
+      expect((await p.b.client.sendVerificationEmail({ email: p.email })).error).toBeNull()
+      expect([200, 302]).toContain((await p.b.request(await linkTo(p.email))).status)
+      expect(await verified(p)).toBe(true)
+
+      const next = `moved-verified-${++n}@example.com`
+      expect((await p.b.client.changeEmail({ newEmail: next })).error).toBeNull()
+      const link = await linkTo(next)
+      expect((await p.b.request(link)).status).toBe(302)
+      // Opening the used link again changes nothing and tells no one again: the session's address is
+      // the new one now, so the link sends the person to sign in with the old one.
+      const reopened = await p.b.request(link)
+      expect(reopened.status).toBe(302)
+      expect(new URL(reopened.headers.get("location") ?? "", BASE).searchParams.get("error")).toBe(
+        "SIGN_IN_TO_CONFIRM_EMAIL_CHANGE",
+      )
+
+      expect((await p.b.client.getSession()).data?.user.email).toBe(next)
+      expect(await verified(p)).toBe(true)
+      expect(ofType(await inboxOf(p), "account.email_changed")).toHaveLength(1)
+    })
+
+    it("an unverified account gets one too, and stays unverified", async () => {
+      const p = await person("Unverified mover")
+      const next = `moved-unverified-${++n}@example.com`
+      expect((await p.b.client.changeEmail({ newEmail: next })).error).toBeNull()
+      expect((await p.b.request(await linkTo(next))).status).toBe(302)
+
+      expect((await p.b.client.getSession()).data?.user.email).toBe(next)
+      expect(await verified(p)).toBe(false)
+      expect(ofType(await inboxOf(p), "account.email_changed")).toHaveLength(1)
+    })
+
+    it("an expired or forged change token changes nothing and sends no notice", async () => {
+      const p = await person("Stays put")
+      const now = Math.floor(Date.now() / 1000)
+      const claims = { email: p.email, updateTo: `never-${++n}@example.com`, userId: p.userId }
+      for (const token of [
+        await changeToken(claims, { secret: SECRET, exp: now - 60 }),
+        await changeToken(claims, {
+          secret: "not-the-server-secret-but-long-enough",
+          exp: now + 600,
+        }),
+      ]) {
+        const res = await p.b.request(`/api/auth/verify-email?token=${token}`)
+        expect(res.status).toBe(401)
+      }
+
+      expect((await p.b.client.getSession()).data?.user.email).toBe(p.email)
+      expect(ofType(await inboxOf(p), "account.email_changed")).toEqual([])
+    })
+
+    it("a link opened without its callbackURL (a JSON answer) tells them too", async () => {
+      const p = await person("API mover")
+      const next = `moved-json-${++n}@example.com`
+      expect((await p.b.client.changeEmail({ newEmail: next })).error).toBeNull()
+      const link = new URL(await linkTo(next))
+      link.searchParams.delete("callbackURL")
+      const res = await p.b.request(`${link.pathname}${link.search}`)
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ status: true })
+
+      expect((await p.b.client.getSession()).data?.user.email).toBe(next)
+      expect(ofType(await inboxOf(p), "account.email_changed")).toHaveLength(1)
+    })
+
+    it("a used link opened by whoever now holds the old address is refused, and tells no one again", async () => {
+      const a = await person("Moved on")
+      const next = `moved-on-${++n}@example.com`
+      expect((await a.b.client.changeEmail({ newEmail: next })).error).toBeNull()
+      const link = await linkTo(next)
+      expect((await a.b.request(link)).status).toBe(302)
+      expect(ofType(await inboxOf(a), "account.email_changed")).toHaveLength(1)
+
+      // Someone else signs up with the released address and opens A's link while signed in.
+      const b = open()
+      expect(
+        (await b.client.signUp.email({ email: a.email, password: PASSWORD, name: "Newcomer" }))
+          .error,
+      ).toBeNull()
+      const refused = await b.request(link)
+      expect(refused.status).toBe(302)
+      expect(new URL(refused.headers.get("location") ?? "", BASE).searchParams.get("error")).toBe(
+        "INVALID_TOKEN",
+      )
+
+      expect((await b.client.getSession()).data?.user.email).toBe(a.email)
+      expect((await a.b.client.getSession()).data?.user.email).toBe(next)
+      expect(ofType(await inboxOf(a), "account.email_changed")).toHaveLength(1)
+    })
+
+    it("a token not signed with the server's secret tells no one, even when its claims match an account", async () => {
+      const a = await person("Target")
+      const b = await person("Forger")
+      const now = Math.floor(Date.now() / 1000)
+      // B's own address as the old one (so B's session passes the before hook), A's as the new one.
+      const token = await changeToken(
+        { email: b.email, updateTo: a.email, userId: a.userId },
+        { secret: "not-the-server-secret-but-long-enough", exp: now + 600 },
+      )
+      expect((await b.b.request(`/api/auth/verify-email?token=${token}`)).status).toBe(401)
+
+      expect(ofType(await inboxOf(a), "account.email_changed")).toEqual([])
+      expect(ofType(await inboxOf(b), "account.email_changed")).toEqual([])
+    })
+
+    it("a notifier that fails doesn't fail a completed change", async () => {
+      const p = await person("Unlucky mover")
+      const next = `moved-unlucky-${++n}@example.com`
+      expect((await p.b.client.changeEmail({ newEmail: next })).error).toBeNull()
+      const link = await linkTo(next)
+      const spy = vi.spyOn(t.auth.api, "notify").mockRejectedValue(new Error("inbox down"))
+      try {
+        expect((await p.b.request(link)).status).toBe(302)
+      } finally {
+        spy.mockRestore()
+      }
+      expect((await p.b.client.getSession()).data?.user.email).toBe(next)
+    })
+
+    it("verifying a sign-up's address sends no notice", async () => {
+      const p = await person("Just verifying")
+      expect((await p.b.client.sendVerificationEmail({ email: p.email })).error).toBeNull()
+      expect([200, 302]).toContain((await p.b.request(await linkTo(p.email))).status)
+
+      expect(await verified(p)).toBe(true)
+      expect(ofType(await inboxOf(p), "account.email_changed")).toEqual([])
+    })
   })
 
   it("tells the organization's billing managers when a payment fails, and nobody else", async () => {

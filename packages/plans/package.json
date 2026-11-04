@@ -14,10 +14,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@better-auth/core": "1.7.7",
+    "@better-auth/core": "1.7.16",
     "@byo-oss/entitlements": "^0.2.0",
     "better-auth": "catalog:",
-    "better-call": "1.4.0",
+    "better-call": "1.4.5",
     "zod": "catalog:"
   },
   "devDependencies": {

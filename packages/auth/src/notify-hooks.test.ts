@@ -3,6 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { createTestAuth } from "./auth.test.helpers"
+import { notificationHooks } from "./notify-hooks"
 
 describe("auth events send notices to the right people", () => {
   let t: Awaited<ReturnType<typeof createTestAuth>>
@@ -137,5 +138,29 @@ describe("auth events send notices to the right people", () => {
     } finally {
       await local.close()
     }
+  })
+})
+
+describe("a notifier that throws", () => {
+  it("a personal notice reports the failure instead of failing the caller", async () => {
+    const onError = vi.fn()
+    const hooks = notificationHooks({
+      notifier: {
+        send: async () => {
+          throw new Error("notifier down")
+        },
+      },
+      adapter: async () => {
+        throw new Error("no adapter needed for a personal notice")
+      },
+      onError,
+    })
+    await expect(
+      hooks.personal({ type: "account.email_changed", userId: "user_a" }),
+    ).resolves.toBeUndefined()
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "notifier down" }),
+      "account.email_changed",
+    )
   })
 })

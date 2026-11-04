@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@better-auth/core": "1.7.7",
+    "@better-auth/core": "1.7.16",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/passkey": "catalog:",
     "@better-auth/sso": "catalog:",

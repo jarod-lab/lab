@@ -5,10 +5,10 @@
 //  - unlinking: the last way in is kept. A way in is a password, another linked account, or a passkey
 //    (better-auth only counts accounts). `allowUnlinkingAll` is on so the check here is the only one.
 //  - email change: the address being replaced is told a change was requested (the new address gets
-//    the confirmation link from index.ts).
+//    the confirmation link from index.ts), and the person is told in the app once it went through.
 import type { BetterAuthPlugin } from "better-auth"
-import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api"
-import { decodeJwt } from "jose"
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api"
+import { decodeJwt, jwtVerify } from "jose"
 import {
   ACTIVE_SUBSCRIPTION_CODE,
   LAST_SIGN_IN_METHOD_CODE,
@@ -26,6 +26,13 @@ interface Org {
   slug: string | null
 }
 
+/** An owner by its stored role list, read as better-auth reads it: split on commas, each trimmed. */
+const isOwner = (role: string) =>
+  role
+    .split(",")
+    .map((r) => r.trim())
+    .includes("owner")
+
 /**
  * The organizations a user can't leave behind by deleting their account: owned by them, and either
  * not their personal one or shared with other members.
@@ -37,7 +44,7 @@ export async function blockingOrganizations(db: Adapter, userId: string): Promis
   })
   const blockers: Org[] = []
   for (const member of memberships) {
-    if (!member.role.split(",").includes("owner")) continue
+    if (!isOwner(member.role)) continue
     const org = await db.findOne<Org>({
       model: "organization",
       where: [{ field: "id", value: member.organizationId }],
@@ -66,7 +73,7 @@ async function personalOrganizationOf(db: Adapter, userId: string): Promise<Org 
   })
   if (!org) return null
   const member = await findMember(db, userId, org.id)
-  return member?.role.split(",").includes("owner") ? org : null
+  return member && isOwner(member.role) ? org : null
 }
 
 /** Throws the refusal the app shows, or returns when the account may be deleted. */
@@ -133,11 +140,71 @@ export function changeRequestOf(token: string): { oldEmail: string } | null {
   }
 }
 
+/**
+ * Whether /verify-email succeeded. After hooks run for refusals too, so this reads the endpoint's
+ * answer: its JSON (no callbackURL), or the 302 to exactly the callbackURL it was given. A refusal is
+ * an APIError, or a 302 to the callbackURL with `error=` appended, so it never matches. The redirect
+ * is better-call's APIError, not better-auth's subclass, hence `isAPIError` over `instanceof`.
+ */
+function verifyEmailSucceeded(ctx: { query?: unknown; context: { returned?: unknown } }): boolean {
+  const returned = ctx.context.returned
+  if (returned === undefined || returned === null) return false
+  if (!isAPIError(returned)) return true
+  if (returned.statusCode !== 302) return false
+  const callbackURL = (ctx.query as { callbackURL?: unknown } | undefined)?.callbackURL
+  const headers = returned.headers as Headers | Record<string, string> | undefined
+  const location = headers instanceof Headers ? headers.get("location") : headers?.location
+  return typeof callbackURL === "string" && location === callbackURL
+}
+
+/**
+ * The change a /verify-email request made, if it made one. All of these must hold:
+ * - the endpoint succeeded (see verifyEmailSucceeded)
+ * - the token has the server's signature and is a change-of-email verification with different old
+ *   and new addresses
+ * - the token's user now has the new address
+ *
+ * A refused request (a used or expired link, another account's session, a forged token) fails the
+ * first or second check, whatever the stored address is.
+ */
+async function completedChange(ctx: {
+  query?: unknown
+  context: {
+    returned?: unknown
+    secret: string
+    internalAdapter: { findUserById: (id: string) => Promise<{ id: string; email: string } | null> }
+  }
+}): Promise<{ userId: string } | null> {
+  if (!verifyEmailSucceeded(ctx)) return null
+  const token = (ctx.query as { token?: unknown } | undefined)?.token
+  if (typeof token !== "string") return null
+  let payload: Record<string, unknown>
+  try {
+    payload = (
+      await jwtVerify(token, new TextEncoder().encode(ctx.context.secret), {
+        algorithms: ["HS256"],
+      })
+    ).payload
+  } catch {
+    return null
+  }
+  const { requestType, email, updateTo, userId } = payload
+  if (requestType !== "change-email-verification") return null
+  if (typeof email !== "string" || typeof updateTo !== "string" || typeof userId !== "string") {
+    return null
+  }
+  if (email.toLowerCase() === updateTo.toLowerCase()) return null
+  const user = await ctx.context.internalAdapter.findUserById(userId)
+  return user?.email.toLowerCase() === updateTo.toLowerCase() ? { userId } : null
+}
+
 export function accountPlugin(opts: {
   notices: Notices
   adapter: () => Promise<Adapter>
   /** Whether the stripe plugin is mounted (its subscription model exists only then). */
   billing: boolean
+  /** A change of sign-in email went through (once per change, verified account or not). */
+  onEmailChanged: (userId: string) => Promise<void>
 }) {
   return {
     id: "starter-account",
@@ -209,6 +276,15 @@ export function accountPlugin(opts: {
         },
       ],
       after: [
+        {
+          // Not better-auth's afterEmailVerification: since 1.7.16 that runs only for an account that
+          // was verified already, and the notice is for every account whose address changed.
+          matcher: (ctx: { path?: string }) => ctx.path === "/verify-email",
+          handler: createAuthMiddleware(async (ctx) => {
+            const change = await completedChange(ctx)
+            if (change) await opts.onEmailChanged(change.userId)
+          }),
+        },
         {
           matcher: (ctx: { path?: string }) => ctx.path === "/change-email",
           handler: createAuthMiddleware(async (ctx) => {

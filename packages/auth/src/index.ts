@@ -480,12 +480,6 @@ export function createAuth(opts: AuthOptions) {
         }
         return wrapsPlugin.emails.verification(data)
       },
-      // The change-of-address link has been used: the account's address is the new one now.
-      afterEmailVerification: async (user, request) => {
-        const token = request ? new URL(request.url).searchParams.get("token") : null
-        if (!token || !changeRequestOf(token)) return
-        await notifications.personal({ type: "account.email_changed", userId: user.id })
-      },
     },
     // A reset means the password may be compromised: sign out every session, not just future ones.
     emailAndPassword: {
@@ -641,7 +635,14 @@ export function createAuth(opts: AuthOptions) {
       // Sign-in links; the wraps plugin sends them through the same SES path as other auth emails.
       magicLink({ sendMagicLink: wrapsPlugin.emails.magicLink }),
       // Unlinking, deletion and email-change rules, and the security summary the page reads.
-      accountPlugin({ notices, adapter, billing: !!opts.stripe }),
+      // A used change-of-address link is told in the app (account.email_changed), verified or not.
+      accountPlugin({
+        notices,
+        adapter,
+        billing: !!opts.stripe,
+        onEmailChanged: (userId) =>
+          notifications.personal({ type: "account.email_changed", userId }),
+      }),
       // Notices for account, organization, API key and passkey events (see notify-hooks.ts).
       notifications.plugin,
       securitySummaryPlugin(),

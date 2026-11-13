@@ -105,7 +105,8 @@ export async function acceptInvitationAs(
   await app.open(pathOf(options.link))
   await screen.getByRole("button", "Create an account").tap()
   await screen.getByLabel("Name").fill(options.name)
-  await screen.getByLabel("Email").fill(options.email)
+  // The invitation locks the address to the invited one (read-only), so check it rather than fill it.
+  await expect(screen.getByLabel("Email")).toHaveValue(options.email)
   await screen.getByLabel("Password").fill(PASSWORD)
   await screen.getByRole("button", "Create account").tap()
   await screen.getByRole("button", "Accept").tap()

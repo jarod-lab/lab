@@ -31,7 +31,7 @@
     "@tanstack/eslint-plugin-router": "catalog:",
     "ai": "^7.0.130",
     "code-baseline": "^1.6.0",
-    "e2e": "^0.17.0",
+    "e2e": "0.22.0",
     "lefthook": "^2.1.16",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "^7.0.2004",

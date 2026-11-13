@@ -35,31 +35,15 @@ packages:
 # Transitive packages pinned below their fixed release by a dependency that has not moved yet. Each
 # is a minor or patch of the version it replaces; drop the entry once its parent ships the fix.
 overrides:
-  # e2e (the test runner) pins 2.2.0 (GHSA: shared transport, bearer auth): fixed in 2.3.0.
-  "@modelcontextprotocol/server": ">=2.3.0"
   # socks (through the shadcn CLI's registry client) pins 10.7.3: fixed in 10.7.4.
   ip-address: ">=10.7.4"
+  # @vercel/oidc 3.x (through @vercel/blob) pins @vercel/cli-config 0.3.1, which pulls zod 4.1.11
+  # (GHSA-mrhx-c7xc-m3w5). 0.3.6 keeps the four functions oidc calls; drop once oidc moves.
+  "@vercel/oidc>@vercel/cli-config": "0.3.6"
 
 minimumReleaseAgeExclude:
   - '@byo-oss/*'
   - '@wraps.dev/*'
-  - "@better-auth/api-key@1.7.16"
-  - "@better-auth/cimd@1.7.16"
-  - "@better-auth/core@1.7.16"
-  - "@better-auth/drizzle-adapter@1.7.16"
-  - "@better-auth/kysely-adapter@1.7.16"
-  - "@better-auth/memory-adapter@1.7.16"
-  - "@better-auth/mongo-adapter@1.7.16"
-  - "@better-auth/oauth-provider@1.7.16"
-  - "@better-auth/passkey@1.7.16"
-  - "@better-auth/prisma-adapter@1.7.16"
-  - "@better-auth/scim@1.7.16"
-  - "@better-auth/sso@1.7.16"
-  - "@better-auth/stripe@1.7.16"
-  - "@better-auth/telemetry@1.7.16"
-  - auth@1.7.16
-  - better-auth@1.7.16
-  - better-call@1.4.5
 
 allowBuilds:
   esbuild: true
@@ -71,6 +55,17 @@ auditConfig:
     # esbuild's dev server (GHSA-67mh-4wv8-2f99): dev-only, through drizzle-kit's @esbuild-kit; we
     # never run esbuild's server. The Dependabot alert is dismissed too (docs/tooling.md).
     - GHSA-67mh-4wv8-2f99
+    # glob 13 (GHSA-3g3m-2fjr-6pw4): fixed only in glob 14, a new major. Storybook's react-vite
+    # docgen plugin pins 13; it runs at dev/build time on our own source, never in a deployed
+    # service. Drop once @storybook/react-vite moves to glob 14.
+    - GHSA-3g3m-2fjr-6pw4
+    # minimatch 10 (GHSA-g3hv-75wg-m249): fixed only in minimatch 11, a new major. Reached through
+    # eslint and its plugins, gdp-ts's eslint rules, and the shadcn CLI's ts-morph: lint and
+    # codegen tooling that matches our own globs, not request input. Drop once those move to 11.
+    - GHSA-g3hv-75wg-m249
+    # deepmerge 4.3.1 (GHSA-gcqx-w48m-w2h4): no patched release. Reached only through the shadcn
+    # CLI (and @shadcn/registry), which merges its own config at dev time; no deployed code uses it.
+    - GHSA-gcqx-w48m-w2h4
 
 # `pnpm audit --fix` drops an ignored advisory above once it no longer appears in the report.
 audit:

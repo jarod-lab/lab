@@ -151,7 +151,9 @@ describe("account rules", () => {
 
     it("removes the personal organization and its keys", async () => {
       const user = await h.signUp("Leaver")
-      await removePersonalOrganization(db, user.userId, false)
+      // The id comes back so the organization's files can be swept once the user is gone.
+      expect(await removePersonalOrganization(db, user.userId, false)).toBe(user.orgId)
+      expect(await removePersonalOrganization(db, user.userId, false)).toBeNull()
       const org = await db.findOne({
         model: "organization",
         where: [{ field: "slug", value: personalSlug(user.userId) }],

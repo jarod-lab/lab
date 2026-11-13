@@ -14,6 +14,7 @@ import { analyticsFromEnv, captureAuthEvent, captureSignUp } from "./analytics"
 import { createApp } from "./app"
 import { recordAuthEvent } from "./data/audit"
 import { createDevMailSink } from "./dev-mail"
+import { fileSweep } from "./file-sweep"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
@@ -54,69 +55,6 @@ const supportEmail = env.SUPPORT_REPLY_DOMAIN
       replyDelay: env.SUPPORT_REPLY_DELAY_MS,
     }
   : undefined
-const auth = createAuth({
-  db,
-  secret: env.BETTER_AUTH_SECRET,
-  baseURL,
-  emailFrom: env.EMAIL_FROM,
-  wrapsApiKey: env.WRAPS_API_KEY,
-  // The web app's origins when it is not this one (pnpm dev, e2e). Empty when apps/api serves it.
-  webOrigins: env.WEB_ORIGINS,
-  ses: devMail ? { client: devMail.client } : undefined,
-  // Stripe runs only in test mode, and only with both keys (createAuth refuses a live key).
-  stripe:
-    env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
-      ? {
-          secretKey: env.STRIPE_SECRET_KEY,
-          webhookSecret: env.STRIPE_WEBHOOK_SECRET,
-          plans: parseStripePlans(env.STRIPE_PLANS),
-        }
-      : undefined,
-  oauthResources: [baseURL, `${baseURL}/mcp`],
-  github:
-    env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
-      ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET }
-      : undefined,
-  google:
-    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
-      ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
-      : undefined,
-  passwordBreachCheck: true,
-  // Rate limits on sign-in, mail and one-time codes, by client IP (rate-limit.ts). e2e turns them off.
-  rateLimit: env.AUTH_RATE_LIMIT === "on" ? {} : false,
-  // Auth activity (sign-in, failed sign-in, sign-out, ...) lands in the audit trail (auth-events.ts).
-  onAuthEvent: async (event) => {
-    captureAuthEvent(analytics, event)
-    await recordAuthEvent(db, event)
-  },
-  // A notification that could not be recorded never fails the request; it is reported here.
-  onNotificationError: (error, type) => reportError(error, { notification: type }),
-  onSignUp: (event) => captureSignUp(analytics, event),
-  // Plan entitlements (packages/auth/src/entitlements.ts): the operator organization's members
-  // manage overrides; unclaimed organizations get the lower daily request limit.
-  entitlements: {
-    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
-    unclaimedRequestLimit: env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT,
-  },
-  support: {
-    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
-    email: supportEmail,
-    // @starter/env has checked each source comes with the reply domain, and only one is set.
-    inbound: env.SUPPORT_INBOUND_SECRET
-      ? { secret: env.SUPPORT_INBOUND_SECRET }
-      : env.WRAPS_INBOUND_KEY && env.WRAPS_INBOUND_BUCKET
-        ? {
-            key: env.WRAPS_INBOUND_KEY,
-            bucket: env.WRAPS_INBOUND_BUCKET,
-            region: env.WRAPS_INBOUND_REGION,
-          }
-        : undefined,
-  },
-})
-// Every BYO plugin's sweep (@byo-oss/core sweepAll), every minute: support's delayed reply mail,
-// retries and closing solved tickets, and the notification emails that are delayed or retried.
-const supportSweep = startSupportSweep(auth, { logger, intervalMs: env.SUPPORT_SWEEP_INTERVAL_MS })
-
 // Where uploads go (docs/storage.md). @starter/env has checked the chosen driver's variables are set.
 function fileStore(): FileStore | undefined {
   switch (env.STORAGE_DRIVER) {
@@ -155,7 +93,73 @@ function fileStore(): FileStore | undefined {
       return createFileStore({ driver: "vercel-blob", token: env.BLOB_READ_WRITE_TOKEN ?? "" })
   }
 }
+// Built before auth: deleting an organization or person sweeps their files (file-sweep.ts).
 const files = fileStore()
+
+const auth = createAuth({
+  db,
+  secret: env.BETTER_AUTH_SECRET,
+  baseURL,
+  emailFrom: env.EMAIL_FROM,
+  wrapsApiKey: env.WRAPS_API_KEY,
+  // The web app's origins when it is not this one (pnpm dev, e2e). Empty when apps/api serves it.
+  webOrigins: env.WEB_ORIGINS,
+  ses: devMail ? { client: devMail.client } : undefined,
+  // Stripe runs only in test mode, and only with both keys (createAuth refuses a live key).
+  stripe:
+    env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
+      ? {
+          secretKey: env.STRIPE_SECRET_KEY,
+          webhookSecret: env.STRIPE_WEBHOOK_SECRET,
+          plans: parseStripePlans(env.STRIPE_PLANS),
+        }
+      : undefined,
+  oauthResources: [baseURL, `${baseURL}/mcp`],
+  github:
+    env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+      ? { clientId: env.GITHUB_CLIENT_ID, clientSecret: env.GITHUB_CLIENT_SECRET }
+      : undefined,
+  google:
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+      : undefined,
+  passwordBreachCheck: true,
+  // Rate limits on sign-in, mail and one-time codes, by client IP (rate-limit.ts). e2e turns them off.
+  rateLimit: env.AUTH_RATE_LIMIT === "on" ? {} : false,
+  // Auth activity (sign-in, failed sign-in, sign-out, ...) lands in the audit trail (auth-events.ts).
+  onAuthEvent: async (event) => {
+    captureAuthEvent(analytics, event)
+    await recordAuthEvent(db, event)
+  },
+  // A notification that could not be recorded never fails the request; it is reported here.
+  onNotificationError: (error, type) => reportError(error, { notification: type }),
+  onSignUp: (event) => captureSignUp(analytics, event),
+  // Once an organization or person is deleted, their files go too (docs/storage.md).
+  onDeleted: fileSweep(files, logger),
+  // Plan entitlements (packages/auth/src/entitlements.ts): the operator organization's members
+  // manage overrides; unclaimed organizations get the lower daily request limit.
+  entitlements: {
+    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
+    unclaimedRequestLimit: env.UNCLAIMED_ORG_DAILY_REQUEST_LIMIT,
+  },
+  support: {
+    staffOrganizationId: env.OPERATOR_ORGANIZATION_ID,
+    email: supportEmail,
+    // @starter/env has checked each source comes with the reply domain, and only one is set.
+    inbound: env.SUPPORT_INBOUND_SECRET
+      ? { secret: env.SUPPORT_INBOUND_SECRET }
+      : env.WRAPS_INBOUND_KEY && env.WRAPS_INBOUND_BUCKET
+        ? {
+            key: env.WRAPS_INBOUND_KEY,
+            bucket: env.WRAPS_INBOUND_BUCKET,
+            region: env.WRAPS_INBOUND_REGION,
+          }
+        : undefined,
+  },
+})
+// Every BYO plugin's sweep (@byo-oss/core sweepAll), every minute: support's delayed reply mail,
+// retries and closing solved tickets, and the notification emails that are delayed or retried.
+const supportSweep = startSupportSweep(auth, { logger, intervalMs: env.SUPPORT_SWEEP_INTERVAL_MS })
 
 // The daily request limit is the plan's (@starter/plans), through entitlements; unclaimed
 // organizations get UNCLAIMED_ORG_DAILY_REQUEST_LIMIT (createAuth's `entitlements` option).

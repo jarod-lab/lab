@@ -3,7 +3,7 @@
 // flows that must keep working across better-auth upgrades, including minor and patch releases,
 // so they assert status codes, error codes, cookies, redirects and emails rather than internals.
 import { createHash, createHmac, randomBytes } from "node:crypto"
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest"
 import { and, eq } from "drizzle-orm"
 import { SignJWT } from "jose"
 import { personalSlug } from "@starter/auth"
@@ -17,7 +17,9 @@ import {
   user as userTable,
   verification,
 } from "@starter/db/schema"
+import { setErrorReporter } from "@starter/errors"
 import { createLogger } from "@starter/logger"
+import { createMemoryStore } from "@starter/storage"
 import { BASE, createTestApp, SECRET } from "./app.test.helpers"
 import { browser } from "./browser.test.helpers"
 
@@ -63,11 +65,35 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
   let t: Awaited<ReturnType<typeof createTestApp>>
   /** Every access-log line the app writes. */
   const logLines: string[] = []
+  /**
+   * The file store, with deletePrefix wrapped: every sweep records whether the deleted user's or
+   * organization's row was still there when it ran (it must never be), and `failSweeps` makes the
+   * store throw after recording.
+   */
+  const files = createMemoryStore({ driver: "memory", publicUrl: `${BASE}/files` })
+  const sweeps: { prefix: string; rowLeft: boolean }[] = []
+  let failSweeps = false
+  const sweepPrefix = files.deletePrefix.bind(files)
+  files.deletePrefix = async (prefix) => {
+    const [kind, id = ""] = prefix.split("/")
+    const model = kind === "org" ? "organization" : "user"
+    const row = await (await t.auth.$context).adapter.findOne({
+      model,
+      where: [{ field: "id", value: id }],
+    })
+    sweeps.push({ prefix, rowLeft: row !== null })
+    if (failSweeps) throw new Error("AccessDenied: s3:ListBucket")
+    return sweepPrefix(prefix)
+  }
   beforeAll(async () => {
     const logger = createLogger({ level: "info", destination: { write: (s) => logLines.push(s) } })
-    t = await createTestApp([], { logger })
+    t = await createTestApp([], { logger, files })
   })
-  afterAll(() => t.close())
+  afterAll(async () => {
+    // Every deletion in this file, not only the sweep tests', swept after its row was gone.
+    expect(sweeps.filter((s) => s.rowLeft)).toEqual([])
+    await t.close()
+  })
 
   const open = () => browser((url, init) => t.app.request(url, init))
   let n = 0
@@ -2282,6 +2308,36 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
   describe("delete account", () => {
     const CONFIRM_DELETE = "Confirm deleting your Starter account"
 
+    // The file sweep on deletion (file-sweep.ts): accounts with files, and what the store holds.
+    // PNG is a real 1x1 image.
+    const PNG =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    const upload = async (b: ReturnType<typeof open>, path: string) => {
+      const res = await b.request(path, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ image: PNG }),
+      })
+      expect(res.status, path).toBe(200)
+    }
+    const keysUnder = (prefix: string) =>
+      [...files.files.keys()].filter((k) => k.startsWith(prefix))
+    const sweepsOf = (...prefixes: string[]) => sweeps.filter((s) => prefixes.includes(s.prefix))
+    const activeOrg = async (b: ReturnType<typeof open>) =>
+      (await b.client.getSession()).data?.session.activeOrganizationId ?? ""
+    /** A new account with an avatar and a logo on its personal organization. */
+    async function withFiles(name: string) {
+      const account = await signedUp(name)
+      const orgId = await activeOrg(account.b)
+      await upload(account.b, "/v1/me/avatar")
+      await upload(account.b, "/v1/organization/logo")
+      const person = `user/${account.userId}/`
+      const org = `org/${orgId}/`
+      expect(keysUnder(person)).toHaveLength(1)
+      expect(keysUnder(org)).toHaveLength(1)
+      return { ...account, orgId, person, org }
+    }
+
     it("refuses while the user owns an organization others use, and emails nothing", async () => {
       const { b, email: address } = await signedUp("Ada")
       const created = await b.client.organization.create({ name: "Acme Labs", slug: `acme-${++n}` })
@@ -2456,8 +2512,119 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
       ).not.toBeNull()
     })
 
+    describe("sweeps the deleted owner's files", () => {
+      it("on self-delete: the avatar and the personal organization's logo, once both rows are gone", async () => {
+        const { b, email: address, userId, orgId, person, org } = await withFiles("Swept")
+        expect((await b.client.deleteUser({ callbackURL: "/goodbye" })).error).toBeNull()
+        const landed = await b.request((await mailed(address, CONFIRM_DELETE)).link)
+        expect(landed.status).toBe(302)
+
+        expect(keysUnder(person)).toEqual([])
+        expect(keysUnder(org)).toEqual([])
+        expect(sweepsOf(person, org)).toEqual([
+          { prefix: person, rowLeft: false },
+          { prefix: org, rowLeft: false },
+        ])
+        const adapter = (await t.auth.$context).adapter
+        expect(
+          await adapter.findOne({ model: "user", where: [{ field: "id", value: userId }] }),
+        ).toBeNull()
+        expect(
+          await adapter.findOne({ model: "organization", where: [{ field: "id", value: orgId }] }),
+        ).toBeNull()
+      })
+
+      it("on organization delete: its logo, and no other organization's", async () => {
+        const bystander = await withFiles("Bystander")
+        const owner = await signedUp("Org sweeper")
+        const created = await owner.b.client.organization.create({
+          name: "Swept Co",
+          slug: `swept-${++n}`,
+        })
+        const orgId = created.data?.id ?? ""
+        expect(
+          (await owner.b.client.organization.setActive({ organizationId: orgId })).error,
+        ).toBeNull()
+        await upload(owner.b, "/v1/organization/logo")
+        const org = `org/${orgId}/`
+        expect(keysUnder(org)).toHaveLength(1)
+
+        expect(
+          (await owner.b.client.organization.delete({ organizationId: orgId })).error,
+        ).toBeNull()
+        expect(keysUnder(org)).toEqual([])
+        expect(sweepsOf(org)).toEqual([{ prefix: org, rowLeft: false }])
+        expect(keysUnder(bystander.org)).toHaveLength(1)
+        expect(keysUnder(bystander.person)).toHaveLength(1)
+      })
+
+      // Admin removal skips deleteUser.beforeDelete, so the personal organization (and its logo)
+      // stays: a known gap (docs/roadmap.md). Only the person's own files go.
+      it("on admin removal: the person's files only", async () => {
+        const { b: root, userId: rootId } = await signedUp("Root sweeper")
+        await (await t.auth.$context).adapter.updateMany({
+          model: "user",
+          where: [{ field: "id", value: rootId }],
+          update: { role: "admin" },
+        })
+        const victim = await withFiles("Removed")
+
+        expect((await root.client.admin.removeUser({ userId: victim.userId })).error).toBeNull()
+        expect(keysUnder(victim.person)).toEqual([])
+        expect(keysUnder(victim.org)).toHaveLength(1)
+        expect(sweepsOf(victim.person, victim.org)).toEqual([
+          { prefix: victim.person, rowLeft: false },
+        ])
+      })
+
+      it("never fails the deletion when the store throws, and reports the error", async () => {
+        const reported: { message: string; context: Record<string, unknown> }[] = []
+        setErrorReporter((error, context) =>
+          reported.push({ message: error.message, context: context ?? {} }),
+        )
+        failSweeps = true
+        onTestFinished(() => {
+          failSweeps = false
+          setErrorReporter(undefined)
+        })
+        const { b, email: address, userId, person, org } = await withFiles("Unswept")
+        expect((await b.client.deleteUser({ callbackURL: "/goodbye" })).error).toBeNull()
+        const landed = await b.request((await mailed(address, CONFIRM_DELETE)).link)
+        expect(landed.status).toBe(302)
+        expect(new URL(landed.headers.get("location") ?? "", BASE).pathname).toBe("/goodbye")
+
+        expect(
+          await (await t.auth.$context).adapter.findOne({
+            model: "user",
+            where: [{ field: "id", value: userId }],
+          }),
+        ).toBeNull()
+        expect(sweepsOf(person, org)).toEqual([
+          { prefix: person, rowLeft: false },
+          { prefix: org, rowLeft: false },
+        ])
+        const sweepErrors = reported.filter((r) => r.context.phase === "onDeleted")
+        expect(sweepErrors).toHaveLength(2)
+        expect(sweepErrors[0]?.context).toMatchObject({ userId })
+        // The files stay: a failed sweep leaves orphans, never a failed deletion.
+        expect(keysUnder(person)).toHaveLength(1)
+      })
+
+      it("sweeps nothing when the deletion request is refused", async () => {
+        const { b, person, org } = await withFiles("Keeper")
+        const shared = await b.client.organization.create({ name: "Kept Co", slug: `kept-${++n}` })
+        expect(shared.error).toBeNull()
+
+        const res = await b.client.deleteUser({})
+        expect(res.error).toMatchObject({ code: "OWNS_ORGANIZATION" })
+        expect(keysUnder(person)).toHaveLength(1)
+        expect(keysUnder(org)).toHaveLength(1)
+        expect(sweepsOf(person, org, `org/${shared.data?.id}/`)).toEqual([])
+      })
+    })
+
     it("re-checks when the link opens: an organization created since the request still refuses", async () => {
-      const { b, email: address, userId } = await signedUp("Late")
+      const { b, email: address, userId, person, org } = await withFiles("Late")
       expect((await b.client.deleteUser({})).error).toBeNull()
       const confirm = await mailed(address, CONFIRM_DELETE)
       expect(
@@ -2473,6 +2640,10 @@ describe("auth flows over HTTP (real client, real Postgres via PGlite)", () => {
         where: [{ field: "id", value: userId }],
       })
       expect(user).not.toBeNull()
+      // beforeDelete refused before it removed anything, so nothing is swept and the files stay.
+      expect(sweepsOf(person, org)).toEqual([])
+      expect(keysUnder(person)).toHaveLength(1)
+      expect(keysUnder(org)).toHaveLength(1)
     })
   })
 

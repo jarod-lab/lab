@@ -234,6 +234,14 @@ export interface AuthOptions {
    */
   onSignUp?: (event: { userId: string; organizationId: string }) => void
   /**
+   * Called once an organization or a person has been deleted, after the row is gone: on
+   * /organization/delete, and on every user delete (self-delete, its confirmation link, admin
+   * removal). Self-delete also reports the personal organization it removed. server.ts sweeps their
+   * files from the file store (file-sweep.ts). Errors are reported, never returned: the deletion has
+   * already happened.
+   */
+  onDeleted?: (event: DeletedEvent) => void | Promise<void>
+  /**
    * Customer support (@byo-oss/support, support.ts): the staff organization, thread mail and
    * inbound mail. Support is always mounted, so its tables and routes don't depend on the config;
    * unset, nobody is an agent and nothing is mailed.
@@ -246,6 +254,9 @@ export interface AuthOptions {
    */
   entitlements?: EntitlementsConfig
 }
+
+/** What `onDeleted` reports: one organization, or one person. */
+export type DeletedEvent = { organizationId: string } | { userId: string }
 
 const defaultNotificationError = (error: unknown, type: NotificationType) => {
   reportError(error, { notification: type })
@@ -326,6 +337,7 @@ const signOutSession = {
  * oauth-provider plugin's tables. better-auth reads a plugin's table `indexes` when it builds the
  * schema, so `auth:generate` carries them into auth-schema.ts, and drizzle-kit into the migration.
  * Equality columns come first; the refresh-token index ends with `revoked`, then the range column.
+ * The plugin's single-column clientId indexes are dropped in their favour.
  */
 function withGrantIndexes(
   plugin: ReturnType<typeof oauthProvider>,
@@ -344,13 +356,23 @@ function withGrantIndexes(
       ],
     },
   }
+  // Both composite indexes lead with clientId, so they also serve the oauth_client cascade: the
+  // plugin's own single-column clientId index is redundant and costs a write per token rotation. It
+  // is turned off; the field (its reference included) is otherwise the plugin's.
+  const noClientIdIndex = <T extends { fields: { clientId: object } }>(table: T): T => ({
+    ...table,
+    fields: { ...table.fields, clientId: { ...table.fields.clientId, index: false } },
+  })
   const schema = plugin.schema ?? {}
   return {
     ...plugin,
     schema: {
       ...schema,
-      oauthConsent: { ...schema.oauthConsent, ...grantIndexes.oauthConsent },
-      oauthRefreshToken: { ...schema.oauthRefreshToken, ...grantIndexes.oauthRefreshToken },
+      oauthConsent: { ...noClientIdIndex(schema.oauthConsent), ...grantIndexes.oauthConsent },
+      oauthRefreshToken: {
+        ...noClientIdIndex(schema.oauthRefreshToken),
+        ...grantIndexes.oauthRefreshToken,
+      },
     },
   }
 }
@@ -407,6 +429,17 @@ export function createAuth(opts: AuthOptions) {
     await revokeGrantsWith(db, { organizationId, userId }, new Date())
     await deleteMemberData(inboxRef.auth, { userId, organizationId })
     await endScim(userId, organizationId)
+  }
+
+  // Deletions are reported (onDeleted) only once the row is gone. Self-delete removes the personal
+  // organization raw in beforeDelete, so its id waits here, by user id, for user.delete.after.
+  const personalOrgsDeleted = new Map<string, string>()
+  const reportDeleted = async (event: DeletedEvent) => {
+    try {
+      await opts.onDeleted?.(event)
+    } catch (error) {
+      reportError(error, { phase: "onDeleted", ...event })
+    }
   }
 
   // Callbacks below run after construction and need the adapter, so they read it from this ref.
@@ -531,9 +564,11 @@ export function createAuth(opts: AuthOptions) {
           })
           for (const { organizationId } of memberships) await endScim(user.id, organizationId)
           // Its entitlements rows go too: the organization is deleted raw, so no org hook runs.
-          await removePersonalOrganization(db, user.id, billing, (organizationId) =>
-            deleteOrganizationData(auth, organizationId),
+          const personalId = await removePersonalOrganization(db, user.id, billing, (orgId) =>
+            deleteOrganizationData(auth, orgId),
           )
+          // Its files are swept in user.delete.after, once the user is gone too, never from here.
+          if (personalId) personalOrgsDeleted.set(user.id, personalId)
         },
       },
       // Set when two-factor is switched on, cleared when it is switched off (see databaseHooks).
@@ -578,6 +613,18 @@ export function createAuth(opts: AuthOptions) {
             } catch (error) {
               reportError(error, { phase: "onSignUp" })
             }
+          },
+        },
+        // Every user delete (self-delete, its link, admin removal) runs this after the row is gone.
+        // better-auth queues it with no error handler, so reportDeleted never throws: a throw here
+        // would answer 500 for a deletion that already happened. Admin removal skips beforeDelete,
+        // so it has no personal organization entry and sweeps the person's files only.
+        delete: {
+          after: async (user) => {
+            const personalId = personalOrgsDeleted.get(user.id)
+            personalOrgsDeleted.delete(user.id)
+            await reportDeleted({ userId: user.id })
+            if (personalId) await reportDeleted({ organizationId: personalId })
           },
         },
         update: {
@@ -767,6 +814,10 @@ export function createAuth(opts: AuthOptions) {
           afterUpdateMemberRole: async ({ member }) => {
             if (allowed(rolePermissions(member.role), { scim: ["create"] })) return
             await endScim(member.userId, member.organizationId)
+          },
+          // Runs once the plugin's delete has returned: the row is gone. Never throws (reportDeleted).
+          afterDeleteOrganization: async ({ organization }) => {
+            await reportDeleted({ organizationId: organization.id })
           },
           // Support cleans up after delete, remove-member and leave with its own hooks (support.ts):
           // its rows aren't deleted here too, or they would be deleted twice.

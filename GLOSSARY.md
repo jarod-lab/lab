@@ -86,6 +86,9 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
   `ANALYTICS_PROVIDER` (`@starter/analytics`). Unset, nothing is captured.
 - **Upload** — an image a person or agent sends to be kept in the file store: a person's **avatar**
   (`user.image`) or an organization's **logo** (`organization.logo`). The row keeps its public URL.
+- **File sweep** — removing everything under a deleted organization's or person's prefix
+  (`org/<id>/`, `user/<id>/`) from the file store, once its row is gone (`apps/api/src/file-sweep.ts`).
+  Not the **support sweep** (`support-sweep.ts`): the BYO plugins' scheduled mail and cleanup.
 
 ## Feature flags
 

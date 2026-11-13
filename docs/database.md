@@ -36,8 +36,8 @@
     client, organization and user; `grantStands` in `packages/auth/src/principal.ts`), declared in
     `withGrantIndexes()` in `packages/auth/src/index.ts` so `auth generate` keeps them. A plain
     `CREATE INDEX` blocks writes while it builds; on a large table, run
-    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand before applying 0011. The single-column
-    `clientId` indexes on those tables are now redundant;
+    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand before applying 0011. They made the
+    single-column `clientId` indexes on those tables redundant; 0016 drops them;
   - `member.source`: `"scim"` for a membership the directory created, else null. SCIM
     deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).
 - `0013_notification_email` adds better-inbox 0.6's email delivery: `notification.seen_at`, the
@@ -69,8 +69,17 @@
   `created_by`/`removed_by` are `set null` on user delete. Don't read them from app code: go through
   `auth.entitlements` and `auth.api.*` (`packages/auth/src/entitlements.ts`). `usage_daily` (0003) is
   no longer written: the meter moved to `entitlement_usage`.
+- `0016_drop_oauth_client_id_indexes` drops `oauthConsent_clientId_idx` and
+  `oauthRefreshToken_clientId_idx`, which 0011's composite indexes cover. Those lead with
+  `client_id`, so the `oauth_client` cascade stays indexed. `withGrantIndexes()` turns off the
+  plugin field's index so `auth generate` doesn't bring them back. A plain `DROP INDEX` takes an
+  `ACCESS EXCLUSIVE` lock: it blocks reads and writes on the table while it waits for and holds
+  that lock. The drop is quick, but it queues behind long transactions and everything queues behind
+  it. Don't run `DROP INDEX CONCURRENTLY` by hand first: 0016's statements have no `IF EXISTS`, so
+  it would then fail. On a large, busy table, apply it in a quiet window. Not applied yet: the user
+  applies migrations, agents don't.
 <!-- template:start -->
-- Migrations `0003` through `0011` are not applied until the user runs them.
+- Migrations `0003` onward are not applied until the user runs them.
 <!-- template:end -->
 
 ## Cleanup

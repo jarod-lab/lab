@@ -56,7 +56,9 @@ driver, in production. The API logs a warning when `local` runs with `NODE_ENV=p
    `arn:aws:s3:::<bucket>/*` (with Block Public Access turned off for it), or a CloudFront
    distribution in front of it with origin access control. With CloudFront, set
    `STORAGE_PUBLIC_URL` to its domain.
-2. Create an IAM user (or role) with `s3:PutObject` and `s3:DeleteObject` on that bucket.
+2. Create an IAM user (or role) with `s3:PutObject` and `s3:DeleteObject` on
+   `arn:aws:s3:::<bucket>/*`, and `s3:ListBucket` on `arn:aws:s3:::<bucket>` (the bucket ARN, not
+   `/*`). The sweep on deletion lists a prefix before deleting it.
 3. Set `STORAGE_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
    `S3_SESSION_TOKEN` is for temporary credentials. The driver signs requests itself (aws4fetch), so
    it does not read the AWS credential chain. Pass the keys explicitly.
@@ -70,7 +72,8 @@ default URLs are then path-style: `<endpoint>/<bucket>/<key>`.
    Settings, either the r2.dev subdomain (rate-limited, for development only) or a custom domain
    (for production).
 2. Create an R2 API token with Object Read & Write on that bucket. Its S3 credentials are the
-   access key id and secret access key.
+   access key id and secret access key. That permission includes listing, which the sweep on
+   deletion needs.
 3. Set `STORAGE_BUCKET`, `STORAGE_PUBLIC_URL` (the r2.dev URL or your domain), `R2_ACCOUNT_ID`,
    `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
@@ -87,6 +90,28 @@ does not use, so keep the bucket out of a jurisdiction.
 
 The store's public host comes from the token. `@vercel/blob` is only imported when this driver is
 picked. The driver needs the token itself: OIDC variables alone (`BLOB_STORE_ID`) are not enough.
+The read-write token also covers `list`, which the sweep on deletion uses.
+
+## When an organization or person is deleted
+
+Their files go too. Every key for an organization starts `org/<id>/` and every key for a person
+`user/<id>/` (`organizationFilesPrefix` and `personFilesPrefix` in `@starter/storage`; uploads
+build their keys on them). When one is deleted, the API removes everything under that prefix with
+`FileStore.deletePrefix`, including files no row points at any more (`apps/api/src/file-sweep.ts`).
+
+- It runs only after the row is deleted: auth reports the deletion through `onDeleted`
+  (`databaseHooks.user.delete.after`, and `afterDeleteOrganization`). Self-delete also sweeps the
+  personal organization it removes. Admin removal of a person sweeps only their own files: it
+  leaves the personal organization behind (see the roadmap).
+- It is best effort. A failure is reported (`reportError`) and logged, and the deletion still
+  succeeds. The files of a failed sweep stay, as orphans.
+- Each sweep logs the prefix and how many files it removed at info level.
+- `deletePrefix` accepts only `org/<id>/` or `user/<id>/`. The S3 and Vercel Blob drivers delete
+  only listed keys that are plain file keys under the prefix and count the rest as skipped; the API
+  logs a warning with that count. A listing that repeats its cursor, or runs past 1,000 pages
+  (`MAX_LIST_PAGES`), stops the sweep with an error.
+- On S3 it lists the prefix first, so the credentials need `s3:ListBucket` (see "s3" above). Without
+  it, the first sweep fails with a 403 that is logged.
 
 ## The web app's CSP
 
@@ -102,6 +127,8 @@ CSP use the same origin.
   `apps/api/src/data/uploads.ts` (one that takes a proof when the row is tenant data).
 - For another file type, add its magic bytes beside `imageTypeOf` in `@starter/storage`. Never
   trust the type the client claims.
+- Build the key prefix on `organizationFilesPrefix` or `personFilesPrefix`, or the sweep on
+  deletion misses the files.
 - A new store is a `FileStore` (`packages/storage/src/store.ts`): `put`, `delete` (ignoring URLs the
-  store did not issue) and `origin`, plus a case in `createFileStore` and `apps/api/src/server.ts`,
-  and its variables in `packages/env`.
+  store did not issue), `deletePrefix` (guarded by `assertFilesPrefix`) and `origin`, plus a case in
+  `createFileStore` and `apps/api/src/server.ts`, and its variables in `packages/env`.

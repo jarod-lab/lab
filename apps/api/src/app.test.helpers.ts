@@ -23,6 +23,7 @@ import { captureSignUp } from "./analytics"
 import { type AppOptions, createApp } from "./app"
 import { recordAuthEvent } from "./data/audit"
 import { createDevMailSink } from "./dev-mail"
+import { fileSweep } from "./file-sweep"
 import { createFlagService } from "./flags"
 import { createApiHooks } from "./hooks"
 import { createMeter } from "./meter"
@@ -148,7 +149,13 @@ export async function createTestApp(
   }
   const devMail = options.devMail ? createDevMailSink() : undefined
   const { analytics } = options
+  const logger = options.logger ?? createLogger({ level: "silent" })
   const plans = memorySource()
+  // Built before auth, as in server.ts: deletions sweep their files through fileSweep.
+  const files =
+    options.files === false
+      ? undefined
+      : (options.files ?? createMemoryStore({ driver: "memory", publicUrl: `${BASE}/files` }))
   const auth = createAuth({
     db: t.db,
     secret: SECRET,
@@ -176,6 +183,7 @@ export async function createTestApp(
       staffOrganizationId: options.staffOrganizationId,
     },
     onSignUp: analytics && ((event) => captureSignUp(analytics, event)),
+    onDeleted: fileSweep(files, logger),
     onAuthEvent:
       options.onAuthEvent ??
       (async (event) => {
@@ -184,10 +192,6 @@ export async function createTestApp(
   })
   const meter = createMeter({ db: t.db, entitlements: auth.entitlements })
   const notifier = options.notifier ?? createApiNotifier({ auth, db: t.db })
-  const files =
-    options.files === false
-      ? undefined
-      : (options.files ?? createMemoryStore({ driver: "memory", publicUrl: `${BASE}/files` }))
   // Named once acme exists, below: the operations read it at call time.
   const operator: Operator = { organizationId: undefined }
   const flags = createFlagService({
@@ -225,7 +229,7 @@ export async function createTestApp(
     name: "Test API",
     version: "1.0.0",
     description: "A test API.",
-    logger: options.logger ?? createLogger({ level: "silent" }),
+    logger,
   })
   const req = (path: string, init: RequestInit = {}) => app.request(`${BASE}${path}`, init)
 

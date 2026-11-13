@@ -1,7 +1,16 @@
 import { AppError } from "@starter/errors"
 import { AwsClient } from "aws4fetch"
 
-import { assertFileKey, encodeKey, type FileStore, IMMUTABLE, keyUnder } from "./store"
+import {
+  assertFileKey,
+  assertFilesPrefix,
+  assertNextPage,
+  encodeKey,
+  type FileStore,
+  IMMUTABLE,
+  keyUnder,
+  sweepable,
+} from "./store"
 
 export interface S3Config {
   driver: "s3"
@@ -39,6 +48,44 @@ export interface R2Config {
 
 const trim = (url: string) => url.replace(/\/+$/, "")
 
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" }
+
+/** XML text with its five named entities and numeric references (`&#13;`, `&#x2F;`) unescaped. */
+export function unescapeXml(text: string): string {
+  return text.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (entity, name: string) => {
+    if (!name.startsWith("#")) return ENTITIES[name] ?? entity
+    const code = name.startsWith("#x") ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1))
+    // Past the last code point, fromCodePoint throws: such a reference is left as text, and the key
+    // that holds it fails isFileKey, so it is skipped rather than aborting the sweep.
+    return code <= 0x10ffff ? String.fromCodePoint(code) : entity
+  })
+}
+
+/** One page of a ListObjectsV2 answer. */
+export interface ListPage {
+  keys: string[]
+  truncated: boolean
+  /** The `continuation-token` for the next page, when `truncated`. */
+  next?: string
+}
+
+/**
+ * Reads the keys and the paging fields of a ListObjectsV2 answer. S3 names `<Key>` only inside
+ * `<Contents>`, so a flat scan is enough and no XML dependency is needed.
+ */
+export function parseListPage(xml: string): ListPage {
+  const values = (tag: string) =>
+    Array.from(xml.matchAll(new RegExp(`<${tag}>([^<]*)</${tag}>`, "g")), (m) =>
+      unescapeXml(m[1] ?? ""),
+    )
+  const [next] = values("NextContinuationToken")
+  return {
+    keys: values("Key"),
+    truncated: values("IsTruncated")[0] === "true",
+    ...(next !== undefined && { next }),
+  }
+}
+
 /** S3, and anything that speaks its API: R2 is the same driver with Cloudflare's endpoint. */
 export function createS3Store(config: S3Config | R2Config): FileStore {
   const r2 = config.driver === "r2"
@@ -58,18 +105,35 @@ export function createS3Store(config: S3Config | R2Config): FileStore {
   })
   const send = config.fetch ?? fetch
 
-  async function call(method: "PUT" | "DELETE", key: string, init: RequestInit = {}) {
-    const request = await client.sign(`${bucketUrl}/${encodeKey(key)}`, { method, ...init })
-    const res = await send(request)
-    // A DELETE that finds the key already gone (404) counts as done.
-    if (res.ok || (method === "DELETE" && res.status === 404)) return
-    throw new AppError("INTERNAL", `The file store refused a ${method}`, {
+  const refused = async (method: string, res: Response) =>
+    new AppError("INTERNAL", `The file store refused a ${method}`, {
       context: {
         driver: config.driver,
         status: res.status,
         body: (await res.text()).slice(0, 500),
       },
     })
+
+  async function call(method: "PUT" | "DELETE", key: string, init: RequestInit = {}) {
+    const request = await client.sign(`${bucketUrl}/${encodeKey(key)}`, { method, ...init })
+    const res = await send(request)
+    // A DELETE that finds the key already gone (404) counts as done.
+    if (res.ok || (method === "DELETE" && res.status === 404)) return
+    throw await refused(method, res)
+  }
+
+  /**
+   * One ListObjectsV2 page of the keys under `prefix`. The query goes through searchParams: a
+   * continuation token holds `+`, `/` and `=`. Every refusal throws, a 404 included (no bucket).
+   */
+  async function listPage(prefix: string, token?: string): Promise<ListPage> {
+    const url = new URL(bucketUrl)
+    url.searchParams.set("list-type", "2")
+    url.searchParams.set("prefix", prefix)
+    if (token !== undefined) url.searchParams.set("continuation-token", token)
+    const res = await send(await client.sign(url.href, { method: "GET" }))
+    if (!res.ok) throw await refused("GET", res)
+    return parseListPage(await res.text())
   }
 
   return {
@@ -92,6 +156,25 @@ export function createS3Store(config: S3Config | R2Config): FileStore {
       if (key === null) return false
       await call("DELETE", key)
       return true
+    },
+    async deletePrefix(prefix) {
+      assertFilesPrefix(prefix)
+      const keys: string[] = []
+      // A server that repeats its token, or never stops paging, can't hold the deletion open.
+      const seen = new Set<string>()
+      let token: string | undefined
+      do {
+        if (token !== undefined) assertNextPage(seen, token, config.driver)
+        const page = await listPage(prefix, token)
+        keys.push(...page.keys)
+        token = page.truncated ? page.next : undefined
+      } while (token !== undefined)
+      // The listing comes from whatever S3_ENDPOINT points at: only keys under the prefix that are
+      // plain file keys (no `..`, which a URL would resolve elsewhere) are deleted.
+      const mine = keys.filter((key) => sweepable(key, prefix))
+      // One DELETE each: DeleteObjects needs a Content-MD5 header, and a person has a file or two.
+      for (const key of mine) await call("DELETE", key)
+      return { deleted: mine.length, skipped: keys.length - mine.length }
     },
   }
 }

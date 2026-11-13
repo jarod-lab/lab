@@ -1,6 +1,13 @@
 import { AppError } from "@starter/errors"
 
-import { assertFileKey, type FileStore, keyUnder } from "./store"
+import {
+  assertFileKey,
+  assertFilesPrefix,
+  assertNextPage,
+  type FileStore,
+  keyUnder,
+  sweepable,
+} from "./store"
 
 export interface VercelBlobConfig {
   driver: "vercel-blob"
@@ -8,7 +15,7 @@ export interface VercelBlobConfig {
   token: string
 }
 
-type BlobSdk = Pick<typeof import("@vercel/blob"), "put" | "del">
+type BlobSdk = Pick<typeof import("@vercel/blob"), "put" | "del" | "list">
 
 /** The store id inside a read-write token, which names the store's public host. */
 function storeIdOf(token: string): string {
@@ -29,6 +36,15 @@ export function createVercelBlobStore(config: VercelBlobConfig, sdk?: BlobSdk): 
   const blob = () => {
     loaded ??= sdk ? Promise.resolve(sdk) : import("@vercel/blob")
     return loaded
+  }
+  /** The key behind one of this store's URLs, else null. */
+  const keyOf = (url: string) => {
+    // The host may come back in another case than the token's store id: `new URL` lowercases it.
+    try {
+      return keyUnder(publicUrl, new URL(url).href)
+    } catch {
+      return null
+    }
   }
   const failed = (method: string, error: unknown) =>
     new AppError("INTERNAL", `The file store refused a ${method}`, {
@@ -57,14 +73,7 @@ export function createVercelBlobStore(config: VercelBlobConfig, sdk?: BlobSdk): 
       }
     },
     async delete(url) {
-      // The host may come back in another case than the token's store id: `new URL` lowercases it.
-      let normal: string
-      try {
-        normal = new URL(url).href
-      } catch {
-        return false
-      }
-      if (keyUnder(publicUrl, normal) === null) return false
+      if (keyOf(url) === null) return false
       const { del } = await blob()
       try {
         await del(url, { token: config.token })
@@ -72,6 +81,39 @@ export function createVercelBlobStore(config: VercelBlobConfig, sdk?: BlobSdk): 
         throw failed("DELETE", error)
       }
       return true
+    },
+    async deletePrefix(prefix) {
+      assertFilesPrefix(prefix)
+      const { list, del } = await blob()
+      let deleted = 0
+      let skipped = 0
+      let cursor: string | undefined
+      // A cursor that repeats, or pages that never end, can't hold the deletion open.
+      const seen = new Set<string>()
+      try {
+        do {
+          if (cursor !== undefined) assertNextPage(seen, cursor, "vercel-blob")
+          const page = await list({ prefix, cursor, token: config.token })
+          // The listing is not trusted blindly: only this store's URLs whose key is a plain file key
+          // under the prefix are deleted (the URL is what `del` removes, so it is what is checked).
+          const mine = page.blobs.filter((b) => {
+            const key = keyOf(b.url)
+            return key !== null && sweepable(key, prefix)
+          })
+          skipped += page.blobs.length - mine.length
+          if (mine.length > 0) {
+            await del(
+              mine.map((b) => b.url),
+              { token: config.token },
+            )
+            deleted += mine.length
+          }
+          cursor = page.hasMore ? page.cursor : undefined
+        } while (cursor !== undefined)
+      } catch (error) {
+        throw failed("DELETE", error)
+      }
+      return { deleted, skipped }
     },
   }
 }

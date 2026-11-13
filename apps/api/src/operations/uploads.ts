@@ -5,6 +5,8 @@ import {
   IMAGE_TYPES,
   MAX_IMAGE_BYTES,
   newFileKey,
+  organizationFilesPrefix,
+  personFilesPrefix,
 } from "@starter/storage"
 import { z } from "zod"
 
@@ -35,9 +37,12 @@ function storeOf(files: FileStore | undefined): FileStore {
   })
 }
 
-/** The key prefix of an organization's logo and of a person's avatar: every file they get starts so. */
-const logoPrefix = (orgId: string) => `org/${orgId}/logo`
-const avatarPrefix = (userId: string) => `user/${userId}/avatar`
+/**
+ * The key prefix of an organization's logo and of a person's avatar: every file they get starts so.
+ * Built on the store's directory helpers, which the sweep on deletion removes (file-sweep.ts).
+ */
+const logoPrefix = (orgId: string) => `${organizationFilesPrefix(orgId)}logo`
+const avatarPrefix = (userId: string) => `${personFilesPrefix(userId)}avatar`
 
 /**
  * Whether `url` is a file stored under `prefix`. The row's URL can be set by better-auth's own update

@@ -109,16 +109,17 @@ export async function assertCanDelete(
  * (projects, agents, runs, audit) go by cascade; API keys and SSO providers are keyed by organization
  * id with no foreign key, so they are removed here. Runs after assertCanDelete. The organization is
  * deleted raw (no organization hooks run), so `onRemove` runs the cleanup plugins would have done
- * on /organization/delete (entitlements' rows), before the row goes.
+ * on /organization/delete (entitlements' rows), before the row goes. Returns the deleted
+ * organization's id (null when there was none), so its files can be swept once the user is gone.
  */
 export async function removePersonalOrganization(
   db: Adapter,
   userId: string,
   billing: boolean,
   onRemove?: (organizationId: string) => Promise<void>,
-): Promise<void> {
+): Promise<string | null> {
   const org = await personalOrganizationOf(db, userId)
-  if (!org) return
+  if (!org) return null
   await onRemove?.(org.id)
   await db.deleteMany({ model: "apikey", where: [{ field: "referenceId", value: org.id }] })
   await db.deleteMany({ model: "ssoProvider", where: [{ field: "organizationId", value: org.id }] })
@@ -126,6 +127,7 @@ export async function removePersonalOrganization(
     await db.deleteMany({ model: "subscription", where: [{ field: "referenceId", value: org.id }] })
   }
   await db.deleteMany({ model: "organization", where: [{ field: "id", value: org.id }] })
+  return org.id
 }
 
 /** The address a change-of-email token replaces, when the token is one (else null). */

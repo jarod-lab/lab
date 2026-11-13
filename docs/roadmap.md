@@ -16,9 +16,9 @@
 - LLM onboarding eval: an agent starting from `llms.txt` alone, judged on its run. The deterministic
   HTTP journeys exist (`apps/api/src/onboarding.test.ts`: device grant from discovery, self-signup
   and claim, CLI login).
-- Drop the single-column `clientId` indexes on `oauth_consent` and `oauth_refresh_token`, now covered
-  by the 0011 composite indexes.
 - Audit for FORBIDDEN and BAD_REQUEST attempts.
+- Admin removal of a person leaves their personal organization (and its logo, API keys and
+  entitlements rows) behind; better-auth's `removeUser` skips `deleteUser.beforeDelete`.
 - Notifications for agents: an operation (`list_notifications`) so an OAuth client acting for a
   person can read their notifications. Email or push delivery, per-person preferences and digests.
   Today they are in-app only (`docs/notifications.md`).
@@ -26,11 +26,10 @@
   and a Claude Desktop entry are left out of llms.txt until their docs give a URL-only remote setup.
 - `llms.txt` on the marketing site (`apps/site`), and a sitemap. The site has no search, no
   newsletter backend (the form posts to `site.newsletterAction`) and no theme toggle.
-- Uploads: a deleted organization's or person's files stay in the file store (their keys start
-  `org/<id>/` and `user/<id>/`, so a sweep can find them). Presigned direct-to-bucket uploads for
-  files bigger than an avatar. Resizing on upload. R2 buckets in an EU or US jurisdiction (an
-  `R2_JURISDICTION` for the `<account>.eu.` endpoint), and Vercel Blob through OIDC alone (no
-  read-write token). (`docs/storage.md`)
+- A periodic sweep for files orphaned before deletion swept them, or by a failed sweep.
+- Uploads: presigned direct-to-bucket uploads for files bigger than an avatar. Resizing on upload.
+  R2 buckets in an EU or US jurisdiction (an `R2_JURISDICTION` for the `<account>.eu.` endpoint),
+  and Vercel Blob through OIDC alone (no read-write token). (`docs/storage.md`)
 - Feature flags (`docs/feature-flags.md`): multi-variant flags and experiments (string and number
   values, sticky assignment, metrics per variant); targeting by attribute (plan, region) beyond
   organizations; metering OFREP calls; counting MCP tool failures and browser errors against the

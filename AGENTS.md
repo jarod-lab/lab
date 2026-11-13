@@ -210,8 +210,8 @@ Details: `docs/database.md`.
   `scripts/release.mjs` in a deploy. The exception is `pnpm wt`: it migrates only a worktree's own
   `*_wt_*` database, and agents run it themselves.
 <!-- template:start -->
-- Migrations `0001_agent_auth` through `0012_feature_flags`; 0003 onward are not applied
-  yet.
+- Migrations `0001_agent_auth` through `0016_drop_oauth_client_id_indexes`; 0003 onward are not
+  applied yet.
 <!-- template:end -->
 
 ## Tooling

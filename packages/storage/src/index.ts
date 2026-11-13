@@ -15,6 +15,9 @@ export {
   IMMUTABLE,
   isFileKey,
   newFileKey,
+  organizationFilesPrefix,
+  type PrefixDeletion,
+  personFilesPrefix,
   type StorageDriver,
   type StoredFile,
 } from "./store"

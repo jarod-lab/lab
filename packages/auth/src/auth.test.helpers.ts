@@ -15,7 +15,10 @@ export interface SentMail {
 }
 
 export async function createTestAuth(
-  options: Pick<AuthOptions, "stripe" | "onNotificationError" | "rateLimit" | "onSignUp"> = {},
+  options: Pick<
+    AuthOptions,
+    "stripe" | "onNotificationError" | "rateLimit" | "onSignUp" | "onDeleted"
+  > = {},
 ) {
   const t = await createTestDb()
   // Stands in for SES: records who each auth email is for and the first link in it.
@@ -42,6 +45,7 @@ export async function createTestAuth(
     rateLimit: options.rateLimit ?? false,
     onNotificationError: options.onNotificationError,
     onSignUp: options.onSignUp,
+    onDeleted: options.onDeleted,
     entitlements: { source: plans },
   })
   let n = 0

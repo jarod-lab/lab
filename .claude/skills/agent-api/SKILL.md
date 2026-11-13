@@ -46,7 +46,8 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
 ## Add or change an operation
 
 1. Define it in its domain file under `apps/api/src/operations/` (`account`, `projects`, `api-keys`,
-   `connected-agents`, `audit`, `workspace-agents`, `runs`, `approvals`, `members`), with
+   `connected-agents`, `audit`, `workspace-agents`, `runs`, `approvals`, `members`,
+   `notifications`), with
    `defineOperation` from `operations/shared.ts` (typed by `operationsFor<Catalog>()`). Add it to
    the array that file returns. `createOperations` in `operations/index.ts` composes the arrays into
    `defineRegistry([...])`; that order is the order the docs list operations in, so keep it stable.
@@ -95,6 +96,10 @@ registry can't express, extend `OperationSpec` in `packages/api` and the generat
    with the session cookie as its only security and "web app only" in llms.txt. List it in
    `PUBLIC` in `authorization.test.ts` when its permissions are `{}`. Use `requirePerson` in the
    handler for the user id.
+   For what a person's agent may also do (`list_notifications`), leave `auth` unset and refuse
+   `caller.actor.type !== "user"` in the handler: a person's session or an OAuth token acting for
+   them passes, and API keys get FORBIDDEN. List it in `PUBLIC` with a reason when its permissions
+   are `{}` and test the checks `PUBLIC` skips in its own file; keys still see its MCP tool.
    Operator operations: `audience: "operator"` is for what only the operator organization does
    (`OPERATOR_ORGANIZATION_ID`; the feature flag rollouts). `invoke` refuses any other caller with
    FORBIDDEN before permissions (`InvokeOptions.isOperator`, from `createApiHooks({ operator })`);

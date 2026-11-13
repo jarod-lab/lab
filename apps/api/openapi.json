@@ -8065,6 +8065,153 @@
         },
         "x-audience": "operator"
       }
+    },
+    "/v1/notifications": {
+      "get": {
+        "operationId": "list_notifications",
+        "summary": "List the person's notifications in this organization",
+        "description": "Lists the in-app notifications of the person this credential acts for, newest first: approvals waiting, runs that finished or failed, members joining, usage limits and the like. Only notifications about this organization are included; the person's account notices and other organizations' notifications are not. Listing never marks anything read or seen, so the person still gets their emails. Pass nextCursor back as cursor for older ones; it is null on the last page. Needs a person: a session or an OAuth token. API keys are refused.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "description": "The event, e.g. approval.requested or member.joined"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "href": {
+                            "description": "A path in the web app the notification links to",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "read": {
+                            "type": "boolean",
+                            "description": "Whether the person has read it in the web app"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "title",
+                          "body",
+                          "href",
+                          "read",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "notifications",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited or over quota. Wait for the Retry-After header before retrying.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "bearer": []
+          },
+          {
+            "oauth2": []
+          }
+        ],
+        "x-required-permissions": [],
+        "x-agent-hints": {
+          "readOnly": true,
+          "idempotent": true
+        }
+      }
     }
   },
   "components": {

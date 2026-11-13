@@ -19,9 +19,12 @@
 - Audit for FORBIDDEN and BAD_REQUEST attempts.
 - Admin removal of a person leaves their personal organization (and its logo, API keys and
   entitlements rows) behind; better-auth's `removeUser` skips `deleteUser.beforeDelete`.
-- Notifications for agents: an operation (`list_notifications`) so an OAuth client acting for a
-  person can read their notifications. Email or push delivery, per-person preferences and digests.
-  Today they are in-app only (`docs/notifications.md`).
+- Notifications: push delivery, per-person preferences and digests. In-app and email delivery
+  exist, and agents can list a person's notifications (`docs/notifications.md`), but can't mark them
+  read: that would drop the person's pending emails, so it needs its own design.
+- An operation-level way to refuse API keys while allowing a person's session or OAuth token (unlike
+  `auth: "person"`, which is session only), honoured by REST, MCP and OpenAPI, so keys don't see
+  tools they can't call (today `list_notifications` refuses them in its handler).
 - Verifying the Cursor and VS Code install snippets. Their shapes are inferred from docs. Windsurf
   and a Claude Desktop entry are left out of llms.txt until their docs give a URL-only remote setup.
 - `llms.txt` on the marketing site (`apps/site`), and a sitemap. The site has no search, no

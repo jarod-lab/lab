@@ -741,6 +741,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the person's notifications in this organization
+         * @description Lists the in-app notifications of the person this credential acts for, newest first: approvals waiting, runs that finished or failed, members joining, usage limits and the like. Only notifications about this organization are included; the person's account notices and other organizations' notifications are not. Listing never marks anything read or seen, so the person still gets their emails. Pass nextCursor back as cursor for older ones; it is null on the last page. Needs a person: a session or an OAuth token. API keys are refused.
+         */
+        get: operations["list_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3785,6 +3805,63 @@ export interface operations {
                         };
                         /** @description Why it should be removed: expired (past reclaimBy), inactive (no evaluations in 30 days), single-value (one value served for 7 days), reclaimed-in-code (reclaimed but still declared: remove the code), orphaned (undeclared: delete the rollout) */
                         stale: ("expired" | "inactive" | "single-value" | "reclaimed-in-code" | "orphaned")[];
+                    };
+                };
+            };
+            /** @description Rate limited or over quota. Wait for the Retry-After header before retrying. */
+            429: {
+                headers: {
+                    /** @description Seconds to wait before retrying. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    list_notifications: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        notifications: {
+                            id: string;
+                            /** @description The event, e.g. approval.requested or member.joined */
+                            type: string;
+                            title: string;
+                            body: string | null;
+                            /** @description A path in the web app the notification links to */
+                            href: string | null;
+                            /** @description Whether the person has read it in the web app */
+                            read: boolean;
+                            createdAt: string;
+                        }[];
+                        nextCursor: string | null;
                     };
                 };
             };

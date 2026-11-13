@@ -21,6 +21,7 @@ const PUBLIC: ReadonlySet<string> = new Set([
   "set_my_avatar", // the person's own avatar; requirePerson refuses keys and tokens
   "remove_my_avatar", // likewise
   "get_my_operator_organization", // the person's own membership; requirePerson refuses keys
+  "list_notifications", // the caller's own notifications in this org; the handler refuses API keys
 ])
 
 type Json = Record<string, unknown>

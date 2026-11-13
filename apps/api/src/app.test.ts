@@ -174,6 +174,7 @@ describe("api app (real Postgres via PGlite)", () => {
       expect((await client.listTools()).tools.map((x) => x.name)).toEqual([
         "whoami",
         "get_upload_limits",
+        "list_notifications",
         "boom",
       ])
       await client.close()
@@ -396,6 +397,7 @@ describe("api app (real Postgres via PGlite)", () => {
         "whoami",
         "list_projects",
         "get_upload_limits",
+        "list_notifications",
         "boom",
       ])
       await read.close()
@@ -442,6 +444,7 @@ describe("api app (real Postgres via PGlite)", () => {
         "untarget_feature_flag",
         "reclaim_feature_flag",
         "delete_feature_flag",
+        "list_notifications",
         "boom",
       ])
       // Another organization's owner holds featureFlag too, but never sees an operator tool.

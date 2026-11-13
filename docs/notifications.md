@@ -13,6 +13,22 @@ that need you.
   `POST /api/auth/inbox/mark-read`, `POST /api/auth/inbox/mark-seen` and
   `POST /api/auth/inbox/mark-all-read`. They are session-only and scoped to the caller. An
   impersonated session can list but not mark anything read or seen (`guards.ts`).
+- `list_notifications` (`GET /v1/notifications`, also an MCP tool) is for agents acting for a
+  person. `apps/api/src/operations/notifications.ts` defines it, and
+  `apps/api/src/data/notifications.ts` holds its query.
+  - **Who:** a person, through their session or an OAuth token acting for them. API keys (`sk_`)
+    have no person and get FORBIDDEN. The check is `caller.actor.type`, not `requirePerson`, which would refuse tokens too.
+  - **What:** the person's rows stamped with the caller's organization, newest first, paged.
+    Personal notices (`organization_id` null) and other organizations' rows are never returned. The
+    output leaves out the `data` column.
+  - **It writes no notification state:** never `read`, `seen_at` or `inbox_presence`. A read or seen row drops its
+    pending email, and presence decides whether an email waits (see "Email"), so an agent polling it
+    would otherwise stop the person's emails. There is no mark-read operation for agents.
+  - **`permissions: {}`**, like `whoami`. Any OAuth token in the organization, whatever its scopes,
+    can read that person's rows there. That includes `billing.payment_failed`,
+    `billing.subscription_canceled`, `api_key.created` and `security.two_factor_reset` for the
+    people who receive them, although `subscription` itself is person-only. They are the person's
+    own rows, so this is intended.
 - `auth.api.notify` is server-only, never an HTTP route. Don't call it directly. Send through the
   catalog:
   - `packages/auth/src/notifications.ts` is the event catalog (`NotificationEvent`).

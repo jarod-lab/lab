@@ -8,6 +8,7 @@ import { auditOperations } from "./audit"
 import { connectedAgentOperations } from "./connected-agents"
 import { featureFlagOperations } from "./feature-flags"
 import { memberOperations } from "./members"
+import { notificationOperations } from "./notifications"
 import { projectOperations } from "./projects"
 import { runOperations } from "./runs"
 import { scimOperations } from "./scim"
@@ -52,6 +53,7 @@ export function createOperations({
   const scim = scimOperations(deps)
   const uploads = uploadOperations(deps)
   const featureFlags = featureFlagOperations(deps)
+  const notifications = notificationOperations(deps)
 
   return defineRegistry([
     account.whoami,
@@ -99,5 +101,6 @@ export function createOperations({
     featureFlags.untarget_feature_flag,
     featureFlags.reclaim_feature_flag,
     featureFlags.delete_feature_flag,
+    notifications.list_notifications,
   ])
 }

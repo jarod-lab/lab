@@ -36,7 +36,10 @@
     client, organization and user; `grantStands` in `packages/auth/src/principal.ts`), declared in
     `withGrantIndexes()` in `packages/auth/src/index.ts` so `auth generate` keeps them. A plain
     `CREATE INDEX` blocks writes while it builds; on a large table, run
-    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand before applying 0011. They made the
+    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` by hand, with the same names and columns, before
+    applying 0011; its own statements are `IF NOT EXISTS`, so they then skip. `IF NOT EXISTS` goes
+    by name only, and a failed `CONCURRENTLY` build leaves an invalid index it would skip too, so
+    check `pg_index.indisvalid` is true for both first. They made the
     single-column `clientId` indexes on those tables redundant; 0016 drops them;
   - `member.source`: `"scim"` for a membership the directory created, else null. SCIM
     deprovisioning removes only those (`packages/auth/src/scim-projection.ts`).

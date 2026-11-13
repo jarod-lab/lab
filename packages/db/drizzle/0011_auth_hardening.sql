@@ -7,5 +7,5 @@ CREATE TABLE "rate_limit" (
 );
 --> statement-breakpoint
 ALTER TABLE "member" ADD COLUMN "source" text;--> statement-breakpoint
-CREATE INDEX "oauthConsent_grant_idx" ON "oauth_consent" USING btree ("client_id","reference_id","user_id");--> statement-breakpoint
-CREATE INDEX "oauthRefreshToken_grant_idx" ON "oauth_refresh_token" USING btree ("client_id","reference_id","user_id","revoked","expires_at");
+CREATE INDEX IF NOT EXISTS "oauthConsent_grant_idx" ON "oauth_consent" USING btree ("client_id","reference_id","user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "oauthRefreshToken_grant_idx" ON "oauth_refresh_token" USING btree ("client_id","reference_id","user_id","revoked","expires_at");

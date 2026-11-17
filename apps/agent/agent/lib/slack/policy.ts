@@ -29,6 +29,24 @@ export function isAllowedSlackPrincipal(principalId: string, teams: readonly str
   )
 }
 
+/** Whether a principal is a listed founder (AGENT_FOUNDER_PRINCIPALS). None listed: nobody is. */
+export function isFounderPrincipal(principalId: string): boolean {
+  return agentEnvList("AGENT_FOUNDER_PRINCIPALS").includes(principalId)
+}
+
+/**
+ * The auth an approval or question answer is admitted under, or null to reject it and leave the
+ * request open. Only a listed founder who also passes the workspace check may answer, for every
+ * approval in a Slack session (a repository write, the ship gate, a bigger model): the person who
+ * asked, or anyone else in the workspace, cannot approve their own request. This is the design's
+ * "approvals restrict who may answer to the founders' principals", set once on the channel because
+ * eve has no agent-wide response policy.
+ */
+export function founderAnswerAuth(auth: SessionAuthContext | null): SessionAuthContext | null {
+  const allowed = allowedSlackAuth(auth)
+  return allowed !== null && isFounderPrincipal(allowed.principalId) ? allowed : null
+}
+
 /** The auth to run a turn under, or null when the sender may not start one. */
 export function allowedSlackAuth(auth: SessionAuthContext | null): SessionAuthContext | null {
   if (auth === null) {

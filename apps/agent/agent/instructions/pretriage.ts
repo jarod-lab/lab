@@ -1,4 +1,4 @@
-import { decide } from "eve/ai"
+import { meteredDecide } from "../lib/spend/ledger.js"
 import { defineDynamic, defineInstructions } from "eve/instructions"
 import type { LeaseSandbox } from "../lib/github/lease.js"
 import { pretriage, pretriageTarget } from "../lib/triage/pretriage.js"
@@ -37,7 +37,7 @@ export default defineDynamic(async (ctx) => {
         return null
       }
       return await pretriage(target, auth, {
-        decide,
+        decide: meteredDecide({ build: true }),
         gh: sandboxGhRunner(sandbox as LeaseSandbox),
       })
     } catch (error) {

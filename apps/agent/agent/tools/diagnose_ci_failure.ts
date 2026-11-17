@@ -1,4 +1,4 @@
-import { decide } from "eve/ai"
+import { meteredDecide } from "../lib/spend/ledger.js"
 import { defineTool } from "eve/tools"
 import { z } from "zod"
 import { parseGh } from "../lib/github/cli.js"
@@ -32,7 +32,7 @@ export default defineTool({
       return runGh(sandbox, parsed.invocation, "repo-read")
     }
     return await diagnosePullRequestChecks(gh, pull_request, {
-      decide,
+      decide: meteredDecide(),
       signal: ctx.abortSignal,
     })
   },

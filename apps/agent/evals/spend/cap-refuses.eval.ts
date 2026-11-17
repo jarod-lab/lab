@@ -16,6 +16,10 @@ export default defineEval({
     // The spend hook cancelled the turn: not a failure, no reply, no model call.
     t.event("turn.settled", { count: 1, data: { outcome: "cancelled" } })
     t.notEvent("model.started")
+    // So no tool ran either: a refused turn cannot call the decision model (triage), a station or
+    // anything else that costs money.
+    t.notEvent("call.requested")
+    t.notEvent("call.started")
     const modelCalls = (await probeEvents()).filter((entry) => entry.event === "model-call")
     t.check(
       modelCalls.length,

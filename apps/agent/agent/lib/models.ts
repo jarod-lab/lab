@@ -1,5 +1,5 @@
-import { agentEnv } from "@lab/env/agent"
 import { mockModel } from "eve/evals"
+import { offlineMode } from "./offline/mode.js"
 import { offlineResponder } from "./offline/responder.js"
 
 // One place to change every agent's model. Ids are Vercel AI Gateway strings
@@ -20,27 +20,13 @@ export const MODELS = {
   reviewer: "openai/gpt-6.1-sol-fast",
 } as const
 
+export { offlineMode }
+
 export type FactoryModel = keyof typeof MODELS
 export type FactoryAgent = Exclude<FactoryModel, "decision">
 
 /** The model id a ledger row is recorded under for a chat turn. */
 export const chatModelId = (): string => (offlineMode() ? "offline-mock" : MODELS.orchestrator)
-
-/**
- * Whether the agent runs on scripted models (evals and tests): AGENT_OFFLINE=1.
- *
- * @throws In production. A scripted model answering real people, with the spend cap guarding
- * nothing real, is a misconfiguration to stop at load, not to run quietly.
- */
-export function offlineMode(): boolean {
-  if (agentEnv("AGENT_OFFLINE") !== "1") {
-    return false
-  }
-  if (agentEnv("VERCEL_ENV") === "production") {
-    throw new Error("AGENT_OFFLINE=1 is set in production: refusing to run on scripted models.")
-  }
-  return true
-}
 
 /** The model for an agent's role: its gateway id, or a scripted model when offline. */
 export function modelFor(role: FactoryModel) {

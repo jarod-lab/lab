@@ -1,4 +1,4 @@
-import { decide } from "eve/ai"
+import { meteredDecide } from "../lib/spend/ledger.js"
 import { defineTool } from "eve/tools"
 import { z } from "zod"
 import { labelDecision } from "../lib/github/approval.js"
@@ -60,7 +60,7 @@ export default defineTool({
         issueNumber: input.issue_number,
         title: input.title,
       },
-      { decide, gh: sandboxGhRunner(sandbox), signal: ctx.abortSignal },
+      { decide: meteredDecide(), gh: sandboxGhRunner(sandbox), signal: ctx.abortSignal },
     )
   },
   inputSchema,

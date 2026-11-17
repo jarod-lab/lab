@@ -41,6 +41,9 @@ export const AGENT_ENV_NAMES = [
   // Offline mode (evals, tests): scripted models, and a probe that records what the agent did.
   "AGENT_OFFLINE",
   "AGENT_PROBE_URL",
+  // Read only to refuse offline mode where the agent is real.
+  "NODE_ENV",
+  "SLACK_BOT_TOKEN",
 ] as const
 
 export type AgentEnvName = (typeof AGENT_ENV_NAMES)[number]

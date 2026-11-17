@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
 import type { HqClient } from "#lib/hq/client.js"
-import { checkCap, refusalText, turnEstimateUsd } from "#lib/spend/cap.js"
+import { checkCap, DECISION_ESTIMATE_USD, refusalText, turnEstimateUsd } from "#lib/spend/cap.js"
 import {
   classify,
   createSpendHooks,
@@ -214,13 +214,69 @@ describe("settling a turn", () => {
     expect((await runCost())?.costEstimated).toBe(false)
   })
 
-  test("some records without a cost settle at the estimate, never below what was reported", async () => {
+  test("a record without a cost is priced at the estimate beside what was reported, not at zero", async () => {
     const { hooks } = hooksOn(() => hq.client)
     await hooks.turnStarted({}, context().ctx)
     await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 0.02 } } }, context().ctx)
     await hooks.usageRecorded({ data: { kind: "model", usage: {} } }, context().ctx)
     await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
-    expect((await allowance()).spentUsd).toBeCloseTo(0.1, 4)
+    expect((await allowance()).spentUsd).toBeCloseTo(0.02 + 0.1, 4)
+    expect((await runCost())?.costEstimated).toBe(true)
+  })
+
+  test("$0.30 reported plus one record without a cost settles above $0.30, marked estimated", async () => {
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 0.3 } } }, context().ctx)
+    await hooks.usageRecorded(
+      { data: { kind: "model", owner: { callId: "station" }, usage: {} } },
+      context().ctx,
+    )
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    const today = await allowance()
+    expect(today.spentUsd).toBeGreaterThan(0.3)
+    expect(today.spentUsd).toBeCloseTo(0.3 + 0.1, 4)
+    expect(today.reservedUsd).toBe(0)
+    expect((await runCost())?.costEstimated).toBe(true)
+  })
+
+  test("a decision-model call joins the turn at its estimate, marked estimated", async () => {
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 0.3 } } }, context().ctx)
+    await hooks.decisionSpent({ model: "decision-model" })
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    expect((await allowance()).spentUsd).toBeCloseTo(0.3 + DECISION_ESTIMATE_USD, 4)
+    expect((await runCost())?.costEstimated).toBe(true)
+  })
+
+  test("a decision call before a build's first turn is recorded as build spend, outside the cap", async () => {
+    const sent: Parameters<HqClient["recordSpend"]>[0][] = []
+    const recorder = {
+      recordSpend: (input: Parameters<HqClient["recordSpend"]>[0]) => {
+        sent.push(input)
+        return Promise.resolve({ id: "x", amountUsd: 0, estimated: false })
+      },
+    } as HqClient
+    const { hooks } = hooksOn(() => recorder)
+    await hooks.decisionSpent({ model: "decision-model", build: true })
+    await hooks.decisionSpent({ model: "decision-model", costUsd: 0.05, build: true })
+    expect(sent).toEqual([
+      {
+        runId: undefined,
+        source: "build",
+        amountUsd: undefined,
+        estimatedUsd: DECISION_ESTIMATE_USD,
+        model: "decision-model",
+      },
+      {
+        runId: undefined,
+        source: "build",
+        amountUsd: 0.05,
+        estimatedUsd: undefined,
+        model: "decision-model",
+      },
+    ])
   })
 
   test("usage that arrives after the turn settled is recorded once, not lost", async () => {
@@ -284,6 +340,96 @@ describe("settling a turn", () => {
     ).resolves.toBeUndefined()
     // The hold was never settled, so it still counts at its estimate: nothing is lost.
     expect((await allowance()).reservedUsd).toBeCloseTo(0.1, 4)
+  })
+
+  test("hq down at settle with a cost above the estimate: once hq is back the whole cost is in", async () => {
+    let up = true
+    const flaky = () => {
+      if (!up) {
+        throw new Error("hq is down")
+      }
+      return hq.client
+    }
+    const { hooks, store } = hooksOn(flaky)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 2 } } }, context().ctx)
+    up = false
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    // The hold is parked to settle again, and the cost above it is parked to be recorded.
+    expect(store.state().unsettled).toHaveLength(1)
+    expect(store.state().pending).toHaveLength(1)
+    up = true
+    // The day's next hook of any kind flushes both.
+    await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 0 } } }, context().ctx)
+    const today = await allowance()
+    expect(today.reservedUsd).toBe(0)
+    expect(today.spentUsd).toBeCloseTo(2, 4)
+    expect(store.state().unsettled).toEqual([])
+    expect(store.state().pending).toEqual([])
+  })
+
+  test("a settle whose reply was lost (then CONFLICT) still records the cost above $1000 once", async () => {
+    let calls = 0
+    const lossy: HqClient = {
+      ...hq.client,
+      settleSpend: async (input) => {
+        calls += 1
+        const reply = await hq.client.settleSpend(input)
+        if (calls === 1) {
+          throw new Error("the reply was lost")
+        }
+        return reply
+      },
+    }
+    const { hooks } = hooksOn(() => lossy)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded(
+      { data: { kind: "model", usage: { costUsd: 1500.25 } } },
+      context().ctx,
+    )
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    expect(calls).toBe(2)
+    const today = await allowance()
+    expect(today.spentUsd).toBeCloseTo(1500.25, 4)
+    expect(today.reservedUsd).toBe(0)
+  })
+})
+
+describe("the model.requested guard", () => {
+  const withTurn = (id: string) => ({ ...context().ctx, turn: { id } })
+
+  test("a turn that ran turn.started and holds its estimate is let through", async () => {
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, withTurn("turn_0"))
+    const call = context()
+    hooks.modelRequested({}, { ...call.ctx, turn: { id: "turn_0" } })
+    expect(call.cancel).not.toHaveBeenCalled()
+  })
+
+  test("a model call in a turn without turn.started's marker is cancelled", async () => {
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, withTurn("turn_0"))
+    const call = context()
+    hooks.modelRequested({}, { ...call.ctx, turn: { id: "turn_1" } })
+    expect(call.cancel).toHaveBeenCalledTimes(1)
+    const fresh = context()
+    hooksOn(() => hq.client).hooks.modelRequested({}, { ...fresh.ctx, turn: { id: "turn_0" } })
+    expect(fresh.cancel).toHaveBeenCalledTimes(1)
+  })
+
+  test("an eve turn that never got its hold is cancelled before the model call", async () => {
+    // The state a crash between the marker and the reservation leaves: marked, no hold.
+    const store = memoryStore()
+    store.update(() => ({
+      ...EMPTY_SPEND_STATE,
+      kind: "eve" as const,
+      turnId: "turn_0",
+      settled: false,
+    }))
+    const { hooks } = hooksOn(() => hq.client, store)
+    const call = context()
+    hooks.modelRequested({}, { ...call.ctx, turn: { id: "turn_0" } })
+    expect(call.cancel).toHaveBeenCalledTimes(1)
   })
 })
 

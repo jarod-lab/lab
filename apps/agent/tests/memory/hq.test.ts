@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
-import { hqMemory, searchQueryFrom } from "#lib/memory/hq.js"
+import { hqMemory, proposalPolicy, searchQueryFrom } from "#lib/memory/hq.js"
+import { approvalContext, CALLERS, outcome } from "../helpers.js"
 import { createHqFixture, type HqFixture } from "../hq/hq-fixture.js"
 
 /**
@@ -55,6 +56,21 @@ describe("the hq memory slot", () => {
   test("its only write tool is a proposal: no save, remove or edit tool exists", async () => {
     const names = Object.keys(await toolsOf()).sort()
     expect(names).toEqual(["get_entry", "propose_entry", "search_entries"])
+  })
+
+  test("a summary-only run, the least trusted principal, cannot propose; builds and Slack can", async () => {
+    const tools = await toolsOf()
+    const { approval } = tools.propose_entry as unknown as {
+      approval: (ctx: never) => unknown
+    }
+    const input = { text: "x" }
+    expect(outcome(approval(approvalContext(CALLERS.summary, input)))).toBe("denied")
+    for (const caller of ["autonomous", "ticket", "untrusted", "trusted", "schedule"] as const) {
+      expect(outcome(approval(approvalContext(CALLERS[caller], input))), caller).toBe(
+        "not-applicable",
+      )
+    }
+    expect(outcome(proposalPolicy(approvalContext(CALLERS.summary, input)))).toBe("denied")
   })
 
   test("a write goes to proposeEntry: a pending proposal, no entry, the run attached", async () => {

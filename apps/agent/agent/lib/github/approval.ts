@@ -307,23 +307,3 @@ export const bashPolicy =
   (role: ShellRole) =>
   (ctx: ApprovalContext<BashToolInput>): ApprovalStatus =>
     shellDecision(analyzeCommand(ctx.toolInput?.command ?? ""), role, ctx.session.auth.current)
-
-/**
- * Policy for writing the factory brain (the shared memory slot).
- *
- * @remarks
- * The brain is context every future run trusts. Unattended runs work from
- * untrusted issue bodies, so they never write it; they don't get the tools
- * at all (`agent/lib/memory/brain.ts`), and this denial is the second lock.
- * Trusted callers write directly; the dev TUI waits for approval.
- */
-export function factoryBrainPolicy(ctx: ApprovalContext): ApprovalStatus {
-  const auth = ctx.session.auth.current
-  if (isAutonomous(auth)) {
-    return denied("Unattended factory runs may read the factory brain but not write to it.")
-  }
-  if (isTrusted(auth) || isScheduleAppAuth(auth)) {
-    return "not-applicable"
-  }
-  return "user-approval"
-}

@@ -2,7 +2,7 @@ import type { SessionAuthContext } from "eve/context"
 import type { HqClient, RunOutcome, RunSummary } from "../hq/client.js"
 import { log } from "../log.js"
 import { isAutonomous, isSummaryOnly } from "../trust.js"
-import { BUILD_ESTIMATE_USD, checkCap, refusalText } from "./cap.js"
+import { BUILD_ESTIMATE_USD, checkCap, DECISION_ESTIMATE_USD, refusalText } from "./cap.js"
 
 /**
  * The spend ledger's hooks: the cap before a turn, the cost after it.
@@ -12,15 +12,21 @@ import { BUILD_ESTIMATE_USD, checkCap, refusalText } from "./cap.js"
  * without an eve runtime; `agent/hooks/spend.ts` binds them to eve's hooks and `defineState`.
  *
  * - `turn.started`: every turn is capped unless the dispatching channel stamped it as an unattended
- *   build (the autonomous principal): record the run, then reserve the estimate in hq. A refusal,
- *   an hq outage or a malformed answer cancels the turn before any model call (`ctx.cancel()`).
+ *   build (the autonomous principal). The turn's id is written to state first, then the run is
+ *   recorded and the estimate reserved in hq. A refusal, an hq outage or a malformed answer cancels
+ *   the turn before any model call (`ctx.cancel()`).
+ * - `model.requested`: fail closed. A model call whose turn has no marker from `turn.started`, or an
+ *   eve turn with no hold, is cancelled (a crash between the marker and the hold would otherwise
+ *   let the turn run uncapped).
  * - `usage.recorded` fires once per model run and once per delegated call, so a turn's usage is
  *   summed in state and settled once, at `turn.settled`. Usage that arrives with no open hold
  *   (late delegated spend, a build) goes to `record_spend`. Hooks are not exactly-once: each
  *   record is keyed on `ctx.occurrence.idempotencyKey` and skipped when seen. hq's `record_spend`
  *   has no idempotency field, so this guard is best effort (see the report).
- * - Every hq call after the reservation is wrapped: a throwing hook fails the turn. Cost is never
- *   dropped silently: a failed `record_spend` waits in state and is retried by the next hook.
+ * - A turn's cost is never dropped. The hold settles at the exact cost up to its estimate; the rest
+ *   is recorded as its own `record_spend` (exact above the estimate, `estimatedUsd` for records the
+ *   provider gave no cost), so it reaches hq whether or not the settle does. A settle or a record
+ *   that fails is parked in state and retried by the next hook.
  */
 
 /** Builds are outside the daily cap; they record their cost as `build` spend. */
@@ -33,10 +39,22 @@ export interface PendingRecord {
   amountUsd?: number
   estimatedUsd?: number
   model: string
+  /** The run it belongs to; null for none; left out, the current run. */
+  runId?: string | null
+}
+
+/** A hold whose settle failed: retried by the next hook, so it does not stay open in hq. */
+export interface UnsettledHold {
+  holdId: string
+  /** Left out, hq settles at the hold's estimate, marked estimated. */
+  amountUsd?: number
+  model: string
 }
 
 export interface SpendState {
   kind: TurnKind | null
+  /** The turn `turn.started` ran for: the marker `model.requested` checks. */
+  turnId: string | null
   runId: string | null
   /** The open hold, until the turn settles. */
   holdId: string | null
@@ -46,9 +64,12 @@ export interface SpendState {
   /** How many records reported a cost, and how many did not. */
   withCost: number
   withoutCost: number
+  /** Decision-model calls this turn, priced at an estimate (the decision model reports no cost). */
+  extraEstimatedUsd: number
   /** Idempotency keys already handled (the last 200). */
   seen: string[]
   pending: PendingRecord[]
+  unsettled: UnsettledHold[]
   /** True once the turn settled: later usage is recorded, not summed. */
   settled: boolean
   /**
@@ -60,14 +81,17 @@ export interface SpendState {
 
 export const EMPTY_SPEND_STATE: SpendState = {
   kind: null,
+  turnId: null,
   runId: null,
   holdId: null,
   estimateUsd: 0,
   knownUsd: 0,
   withCost: 0,
   withoutCost: 0,
+  extraEstimatedUsd: 0,
   seen: [],
   pending: [],
+  unsettled: [],
   settled: true,
   refusal: null,
 }
@@ -85,6 +109,7 @@ export interface SpendHookContext {
   }
   readonly channel: { readonly kind?: string }
   readonly occurrence: { readonly idempotencyKey: string }
+  readonly turn?: { readonly id: string } | null
   cancel(reason?: string): void
 }
 
@@ -143,16 +168,35 @@ const costOf = (usage: { costUsd?: number }): number | undefined =>
     ? usage.costUsd
     : undefined
 
+const round4 = (amount: number) => Math.round(amount * 10_000) / 10_000
+
+/** How a finished turn's cost is split between the hold's settlement and separate records. */
+export interface Settlement {
+  /** What the hold settles at; undefined, hq settles at the hold's estimate, marked estimated. */
+  settleAt: number | undefined
+  /** Exact cost above the hold's estimate: recorded on its own. */
+  excessUsd: number
+  /** Cost the provider did not report, priced at an estimate: recorded on its own, estimated. */
+  estimatedUsd: number
+}
+
 /**
- * What to settle a turn at: the summed cost when every record reported one; otherwise the estimate
- * (`undefined`, which hq settles at the hold's estimate, marked estimated), unless what was
- * reported already exceeds it. A missing cost is never taken as zero.
+ * What to settle a turn at, and what to record beside it.
+ *
+ * - No record reported a cost: the hold settles at its estimate (marked estimated by hq).
+ * - Some did: the hold settles at the reported cost up to its estimate and the rest of it is
+ *   recorded exact; each record without a cost, and each decision-model call, is priced at an
+ *   estimate and recorded estimated. A missing cost is never taken as zero.
  */
-export function settlementAmount(state: SpendState): number | undefined {
-  if (state.withoutCost === 0 && state.withCost > 0) {
-    return state.knownUsd
+export function settlementOf(state: SpendState): Settlement {
+  if (state.withCost === 0) {
+    return { settleAt: undefined, excessUsd: 0, estimatedUsd: round4(state.extraEstimatedUsd) }
   }
-  return state.knownUsd > state.estimateUsd ? state.knownUsd : undefined
+  return {
+    settleAt: Math.min(state.knownUsd, state.estimateUsd),
+    excessUsd: round4(Math.max(0, state.knownUsd - state.estimateUsd)),
+    estimatedUsd: round4(state.withoutCost * state.estimateUsd + state.extraEstimatedUsd),
+  }
 }
 
 const OUTCOMES: Record<TurnSettledEvent["data"]["outcome"], RunOutcome> = {
@@ -177,9 +221,10 @@ export function createSpendHooks(deps: SpendHookDeps) {
       }
       return
     }
+    const runId = entry.runId === undefined ? store.get().runId : entry.runId
     try {
       await deps.hq().recordSpend({
-        runId: store.get().runId ?? undefined,
+        runId: runId ?? undefined,
         source: entry.source,
         amountUsd: entry.amountUsd,
         estimatedUsd: entry.estimatedUsd,
@@ -187,24 +232,60 @@ export function createSpendHooks(deps: SpendHookDeps) {
       })
     } catch (error) {
       log.warn("spend: record_spend failed, will retry", error)
-      store.update((s) => ({ ...s, pending: [...s.pending, entry] }))
+      store.update((s) => ({ ...s, pending: [...s.pending, { ...entry, runId }] }))
     }
   }
 
-  async function retryPending(): Promise<void> {
-    const waiting = store.get().pending
-    if (waiting.length === 0) {
-      return
+  /** Settles one hold; true when it is closed (settled now, or already: a CONFLICT). */
+  async function settle(hold: UnsettledHold): Promise<boolean> {
+    try {
+      await deps.hq().settleSpend(hold)
+      return true
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "CONFLICT") {
+        return true
+      }
+      log.warn("spend: settle_spend failed", error)
+      return false
     }
-    store.update((s) => ({ ...s, pending: [] }))
-    for (const entry of waiting) {
-      await record(entry)
+  }
+
+  /** Retries what an earlier hook could not send: holds to settle, and records. */
+  async function flush(): Promise<void> {
+    const holds = store.get().unsettled
+    if (holds.length > 0) {
+      store.update((s) => ({ ...s, unsettled: [] }))
+      for (const hold of holds) {
+        if (!(await settle(hold))) {
+          store.update((s) => ({ ...s, unsettled: [...s.unsettled, hold] }))
+        }
+      }
+    }
+    const waiting = store.get().pending
+    if (waiting.length > 0) {
+      store.update((s) => ({ ...s, pending: [] }))
+      for (const entry of waiting) {
+        await record(entry)
+      }
     }
   }
 
   async function turnStarted(_event: unknown, ctx: SpendHookContext): Promise<void> {
     const kind = classify(ctx.session.auth.current)
     const estimateUsd = deps.estimateUsd()
+    // The marker first, before any hq call: model.requested refuses a turn that lacks it.
+    const carried = store.get()
+    store.update(() => ({
+      ...EMPTY_SPEND_STATE,
+      kind,
+      turnId: ctx.turn?.id ?? null,
+      estimateUsd,
+      settled: false,
+      seen: carried.seen,
+      pending: carried.pending,
+      unsettled: carried.unsettled,
+    }))
+    await flush()
     let runId: string | null = null
     try {
       const run = await deps.hq().recordRun({
@@ -217,16 +298,7 @@ export function createSpendHooks(deps: SpendHookDeps) {
       // A run row is bookkeeping: the turn does not depend on it.
       log.warn("spend: record_run failed", error)
     }
-    const carried = store.get()
-    store.update(() => ({
-      ...EMPTY_SPEND_STATE,
-      kind,
-      runId,
-      estimateUsd,
-      settled: false,
-      seen: carried.seen,
-      pending: carried.pending,
-    }))
+    store.update((s) => ({ ...s, runId }))
     if (kind === "build") {
       return
     }
@@ -274,13 +346,27 @@ export function createSpendHooks(deps: SpendHookDeps) {
     }
   }
 
+  /**
+   * Fail closed before every model call: the turn must have run `turn.started` (its marker is in
+   * state), and an eve turn must hold its estimate. Otherwise the call is cancelled, not allowed.
+   */
+  function modelRequested(_event: unknown, ctx: SpendHookContext): void {
+    const state = store.get()
+    const turnId = ctx.turn?.id ?? null
+    const unmarked = state.turnId === null || (turnId !== null && state.turnId !== turnId)
+    const unheld = state.kind === "eve" && state.holdId === null && !state.settled
+    if (unmarked || unheld) {
+      ctx.cancel(refusalText({ remainingUsd: 0, unavailable: true }))
+    }
+  }
+
   async function usageRecorded(event: UsageEvent, ctx: SpendHookContext): Promise<void> {
     const key = ctx.occurrence.idempotencyKey
     if (seen(key)) {
       return
     }
     remember(key)
-    await retryPending()
+    await flush()
     const state = store.get()
     const cost = costOf(event.data.usage)
     const model =
@@ -311,13 +397,43 @@ export function createSpendHooks(deps: SpendHookDeps) {
     })
   }
 
+  /**
+   * A decision-model call (`decide()`): eve emits no `usage.recorded` for it. Inside an open eve
+   * turn it joins the turn's sum (at its reported cost, else the decision estimate); anywhere else
+   * it is recorded straight away, as build spend when it is for a build (`build: true`, pretriage).
+   */
+  async function decisionSpent(input: {
+    costUsd?: number
+    model: string
+    build?: boolean
+  }): Promise<void> {
+    const cost = costOf({ costUsd: input.costUsd })
+    const state = store.get()
+    if (!input.build && state.kind === "eve" && state.holdId !== null && !state.settled) {
+      store.update((s) =>
+        cost === undefined
+          ? { ...s, extraEstimatedUsd: s.extraEstimatedUsd + DECISION_ESTIMATE_USD }
+          : { ...s, knownUsd: s.knownUsd + cost, withCost: s.withCost + 1 },
+      )
+      return
+    }
+    await record({
+      key: "decision",
+      source: input.build || state.kind === "build" ? "build" : "eve",
+      amountUsd: cost,
+      estimatedUsd: cost === undefined ? DECISION_ESTIMATE_USD : undefined,
+      model: input.model,
+      runId: input.build ? null : undefined,
+    })
+  }
+
   async function turnSettled(event: TurnSettledEvent, ctx: SpendHookContext): Promise<void> {
     const key = ctx.occurrence.idempotencyKey
     if (seen(key)) {
       return
     }
     remember(key)
-    await retryPending()
+    await flush()
     const state = store.get()
     if (state.kind === null || state.settled) {
       return
@@ -325,37 +441,29 @@ export function createSpendHooks(deps: SpendHookDeps) {
     store.update((s) => ({ ...s, settled: true }))
 
     if (state.holdId !== null) {
-      let settledOk = false
-      const amount = settlementAmount(state)
-      // The hold settles up to one call's limit; the rest is recorded against the same run.
-      const settledAt = amount === undefined ? undefined : Math.min(amount, MAX_CALL_USD)
-      for (let attempt = 0; attempt < SETTLE_ATTEMPTS && !settledOk; attempt++) {
-        try {
-          await deps.hq().settleSpend({
-            holdId: state.holdId,
-            amountUsd: settledAt,
-            model: deps.modelId(),
-          })
-          settledOk = true
-          if (amount !== undefined && amount > MAX_CALL_USD) {
-            await record({
-              key: ctx.occurrence.idempotencyKey,
-              source: "eve",
-              amountUsd: Math.round((amount - MAX_CALL_USD) * 10_000) / 10_000,
-              model: deps.modelId(),
-            })
-          }
-        } catch (error) {
-          // A second settle is a CONFLICT: the hold is already closed, nothing more to do.
-          if (error instanceof Error && "code" in error && error.code === "CONFLICT") {
-            settledOk = true
-          } else {
-            log.warn("spend: settle_spend failed", error)
-          }
-        }
+      const { settleAt, excessUsd, estimatedUsd } = settlementOf(state)
+      const hold: UnsettledHold = {
+        holdId: state.holdId,
+        amountUsd: settleAt,
+        model: deps.modelId(),
       }
-      // An unsettled hold still counts at its estimate in hq after 15 minutes; it is not lost.
-      store.update((s) => ({ ...s, holdId: null }))
+      let closed = false
+      for (let attempt = 0; attempt < SETTLE_ATTEMPTS && !closed; attempt++) {
+        closed = await settle(hold)
+      }
+      // Not lost either way: parked, it is retried by the next hook, and the cost above the hold
+      // is recorded below whether or not the settle reached hq.
+      store.update((s) => ({
+        ...s,
+        holdId: null,
+        unsettled: closed ? s.unsettled : [...s.unsettled, hold],
+      }))
+      if (excessUsd > 0) {
+        await record({ key, source: "eve", amountUsd: excessUsd, model: deps.modelId() })
+      }
+      if (estimatedUsd > 0) {
+        await record({ key, source: "eve", estimatedUsd, model: deps.modelId() })
+      }
     }
 
     if (state.runId !== null) {
@@ -374,5 +482,5 @@ export function createSpendHooks(deps: SpendHookDeps) {
     }
   }
 
-  return { turnStarted, usageRecorded, turnSettled }
+  return { turnStarted, modelRequested, usageRecorded, decisionSpent, turnSettled }
 }

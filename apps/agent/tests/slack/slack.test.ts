@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
+import { bashPolicy } from "#lib/github/approval.js"
+import { slackConfig } from "#lib/slack/config.js"
 import { allowedSlackAuth, isAllowedSlackPrincipal } from "#lib/slack/policy.js"
 import { postCapRefusal } from "#lib/slack/refusal.js"
 import { refusalText } from "#lib/spend/cap.js"
 import { EMPTY_SPEND_STATE, type SpendState, type SpendStore } from "#lib/spend/hooks.js"
-import { CALLERS } from "../helpers.js"
+import { approvalContext, CALLERS, ghCommand, outcome } from "../helpers.js"
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -33,6 +35,48 @@ describe("who may start a Slack turn", () => {
     const allowed = allowedSlackAuth(auth)
     expect(allowed?.principalId).toBe("slack:T0:U1")
     expect(allowed?.attributes.trusted).toBeUndefined()
+  })
+})
+
+describe("who may answer an approval in Slack", () => {
+  const person = (principalId: string) => ({ ...CALLERS.untrusted, principalId })
+  const answer = (principalId: string) =>
+    slackConfig.onAnswers({ defaultAuth: person(principalId) } as never)
+
+  test("a Slack caller's repository write and the ship gate both ask a person", () => {
+    const slackCaller = person("slack:T0:UASKER")
+    // Routine write (an issue) and ship (marking a pull request ready): neither runs unasked.
+    for (const args of [
+      ["issue", "create", "--title", "T", "--body", "B"],
+      ["pr", "ready", "34"],
+    ]) {
+      const verdict = outcome(
+        bashPolicy("orchestrator")(approvalContext(slackCaller, { command: ghCommand(args) })),
+      )
+      expect(verdict, args.join(" ")).toBe("user-approval")
+    }
+  })
+
+  test("a founder's answer is admitted under their own identity", () => {
+    vi.stubEnv("SLACK_ALLOWED_TEAM_IDS", "T0")
+    vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", "slack:T0:UFOUNDER")
+    expect(answer("slack:T0:UFOUNDER")).toEqual({
+      auth: expect.objectContaining({ principalId: "slack:T0:UFOUNDER" }),
+    })
+  })
+
+  test("a non-founder in the workspace, even the person who asked, is rejected and the request stays open", () => {
+    vi.stubEnv("SLACK_ALLOWED_TEAM_IDS", "T0")
+    vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", "slack:T0:UFOUNDER")
+    expect(answer("slack:T0:UASKER")).toBeNull()
+  })
+
+  test("an outsider is rejected, a founder id from another workspace too, and with none listed nobody answers", () => {
+    vi.stubEnv("SLACK_ALLOWED_TEAM_IDS", "T0")
+    vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", "slack:T0:UFOUNDER, slack:T9:UFOUNDER")
+    expect(answer("slack:T9:UFOUNDER")).toBeNull()
+    vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", "")
+    expect(answer("slack:T0:UFOUNDER")).toBeNull()
   })
 })
 

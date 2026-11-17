@@ -18,6 +18,9 @@ export const DEFAULT_TURN_ESTIMATE_USD = 0.1
 /** What one unattended build model run is recorded at when the provider reports no cost. */
 export const BUILD_ESTIMATE_USD = 0.25
 
+/** What one decision-model call (`decide()`, which reports no cost to the ledger) is priced at. */
+export const DECISION_ESTIMATE_USD = 0.02
+
 /** The most an estimate may be set to: a typo must not hold the day's whole cap. */
 const MAX_ESTIMATE_USD = 5
 

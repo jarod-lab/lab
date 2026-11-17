@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
   bashPolicy,
-  factoryBrainPolicy,
   GH_ONLY,
   ghEffectDecision,
   labelDecision,
@@ -1391,22 +1390,6 @@ describe("git push", () => {
   })
 })
 
-describe("factoryBrainPolicy", () => {
-  test.each<[CallerClass, string]>([
-    ["trusted", RUN],
-    ["schedule", RUN],
-    ["untrusted", ASK],
-    ["anonymous", ASK],
-    ["autonomous", DENY],
-    ["ticket", DENY],
-    ["summary", DENY],
-  ])("%s: %s", (caller, expected) => {
-    expect(verdict(factoryBrainPolicy(approvalContext(CALLERS[caller], { text: "x" })))).toBe(
-      expected,
-    )
-  })
-})
-
 /*
  * In a shared thread the caller of this turn (`auth.current`) can differ
  * from the caller who started the session (`auth.initiator`). What a call
@@ -1426,20 +1409,6 @@ describe("a decision is about the caller of this turn, not the caller who starte
     "the orchestrator's bash, started by %s and continued by %s: a routine write is %s",
     (startedBy, turnOf, expected) => {
       expect(verdict(bashPolicy("orchestrator")(continuedSession(startedBy, turnOf, CREATE)))).toBe(
-        expected,
-      )
-    },
-  )
-
-  test.each<[CallerClass, CallerClass, string]>([
-    ["trusted", "untrusted", ASK],
-    ["trusted", "autonomous", DENY],
-    ["untrusted", "trusted", RUN],
-    ["autonomous", "schedule", RUN],
-  ])(
-    "the factory brain, started by %s and continued by %s: a write is %s",
-    (startedBy, turnOf, expected) => {
-      expect(verdict(factoryBrainPolicy(continuedSession(startedBy, turnOf, { text: "x" })))).toBe(
         expected,
       )
     },

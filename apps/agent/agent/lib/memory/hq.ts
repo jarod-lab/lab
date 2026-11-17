@@ -1,8 +1,10 @@
 import { defineMemoryProvider } from "eve/memory"
 import { defineTool } from "eve/tools"
+import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval"
 import { z } from "zod"
 import type { EntryHit, HqClient } from "../hq/client.js"
 import { log } from "../log.js"
+import { isSummaryOnly } from "../trust.js"
 
 /**
  * The agent's memory: hq's brain (facts, voice, decisions, playbooks, customers).
@@ -14,6 +16,19 @@ import { log } from "../log.js"
  * proposal or edit an entry, so even a tool that tried would be FORBIDDEN. Recalled entries are
  * given to the model as data, never as instructions.
  */
+
+/**
+ * Who may propose. A proposal is only ever pending, but a pull request anyone opened gets a
+ * summary-only run, Foreman's least trusted principal, and its text must not reach the founders'
+ * queue: that run is denied. Builds and Slack callers may propose (the founder decides).
+ */
+export const proposalPolicy = (ctx: ApprovalContext): ApprovalStatus =>
+  isSummaryOnly(ctx.session.auth.current)
+    ? {
+        reason: "A run summarizing a pull request cannot propose brain entries.",
+        type: "denied",
+      }
+    : "not-applicable"
 
 export interface HqMemoryDeps {
   hq: () => HqClient
@@ -106,6 +121,7 @@ export function hqMemory(deps: HqMemoryDeps) {
     async tools() {
       return {
         propose_entry: defineTool({
+          approval: proposalPolicy,
           description:
             "Propose a new brain entry, or a change to one, for a founder to approve. Use it when " +
             "someone asks you to remember a fact, a decision or how the org does something. It does " +

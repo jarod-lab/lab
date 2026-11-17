@@ -27,6 +27,13 @@ function isBareHttpOrigin(value: string): boolean {
 export const env = createEnv({
   server: {
     DATABASE_URL: z.url(),
+    /**
+     * apps/hq (the org brain) only: its own database, which also takes starter's migrations (auth
+     * tables); its own tables live in the `hq` schema. apps/hq refuses to start without it.
+     */
+    HQ_DATABASE_URL: z.url().optional(),
+    /** apps/hq only: its public base URL (OAuth issuer, docs links). Unset, http://127.0.0.1:<port>. */
+    HQ_BASE_URL: z.url().optional(),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),

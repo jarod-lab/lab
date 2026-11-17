@@ -1,0 +1,40 @@
+{
+  "name": "@lab/hq",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc",
+    "lint": "oxlint --type-aware -c ../../.oxlintrc.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.8",
+    "@lab/api": "workspace:*",
+    "@lab/auth": "workspace:*",
+    "@lab/db": "workspace:*",
+    "@lab/env": "workspace:*",
+    "@lab/errors": "workspace:*",
+    "@lab/logger": "workspace:*",
+    "@lab/mcp": "workspace:*",
+    "@lab/observability": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "hono": "^4.13.18",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@lab/config": "workspace:*",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "drizzle-kit": "^0.31.11",
+    "oxlint": "catalog:",
+    "tsx": "^4.23.15",
+    "vitest": "catalog:"
+  }
+}

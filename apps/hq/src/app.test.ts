@@ -2,7 +2,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { defineOperation } from "@lab/api"
 import { createAuth } from "@lab/auth"
+import { user } from "@lab/db"
 import { createTestDb } from "@lab/db/testing"
+import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
@@ -64,6 +66,7 @@ describe("hq app (real Postgres via PGlite)", () => {
       auth,
       now: () => new Date("2026-11-17T12:00:00Z"),
       baseURL: BASE,
+      founders: { userIds: [], emails: ["founder@example.com"] },
       extraOperations: [echo, decide],
     })
     close = async () => t.close()
@@ -77,6 +80,8 @@ describe("hq app (real Postgres via PGlite)", () => {
     const session = await auth.api.getSession({ headers: new Headers({ cookie }) })
     const orgId = session?.session.activeOrganizationId
     if (!orgId) throw new Error("signup did not activate a personal organization")
+    // hq lets in only founders: this address is on the list once the account has verified it.
+    await t.db.update(user).set({ emailVerified: true }).where(eq(user.id, res.response.user.id))
     founder = { cookie, userId: res.response.user.id, orgId }
     keyFor = async (permissions) =>
       (

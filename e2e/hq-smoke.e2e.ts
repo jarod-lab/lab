@@ -1,6 +1,8 @@
 import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
 
+import { HQ_FOUNDER_EMAIL, HQ_FOUNDER_PASSWORD } from "./support/hq-stack"
+
 // An API test of apps/hq (the `hq` target in e2e.config.ts): no model, no page. The other targets
 // serve the product's web app and API, so the test does nothing there.
 test("hq answers GET /v1/status for a signed-in founder", async ({ app }) => {
@@ -11,15 +13,14 @@ test("hq answers GET /v1/status for a signed-in founder", async ({ app }) => {
   const product = await fetch(new URL("/v1/whoami", app.baseUrl))
   if (product.status === 401) return
 
-  // A founder: signing up makes a personal organization the person owns.
-  const email = `founder.${Date.now()}@example.com`
-  const signUp = await fetch(new URL("/api/auth/sign-up/email", app.baseUrl), {
+  // The hq stack seeds one founder (scripts/e2e-hq-stack.mjs); a fresh sign-up is no founder.
+  const signIn = await fetch(new URL("/api/auth/sign-in/email", app.baseUrl), {
     method: "POST",
     headers: { "content-type": "application/json", origin: app.baseUrl },
-    body: JSON.stringify({ name: "Founder", email, password: "e2e founder on the local stack" }),
+    body: JSON.stringify({ email: HQ_FOUNDER_EMAIL, password: HQ_FOUNDER_PASSWORD }),
   })
-  expect(signUp.status).toBe(200)
-  const cookie = signUp.headers
+  expect(signIn.status).toBe(200)
+  const cookie = signIn.headers
     .getSetCookie()
     .map((c) => c.split(";")[0])
     .join("; ")

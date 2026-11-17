@@ -34,6 +34,13 @@ export const env = createEnv({
     HQ_DATABASE_URL: z.url().optional(),
     /** apps/hq only: its public base URL (OAuth issuer, docs links). Unset, http://127.0.0.1:<port>. */
     HQ_BASE_URL: z.url().optional(),
+    /**
+     * apps/hq only: the founders, who alone decide proposals and edit entries (hq's sign-up is open,
+     * so signing up makes no one a founder). Comma-separated emails, which count once the account
+     * has verified the address, and/or user ids. Empty, nobody can approve anything.
+     */
+    HQ_FOUNDER_EMAILS: z.string().optional(),
+    HQ_FOUNDER_USER_IDS: z.string().optional(),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),

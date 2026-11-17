@@ -135,6 +135,19 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Support queue** — the staff's list of tickets (the package's `SupportInbox`). Not the **Inbox**.
 - **Internal note** — a staff-only message on a ticket. Never shown, mailed or notified to a customer.
 
+## The brain (`apps/hq`)
+
+- **Founder** — a person on hq's allowlist (`HQ_FOUNDER_EMAILS`, once the email is verified, or
+  `HQ_FOUNDER_USER_IDS`). hq's sign-up is open, so signing up makes no one a founder. Only a founder uses
+  hq, and only a founder decides a proposal or edits an entry.
+- **Entry** — one thing the org knows: a `fact`, `voice`, `decision`, `playbook` or `customer`, named by
+  a slug unique within its kind. Its content is in its **versions**.
+- **Version** — one numbered, dated state of an entry, with its author (a person or an agent) and where it
+  came from. An edit adds a version; none is ever updated or deleted.
+- **Proposal** — an agent's or an outside write's request to add or change an entry. It stays `pending`
+  until a founder approves (which writes the next version) or rejects it; the **base version** it was
+  made against must still be the entry's newest, or approving is a CONFLICT.
+
 ## The web app
 
 - **App** — the signed-in product (`apps/app`, `@lab/app`) at `app.` on the product domain.

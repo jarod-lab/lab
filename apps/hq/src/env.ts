@@ -3,6 +3,13 @@ import { env } from "@lab/env"
 /** The default port when neither a launcher nor PORT names one. */
 const DEFAULT_PORT = 3100
 
+/** A comma-separated env value as a list: trimmed, empty items dropped. */
+const listOf = (value: string | undefined) =>
+  (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+
 /**
  * What apps/hq needs to boot, from @lab/env (the only place env vars are read). `portArg` is the
  * port the launcher passes as an argument (the e2e runner picks a free one); HQ_DATABASE_URL has
@@ -19,6 +26,10 @@ export function hqEnv(portArg?: string) {
     databaseUrl,
     port,
     baseURL: (env.HQ_BASE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, ""),
+    founders: {
+      userIds: listOf(env.HQ_FOUNDER_USER_IDS),
+      emails: listOf(env.HQ_FOUNDER_EMAILS).map((email) => email.toLowerCase()),
+    },
     secret: env.BETTER_AUTH_SECRET,
     emailFrom: env.EMAIL_FROM,
   }

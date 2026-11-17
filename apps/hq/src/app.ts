@@ -29,6 +29,7 @@ import { createHealthHandler, requestIdFrom } from "@lab/observability"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 
+import { type FounderPolicy, mayUseHq, NO_FOUNDERS } from "./data/founders"
 import { createHqOperations, HQ_VERSION } from "./operations"
 
 export interface HqAppOptions {
@@ -36,6 +37,11 @@ export interface HqAppOptions {
   auth: Auth
   /** The clock: timestamps and windows read it, so tests can move time. */
   now: () => Date
+  /**
+   * Who may decide proposals and edit entries (the founder allowlist). Unset, nobody can: a
+   * signed-in person is not a founder just by signing up.
+   */
+  founders?: FounderPolicy
   /** Public base URL, no trailing slash (OAuth issuer, docs links). Default http://localhost:3100. */
   baseURL?: string
   /** More operations beside hq's own. For tests (a write, to reach the body and origin checks). */
@@ -71,8 +77,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function createHqApp(opts: HqAppOptions) {
   const { auth } = opts
   const baseURL = (opts.baseURL ?? "http://localhost:3100").replace(/\/$/, "")
+  const founders = opts.founders ?? NO_FOUNDERS
   const operations: readonly AnyOperation[] = [
-    ...createHqOperations({ db: opts.db, now: opts.now }),
+    ...createHqOperations({ db: opts.db, now: opts.now, founders }),
     ...(opts.extraOperations ?? []),
   ]
   const issuer = `${baseURL}${AUTH_BASE_PATH}`
@@ -101,9 +108,17 @@ export function createHqApp(opts: HqAppOptions) {
 
   // The trust rule, enforced wherever a key comes from: only a signed-in person holds a
   // person-only action (PERSON_ONLY_ACTIONS). A key or token that carries one has it stripped.
+  // And only a founder, or a key or token of a founder's organization, reaches hq at all (sign-up
+  // is open, so a stranger has a session and an organization too): everything else is FORBIDDEN.
   const authenticate = async (req: Request): Promise<Caller | null> => {
     const caller = await resolvePrincipal(auth, req.headers, { audience: [baseURL, mcpUrl] })
-    return caller?.via === "session" ? caller : caller && withoutPersonOnly(caller)
+    if (!caller) return null
+    if (!(await mayUseHq(opts.db, founders, caller))) {
+      throw new AppError("FORBIDDEN", "This brain is for the organization's founders", {
+        hint: "Your account is not on this org's founder list.",
+      })
+    }
+    return caller.via === "session" ? caller : withoutPersonOnly(caller)
   }
 
   const mcp = createMcpHandler({

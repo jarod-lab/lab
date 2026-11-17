@@ -234,7 +234,7 @@ stale one fails.
   It is used by `apps/api/src/data/members.ts`.
 - `PERSON_ONLY_ACTIONS` (`packages/auth/src/access.ts`) lists the actions no API key may hold:
   `run: ["approve"]`, `entitlements: ["override"]` and the brain's `hq_entry: ["update"]`,
-  `hq_proposal: ["decide"]`, `hq_spend: ["grant"]`. `PERSON_ONLY_RESOURCES` is the owner-only resources plus `subscription` and
+  `hq_proposal: ["decide"]`, `hq_spend: ["grant"]`. A key records spend with `hq_spend: ["record"]` (reserve, settle, record). `PERSON_ONLY_RESOURCES` is the owner-only resources plus `subscription` and
   `support` (`docs/support.md`).
 - `provisionalSignup` (`packages/auth/src/signup.ts`) reads the database from `auth.db`. It has no
   WeakMap registry.

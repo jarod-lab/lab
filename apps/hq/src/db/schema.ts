@@ -1,4 +1,17 @@
-import { index, integer, jsonb, pgSchema, text, timestamp, unique } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgSchema,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core"
 
 /**
  * hq's own tables live in the `hq` Postgres schema, beside starter's auth tables in `public`
@@ -88,3 +101,98 @@ export interface EntryBody {
   text: string
   [field: string]: unknown
 }
+
+/** What ran: a Slack chat or schedule on Eve, a build in a sandbox, a review on the box. */
+export const RUNNERS = ["eve", "sandbox", "box"] as const
+export type Runner = (typeof RUNNERS)[number]
+
+export const RUN_OUTCOMES = ["succeeded", "failed", "stopped"] as const
+export type RunOutcome = (typeof RUN_OUTCOMES)[number]
+
+/** Where spend came from. Only `eve` (chat and schedules) counts toward the daily cap. */
+export const SPEND_SOURCES = ["eve", "build", "box"] as const
+export type SpendSource = (typeof SPEND_SOURCES)[number]
+
+/** What a finished run reports: what worked, what failed, and what made it stop. */
+export interface RunSummary {
+  worked: string[]
+  failed: string[]
+  stop: string[]
+}
+
+/** One execution the factory ran. Its cost is the sum of its `spend` rows. */
+export const runs = hq.table(
+  "runs",
+  {
+    id: text("id").primaryKey(),
+    task: text("task").notNull(),
+    trigger: text("trigger").notNull(),
+    runner: text("runner", { enum: RUNNERS }).notNull(),
+    startedAt: at("started_at").notNull(),
+    endedAt: at("ended_at"),
+    outcome: text("outcome", { enum: RUN_OUTCOMES }),
+    link: text("link"),
+    summary: jsonb("summary").$type<RunSummary>(),
+  },
+  (t) => [index("runs_started_idx").on(t.startedAt)],
+)
+
+// Money is numeric(10,4): exact decimals, 0.0001 dollar at the finest. Rows are read as text and
+// computed on as integer units of $0.0001 (src/data/money.ts), never as JS floats. `day` is the UTC
+// day: a date with no time zone, derived from the app's clock.
+
+/** One model charge. `estimated` is true when the provider reported no cost and an estimate stood in. */
+export const spend = hq.table(
+  "spend",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id"),
+    day: date("day", { mode: "string" }).notNull(),
+    source: text("source", { enum: SPEND_SOURCES }).notNull(),
+    amountUsd: numeric("amount_usd", { precision: 10, scale: 4 }).notNull(),
+    model: text("model").notNull(),
+    estimated: boolean("estimated").notNull(),
+    createdAt: at("created_at").notNull(),
+  },
+  (t) => [
+    index("spend_day_source_idx").on(t.day, t.source),
+    check("spend_amount_nonnegative", sql`${t.amountUsd} >= 0`),
+  ],
+)
+
+/** A founder's extra allowance for one day (a spend grant); it raises that day's remaining. */
+export const spendGrants = hq.table(
+  "spend_grants",
+  {
+    id: text("id").primaryKey(),
+    day: date("day", { mode: "string" }).notNull(),
+    amountUsd: numeric("amount_usd", { precision: 10, scale: 4 }).notNull(),
+    grantedBy: text("granted_by").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: at("created_at").notNull(),
+  },
+  (t) => [
+    index("spend_grants_day_idx").on(t.day),
+    check("spend_grants_amount_positive", sql`${t.amountUsd} > 0`),
+  ],
+)
+
+/**
+ * A reservation a turn takes before it starts: its estimate counts against the day until it is
+ * settled into a `spend` row. A hold nobody settled still counts at its estimate, forever.
+ */
+export const spendHolds = hq.table(
+  "spend_holds",
+  {
+    id: text("id").primaryKey(),
+    day: date("day", { mode: "string" }).notNull(),
+    estimateUsd: numeric("estimate_usd", { precision: 10, scale: 4 }).notNull(),
+    runId: text("run_id"),
+    createdAt: at("created_at").notNull(),
+    settledAt: at("settled_at"),
+  },
+  (t) => [
+    index("spend_holds_day_idx").on(t.day),
+    check("spend_holds_estimate_positive", sql`${t.estimateUsd} > 0`),
+  ],
+)

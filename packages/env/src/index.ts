@@ -41,6 +41,11 @@ export const env = createEnv({
      */
     HQ_FOUNDER_EMAILS: z.string().optional(),
     HQ_FOUNDER_USER_IDS: z.string().optional(),
+    /**
+     * Tests only (apps/hq's real-Postgres spend race, apps/hq/src/data/spend.test.ts, which reads
+     * it directly): a database named `*_test` it may write to. Nothing in the app reads it.
+     */
+    HQ_TEST_DATABASE_URL: z.url().optional(),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     EMAIL_FROM: z.string().min(1),

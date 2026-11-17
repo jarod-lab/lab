@@ -29,6 +29,7 @@ import { createHealthHandler, requestIdFrom } from "@lab/observability"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 
+import { createAdminApp } from "./admin/routes"
 import { type FounderPolicy, mayUseHq, NO_FOUNDERS } from "./data/founders"
 import { createHqOperations, HQ_VERSION } from "./operations"
 
@@ -200,6 +201,18 @@ export function createHqApp(opts: HqAppOptions) {
       hint: "Agents and scripts authenticate with an API key or OAuth access token.",
     })
   }
+
+  // The admin pages (Hono JSX): proposals, an entry's history, spend. A founder's session only.
+  app.route(
+    "/admin",
+    createAdminApp({
+      db: opts.db,
+      now: opts.now,
+      operations,
+      authenticate,
+      assertTrustedOrigin,
+    }),
+  )
 
   // REST: one route per operation.
   for (const op of operations) {

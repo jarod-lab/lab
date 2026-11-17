@@ -15,6 +15,13 @@
       "when": 1794945127251,
       "tag": "0001_entry_versions_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794947840031,
+      "tag": "0002_runs_and_spend",
+      "breakpoints": true
     }
   ]
 }

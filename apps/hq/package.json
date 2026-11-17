@@ -30,10 +30,12 @@
   },
   "devDependencies": {
     "@lab/config": "workspace:*",
+    "@lab/ui": "workspace:*",
     "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "drizzle-kit": "^0.31.11",
+    "jsdom": "catalog:",
     "oxlint": "catalog:",
     "tsx": "^4.23.15",
     "vitest": "catalog:"

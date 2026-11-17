@@ -1,7 +1,7 @@
 "use client"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Drawer,
   DrawerClose,
@@ -11,7 +11,7 @@ import {
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
-} from "@starter/ui/components/ui/drawer"
+} from "@lab/ui/components/ui/drawer"
 
 const PARAGRAPHS = [
   "Your changes are saved automatically as you type.",

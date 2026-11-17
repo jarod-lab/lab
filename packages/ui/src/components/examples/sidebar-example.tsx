@@ -7,15 +7,15 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
+} from "@lab/ui/components/ui/dropdown-menu"
 import {
   Item,
   ItemActions,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@starter/ui/components/ui/item"
-import { Label } from "@starter/ui/components/ui/label"
+} from "@lab/ui/components/ui/item"
+import { Label } from "@lab/ui/components/ui/label"
 import {
   Sidebar,
   SidebarContent,
@@ -31,7 +31,7 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
-} from "@starter/ui/components/ui/sidebar"
+} from "@lab/ui/components/ui/sidebar"
 import { ChevronsUpDownIcon, CheckIcon, SearchIcon } from "lucide-react"
 
 export default function SidebarExample() {

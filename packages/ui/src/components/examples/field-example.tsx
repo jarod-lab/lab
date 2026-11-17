@@ -3,9 +3,9 @@
 import { useState } from "react"
 import { REGEXP_ONLY_DIGITS } from "input-otp"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Badge } from "@starter/ui/components/ui/badge"
-import { Checkbox } from "@starter/ui/components/ui/checkbox"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Badge } from "@lab/ui/components/ui/badge"
+import { Checkbox } from "@lab/ui/components/ui/checkbox"
 import {
   Field,
   FieldContent,
@@ -15,20 +15,20 @@ import {
   FieldLegend,
   FieldSet,
   FieldTitle,
-} from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+} from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "@starter/ui/components/ui/input-otp"
+} from "@lab/ui/components/ui/input-otp"
 import {
   NativeSelect,
   NativeSelectOptGroup,
   NativeSelectOption,
-} from "@starter/ui/components/ui/native-select"
-import { RadioGroup, RadioGroupItem } from "@starter/ui/components/ui/radio-group"
+} from "@lab/ui/components/ui/native-select"
+import { RadioGroup, RadioGroupItem } from "@lab/ui/components/ui/radio-group"
 import {
   Select,
   SelectContent,
@@ -36,10 +36,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
-import { Slider } from "@starter/ui/components/ui/slider"
-import { Switch } from "@starter/ui/components/ui/switch"
-import { Textarea } from "@starter/ui/components/ui/textarea"
+} from "@lab/ui/components/ui/select"
+import { Slider } from "@lab/ui/components/ui/slider"
+import { Switch } from "@lab/ui/components/ui/switch"
+import { Textarea } from "@lab/ui/components/ui/textarea"
 
 export default function FieldExample() {
   return (

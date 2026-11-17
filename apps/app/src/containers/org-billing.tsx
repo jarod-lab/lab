@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 
-import { takesSeat } from "@starter/plans"
+import { takesSeat } from "@lab/plans"
 
-import type { RenderLink } from "@starter/ui/dplus/shell/link"
+import type { RenderLink } from "@lab/ui/dplus/shell/link"
 
 import {
   type BillingAdapter,

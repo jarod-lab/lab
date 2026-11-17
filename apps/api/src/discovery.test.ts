@@ -5,7 +5,7 @@
 // $id inside it is the same URL). To refresh it, fetch that URL again and re-run this test.
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { DEFAULT_REGISTRY_META, serverJson } from "@starter/api"
+import { DEFAULT_REGISTRY_META, serverJson } from "@lab/api"
 import Ajv from "ajv"
 import addFormats from "ajv-formats"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
@@ -92,10 +92,9 @@ describe("committed root server.json", () => {
       writeFileSync(ROOT_SERVER_JSON, `${JSON.stringify(generated, null, 2)}\n`)
     }
     const committed = JSON.parse(readFileSync(ROOT_SERVER_JSON, "utf8"))
-    expect(
-      committed,
-      "run UPDATE_SERVER_JSON=1 pnpm --filter @starter/api-app test discovery",
-    ).toEqual(generated)
+    expect(committed, "run UPDATE_SERVER_JSON=1 pnpm --filter @lab/api-app test discovery").toEqual(
+      generated,
+    )
   })
 
   it("validates against the registry schema", () => {

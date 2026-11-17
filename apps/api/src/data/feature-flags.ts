@@ -10,16 +10,16 @@ import type {
   Named,
   OperatorOrg,
   OrganizationId,
-} from "@starter/auth-proofs"
+} from "@lab/auth-proofs"
 import {
   type Database,
   featureFlag,
   featureFlagExposureDaily,
   featureFlagTarget,
   organization,
-} from "@starter/db"
-import { AppError } from "@starter/errors"
-import type { Rollout } from "@starter/flags"
+} from "@lab/db"
+import { AppError } from "@lab/errors"
+import type { Rollout } from "@lab/flags"
 import { and, asc, count, eq, gte, inArray, isNull, or, sql } from "drizzle-orm"
 
 export type FlagRow = typeof featureFlag.$inferSelect

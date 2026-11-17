@@ -1,5 +1,5 @@
-import { AppError, setErrorReporter } from "@starter/errors"
-import { createLogger } from "@starter/logger"
+import { AppError, setErrorReporter } from "@lab/errors"
+import { createLogger } from "@lab/logger"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { REQUEST_ID_HEADER, createHealthHandler, observe, requestIdFrom } from "./index"
 

@@ -1,8 +1,8 @@
 import { useEffect, useId, useState } from "react"
 
-import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+import { Button } from "@lab/ui/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 
 import { AuthCard, ErrorAlert } from "../components/auth-card"
 import { useReauthGuard } from "../components/reauth-dialog"

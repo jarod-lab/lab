@@ -2,15 +2,15 @@ import { useForm } from "@tanstack/react-form"
 import { useId } from "react"
 import { z } from "zod"
 
-import { Button } from "@starter/ui/components/ui/button"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+} from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 
 import { fieldMessage } from "../lib/messages"
 import { ErrorAlert } from "./auth-card"

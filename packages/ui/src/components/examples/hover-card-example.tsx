@@ -1,5 +1,5 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@starter/ui/components/ui/dialog"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@starter/ui/components/ui/hover-card"
+} from "@lab/ui/components/ui/dialog"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@lab/ui/components/ui/hover-card"
 
 export default function HoverCardExample() {
   return (

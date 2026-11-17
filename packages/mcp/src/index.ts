@@ -20,8 +20,8 @@ import {
   invoke,
   type InvokeOptions,
   outputSchema,
-} from "@starter/api"
-import { AppError, type ErrorCode as AppErrorCode, reportError, toAppError } from "@starter/errors"
+} from "@lab/api"
+import { AppError, type ErrorCode as AppErrorCode, reportError, toAppError } from "@lab/errors"
 import { z } from "zod"
 
 export interface McpHandlerOptions {

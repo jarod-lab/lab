@@ -1,7 +1,7 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 import {
   Sheet,
   SheetClose,
@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@starter/ui/components/ui/sheet"
+} from "@lab/ui/components/ui/sheet"
 
 export default function SheetExample() {
   return (

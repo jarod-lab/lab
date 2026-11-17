@@ -1,4 +1,4 @@
-import { AppError, reportError } from "@starter/errors"
+import { AppError, reportError } from "@lab/errors"
 import {
   decodeImage,
   type FileStore,
@@ -7,7 +7,7 @@ import {
   newFileKey,
   organizationFilesPrefix,
   personFilesPrefix,
-} from "@starter/storage"
+} from "@lab/storage"
 import { z } from "zod"
 
 import { setOrganizationLogo, setOwnAvatar } from "../data/uploads"

@@ -1,10 +1,10 @@
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { type CSSProperties, useEffect, useRef } from "react"
 
-import { Button } from "@starter/ui/components/ui/button"
-import { Status } from "@starter/ui/dplus/status"
-import { anchorLink, type RenderLink } from "@starter/ui/dplus/shell/link"
-import { PageBody, PageHeader, PageTabs } from "@starter/ui/dplus/shell/page-header"
+import { Button } from "@lab/ui/components/ui/button"
+import { Status } from "@lab/ui/dplus/status"
+import { anchorLink, type RenderLink } from "@lab/ui/dplus/shell/link"
+import { PageBody, PageHeader, PageTabs } from "@lab/ui/dplus/shell/page-header"
 
 import {
   formatCount,

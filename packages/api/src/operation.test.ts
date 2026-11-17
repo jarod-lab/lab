@@ -1,4 +1,4 @@
-import { AppError } from "@starter/errors"
+import { AppError } from "@lab/errors"
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import {

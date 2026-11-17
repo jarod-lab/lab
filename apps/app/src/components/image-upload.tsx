@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react"
 
-import { Button } from "@starter/ui/components/ui/button"
-import { FieldDescription } from "@starter/ui/components/ui/field"
+import { Button } from "@lab/ui/components/ui/button"
+import { FieldDescription } from "@lab/ui/components/ui/field"
 
 import { messageOf } from "../lib/messages"
 

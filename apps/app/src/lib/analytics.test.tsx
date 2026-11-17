@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { MAX_CLIENT_EVENTS } from "@starter/analytics/events"
+import { MAX_CLIENT_EVENTS } from "@lab/analytics/events"
 import {
   createMemoryHistory,
   createRootRoute,

@@ -4,19 +4,19 @@ import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
-import { useIsMobile } from "@starter/ui/hooks/use-mobile"
-import { Button } from "@starter/ui/components/ui/button"
-import { Input } from "@starter/ui/components/ui/input"
-import { Separator } from "@starter/ui/components/ui/separator"
+import { useIsMobile } from "@lab/ui/hooks/use-mobile"
+import { Button } from "@lab/ui/components/ui/button"
+import { Input } from "@lab/ui/components/ui/input"
+import { Separator } from "@lab/ui/components/ui/separator"
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@starter/ui/components/ui/sheet"
-import { Skeleton } from "@starter/ui/components/ui/skeleton"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@starter/ui/components/ui/tooltip"
+} from "@lab/ui/components/ui/sheet"
+import { Skeleton } from "@lab/ui/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@lab/ui/components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"

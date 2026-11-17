@@ -1,8 +1,8 @@
 // The flag service's failure paths: evaluation falls back to the code default when the database is
 // down (OpenFeature's rule), and counted exposures survive a failed write until the next flush.
-import { featureFlag, featureFlagExposureDaily, organization } from "@starter/db"
-import { createTestDb } from "@starter/db/testing"
-import { setErrorReporter } from "@starter/errors"
+import { featureFlag, featureFlagExposureDaily, organization } from "@lab/db"
+import { createTestDb } from "@lab/db/testing"
+import { setErrorReporter } from "@lab/errors"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createFlagService } from "./flags"

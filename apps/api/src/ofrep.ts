@@ -6,9 +6,9 @@
 //
 // Evaluations are always for the caller's own organization: the context's targetingKey is
 // replaced by it, so a client can't read another organization's flags by naming it.
-import type { Caller } from "@starter/api"
-import { AppError } from "@starter/errors"
-import { type Evaluation, isFlagKey, murmur3 } from "@starter/flags"
+import type { Caller } from "@lab/api"
+import { AppError } from "@lab/errors"
+import { type Evaluation, isFlagKey, murmur3 } from "@lab/flags"
 import type { Env, Hono } from "hono"
 
 import type { FlagService } from "./flags"

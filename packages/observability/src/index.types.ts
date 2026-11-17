@@ -1,5 +1,5 @@
 // Type-level tests: checked by `pnpm typecheck`, not run by Vitest.
-import { createLogger } from "@starter/logger"
+import { createLogger } from "@lab/logger"
 import { observe } from "./index"
 
 const logger = createLogger()

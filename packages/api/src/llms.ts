@@ -127,11 +127,11 @@ export function installSnippets(info: ApiInfo, unauthenticated: readonly string[
     "",
     "### CLI",
     "",
-    "The `starter` command signs in with the device grant (below) and calls any operation from a terminal:",
+    "The `lab` command signs in with the device grant (below) and calls any operation from a terminal:",
     "",
     fence(
       "sh",
-      `npx @starter/cli login --base-url ${info.baseURL}\nnpx @starter/cli whoami\nnpx @starter/cli ops\nnpx @starter/cli call <operation> --json '{}'`,
+      `npx @lab/cli login --base-url ${info.baseURL}\nnpx @lab/cli whoami\nnpx @lab/cli ops\nnpx @lab/cli call <operation> --json '{}'`,
     ),
     "",
     "### Any other MCP client",

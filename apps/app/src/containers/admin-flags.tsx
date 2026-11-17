@@ -1,5 +1,5 @@
-import { Button } from "@starter/ui/components/ui/button"
-import type { RenderLink } from "@starter/ui/dplus/shell/link"
+import { Button } from "@lab/ui/components/ui/button"
+import type { RenderLink } from "@lab/ui/dplus/shell/link"
 
 import { adminTabs } from "../lib/admin-nav"
 import { getFeatureFlagsApi } from "../lib/feature-flags-api"

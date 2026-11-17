@@ -1,13 +1,13 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
 import {
   Field,
   FieldContent,
   FieldDescription,
   FieldLabel,
   FieldTitle,
-} from "@starter/ui/components/ui/field"
-import { Label } from "@starter/ui/components/ui/label"
-import { Switch } from "@starter/ui/components/ui/switch"
+} from "@lab/ui/components/ui/field"
+import { Label } from "@lab/ui/components/ui/label"
+import { Switch } from "@lab/ui/components/ui/switch"
 
 export default function SwitchExample() {
   return (

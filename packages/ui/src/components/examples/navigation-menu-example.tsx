@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { Link } from "@starter/ui/components/examples/example-compat"
+import { Link } from "@lab/ui/components/examples/example-compat"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -12,7 +12,7 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
-} from "@starter/ui/components/ui/navigation-menu"
+} from "@lab/ui/components/ui/navigation-menu"
 import { CircleAlertIcon } from "lucide-react"
 
 const components: { title: string; href: string; description: string }[] = [

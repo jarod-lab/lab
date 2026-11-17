@@ -1,5 +1,5 @@
 import { defineProof, type Named, type Proof } from "@gdp-ts/core"
-import { approval, type Database } from "@starter/db"
+import { approval, type Database } from "@lab/db"
 import { and, eq } from "drizzle-orm"
 import type { ApprovalId, OrganizationId } from "../lib/ids"
 

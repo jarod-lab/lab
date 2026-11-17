@@ -1,15 +1,9 @@
 // Members' security state for the Members page. better-auth's member list has no two-factor or
 // activity fields, so these are read here, always filtered to the caller's organization.
-import type {
-  CallerActsFor,
-  MemberInOrg,
-  Named,
-  OrganizationId,
-  UserId,
-} from "@starter/auth-proofs"
-import { personalSlug } from "@starter/auth"
-import { type Database, member, organization, session, twoFactor, user } from "@starter/db"
-import { AppError } from "@starter/errors"
+import type { CallerActsFor, MemberInOrg, Named, OrganizationId, UserId } from "@lab/auth-proofs"
+import { personalSlug } from "@lab/auth"
+import { type Database, member, organization, session, twoFactor, user } from "@lab/db"
+import { AppError } from "@lab/errors"
 import { and, eq, inArray, max, ne } from "drizzle-orm"
 
 export interface MemberSecurity {

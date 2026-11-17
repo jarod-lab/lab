@@ -1,4 +1,4 @@
-import { buttonVariants } from "@starter/ui/components/ui/button"
+import { buttonVariants } from "@lab/ui/components/ui/button"
 import { cn } from "cn"
 
 import { site } from "../../site"

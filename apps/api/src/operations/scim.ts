@@ -1,4 +1,4 @@
-import { AppError } from "@starter/errors"
+import { AppError } from "@lab/errors"
 import { z } from "zod"
 
 import { listScimTokens } from "../data/scim"

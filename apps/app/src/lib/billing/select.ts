@@ -1,4 +1,4 @@
-import { createClient } from "@starter/auth/client"
+import { createClient } from "@lab/auth/client"
 
 import type { BillingAdapter } from "./adapter"
 import { fixtureBillingAdapter } from "./fixture"

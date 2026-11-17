@@ -1,5 +1,5 @@
-import { memberInOrg, name, UserId } from "@starter/auth-proofs"
-import { AppError } from "@starter/errors"
+import { memberInOrg, name, UserId } from "@lab/auth-proofs"
+import { AppError } from "@lab/errors"
 import { z } from "zod"
 
 import { listMemberSecurity, resetMemberTwoFactor } from "../data/members"

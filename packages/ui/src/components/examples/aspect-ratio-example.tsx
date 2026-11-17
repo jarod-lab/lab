@@ -1,7 +1,7 @@
-import { Image } from "@starter/ui/components/examples/example-compat"
+import { Image } from "@lab/ui/components/examples/example-compat"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { AspectRatio } from "@starter/ui/components/ui/aspect-ratio"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { AspectRatio } from "@lab/ui/components/ui/aspect-ratio"
 
 export default function AspectRatioExample() {
   return (

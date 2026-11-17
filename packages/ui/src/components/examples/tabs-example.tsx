@@ -1,14 +1,14 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
-import { Input } from "@starter/ui/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@starter/ui/components/ui/tabs"
+} from "@lab/ui/components/ui/dropdown-menu"
+import { Input } from "@lab/ui/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@lab/ui/components/ui/tabs"
 import {
   AppWindowIcon,
   CodeIcon,

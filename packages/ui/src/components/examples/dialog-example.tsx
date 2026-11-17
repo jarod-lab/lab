@@ -2,9 +2,9 @@
 
 import * as React from "react"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
-import { Checkbox } from "@starter/ui/components/ui/checkbox"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
+import { Checkbox } from "@lab/ui/components/ui/checkbox"
 import {
   Dialog,
   DialogClose,
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@starter/ui/components/ui/dialog"
+} from "@lab/ui/components/ui/dialog"
 import {
   Field,
   FieldContent,
@@ -24,16 +24,16 @@ import {
   FieldSeparator,
   FieldSet,
   FieldTitle,
-} from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+} from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@starter/ui/components/ui/input-group"
-import { Kbd } from "@starter/ui/components/ui/kbd"
-import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
+} from "@lab/ui/components/ui/input-group"
+import { Kbd } from "@lab/ui/components/ui/kbd"
+import { NativeSelect, NativeSelectOption } from "@lab/ui/components/ui/native-select"
 import {
   Select,
   SelectContent,
@@ -42,11 +42,11 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
-import { Switch } from "@starter/ui/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@starter/ui/components/ui/tabs"
-import { Textarea } from "@starter/ui/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@starter/ui/components/ui/tooltip"
+} from "@lab/ui/components/ui/select"
+import { Switch } from "@lab/ui/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@lab/ui/components/ui/tabs"
+import { Textarea } from "@lab/ui/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@lab/ui/components/ui/tooltip"
 import { InfoIcon } from "lucide-react"
 
 export default function DialogExample() {

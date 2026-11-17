@@ -1,5 +1,5 @@
-import { reportError, toAppError } from "@starter/errors"
-import type { Logger } from "@starter/logger"
+import { reportError, toAppError } from "@lab/errors"
+import type { Logger } from "@lab/logger"
 
 export const REQUEST_ID_HEADER = "x-request-id"
 

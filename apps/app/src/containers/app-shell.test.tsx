@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { expectNoA11yViolations } from "@starter/ui/a11y"
-import { anchorLink } from "@starter/ui/dplus/shell/link"
+import { expectNoA11yViolations } from "@lab/ui/a11y"
+import { anchorLink } from "@lab/ui/dplus/shell/link"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"

@@ -2,8 +2,8 @@ import {} from "@tanstack/react-form"
 import { useId, useState } from "react"
 import { z } from "zod"
 
-import { Button } from "@starter/ui/components/ui/button"
-import {} from "@starter/ui/components/ui/input"
+import { Button } from "@lab/ui/components/ui/button"
+import {} from "@lab/ui/components/ui/input"
 
 import { relativeTime } from "../../lib/account-format"
 

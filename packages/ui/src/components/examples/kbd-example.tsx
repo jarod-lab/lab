@@ -1,8 +1,8 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@starter/ui/components/ui/input-group"
-import { Kbd, KbdGroup } from "@starter/ui/components/ui/kbd"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@starter/ui/components/ui/tooltip"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@lab/ui/components/ui/input-group"
+import { Kbd, KbdGroup } from "@lab/ui/components/ui/kbd"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@lab/ui/components/ui/tooltip"
 import { CircleDashedIcon, ArrowLeftIcon, ArrowRightIcon, SaveIcon } from "lucide-react"
 
 export default function KbdExample() {

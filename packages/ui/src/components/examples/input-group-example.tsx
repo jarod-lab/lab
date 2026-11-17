@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
-import { ButtonGroup, ButtonGroupText } from "@starter/ui/components/ui/button-group"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
+import { ButtonGroup, ButtonGroupText } from "@lab/ui/components/ui/button-group"
 import {
   Card,
   CardContent,
@@ -11,15 +11,15 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@starter/ui/components/ui/card"
+} from "@lab/ui/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
+} from "@lab/ui/components/ui/dropdown-menu"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
@@ -27,8 +27,8 @@ import {
   InputGroupInput,
   InputGroupText,
   InputGroupTextarea,
-} from "@starter/ui/components/ui/input-group"
-import { Kbd, KbdGroup } from "@starter/ui/components/ui/kbd"
+} from "@lab/ui/components/ui/input-group"
+import { Kbd, KbdGroup } from "@lab/ui/components/ui/kbd"
 import {
   Popover,
   PopoverContent,
@@ -36,10 +36,10 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
-} from "@starter/ui/components/ui/popover"
-import { Spinner } from "@starter/ui/components/ui/spinner"
-import { Textarea } from "@starter/ui/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@starter/ui/components/ui/tooltip"
+} from "@lab/ui/components/ui/popover"
+import { Spinner } from "@lab/ui/components/ui/spinner"
+import { Textarea } from "@lab/ui/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@lab/ui/components/ui/tooltip"
 import {
   SearchIcon,
   EyeOffIcon,

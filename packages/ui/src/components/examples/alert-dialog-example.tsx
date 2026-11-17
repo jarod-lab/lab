@@ -1,4 +1,4 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,8 +10,8 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@starter/ui/components/ui/alert-dialog"
-import { Button } from "@starter/ui/components/ui/button"
+} from "@lab/ui/components/ui/alert-dialog"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@starter/ui/components/ui/dialog"
+} from "@lab/ui/components/ui/dialog"
 import { BluetoothIcon, Trash2Icon } from "lucide-react"
 
 export default function AlertDialogExample() {

@@ -9,8 +9,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@starter/ui/components/ui/alert-dialog"
-import { Button } from "@starter/ui/components/ui/button"
+} from "@lab/ui/components/ui/alert-dialog"
+import { Button } from "@lab/ui/components/ui/button"
 
 export interface ConfirmDialogProps {
   /** Controlled open state. Omit both this and `onOpenChange` to let a `trigger` own it. */

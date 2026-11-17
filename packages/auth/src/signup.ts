@@ -4,9 +4,9 @@
 // elsewhere (see whoami's `claimed`).
 import { randomBytes, randomUUID } from "node:crypto"
 
-import type { Database } from "@starter/db"
-import { signupAttempt } from "@starter/db/schema"
-import { AppError } from "@starter/errors"
+import type { Database } from "@lab/db"
+import { signupAttempt } from "@lab/db/schema"
+import { AppError } from "@lab/errors"
 import { and, count, eq, gte } from "drizzle-orm"
 
 import type { Auth } from "./index"

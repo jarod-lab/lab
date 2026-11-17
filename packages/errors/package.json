@@ -1,5 +1,5 @@
 {
-  "name": "@starter/errors",
+  "name": "@lab/errors",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@starter/config": "workspace:*",
+    "@lab/config": "workspace:*",
     "@types/node": "catalog:",
     "oxlint": "catalog:",
     "vitest": "catalog:",

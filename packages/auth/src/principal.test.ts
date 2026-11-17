@@ -1,5 +1,5 @@
-import { allowed } from "@starter/api"
-import type { AppError } from "@starter/errors"
+import { allowed } from "@lab/api"
+import type { AppError } from "@lab/errors"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { AUDIENCE, BASE, createTestAuth } from "./auth.test.helpers"
 import { resolvePrincipal } from "./principal"

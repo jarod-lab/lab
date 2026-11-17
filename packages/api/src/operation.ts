@@ -1,11 +1,11 @@
-import { AppError, type ErrorCode, reportError, toAppError } from "@starter/errors"
+import { AppError, type ErrorCode, reportError, toAppError } from "@lab/errors"
 import { z } from "zod"
 
 import { allowed, isEmpty, type PermissionSet, type PermissionsOf } from "./permissions"
 
 /**
  * Who is calling, for which organization, and what they may do there. `Principal` from
- * `@starter/auth` satisfies this; the registry doesn't depend on auth.
+ * `@lab/auth` satisfies this; the registry doesn't depend on auth.
  */
 export interface Caller {
   organizationId: string
@@ -145,7 +145,7 @@ export interface OperationSpec<
   hints?: { readOnly?: boolean; destructive?: boolean; idempotent?: boolean }
   /**
    * A sensitive action: a session caller must have signed in recently (FRESH_AGE_SECONDS in
-   * `@starter/auth`), or the call is refused with SESSION_NOT_FRESH. API keys and OAuth tokens have no
+   * `@lab/auth`), or the call is refused with SESSION_NOT_FRESH. API keys and OAuth tokens have no
    * sign-in age, so they are not checked. Enforced by the invoke hooks in apps/api.
    */
   fresh?: true

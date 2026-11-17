@@ -1,7 +1,7 @@
 "use client"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -9,11 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@starter/ui/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
-import { Item, ItemContent, ItemDescription, ItemTitle } from "@starter/ui/components/ui/item"
-import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
+} from "@lab/ui/components/ui/dialog"
+import { Field, FieldDescription, FieldError, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@lab/ui/components/ui/item"
+import { NativeSelect, NativeSelectOption } from "@lab/ui/components/ui/native-select"
 import {
   Select,
   SelectContent,
@@ -23,7 +23,7 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
+} from "@lab/ui/components/ui/select"
 import { ChartLineIcon, ChartBarIcon, ChartPieIcon } from "lucide-react"
 
 export default function SelectExample() {
@@ -525,7 +525,7 @@ function SelectDisabled() {
 
 const plans = [
   {
-    name: "Starter",
+    name: "Lab",
     description: "Perfect for individuals getting started.",
   },
   {

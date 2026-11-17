@@ -4,7 +4,7 @@ import {
   type Analytics,
   clientEventBatchSchema,
   noopAnalytics,
-} from "@starter/analytics"
+} from "@lab/analytics"
 import {
   type AnyOperation,
   type ApiInfo,
@@ -21,7 +21,7 @@ import {
   type RegistryMeta,
   serverInstructions,
   serverJson,
-} from "@starter/api"
+} from "@lab/api"
 import {
   AUTH_BASE_PATH,
   type Auth,
@@ -31,18 +31,18 @@ import {
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
   resolvePrincipal,
-} from "@starter/auth"
-import { AppError, reportError, toAppError } from "@starter/errors"
-import { type Logger } from "@starter/logger"
-import { createMcpHandler, protectedResourceMetadata } from "@starter/mcp"
+} from "@lab/auth"
+import { AppError, reportError, toAppError } from "@lab/errors"
+import { type Logger } from "@lab/logger"
+import { createMcpHandler, protectedResourceMetadata } from "@lab/mcp"
 import {
   createHealthHandler,
   createStatusHandler,
   requestIdFrom,
   type StatusOptions,
   type StatusProvider,
-} from "@starter/observability"
-import { type FileStore, IMMUTABLE } from "@starter/storage"
+} from "@lab/observability"
+import { type FileStore, IMMUTABLE } from "@lab/storage"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 

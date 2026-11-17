@@ -1,14 +1,14 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 
-import { Badge } from "@starter/ui/components/ui/badge"
-import { Button } from "@starter/ui/components/ui/button"
+import { Badge } from "@lab/ui/components/ui/badge"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@starter/ui/components/ui/card"
+} from "@lab/ui/components/ui/card"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ErrorAlert } from "../components/auth-card"

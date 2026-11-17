@@ -1,7 +1,7 @@
 "use client"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button, buttonVariants } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button, buttonVariants } from "@lab/ui/components/ui/button"
 import { ArrowRightIcon, ArrowLeftCircleIcon } from "lucide-react"
 
 export default function ButtonExample() {

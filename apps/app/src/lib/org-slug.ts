@@ -1,4 +1,4 @@
-import { isReservedOrgSlug } from "@starter/auth/client"
+import { isReservedOrgSlug } from "@lab/auth/client"
 
 /**
  * An organization's URL slug is the first path segment (`/:org`). Lowercase letters, digits and

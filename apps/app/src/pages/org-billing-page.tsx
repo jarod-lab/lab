@@ -3,7 +3,7 @@ import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-tab
 import { useId, useMemo, useState } from "react"
 import { cn } from "cn"
 
-import { Button } from "@starter/ui/components/ui/button"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Table,
   TableBody,
@@ -11,14 +11,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@starter/ui/components/ui/table"
-import { Meter } from "@starter/ui/dplus/meter"
-import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
-import { PageBody } from "@starter/ui/dplus/shell/page-header"
-import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
-import { ViewOnlyNotice } from "@starter/ui/dplus/shell/view-only-notice"
+} from "@lab/ui/components/ui/table"
+import { Meter } from "@lab/ui/dplus/meter"
+import { type RenderLink, anchorLink } from "@lab/ui/dplus/shell/link"
+import { PageBody } from "@lab/ui/dplus/shell/page-header"
+import { SettingsHeader } from "@lab/ui/dplus/shell/settings-header"
+import { ViewOnlyNotice } from "@lab/ui/dplus/shell/view-only-notice"
 
-import { Progress, ProgressLabel } from "@starter/ui/components/ui/progress"
+import { Progress, ProgressLabel } from "@lab/ui/components/ui/progress"
 
 import {
   type BillingInvoice,

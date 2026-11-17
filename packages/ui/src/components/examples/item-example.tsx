@@ -1,7 +1,7 @@
-import { Image } from "@starter/ui/components/examples/example-compat"
+import { Image } from "@lab/ui/components/examples/example-compat"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Item,
   ItemActions,
@@ -13,7 +13,7 @@ import {
   ItemMedia,
   ItemSeparator,
   ItemTitle,
-} from "@starter/ui/components/ui/item"
+} from "@lab/ui/components/ui/item"
 import { InboxIcon } from "lucide-react"
 
 export default function ItemExample() {

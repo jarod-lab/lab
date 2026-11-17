@@ -1,6 +1,6 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Badge } from "@starter/ui/components/ui/badge"
-import { Spinner } from "@starter/ui/components/ui/spinner"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Badge } from "@lab/ui/components/ui/badge"
+import { Spinner } from "@lab/ui/components/ui/spinner"
 import { BadgeCheck, ArrowRightIcon, ArrowUpRightIcon } from "lucide-react"
 
 export default function BadgeExample() {

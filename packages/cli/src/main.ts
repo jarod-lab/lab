@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
-import { createClient, StarterError } from "@starter/sdk"
+import { createClient, LabError } from "@lab/sdk"
 import {
   DEFAULT_SCOPE,
   withOfflineAccess,
@@ -18,7 +18,7 @@ import { type Credentials, credentialsPath, loadCredentials, saveCredentials } f
 import { buildRequest, findOperation, listOperations, type OpenApiDocument } from "./spec"
 
 // The product's public API origin (PRODUCT.publicURL in apps/api/src/product.ts), used when nothing
-// else names one. Local dev sets STARTER_URL or --base-url.
+// else names one. Local dev sets LAB_URL or --base-url.
 export const DEFAULT_BASE_URL = "https://api.example.com"
 
 export interface Io {
@@ -35,30 +35,30 @@ export interface Environment {
   io: Io
 }
 
-const HELP = `starter: command-line client for the Starter API
+const HELP = `lab: command-line client for the Lab API
 
 Usage:
-  starter login [--base-url URL] [--scope "read write"]   sign in (offline_access is always added)
-  starter logout [--base-url URL]                          forget the saved session
-  starter whoami                                           show the credential in use
-  starter ops                                              list the API's operations
-  starter call <operation> [--json '{...}' | --input FILE]  run one operation (use - for stdin)
+  lab login [--base-url URL] [--scope "read write"]   sign in (offline_access is always added)
+  lab logout [--base-url URL]                          forget the saved session
+  lab whoami                                           show the credential in use
+  lab ops                                              list the API's operations
+  lab call <operation> [--json '{...}' | --input FILE]  run one operation (use - for stdin)
                            [--idempotency-key KEY]
 
 Options:
-  --base-url URL   API origin (default: STARTER_URL, the last login, or ${DEFAULT_BASE_URL})
+  --base-url URL   API origin (default: LAB_URL, the last login, or ${DEFAULT_BASE_URL})
 
 Environment:
-  STARTER_URL       API origin
-  STARTER_API_KEY   use this API key instead of a saved login
-  STARTER_CONFIG_DIR  where credentials.json is kept (default ~/.config/starter)
+  LAB_URL       API origin
+  LAB_API_KEY   use this API key instead of a saved login
+  LAB_CONFIG_DIR  where credentials.json is kept (default ~/.config/lab)
 
 Output is JSON on stdout. Errors are JSON on stderr, as {"status", "error": {code, message, hint}},
 and the exit code is 1 (2 for a usage mistake).
 `
 
 const usage = (message: string, hint?: string) =>
-  new StarterError({ status: 0, code: "USAGE", message, hint })
+  new LabError({ status: 0, code: "USAGE", message, hint })
 
 /** Runs one CLI invocation and returns its exit code. Never throws. */
 export async function main(argv: string[], context: Environment): Promise<number> {
@@ -73,16 +73,16 @@ export async function main(argv: string[], context: Environment): Promise<number
     io.stdout(`${JSON.stringify(output, null, 2)}\n`)
     return 0
   } catch (error) {
-    const err = toStarterError(error)
+    const err = toLabError(error)
     io.stderr(`${JSON.stringify(err.toJSON(), null, 2)}\n`)
     return err.code === "USAGE" ? 2 : 1
   }
 }
 
-function toStarterError(error: unknown): StarterError {
-  if (error instanceof StarterError) return error
+function toLabError(error: unknown): LabError {
+  if (error instanceof LabError) return error
   const message = error instanceof Error ? error.message : String(error)
-  return new StarterError({ status: 0, code: "INTERNAL", message, cause: error })
+  return new LabError({ status: 0, code: "INTERNAL", message, cause: error })
 }
 
 interface Flags {
@@ -110,7 +110,7 @@ function parseFlags(argv: string[]) {
       },
     })
   } catch (error) {
-    throw usage(error instanceof Error ? error.message : "Invalid arguments", "Run starter --help.")
+    throw usage(error instanceof Error ? error.message : "Invalid arguments", "Run lab --help.")
   }
 }
 
@@ -145,15 +145,14 @@ async function dispatch(
     case "call":
       return call(positionals[1], flags, context)
     default:
-      throw usage(`Unknown command "${command}"`, "Run starter --help.")
+      throw usage(`Unknown command "${command}"`, "Run lab --help.")
   }
 }
 
-/** The origin to talk to: --base-url, then STARTER_URL, then the last login, then the default. */
+/** The origin to talk to: --base-url, then LAB_URL, then the last login, then the default. */
 export function resolveBaseUrl(flags: Flags, env: Environment["env"], creds: Credentials): string {
-  // An empty STARTER_URL counts as unset.
-  const raw =
-    flags["base-url"] ?? (env.STARTER_URL || undefined) ?? creds.current ?? DEFAULT_BASE_URL
+  // An empty LAB_URL counts as unset.
+  const raw = flags["base-url"] ?? (env.LAB_URL || undefined) ?? creds.current ?? DEFAULT_BASE_URL
   let url: URL
   try {
     url = new URL(raw)
@@ -262,12 +261,12 @@ async function ops(flags: Flags, context: Environment) {
 
 async function call(name: string | undefined, flags: Flags, context: Environment) {
   if (name === undefined) {
-    throw usage("call needs an operation name", "Run starter ops to list them.")
+    throw usage("call needs an operation name", "Run lab ops to list them.")
   }
   const base = await originOf(flags, context)
   const doc = await fetchSpec(base, context)
   const op = findOperation(doc, name)
-  if (!op) throw usage(`Unknown operation "${name}"`, "Run starter ops to list them.")
+  if (!op) throw usage(`Unknown operation "${name}"`, "Run lab ops to list them.")
   const client = op.anonymous
     ? createClient({ baseURL: base, fetch: context.deps.fetch, sleep: context.deps.sleep })
     : (await apiAccess(flags, context)).client
@@ -310,7 +309,7 @@ async function originOf(flags: Flags, context: Environment): Promise<string> {
 async function fetchSpec(base: string, context: Environment): Promise<OpenApiDocument> {
   const response = await send(context.deps, new Request(`${base}/openapi.json`))
   if (!response.ok) {
-    throw new StarterError({
+    throw new LabError({
       status: response.status,
       code: `HTTP_${response.status}`,
       message: `Could not read ${base}/openapi.json`,
@@ -321,14 +320,14 @@ async function fetchSpec(base: string, context: Environment): Promise<OpenApiDoc
 }
 
 /**
- * The base URL and a client for the credential in use: STARTER_API_KEY when set, otherwise the
+ * The base URL and a client for the credential in use: LAB_API_KEY when set, otherwise the
  * saved login, refreshed when its access token is near expiry.
  */
 async function apiAccess(flags: Flags, context: Environment) {
   const { deps, env } = context
   const { file, creds } = await store(context)
   const base = resolveBaseUrl(flags, env, creds)
-  const apiKey = env.STARTER_API_KEY
+  const apiKey = env.LAB_API_KEY
   if (apiKey) {
     return {
       base,
@@ -336,21 +335,21 @@ async function apiAccess(flags: Flags, context: Environment) {
     }
   }
   if (!creds.profiles[base]) {
-    throw new StarterError({
+    throw new LabError({
       status: 0,
       code: "NOT_LOGGED_IN",
       message: `No saved login for ${base}`,
-      hint: "Run starter login, or set STARTER_API_KEY.",
+      hint: "Run lab login, or set LAB_API_KEY.",
     })
   }
   const accessToken = async () => {
     const latest = (await loadCredentials(file)).profiles[base]
     if (!latest) {
-      throw new StarterError({
+      throw new LabError({
         status: 0,
         code: "NOT_LOGGED_IN",
         message: `No saved login for ${base}`,
-        hint: "Run starter login.",
+        hint: "Run lab login.",
       })
     }
     if (!needsRefresh(latest, deps.now()) && latest.accessToken) return latest.accessToken

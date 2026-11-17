@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react"
 
-import { AppShell } from "@starter/ui/dplus/shell/app-shell"
-import { AppSidebar, type NavItem } from "@starter/ui/dplus/shell/app-sidebar"
-import { CommandPalette } from "@starter/ui/dplus/shell/command-palette"
-import type { RenderLink } from "@starter/ui/dplus/shell/link"
-import { Topbar, type Crumb } from "@starter/ui/dplus/shell/topbar"
+import { AppShell } from "@lab/ui/dplus/shell/app-shell"
+import { AppSidebar, type NavItem } from "@lab/ui/dplus/shell/app-sidebar"
+import { CommandPalette } from "@lab/ui/dplus/shell/command-palette"
+import type { RenderLink } from "@lab/ui/dplus/shell/link"
+import { Topbar, type Crumb } from "@lab/ui/dplus/shell/topbar"
 
 import { canOpenAdmin } from "../lib/admin-nav"
 import { modifierKeyLabel } from "../lib/platform"

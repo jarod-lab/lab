@@ -1,5 +1,5 @@
 {
-  "name": "@starter/observability",
+  "name": "@lab/observability",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,11 +14,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@starter/errors": "workspace:*",
-    "@starter/logger": "workspace:*"
+    "@lab/errors": "workspace:*",
+    "@lab/logger": "workspace:*"
   },
   "devDependencies": {
-    "@starter/config": "workspace:*",
+    "@lab/config": "workspace:*",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:",

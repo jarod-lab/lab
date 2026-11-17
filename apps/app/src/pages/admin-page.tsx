@@ -4,7 +4,7 @@ import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-tab
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useId, useMemo, useRef, useState } from "react"
 
-import { Button } from "@starter/ui/components/ui/button"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -12,16 +12,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@starter/ui/components/ui/dialog"
+} from "@lab/ui/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
-import { Field, FieldDescription, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
+} from "@lab/ui/components/ui/dropdown-menu"
+import { Field, FieldDescription, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
+import { NativeSelect, NativeSelectOption } from "@lab/ui/components/ui/native-select"
 import {
   Table,
   TableBody,
@@ -29,11 +29,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@starter/ui/components/ui/table"
-import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
-import { PageBody } from "@starter/ui/dplus/shell/page-header"
-import { type SettingsTab, SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
-import { Status } from "@starter/ui/dplus/status"
+} from "@lab/ui/components/ui/table"
+import { type RenderLink, anchorLink } from "@lab/ui/dplus/shell/link"
+import { PageBody } from "@lab/ui/dplus/shell/page-header"
+import { type SettingsTab, SettingsHeader } from "@lab/ui/dplus/shell/settings-header"
+import { Status } from "@lab/ui/dplus/status"
 
 import type { AdminAction } from "../containers/admin-data"
 import type { AdminRole, AdminSession, AdminUser } from "../lib/admin-api"

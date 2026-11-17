@@ -1,15 +1,15 @@
 "use client"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
-import { Input } from "@starter/ui/components/ui/input"
+} from "@lab/ui/components/ui/dropdown-menu"
+import { Input } from "@lab/ui/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
+} from "@lab/ui/components/ui/select"
 import {
   Table,
   TableBody,
@@ -27,7 +27,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@starter/ui/components/ui/table"
+} from "@lab/ui/components/ui/table"
 import { MoreHorizontalIcon } from "lucide-react"
 
 const invoices = [

@@ -1,5 +1,5 @@
-import { defineOperation } from "@starter/api"
-import { setErrorReporter } from "@starter/errors"
+import { defineOperation } from "@lab/api"
+import { setErrorReporter } from "@lab/errors"
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest"
 import { z } from "zod"
 import { BASE, createTestApp } from "./app.test.helpers"

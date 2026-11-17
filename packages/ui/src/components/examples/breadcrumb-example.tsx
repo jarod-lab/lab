@@ -1,6 +1,6 @@
-import { Link } from "@starter/ui/components/examples/example-compat"
+import { Link } from "@lab/ui/components/examples/example-compat"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -9,14 +9,14 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@starter/ui/components/ui/breadcrumb"
-import { Button } from "@starter/ui/components/ui/button"
+} from "@lab/ui/components/ui/breadcrumb"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
+} from "@lab/ui/components/ui/dropdown-menu"
 
 export default function BreadcrumbExample() {
   return (

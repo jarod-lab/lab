@@ -11,9 +11,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { serve } from "@hono/node-server"
-import { createAuth } from "@starter/auth"
-import { createTestDb } from "@starter/db/testing"
-import { createLogger } from "@starter/logger"
+import { createAuth } from "@lab/auth"
+import { createTestDb } from "@lab/db/testing"
+import { createLogger } from "@lab/logger"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { createApp } from "./app"
 import { BASE, createTestApp, SECRET, type SentEmail } from "./app.test.helpers"
@@ -89,7 +89,7 @@ async function ok(res: Response): Promise<Json> {
 }
 
 const SKILL = readFileSync(
-  fileURLToPath(new URL("../../../skills/starter/SKILL.md", import.meta.url)),
+  fileURLToPath(new URL("../../../skills/lab/SKILL.md", import.meta.url)),
   "utf8",
 )
 
@@ -560,7 +560,7 @@ describe("onboarding journey C: the CLI against a live server", () => {
       logger: createLogger({ level: "silent" }),
     })
     handler = (req) => app.fetch(req)
-    dir = await mkdtemp(join(tmpdir(), "starter-cli-live-"))
+    dir = await mkdtemp(join(tmpdir(), "lab-cli-live-"))
   })
 
   afterAll(async () => {
@@ -574,7 +574,7 @@ describe("onboarding journey C: the CLI against a live server", () => {
     const env = {
       PATH: process.env.PATH ?? "",
       HOME: dir,
-      STARTER_CONFIG_DIR: join(dir, "config"),
+      LAB_CONFIG_DIR: join(dir, "config"),
     }
     const proc = { stdout: "", stderr: "" }
     const child: ChildProcess = spawn(tsx, [cliBin, ...args], {

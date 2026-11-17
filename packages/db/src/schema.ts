@@ -1,5 +1,5 @@
 // Auth tables (user, session, account, verification, organization, member, ...) are generated:
-//   pnpm --filter @starter/auth generate
+//   pnpm --filter @lab/auth generate
 import {
   boolean,
   doublePrecision,

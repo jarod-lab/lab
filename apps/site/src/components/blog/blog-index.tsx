@@ -1,6 +1,6 @@
-import { buttonVariants } from "@starter/ui/components/ui/button"
-import { Input } from "@starter/ui/components/ui/input"
-import { Label } from "@starter/ui/components/ui/label"
+import { buttonVariants } from "@lab/ui/components/ui/button"
+import { Input } from "@lab/ui/components/ui/input"
+import { Label } from "@lab/ui/components/ui/label"
 import { cn } from "cn"
 
 import { CATEGORIES, CATEGORY_LABELS, type Category } from "../../data/content"

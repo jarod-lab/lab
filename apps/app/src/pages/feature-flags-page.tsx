@@ -1,10 +1,10 @@
 import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table"
 import { useId, useMemo, useRef, useState } from "react"
 
-import { Badge } from "@starter/ui/components/ui/badge"
-import { Button } from "@starter/ui/components/ui/button"
-import { Field, FieldLabel } from "@starter/ui/components/ui/field"
-import { NativeSelect, NativeSelectOption } from "@starter/ui/components/ui/native-select"
+import { Badge } from "@lab/ui/components/ui/badge"
+import { Button } from "@lab/ui/components/ui/button"
+import { Field, FieldLabel } from "@lab/ui/components/ui/field"
+import { NativeSelect, NativeSelectOption } from "@lab/ui/components/ui/native-select"
 import {
   Table,
   TableBody,
@@ -12,10 +12,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@starter/ui/components/ui/table"
-import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
-import { PageBody } from "@starter/ui/dplus/shell/page-header"
-import { type SettingsTab, SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
+} from "@lab/ui/components/ui/table"
+import { type RenderLink, anchorLink } from "@lab/ui/dplus/shell/link"
+import { PageBody } from "@lab/ui/dplus/shell/page-header"
+import { type SettingsTab, SettingsHeader } from "@lab/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { FormError, useAppForm } from "../components/form"

@@ -1,18 +1,18 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@starter/ui/components/ui/accordion"
-import { Button } from "@starter/ui/components/ui/button"
+} from "@lab/ui/components/ui/accordion"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@starter/ui/components/ui/card"
+} from "@lab/ui/components/ui/card"
 import { ArrowUpRightIcon } from "lucide-react"
 
 export default function AccordionExample() {

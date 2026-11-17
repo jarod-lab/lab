@@ -1,7 +1,7 @@
 "use client"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Field, FieldLabel } from "@starter/ui/components/ui/field"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Field, FieldLabel } from "@lab/ui/components/ui/field"
 import {
   Pagination,
   PaginationContent,
@@ -10,7 +10,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@starter/ui/components/ui/pagination"
+} from "@lab/ui/components/ui/pagination"
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
+} from "@lab/ui/components/ui/select"
 
 export default function PaginationExample() {
   return (

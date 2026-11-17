@@ -5,9 +5,9 @@ import {
   createAnalytics,
   createMemoryProvider,
   noopAnalytics,
-} from "@starter/analytics"
-import type { AuthEvent } from "@starter/auth"
-import { createLogger } from "@starter/logger"
+} from "@lab/analytics"
+import type { AuthEvent } from "@lab/auth"
+import { createLogger } from "@lab/logger"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import { analyticsFromEnv, captureAuthEvent } from "./analytics"

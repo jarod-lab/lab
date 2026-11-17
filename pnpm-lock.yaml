@@ -319,43 +319,43 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.8
         version: 2.1.8(hono@4.13.18)
-      '@starter/analytics':
+      '@lab/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
-      '@starter/api':
+      '@lab/api':
         specifier: workspace:*
         version: link:../../packages/api
-      '@starter/auth':
+      '@lab/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@starter/auth-proofs':
+      '@lab/auth-proofs':
         specifier: workspace:*
         version: link:../../packages/auth-proofs
-      '@starter/db':
+      '@lab/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@starter/env':
+      '@lab/env':
         specifier: workspace:*
         version: link:../../packages/env
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../../packages/errors
-      '@starter/flags':
+      '@lab/flags':
         specifier: workspace:*
         version: link:../../packages/flags
-      '@starter/logger':
+      '@lab/logger':
         specifier: workspace:*
         version: link:../../packages/logger
-      '@starter/mcp':
+      '@lab/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
-      '@starter/observability':
+      '@lab/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@starter/plans':
+      '@lab/plans':
         specifier: workspace:*
         version: link:../../packages/plans
-      '@starter/storage':
+      '@lab/storage':
         specifier: workspace:*
         version: link:../../packages/storage
       drizzle-orm:
@@ -368,15 +368,15 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@lab/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.32.1(supports-color@10.2.2)(zod@4.6.7)
       '@seriousme/openapi-schema-validator':
         specifier: ^2.11.0
         version: 2.11.0
-      '@starter/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
@@ -428,6 +428,24 @@ importers:
       '@byo-oss/support':
         specifier: ^0.5.0
         version: 0.5.0(@aws-sdk/client-s3@3.1146.0)(@aws-sdk/client-sesv2@3.1146.0)(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.1(react@19.3.0))(better-auth@1.7.16(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(supports-color@10.2.2)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)(zod@4.6.7)
+      '@lab/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
+      '@lab/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@lab/flags':
+        specifier: workspace:*
+        version: link:../../packages/flags
+      '@lab/plans':
+        specifier: workspace:*
+        version: link:../../packages/plans
+      '@lab/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@lab/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@openfeature/core':
         specifier: ^1.12.0
         version: 1.12.0
@@ -440,24 +458,6 @@ importers:
       '@openfeature/web-sdk':
         specifier: ^1.10.0
         version: 1.10.0(@openfeature/core@1.12.0)
-      '@starter/analytics':
-        specifier: workspace:*
-        version: link:../../packages/analytics
-      '@starter/auth':
-        specifier: workspace:*
-        version: link:../../packages/auth
-      '@starter/flags':
-        specifier: workspace:*
-        version: link:../../packages/flags
-      '@starter/plans':
-        specifier: workspace:*
-        version: link:../../packages/plans
-      '@starter/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-      '@starter/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@tanstack/react-form':
         specifier: ^1.33.5
         version: 1.33.5(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(supports-color@10.2.2)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -504,10 +504,10 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/api':
+      '@lab/api':
         specifier: workspace:*
         version: link:../../packages/api
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@tailwindcss/vite':
@@ -582,10 +582,10 @@ importers:
       '@astrojs/rss':
         specifier: ^4.0.19
         version: 4.0.19
-      '@starter/plans':
+      '@lab/plans':
         specifier: workspace:*
         version: link:../../packages/plans
-      '@starter/ui':
+      '@lab/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       astro:
@@ -601,7 +601,7 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@tailwindcss/vite':
@@ -637,17 +637,17 @@ importers:
 
   packages/analytics:
     dependencies:
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../errors
-      '@starter/logger':
+      '@lab/logger':
         specifier: workspace:*
         version: link:../logger
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -665,14 +665,14 @@ importers:
 
   packages/api:
     dependencies:
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../errors
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -732,22 +732,22 @@ importers:
       '@byo-oss/support':
         specifier: ^0.5.0
         version: 0.5.0(@aws-sdk/client-s3@3.1146.0)(@aws-sdk/client-sesv2@3.1146.0)(@better-auth/core@1.7.16(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.4))(@wraps.dev/email@0.15.1(react@19.3.0))(better-auth@1.7.16(@tanstack/react-start@1.169.2(esbuild@0.28.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.14)(supports-color@10.2.2)(vite@8.3.5(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.17)(vitest@5.0.3))(react@19.3.0)(vitest@5.0.3)(zod@4.6.7)
-      '@starter/api':
+      '@lab/api':
         specifier: workspace:*
         version: link:../api
-      '@starter/db':
+      '@lab/db':
         specifier: workspace:*
         version: link:../db
-      '@starter/env':
+      '@lab/env':
         specifier: workspace:*
         version: link:../env
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../errors
-      '@starter/logger':
+      '@lab/logger':
         specifier: workspace:*
         version: link:../logger
-      '@starter/plans':
+      '@lab/plans':
         specifier: workspace:*
         version: link:../plans
       '@wraps.dev/better-auth':
@@ -775,7 +775,7 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -796,17 +796,17 @@ importers:
       '@gdp-ts/core':
         specifier: 'catalog:'
         version: 0.1.0(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(oxlint@1.87.0(oxlint-tsgolint@7.0.2004))(typescript@7.0.2)
-      '@starter/api':
+      '@lab/api':
         specifier: workspace:*
         version: link:../api
-      '@starter/db':
+      '@lab/db':
         specifier: workspace:*
         version: link:../db
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.3(@electric-sql/pglite@0.5.8)(kysely@0.29.6)(postgres@3.4.9)
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@vitest/coverage-v8':
@@ -821,10 +821,10 @@ importers:
 
   packages/cli:
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
-      '@starter/sdk':
+      '@lab/sdk':
         specifier: workspace:*
         version: link:../sdk
       '@types/node':
@@ -864,7 +864,7 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.8
         version: 0.5.8
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -892,7 +892,7 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -910,7 +910,7 @@ importers:
 
   packages/errors:
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -928,7 +928,7 @@ importers:
 
   packages/flags:
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -950,7 +950,7 @@ importers:
         specifier: ^10.4.0
         version: 10.4.0
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -968,20 +968,20 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@lab/api':
+        specifier: workspace:*
+        version: link:../api
+      '@lab/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.32.1(supports-color@10.2.2)(zod@4.6.7)
-      '@starter/api':
-        specifier: workspace:*
-        version: link:../api
-      '@starter/errors':
-        specifier: workspace:*
-        version: link:../errors
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -999,14 +999,14 @@ importers:
 
   packages/observability:
     dependencies:
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../errors
-      '@starter/logger':
+      '@lab/logger':
         specifier: workspace:*
         version: link:../logger
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -1040,7 +1040,7 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -1062,7 +1062,7 @@ importers:
         specifier: ^0.17.0
         version: 0.17.0
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -1089,7 +1089,7 @@ importers:
 
   packages/storage:
     dependencies:
-      '@starter/errors':
+      '@lab/errors':
         specifier: workspace:*
         version: link:../errors
       '@vercel/blob':
@@ -1099,7 +1099,7 @@ importers:
         specifier: ^1.0.20
         version: 1.0.20
     devDependencies:
-      '@starter/config':
+      '@lab/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -1181,12 +1181,12 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@lab/config':
+        specifier: workspace:*
+        version: link:../config
       '@shadcn/lint':
         specifier: 'catalog:'
         version: 0.2.0(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))
-      '@starter/config':
-        specifier: workspace:*
-        version: link:../config
       '@storybook/addon-a11y':
         specifier: ^10.6.3
         version: 10.6.3(storybook@10.6.3(@types/react@19.3.0)(prettier@3.9.9)(react@19.3.0))

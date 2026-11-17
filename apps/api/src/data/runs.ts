@@ -11,9 +11,9 @@ import type {
   OrganizationId,
   RunId,
   RunInOrg,
-} from "@starter/auth-proofs"
-import { agent, approval, type Database, run, runStep, steerMessage } from "@starter/db"
-import { AppError } from "@starter/errors"
+} from "@lab/auth-proofs"
+import { agent, approval, type Database, run, runStep, steerMessage } from "@lab/db"
+import { AppError } from "@lab/errors"
 import { and, asc, desc, eq, gt, inArray, lt, max, or } from "drizzle-orm"
 
 export type Run = typeof run.$inferSelect

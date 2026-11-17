@@ -1,8 +1,8 @@
 import * as React from "react"
 import { REGEXP_ONLY_DIGITS, REGEXP_ONLY_DIGITS_AND_CHARS } from "input-otp"
 
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Card,
   CardContent,
@@ -10,14 +10,14 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@starter/ui/components/ui/card"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
+} from "@lab/ui/components/ui/card"
+import { Field, FieldDescription, FieldError, FieldLabel } from "@lab/ui/components/ui/field"
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "@starter/ui/components/ui/input-otp"
+} from "@lab/ui/components/ui/input-otp"
 import { RefreshCwIcon } from "lucide-react"
 
 export default function InputOTPExample() {

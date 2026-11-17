@@ -5,8 +5,8 @@ import {
   useRouter,
   useRouterState,
 } from "@tanstack/react-router"
-import { isReservedOrgSlug } from "@starter/auth/client"
-import { Button } from "@starter/ui/components/ui/button"
+import { isReservedOrgSlug } from "@lab/auth/client"
+import { Button } from "@lab/ui/components/ui/button"
 
 import { AppShellContainer } from "../containers/app-shell"
 import { OrgFeatures } from "../containers/org-features"

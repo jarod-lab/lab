@@ -1,15 +1,8 @@
 // The approval state changes are single conditional writes: of two decisions made at once, one wins.
 // The agent's view of an approval is pending until its decision is effective.
-import {
-  ApprovalId,
-  approvalInOrg,
-  name,
-  OrganizationId,
-  RunId,
-  runInOrg,
-} from "@starter/auth-proofs"
-import { agent, approval, organization, run } from "@starter/db"
-import { createTestDb } from "@starter/db/testing"
+import { ApprovalId, approvalInOrg, name, OrganizationId, RunId, runInOrg } from "@lab/auth-proofs"
+import { agent, approval, organization, run } from "@lab/db"
+import { createTestDb } from "@lab/db/testing"
 import { eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { approvalView, blockingApprovals, decideApproval, undoApproval } from "./runs"

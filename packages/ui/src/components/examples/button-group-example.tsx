@@ -1,6 +1,6 @@
-import { Example, ExampleWrapper } from "@starter/ui/components/examples/example"
-import { Button } from "@starter/ui/components/ui/button"
-import { ButtonGroup, ButtonGroupText } from "@starter/ui/components/ui/button-group"
+import { Example, ExampleWrapper } from "@lab/ui/components/examples/example"
+import { Button } from "@lab/ui/components/ui/button"
+import { ButtonGroup, ButtonGroupText } from "@lab/ui/components/ui/button-group"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,11 +8,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@starter/ui/components/ui/dropdown-menu"
-import { Field, FieldGroup } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@starter/ui/components/ui/input-group"
-import { Label } from "@starter/ui/components/ui/label"
+} from "@lab/ui/components/ui/dropdown-menu"
+import { Field, FieldGroup } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@lab/ui/components/ui/input-group"
+import { Label } from "@lab/ui/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -20,8 +20,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@starter/ui/components/ui/select"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@starter/ui/components/ui/tooltip"
+} from "@lab/ui/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@lab/ui/components/ui/tooltip"
 import {
   ChevronDownIcon,
   VolumeX,

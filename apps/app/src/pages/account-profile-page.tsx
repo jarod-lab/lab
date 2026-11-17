@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form"
 import { useId, useState } from "react"
 import { z } from "zod"
 
-import { Button } from "@starter/ui/components/ui/button"
+import { Button } from "@lab/ui/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -11,13 +11,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@starter/ui/components/ui/dialog"
-import { Field, FieldError, FieldLabel } from "@starter/ui/components/ui/field"
-import { Input } from "@starter/ui/components/ui/input"
-import { DangerAction, DangerZone } from "@starter/ui/dplus/shell/danger-zone"
-import { type RenderLink, anchorLink } from "@starter/ui/dplus/shell/link"
-import { PageBody } from "@starter/ui/dplus/shell/page-header"
-import { SettingsHeader } from "@starter/ui/dplus/shell/settings-header"
+} from "@lab/ui/components/ui/dialog"
+import { Field, FieldError, FieldLabel } from "@lab/ui/components/ui/field"
+import { Input } from "@lab/ui/components/ui/input"
+import { DangerAction, DangerZone } from "@lab/ui/dplus/shell/danger-zone"
+import { type RenderLink, anchorLink } from "@lab/ui/dplus/shell/link"
+import { PageBody } from "@lab/ui/dplus/shell/page-header"
+import { SettingsHeader } from "@lab/ui/dplus/shell/settings-header"
 
 import { ConfirmDialog } from "../components/confirm-dialog"
 import { ImageUpload, type ImageUploadLimits } from "../components/image-upload"

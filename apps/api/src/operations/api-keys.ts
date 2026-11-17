@@ -1,6 +1,6 @@
-import { allowed } from "@starter/api"
-import { PERSON_ONLY_ACTIONS, PERSON_ONLY_RESOURCES, statements } from "@starter/auth"
-import { AppError } from "@starter/errors"
+import { allowed } from "@lab/api"
+import { PERSON_ONLY_ACTIONS, PERSON_ONLY_RESOURCES, statements } from "@lab/auth"
+import { AppError } from "@lab/errors"
 import { z } from "zod"
 
 import { creatorOf, listApiKeys } from "../data/api-keys"

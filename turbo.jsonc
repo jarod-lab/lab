@@ -84,6 +84,12 @@
     },
     // sdk's schema.test.ts checks the generated client against the API's committed contract. The
     // SDK does not depend on apps/api, so openapi.json is not in its graph.
+    // apps/agent builds with `eve build` (through scripts/run.ts, which sets the inert placeholders
+    // eve's compile needs, because turbo strips the environment): its output is .output.
+    "@lab/agent#build": {
+      "dependsOn": ["^build"],
+      "outputs": [".output/**"]
+    },
     "@lab/sdk#test": {
       "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi.json"]

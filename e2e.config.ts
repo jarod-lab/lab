@@ -60,6 +60,38 @@ const app = {
   },
 }
 
+// Run from a shell where mise has loaded the environment (`mise exec -- ...`, or mise activated):
+// it supplies Node 24 and DATABASE_URL (.env.worktree in a worktree, .env in a clone). A bare shell
+// has neither, and every target's app fails with "Invalid environment variables". A worktree has
+// no .env, so BETTER_AUTH_SECRET is passed in the command: `BETTER_AUTH_SECRET=$(openssl rand
+// -base64 32) pnpm exec e2e run e2e/hq-smoke.e2e.ts`. Postgres must be up with the migrations applied.
+// apps/hq (the org brain) on its own port and database: an API test target (e2e/hq-smoke.e2e.ts).
+// It takes the port as its first argument. HQ_DATABASE_URL defaults to DATABASE_URL here so a
+// worktree's database (migrated by `pnpm wt`) serves it; production keeps the two apart.
+// The target would run every test like the others, so `pnpm e2e` and CI pass `--target desktop,phone`
+// and `pnpm e2e:hq` runs only e2e/hq-smoke.e2e.ts on it.
+const hqEnv: Record<string, string> = {
+  NODE_ENV: "development",
+  EMAIL_FROM: process.env.EMAIL_FROM ?? "noreply@example.com",
+  BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
+  // @lab/env still validates the product's variables; hq reads the HQ_ ones.
+  BETTER_AUTH_URL: "http://127.0.0.1:{port}",
+  DATABASE_URL: process.env.DATABASE_URL ?? "",
+  HQ_DATABASE_URL: process.env.HQ_DATABASE_URL ?? process.env.DATABASE_URL ?? "",
+}
+for (const [key, value] of Object.entries(hqEnv)) if (value === "") delete hqEnv[key]
+
+const hq = {
+  url: "http://127.0.0.1:0",
+  command: {
+    executable: "pnpm",
+    args: ["--filter", "@lab/hq", "exec", "tsx", "src/server.ts", "{port}"],
+    env: hqEnv,
+    log: ".e2e/logs/hq.log",
+    startupTimeout: 120_000,
+  },
+}
+
 // The password is a function so it is never a plain string in the config the model sees. Override per
 // run with E2E_USER_ADMIN_* (the stack still seeds E2E_ADMIN_EMAIL, so set both pairs together).
 const credentials = {
@@ -75,6 +107,7 @@ export default {
   targets: [
     { name: "desktop", engine: web(), app },
     { name: "phone", engine: web({ viewport: { width: 390, height: 844 } }), app },
+    { name: "hq", engine: web(), app: hq },
   ],
   // The model behind agent.* steps. The smoke and app-shell tests use none, so they run without a key.
   // gateway() reads AI_GATEWAY_API_KEY from the runner's own environment (not packages/env).

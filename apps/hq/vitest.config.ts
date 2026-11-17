@@ -1,0 +1,4 @@
+import { baseConfig } from "@lab/config/vitest.base"
+
+// server.ts and env.ts only wire env, the database and the Node listener; app.ts holds the logic.
+export default baseConfig(undefined, ["src/server.ts", "src/env.ts"])

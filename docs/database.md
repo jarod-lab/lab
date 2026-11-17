@@ -11,6 +11,17 @@
   branch's migrations applied. `pnpm wt reset-db` rebuilds it. Agents run these; the main database
   stays the user's. See `docs/tooling.md` (Worktrees).
 
+## hq's tables
+
+`apps/hq` (the org brain) has its own database, `HQ_DATABASE_URL`, which takes starter's migrations
+(the auth tables) and hq's own: tables in `pgSchema("hq")` (`apps/hq/src/db/schema.ts`), SQL in
+`apps/hq/drizzle/`, recorded in their own table (`drizzle.__hq_migrations`) so the two histories
+never mix. New migration: `pnpm --filter @lab/hq db:generate`, then commit the SQL. `pnpm wt`
+applies both sets to a worktree's database (`hq`'s tests get both from `createHqTestDb`,
+`apps/hq/src/testing.ts`). `entry_versions` is append-only: a trigger refuses any update or delete.
+Applying hq's migrations anywhere else (`pnpm --filter @lab/hq db:migrate`) is denied for agents like
+the rest; `scripts/release.mjs` does not run them yet.
+
 ## Migrations
 
 - `0001_agent_auth` adds the API key, JWKS and OAuth tables (apikey, jwks, oauth_*).

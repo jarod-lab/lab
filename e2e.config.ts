@@ -2,6 +2,7 @@ import type { E2EConfig } from "e2e"
 import { web } from "@e2e-dev/web"
 import { gateway } from "ai"
 
+import { HQ_FOUNDER_EMAIL, HQ_FOUNDER_PASSWORD } from "./e2e/support/hq-stack"
 import {
   DKIM_DIR,
   OPERATOR_ORGANIZATION_ID,
@@ -69,7 +70,8 @@ const app = {
 // It takes the port as its first argument. HQ_DATABASE_URL defaults to DATABASE_URL here so a
 // worktree's database (migrated by `pnpm wt`) serves it; production keeps the two apart.
 // The target would run every test like the others, so `pnpm e2e` and CI pass `--target desktop,phone`
-// and `pnpm e2e:hq` runs only e2e/hq-smoke.e2e.ts on it.
+// and `pnpm e2e:hq` runs only the hq-*.e2e.ts files on it. The hq tables must exist: `pnpm wt` applies
+// them to a worktree's database (`pnpm wt reset-db` after pulling in hq migrations).
 const hqEnv: Record<string, string> = {
   NODE_ENV: "development",
   EMAIL_FROM: process.env.EMAIL_FROM ?? "noreply@example.com",
@@ -78,14 +80,18 @@ const hqEnv: Record<string, string> = {
   BETTER_AUTH_URL: "http://127.0.0.1:{port}",
   DATABASE_URL: process.env.DATABASE_URL ?? "",
   HQ_DATABASE_URL: process.env.HQ_DATABASE_URL ?? process.env.DATABASE_URL ?? "",
+  // hq lets in only founders: scripts/e2e-hq-stack.mjs seeds this one (e2e/support/hq-stack.ts).
+  HQ_FOUNDER_EMAILS: HQ_FOUNDER_EMAIL,
+  E2E_HQ_FOUNDER_EMAIL: HQ_FOUNDER_EMAIL,
+  E2E_HQ_FOUNDER_PASSWORD: HQ_FOUNDER_PASSWORD,
 }
 for (const [key, value] of Object.entries(hqEnv)) if (value === "") delete hqEnv[key]
 
 const hq = {
   url: "http://127.0.0.1:0",
   command: {
-    executable: "pnpm",
-    args: ["--filter", "@lab/hq", "exec", "tsx", "src/server.ts", "{port}"],
+    executable: "node",
+    args: ["scripts/e2e-hq-stack.mjs", "{port}"],
     env: hqEnv,
     log: ".e2e/logs/hq.log",
     startupTimeout: 120_000,

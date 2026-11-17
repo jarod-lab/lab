@@ -1,18 +1,14 @@
-import { defineRegistry, operationsFor } from "@lab/api"
-import type { Catalog } from "@lab/auth"
-import type { Database } from "@lab/db"
+import { defineRegistry } from "@lab/api"
 import { z } from "zod"
+
+import { entryOperations } from "./entries"
+import { proposalOperations } from "./proposals"
+import { defineOperation, type HqDeps } from "./shared"
+
+export type { HqDeps } from "./shared"
 
 /** hq's version: reported by `hq_status`, the OpenAPI document and the MCP server. */
 export const HQ_VERSION = "0.0.0"
-
-/** What the operations draw on. `hq_status` needs none of it; the brain's operations do. */
-export interface HqDeps {
-  db: Database
-  now: () => Date
-}
-
-const defineOperation = operationsFor<Catalog>()
 
 const hq_status = defineOperation({
   name: "hq_status",
@@ -34,6 +30,6 @@ const hq_status = defineOperation({
 })
 
 /** Every operation hq serves: one registry for REST, MCP, OpenAPI and llms.txt. */
-export function createHqOperations(_deps: HqDeps) {
-  return defineRegistry([hq_status])
+export function createHqOperations(deps: HqDeps) {
+  return defineRegistry([hq_status, ...entryOperations(deps), ...proposalOperations(deps)])
 }

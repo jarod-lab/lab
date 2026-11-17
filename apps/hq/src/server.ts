@@ -26,7 +26,19 @@ const auth = createAuth({
   rateLimit: {},
 })
 
-const app = createHqApp({ db, auth, now: () => new Date(), baseURL: config.baseURL })
+if (config.founders.userIds.length + config.founders.emails.length === 0) {
+  logger.warn(
+    "no founders configured (HQ_FOUNDER_EMAILS, HQ_FOUNDER_USER_IDS): nobody can approve proposals",
+  )
+}
+
+const app = createHqApp({
+  db,
+  auth,
+  now: () => new Date(),
+  founders: config.founders,
+  baseURL: config.baseURL,
+})
 serve({ fetch: app.fetch, port: config.port }, (addr) =>
   logger.info({ port: addr.port }, "hq listening"),
 )

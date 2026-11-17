@@ -5,7 +5,8 @@ import { grantSpend, readAllowance, recordSpend, reserveSpend, settleSpend } fro
 import { SPEND_SOURCES } from "../db/schema"
 import { defineOperation, type HqDeps, requireFounder } from "./shared"
 
-const usd = z.number().min(0).max(999_999)
+/** One call's amount, in dollars: a realistic ceiling (grant_spend's), well under a column's. */
+const usd = z.number().min(0).max(1000)
 const model = z.string().trim().min(1).max(200)
 const runId = z.string().max(200).optional().describe("The run this belongs to (from record_run)")
 

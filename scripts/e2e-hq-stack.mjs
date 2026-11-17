@@ -11,7 +11,7 @@
 //
 // better-auth's rate limits (sign-up 5 per 5 minutes, sign-in 5 per minute) are counted in the
 // database, so they persist between runs on a worktree's database and made the seed answer 429.
-// This stack clears that table before seeding and again after, so each run starts from zero. Only
+// This stack (only against a *_wt_ or *_test database, e2e-hq-guard.mjs) clears that table before seeding and again after, so each run starts from zero. Only
 // this e2e stack does: the limits themselves are untouched, in hq and in production. A run needs
 // well under the limits (about four sign-ins and one sign-up); a new journey that signs in more
 // has to share them.
@@ -19,11 +19,15 @@ import { spawn } from "node:child_process"
 import { createRequire } from "node:module"
 import { createServer } from "node:net"
 
+import { assertDisposableDatabase } from "./e2e-hq-guard.mjs"
+
 const port = process.argv[2]
 if (!port) throw new Error("usage: node scripts/e2e-hq-stack.mjs <port>")
 const email = process.env.E2E_HQ_FOUNDER_EMAIL
 const password = process.env.E2E_HQ_FOUNDER_PASSWORD
 const database = process.env.HQ_DATABASE_URL
+// Seeding and clearing write to this database: only a throwaway one (e2e-hq-guard.mjs).
+if (database) assertDisposableDatabase(database)
 
 /** hq on `at`, in its own process group so the whole `pnpm` -> `tsx` -> node chain stops together. */
 function startHq(at) {

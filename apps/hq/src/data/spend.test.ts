@@ -270,102 +270,105 @@ const realUrl = /(_wt_|_test$)/.test(dbName(explicitUrl))
     : undefined
 const REAL = realUrl !== undefined
 
-describe.skipIf(!REAL)("the daily cap under real concurrency (real Postgres)", () => {
-  // Two clients, each with its own pool of connections: no shared connection or transaction.
-  const clients = REAL && realUrl ? [createDb(realUrl), createDb(realUrl)] : []
-  const [a, b] = clients
-  const dayStart = new Date(Date.UTC(2200, 0, 1))
-  const cleanup = async () => {
-    for (const table of ["spend", "spend_grants", "spend_holds"]) {
-      await a?.$client.unsafe(
-        `delete from hq.${table} where day >= '2200-01-01' and day < '2201-01-01'`,
-      )
+describe.skipIf(!REAL)(
+  `the daily cap under real concurrency (real Postgres: ${dbName(realUrl)})`,
+  () => {
+    // Two clients, each with its own pool of connections: no shared connection or transaction.
+    const clients = REAL && realUrl ? [createDb(realUrl), createDb(realUrl)] : []
+    const [a, b] = clients
+    const dayStart = new Date(Date.UTC(2200, 0, 1))
+    const cleanup = async () => {
+      for (const table of ["spend", "spend_grants", "spend_holds"]) {
+        await a?.$client.unsafe(
+          `delete from hq.${table} where day >= '2200-01-01' and day < '2201-01-01'`,
+        )
+      }
     }
-  }
-  beforeAll(cleanup)
-  afterAll(async () => {
-    await cleanup()
-    await Promise.all(clients.map((c) => c.$client.end()))
-  })
-
-  const at = (round: number) =>
-    new Date(dayStart.getTime() + round * 24 * 60 * 60_000 + 12 * 3_600_000)
-  /** `callers` reservations at once, spread over both clients. */
-  const race = (round: number, estimate: number, callers: number) =>
-    Promise.all(
-      Array.from({ length: callers }, (_, i) =>
-        reserveSpend((i % 2 === 0 ? a : b) as NonNullable<typeof a>, {
-          estimate: usd(estimate),
-          now: at(round),
-        }),
-      ),
-    )
-  const holds = (results: Awaited<ReturnType<typeof race>>) =>
-    results.filter((r) => "holdId" in r).length
-
-  it("two concurrent reserve_spend calls at 9.90 spent with 0.20 estimates: exactly one gets a hold", async () => {
-    // Review Focus 3's day: 9.90 spent, so 0.10 left. Estimates of 0.20 would both be refused (the
-    // test above), so the race uses 0.06: one fits (0.04 left), a second cannot. Several rounds
-    // and several callers per round, because one lucky interleaving proves nothing.
-    for (let round = 0; round < 6; round++) {
-      await recordSpend(a as NonNullable<typeof a>, {
-        source: "eve",
-        amount: usd(9.9),
-        model: "m",
-        now: at(round),
-      })
-      const results = await race(round, 0.06, 8)
-      expect(holds(results), `round ${round}`).toBe(1)
-      const allowance = await readAllowance(a as NonNullable<typeof a>, at(round))
-      expect(allowance.reserved).toBe(usd(0.06))
-      expect(allowance.remaining).toBe(usd(0.04))
-    }
-  })
-
-  it("with a 0.10 grant on top of 9.90 spent, two 0.15 estimates at once: exactly one gets a hold", async () => {
-    for (let round = 10; round < 16; round++) {
-      await recordSpend(a as NonNullable<typeof a>, {
-        source: "eve",
-        amount: usd(9.9),
-        model: "m",
-        now: at(round),
-      })
-      await grantSpend(a as NonNullable<typeof a>, {
-        amount: usd(0.1),
-        reason: "race",
-        grantedBy: "u",
-        now: at(round),
-      })
-      // Remaining is 10 + 0.10 - 9.90 = 0.20: one 0.15 fits, a second does not. (Two 0.10 would
-      // both fit.)
-      expect(holds(await race(round, 0.15, 2)), `round ${round}`).toBe(1)
-    }
-  })
-
-  it("a settle racing reserves never lets the day go past its cap", async () => {
-    const round = 20
-    const first = await reserveSpend(a as NonNullable<typeof a>, {
-      estimate: usd(9.5),
-      now: at(round),
+    beforeAll(cleanup)
+    afterAll(async () => {
+      await cleanup()
+      await Promise.all(clients.map((c) => c.$client.end()))
     })
-    if (!("holdId" in first)) throw new Error("expected a hold")
-    // While the 9.5 hold settles at 9.5, many reserve 0.3: only one 0.3 fits in the last 0.5.
-    const [, ...results] = await Promise.all([
-      settleSpend(b as NonNullable<typeof b>, {
-        holdId: first.holdId,
-        amount: usd(9.5),
-        model: "m",
+
+    const at = (round: number) =>
+      new Date(dayStart.getTime() + round * 24 * 60 * 60_000 + 12 * 3_600_000)
+    /** `callers` reservations at once, spread over both clients. */
+    const race = (round: number, estimate: number, callers: number) =>
+      Promise.all(
+        Array.from({ length: callers }, (_, i) =>
+          reserveSpend((i % 2 === 0 ? a : b) as NonNullable<typeof a>, {
+            estimate: usd(estimate),
+            now: at(round),
+          }),
+        ),
+      )
+    const holds = (results: Awaited<ReturnType<typeof race>>) =>
+      results.filter((r) => "holdId" in r).length
+
+    it("two concurrent reserve_spend calls at 9.90 spent with 0.20 estimates: exactly one gets a hold", async () => {
+      // Review Focus 3's day: 9.90 spent, so 0.10 left. Estimates of 0.20 would both be refused (the
+      // test above), so the race uses 0.06: one fits (0.04 left), a second cannot. Several rounds
+      // and several callers per round, because one lucky interleaving proves nothing.
+      for (let round = 0; round < 6; round++) {
+        await recordSpend(a as NonNullable<typeof a>, {
+          source: "eve",
+          amount: usd(9.9),
+          model: "m",
+          now: at(round),
+        })
+        const results = await race(round, 0.06, 8)
+        expect(holds(results), `round ${round}`).toBe(1)
+        const allowance = await readAllowance(a as NonNullable<typeof a>, at(round))
+        expect(allowance.reserved).toBe(usd(0.06))
+        expect(allowance.remaining).toBe(usd(0.04))
+      }
+    })
+
+    it("with a 0.10 grant on top of 9.90 spent, two 0.15 estimates at once: exactly one gets a hold", async () => {
+      for (let round = 10; round < 16; round++) {
+        await recordSpend(a as NonNullable<typeof a>, {
+          source: "eve",
+          amount: usd(9.9),
+          model: "m",
+          now: at(round),
+        })
+        await grantSpend(a as NonNullable<typeof a>, {
+          amount: usd(0.1),
+          reason: "race",
+          grantedBy: "u",
+          now: at(round),
+        })
+        // Remaining is 10 + 0.10 - 9.90 = 0.20: one 0.15 fits, a second does not. (Two 0.10 would
+        // both fit.)
+        expect(holds(await race(round, 0.15, 2)), `round ${round}`).toBe(1)
+      }
+    })
+
+    it("a settle racing reserves never lets the day go past its cap", async () => {
+      const round = 20
+      const first = await reserveSpend(a as NonNullable<typeof a>, {
+        estimate: usd(9.5),
         now: at(round),
-      }),
-      ...Array.from({ length: 6 }, (_, i) =>
-        reserveSpend((i % 2 === 0 ? a : b) as NonNullable<typeof a>, {
-          estimate: usd(0.3),
+      })
+      if (!("holdId" in first)) throw new Error("expected a hold")
+      // While the 9.5 hold settles at 9.5, many reserve 0.3: only one 0.3 fits in the last 0.5.
+      const [, ...results] = await Promise.all([
+        settleSpend(b as NonNullable<typeof b>, {
+          holdId: first.holdId,
+          amount: usd(9.5),
+          model: "m",
           now: at(round),
         }),
-      ),
-    ])
-    expect(holds(results)).toBe(1)
-    const allowance = await readAllowance(a as NonNullable<typeof a>, at(round))
-    expect(allowance.spent + allowance.reserved).toBe(usd(9.8))
-  })
-})
+        ...Array.from({ length: 6 }, (_, i) =>
+          reserveSpend((i % 2 === 0 ? a : b) as NonNullable<typeof a>, {
+            estimate: usd(0.3),
+            now: at(round),
+          }),
+        ),
+      ])
+      expect(holds(results)).toBe(1)
+      const allowance = await readAllowance(a as NonNullable<typeof a>, at(round))
+      expect(allowance.spent + allowance.reserved).toBe(usd(9.8))
+    })
+  },
+)

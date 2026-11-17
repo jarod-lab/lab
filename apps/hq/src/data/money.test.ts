@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 
-import { DAILY_CAP, formatUnits, parseUnits, toPositiveUnits, toUnits, unitsToUsd } from "./money"
+import {
+  columnText,
+  DAILY_CAP,
+  formatUnits,
+  parseUnits,
+  toPositiveUnits,
+  toUnits,
+  unitsToUsd,
+} from "./money"
 
 describe("money", () => {
   it("converts dollars to integer units of $0.0001 without float drift", () => {
@@ -35,6 +43,16 @@ describe("money", () => {
     expect(parseUnits("0.5")).toBe(5000)
     expect(parseUnits("-0.2500")).toBe(-2500)
     expect(() => parseUnits("abc")).toThrow()
+  })
+
+  it("formats a sum past one column's maximum for display, and refuses it for a column", () => {
+    const sum = 2 * 999_999_9999 // two maximum cells
+    expect(formatUnits(sum)).toBe("1999999.9998")
+    expect(unitsToUsd(sum)).toBe(1999999.9998)
+    expect(unitsToUsd(-sum)).toBe(-1999999.9998)
+    expect(() => columnText(sum)).toThrow(/more than one record/)
+    expect(columnText(999_999_9999)).toBe("999999.9999")
+    expect(() => formatUnits(Number.MAX_SAFE_INTEGER + 2)).toThrow()
   })
 
   it("reports units as a JSON number through the decimal text", () => {

@@ -10,7 +10,7 @@ import { AppError } from "@lab/errors"
 import { and, desc, eq, gte, isNull, type SQLWrapper, sql } from "drizzle-orm"
 
 import { runs, type SpendSource, spend, spendGrants, spendHolds } from "../db/schema"
-import { DAILY_CAP, formatUnits, parseUnits, type Units } from "./money"
+import { columnText, DAILY_CAP, parseUnits, type Units } from "./money"
 
 /** An unsettled hold older than this is treated as spent at its estimate. */
 export const STALE_HOLD_MS = 15 * 60 * 1000
@@ -95,7 +95,7 @@ export function reserveSpend(
     await tx.insert(spendHolds).values({
       id: holdId,
       day: allowance.day,
-      estimateUsd: formatUnits(input.estimate),
+      estimateUsd: columnText(input.estimate),
       runId: input.runId ?? null,
       createdAt: input.now,
     })
@@ -143,7 +143,7 @@ export function settleSpend(
       runId: hold.runId,
       day: hold.day,
       source: "eve" as const,
-      amountUsd: formatUnits(amount),
+      amountUsd: columnText(amount),
       model: input.model,
       estimated,
       createdAt: input.now,
@@ -186,7 +186,7 @@ export async function recordSpend(
     runId: input.runId ?? null,
     day: dayOf(input.now),
     source: input.source,
-    amountUsd: formatUnits(amount),
+    amountUsd: columnText(amount),
     model: input.model,
     estimated,
     createdAt: input.now,
@@ -211,7 +211,7 @@ export async function grantSpend(
   const row = {
     id: crypto.randomUUID(),
     day: dayOf(input.now),
-    amountUsd: formatUnits(input.amount),
+    amountUsd: columnText(input.amount),
     grantedBy: input.grantedBy,
     reason: input.reason,
     createdAt: input.now,

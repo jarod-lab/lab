@@ -36,13 +36,25 @@ export function toPositiveUnits(usd: number, what = "amount"): Units {
   return units
 }
 
-/** Units as the decimal text numeric(10,4) takes: 99000 is "9.9000". */
+/**
+ * Units as decimal text for DISPLAY and arithmetic results: 99000 is "9.9000". Sums of many rows can
+ * run past what one column holds, and a report of them must still answer, so this has no upper
+ * bound but the safe-integer range. Use `columnText` for a value that is written to a column.
+ */
 export function formatUnits(units: Units): string {
-  if (!Number.isSafeInteger(units) || units < 0 || units > MAX_UNITS) {
+  if (!Number.isSafeInteger(units) || units < 0) {
     throw new AppError("INTERNAL", "money out of range")
   }
   const digits = String(units).padStart(SCALE + 1, "0")
   return `${digits.slice(0, -SCALE)}.${digits.slice(-SCALE)}`
+}
+
+/** Units as the text for one numeric(10,4) cell: the same, refused above what the column holds. */
+export function columnText(units: Units): string {
+  if (units > MAX_UNITS) {
+    throw new AppError("BAD_REQUEST", "That amount is more than one record can hold")
+  }
+  return formatUnits(units)
 }
 
 /** A numeric(10,4) value, as Postgres returns it as text ("9.9000", "10", "0"), as units. */

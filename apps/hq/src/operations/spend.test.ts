@@ -1,6 +1,7 @@
 import { type Caller, invoke } from "@lab/api"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
+import { spend } from "../db/schema"
 import { createHqHarness, type TestPerson } from "../app.test.helpers"
 import { createHqOperations } from "./index"
 
@@ -255,6 +256,80 @@ describe("runs and spend operations (PGlite)", () => {
     expect(
       (await call(founderAs, "POST", "/v1/spend/grants", { amountUsd: 0, reason: "x" })).status,
     ).toBe(400)
+  })
+
+  it("refuses one call above $1000, for an amount, an estimate and a settle", async () => {
+    newDay()
+    const agent = await agentKey()
+    const reserve = (estimateUsd: number) =>
+      call(agent, "POST", "/v1/spend/reservations", { source: "eve", estimateUsd })
+    expect((await reserve(1000.01)).status).toBe(400)
+    expect(
+      (await call(agent, "POST", "/v1/spend", { source: "box", amountUsd: 999999, model: "m" }))
+        .status,
+    ).toBe(400)
+    expect(
+      (await call(agent, "POST", "/v1/spend", { source: "box", estimatedUsd: 5000, model: "m" }))
+        .status,
+    ).toBe(400)
+    const hold = await reserve(1)
+    const settle = (amountUsd: number) =>
+      call(agent, "POST", `/v1/spend/holds/${hold.body.holdId}/settlement`, {
+        amountUsd,
+        model: "m",
+      })
+    expect((await settle(1000.01)).status).toBe(400)
+    expect((await settle(1000)).status).toBe(200)
+  })
+
+  it("sums past one column's maximum still report: list_runs, finish_run, allowance and /admin/spend answer", async () => {
+    newDay()
+    const agent = await agentKey()
+    const run = await call(agent, "POST", "/v1/runs", { task: "big", trigger: "x", runner: "box" })
+    // Many records at the per-call ceiling can add up to more than one numeric(10,4) cell holds.
+    // The API refuses a call that big, so the rows go in directly: what matters is that reading
+    // them back never fails, because nothing can delete them.
+    const at = new Date(now)
+    const row = (source: "box" | "eve", id: string) => ({
+      id,
+      runId: run.body.id,
+      day: at.toISOString().slice(0, 10),
+      source,
+      amountUsd: "999999.9999",
+      model: "m",
+      estimated: false,
+      createdAt: at,
+    })
+    await hq.db
+      .insert(spend)
+      .values([
+        row("box", "huge-1"),
+        row("box", "huge-2"),
+        row("eve", "huge-3"),
+        row("eve", "huge-4"),
+      ])
+
+    const listed = await call(agent, "GET", "/v1/runs")
+    expect(listed.status).toBe(200)
+    expect(listed.body.runs[0]).toMatchObject({ id: run.body.id, costUsd: 3999999.9996 })
+    const finished = await call(agent, "POST", `/v1/runs/${run.body.id}/finish`, {
+      outcome: "stopped",
+      summary: { worked: [], failed: [], stop: ["huge"] },
+    })
+    expect(finished.status).toBe(200)
+    const allowance = await call(agent, "GET", "/v1/spend/allowance")
+    expect(allowance.status).toBe(200)
+    expect(allowance.body).toMatchObject({ spentUsd: 1999999.9998, remainingUsd: 0 })
+    const page = await hq.app.request(`${BASE}/admin/spend`, {
+      headers: { cookie: founder.cookie },
+    })
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain("$1999999.9998")
+    // And the cap still refuses.
+    expect(
+      (await call(agent, "POST", "/v1/spend/reservations", { source: "eve", estimateUsd: 0.0001 }))
+        .body,
+    ).toEqual({ refused: true, remainingUsd: 0 })
   })
 
   it("a key without hq_spend record cannot reserve, settle or record", async () => {

@@ -60,6 +60,11 @@ const app = {
   },
 }
 
+// Run from a shell where mise has loaded the environment (`mise exec -- ...`, or mise activated):
+// it supplies Node 24 and DATABASE_URL (.env.worktree in a worktree, .env in a clone). A bare shell
+// has neither, and every target's app fails with "Invalid environment variables". A worktree has
+// no .env, so BETTER_AUTH_SECRET is passed in the command: `BETTER_AUTH_SECRET=$(openssl rand
+// -base64 32) pnpm exec e2e run e2e/hq-smoke.e2e.ts`. Postgres must be up with the migrations applied.
 // apps/hq (the org brain) on its own port and database: an API test target (e2e/hq-smoke.e2e.ts).
 // It takes the port as its first argument. HQ_DATABASE_URL defaults to DATABASE_URL here so a
 // worktree's database (migrated by `pnpm wt`) serves it; production keeps the two apart.

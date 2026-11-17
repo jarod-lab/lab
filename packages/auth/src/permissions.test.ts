@@ -181,6 +181,11 @@ describe("OAuth scopes", () => {
     expect(PERSON_ONLY_ACTIONS.hq_spend).toEqual(["grant"])
   })
 
+  it("lets a key record spend (reserve, settle, record) but never grant it", () => {
+    expect(statements.hq_spend).toContain("record")
+    expect(PERSON_ONLY_ACTIONS.hq_spend).not.toContain("record")
+  })
+
   it("exclude every action of the person-only resources and actions", () => {
     for (const resource of PERSON_ONLY_RESOURCES) {
       for (const action of statements[resource]) {

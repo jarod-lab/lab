@@ -3,7 +3,9 @@ import { z } from "zod"
 
 import { entryOperations } from "./entries"
 import { proposalOperations } from "./proposals"
+import { runOperations } from "./runs"
 import { defineOperation, type HqDeps } from "./shared"
+import { spendOperations } from "./spend"
 
 export type { HqDeps } from "./shared"
 
@@ -31,5 +33,11 @@ const hq_status = defineOperation({
 
 /** Every operation hq serves: one registry for REST, MCP, OpenAPI and llms.txt. */
 export function createHqOperations(deps: HqDeps) {
-  return defineRegistry([hq_status, ...entryOperations(deps), ...proposalOperations(deps)])
+  return defineRegistry([
+    hq_status,
+    ...entryOperations(deps),
+    ...proposalOperations(deps),
+    ...runOperations(deps),
+    ...spendOperations(deps),
+  ])
 }

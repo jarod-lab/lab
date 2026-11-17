@@ -147,6 +147,18 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Proposal** — an agent's or an outside write's request to add or change an entry. It stays `pending`
   until a founder approves (which writes the next version) or rejects it; the **base version** it was
   made against must still be the entry's newest, or approving is a CONFLICT.
+- **HQ run** — one execution the factory ran and hq logged (`record_run`, `finish_run`): a chat or
+  schedule on Eve, a build in a sandbox, a review on the box. Its cost is the sum of its spend. Not the
+  product's **run** (a workspace agent's execution).
+- **Spend** — one model charge in the ledger, by source (`eve`, `build`, `box`). `estimated` marks a cost
+  the provider did not report, stored at the caller's estimate. Money is exact: integer units of $0.0001.
+- **Daily cap** — $10.00 per UTC day on Eve chat and schedules (source `eve`) only; builds and box runs
+  record their cost but sit outside it.
+- **Hold** — a turn's estimated cost, reserved (`reserve_spend`) before it starts and settled
+  (`settle_spend`) when it ends. A hold nobody settles in 15 minutes counts as spent at its estimate.
+- **Allowance** — what is left of today's cap: cap plus **spend grants**, less settled spend and holds.
+- **Spend grant** — a founder's extra allowance for one day (`grant_spend`). A person's action, never a
+  key's. Not an auth **grant**.
 
 ## The web app
 

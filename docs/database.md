@@ -22,6 +22,12 @@ applies both sets to a worktree's database (`hq`'s tests get both from `createHq
 Applying hq's migrations anywhere else (`pnpm --filter @lab/hq db:migrate`) is denied for agents like
 the rest; `scripts/release.mjs` does not run them yet.
 
+The spend ledger (`runs`, `spend`, `spend_grants`, `spend_holds`) stores money as `numeric(10,4)` and
+reads it back as text; hq computes on integer units of $0.0001 (`apps/hq/src/data/money.ts`), never on
+JS floats, and rounds a finer cost up. Day boundaries are UTC, derived from the app's clock. Reserving
+(`reserve_spend`) takes a per-day `pg_advisory_xact_lock`, so two turns at the edge of the cap cannot
+both fit. That race is tested on real Postgres only (`docs/testing.md`).
+
 ## Migrations
 
 - `0001_agent_auth` adds the API key, JWKS and OAuth tables (apikey, jwks, oauth_*).

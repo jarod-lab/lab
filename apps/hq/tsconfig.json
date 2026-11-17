@@ -1,1 +1,5 @@
-{ "extends": "@lab/config/tsconfig.base.json", "include": ["src", "*.ts"] }
+{
+  "extends": "@lab/config/tsconfig.base.json",
+  "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "hono/jsx" },
+  "include": ["src", "*.ts"]
+}

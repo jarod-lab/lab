@@ -1,7 +1,7 @@
 import type { SessionAuthContext } from "eve/context"
 import type { HqClient, RunOutcome, RunSummary } from "../hq/client.js"
 import { log } from "../log.js"
-import { isAutonomous } from "../trust.js"
+import { isAutonomous, isSummaryOnly } from "../trust.js"
 import { BUILD_ESTIMATE_USD, checkCap, refusalText } from "./cap.js"
 
 /**
@@ -113,9 +113,29 @@ export interface SpendHookDeps {
 const SEEN_LIMIT = 200
 const SETTLE_ATTEMPTS = 2
 
-/** Whether a turn is an unattended build (outside the cap) or chat or a schedule (capped). */
+/**
+ * Whether a turn is an unattended build (outside the daily cap) or capped (chat, schedules, and the
+ * summary of a pull request anyone opened: that run is not a build, and its trigger is the least
+ * trusted input there is, so it stays under the cap).
+ */
 export function classify(auth: SessionAuthContext | null): TurnKind {
-  return isAutonomous(auth) ? "build" : "eve"
+  return isAutonomous(auth) && !isSummaryOnly(auth) ? "build" : "eve"
+}
+
+/** hq refuses one call over this many dollars; larger costs go in several calls. */
+export const MAX_CALL_USD = 1000
+
+/** An amount as calls hq accepts: pieces of at most MAX_CALL_USD that add up to the whole. */
+export function inCalls(amountUsd: number): number[] {
+  const pieces: number[] = []
+  let left = Math.round(amountUsd * 10_000)
+  const most = MAX_CALL_USD * 10_000
+  while (left > most) {
+    pieces.push(MAX_CALL_USD)
+    left -= most
+  }
+  pieces.push(left / 10_000)
+  return pieces
 }
 
 const costOf = (usage: { costUsd?: number }): number | undefined =>
@@ -150,6 +170,13 @@ export function createSpendHooks(deps: SpendHookDeps) {
 
   /** Sends one `record_spend`; a failure parks it in state for the next hook. */
   async function record(entry: PendingRecord): Promise<void> {
+    // hq takes at most MAX_CALL_USD a call: a larger cost goes in pieces, none of it dropped.
+    if (entry.amountUsd !== undefined && entry.amountUsd > MAX_CALL_USD) {
+      for (const piece of inCalls(entry.amountUsd)) {
+        await record({ ...entry, amountUsd: piece })
+      }
+      return
+    }
     try {
       await deps.hq().recordSpend({
         runId: store.get().runId ?? undefined,
@@ -299,14 +326,25 @@ export function createSpendHooks(deps: SpendHookDeps) {
 
     if (state.holdId !== null) {
       let settledOk = false
+      const amount = settlementAmount(state)
+      // The hold settles up to one call's limit; the rest is recorded against the same run.
+      const settledAt = amount === undefined ? undefined : Math.min(amount, MAX_CALL_USD)
       for (let attempt = 0; attempt < SETTLE_ATTEMPTS && !settledOk; attempt++) {
         try {
           await deps.hq().settleSpend({
             holdId: state.holdId,
-            amountUsd: settlementAmount(state),
+            amountUsd: settledAt,
             model: deps.modelId(),
           })
           settledOk = true
+          if (amount !== undefined && amount > MAX_CALL_USD) {
+            await record({
+              key: ctx.occurrence.idempotencyKey,
+              source: "eve",
+              amountUsd: Math.round((amount - MAX_CALL_USD) * 10_000) / 10_000,
+              model: deps.modelId(),
+            })
+          }
         } catch (error) {
           // A second settle is a CONFLICT: the hold is already closed, nothing more to do.
           if (error instanceof Error && "code" in error && error.code === "CONFLICT") {

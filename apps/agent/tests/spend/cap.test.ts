@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
 import type { HqClient } from "#lib/hq/client.js"
-import { checkCap, refusalText } from "#lib/spend/cap.js"
+import { checkCap, refusalText, turnEstimateUsd } from "#lib/spend/cap.js"
 import {
   classify,
   createSpendHooks,
   EMPTY_SPEND_STATE,
+  inCalls,
   type SpendHookContext,
   type SpendState,
   type SpendStore,
@@ -74,6 +75,24 @@ const runCost = async () => {
   const runs = await hq.asAgent("GET", "/v1/runs")
   return runs.body.runs?.[0]
 }
+
+describe("the turn estimate", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  test("is 0.10 unless set; a sensible value is used; a too-large one is clamped to 5, not ignored", () => {
+    expect(turnEstimateUsd()).toBe(0.1)
+    vi.stubEnv("AGENT_TURN_ESTIMATE_USD", "0.25")
+    expect(turnEstimateUsd()).toBe(0.25)
+    vi.stubEnv("AGENT_TURN_ESTIMATE_USD", "20")
+    expect(turnEstimateUsd()).toBe(5)
+    for (const bad of ["abc", "0", "-1", ""]) {
+      vi.stubEnv("AGENT_TURN_ESTIMATE_USD", bad)
+      expect(turnEstimateUsd()).toBe(0.1)
+    }
+  })
+})
 
 describe("checkCap", () => {
   test("allows when remaining exceeds the estimate", async () => {
@@ -157,6 +176,8 @@ describe("the turn.started hook", () => {
     expect(classify(CALLERS.trusted)).toBe("eve")
     expect(classify(CALLERS.schedule)).toBe("eve")
     expect(classify(CALLERS.anonymous)).toBe("eve")
+    // A pull request anyone opened gets a summary run: not a build, so it stays under the cap.
+    expect(classify(CALLERS.summary)).toBe("eve")
     expect(classify(CALLERS.autonomous)).toBe("build")
     expect(classify(CALLERS.ticket)).toBe("build")
   })
@@ -217,6 +238,22 @@ describe("settling a turn", () => {
       late.ctx,
     )
     expect((await allowance()).spentUsd).toBeCloseTo(0.1 + 0.04, 4)
+  })
+
+  test("a cost over hq's per-call limit settles at the limit and records the rest: nothing is lost", async () => {
+    expect(inCalls(2500.5)).toEqual([1000, 1000, 500.5])
+    expect(inCalls(0.0123)).toEqual([0.0123])
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded(
+      { data: { kind: "model", usage: { costUsd: 1500.25 } } },
+      context().ctx,
+    )
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    const today = await allowance()
+    expect(today.spentUsd).toBeCloseTo(1500.25, 4)
+    expect(today.reservedUsd).toBe(0)
+    expect((await runCost())?.costUsd).toBeCloseTo(1500.25, 4)
   })
 
   test("a settle delivered twice does not settle twice", async () => {

@@ -28,9 +28,11 @@ export function turnEstimateUsd(): number {
     return DEFAULT_TURN_ESTIMATE_USD
   }
   const value = Number(raw)
-  return Number.isFinite(value) && value > 0 && value <= MAX_ESTIMATE_USD
-    ? value
-    : DEFAULT_TURN_ESTIMATE_USD
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_TURN_ESTIMATE_USD
+  }
+  // Too large an amount is clamped, not ignored: an operator who asked for more gets the most.
+  return Math.min(value, MAX_ESTIMATE_USD)
 }
 
 export type CapResult =

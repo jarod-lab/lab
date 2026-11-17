@@ -73,3 +73,12 @@ export const FACTORY_LABEL = agentEnv("FACTORY_LABEL") ?? "agent:build"
  * them in sync (`agent/subagents/implementer/instructions.md`).
  */
 export const FACTORY_BRANCH_PREFIX = agentEnv("FACTORY_BRANCH_PREFIX") ?? "agent/"
+
+/**
+ * The label that starts box review (another system). Never a trigger here: no label or branch may
+ * trigger another system.
+ */
+export const BOX_REVIEW_LABEL = "factory:review"
+
+/** The branch prefix of dependency-update pull requests (another system). Never a trigger here. */
+export const DEPS_BRANCH_PREFIX = "deps/"

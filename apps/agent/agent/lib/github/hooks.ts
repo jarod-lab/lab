@@ -7,7 +7,12 @@ import {
   type GitHubIssueEvent,
   type GitHubPullRequestEvent,
 } from "eve/channels/github"
-import { FACTORY_BRANCH_PREFIX, FACTORY_LABEL } from "../constants.js"
+import {
+  BOX_REVIEW_LABEL,
+  DEPS_BRANCH_PREFIX,
+  FACTORY_BRANCH_PREFIX,
+  FACTORY_LABEL,
+} from "../constants.js"
 import { stampAutonomous, stampIssueIntake, stampSummary, stampTrusted } from "../trust.js"
 import { mentionPattern, resolveBotName } from "./bot-name.js"
 
@@ -247,9 +252,33 @@ export const onPullRequest = (
   ctx: GitHubInboundContext,
   pullRequest: GitHubPullRequestEvent,
 ): GitHubInboundResult =>
-  pullRequest.action === "opened" && ctx.sender.type !== "Bot"
+  pullRequest.action === "opened" &&
+  ctx.sender.type !== "Bot" &&
+  !belongsToAnotherSystem(pullRequest)
     ? {
         auth: stampSummary(defaultGitHubAuth(ctx), pullRequest.pullRequestNumber),
         context: [PR_SUMMARY_TASK],
       }
     : null
+
+/**
+ * A pull request that another system owns: box review's (labeled `factory:review`) or a dependency
+ * update's (branch `deps/...`). No label or branch may trigger another system, so neither starts
+ * a summary run. The payload is read as GitHub sends it, with the pull request under
+ * `pull_request` or as the object itself.
+ */
+function belongsToAnotherSystem(pullRequest: GitHubPullRequestEvent): boolean {
+  const raw = pullRequest.raw as {
+    pull_request?: { head?: { ref?: unknown }; labels?: unknown }
+    head?: { ref?: unknown }
+    labels?: unknown
+  }
+  const pr = raw.pull_request ?? raw
+  const ref = pr.head?.ref
+  const labels = pr.labels
+  return (
+    (typeof ref === "string" && ref.startsWith(DEPS_BRANCH_PREFIX)) ||
+    (Array.isArray(labels) &&
+      labels.some((entry) => (entry as { name?: unknown } | null)?.name === BOX_REVIEW_LABEL))
+  )
+}

@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os"
 import { configDefaults, defineConfig } from "vitest/config"
 
 /**
@@ -27,6 +28,11 @@ export default defineConfig({
       GITHUB_CONNECTOR: "github/test-agent",
     },
     environment: "node",
+    // The lab base's limits (packages/config/vitest.base.ts): turbo runs every package's tests at
+    // once, and these tests boot PGlite (real hq) alongside thousands of Foreman's.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
+    maxWorkers: Math.max(1, Math.floor(availableParallelism() / 4)),
     include: ["tests/**/*.test.ts"],
     // The gh contract suite runs the real GitHub CLI's help and needs the gh version Foreman pins.
     // Unproven here until P2 with a pinned gh: `pnpm --filter @lab/agent test:cli` runs it.

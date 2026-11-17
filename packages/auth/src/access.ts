@@ -72,13 +72,16 @@ export const PERSON_ONLY_RESOURCES = [...OWNER_ONLY_RESOURCES, "subscription", "
 /**
  * Actions a person holds but no API key or OAuth token may. Approving a run is a person's decision
  * (the approval is theirs, not an agent's); so is a staff override of another organization's plan,
- * and deciding an hq proposal or granting hq spend. Keys are refused these in create_api_key, and OAuth
+ * and editing an hq entry, deciding an hq proposal or granting hq spend. Keys are refused these in create_api_key, and OAuth
  * scopes never reach them (OAUTH_EXCLUDED in permissions.ts is built from this).
  */
 export const PERSON_ONLY_ACTIONS = {
   run: ["approve"],
   entitlements: ["override"],
-  // The brain's trust rule: only a signed-in founder decides a proposal or grants spend.
+  // The brain's trust rule: keys write proposals and run logs only. Only a signed-in founder edits
+  // an entry, decides a proposal or grants spend. hq strips these from any caller that is not a
+  // session (apps/hq/src/app.ts), whoever minted the key.
+  hq_entry: ["update"],
   hq_proposal: ["decide"],
   hq_spend: ["grant"],
 } as const

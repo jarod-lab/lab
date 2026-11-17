@@ -17,6 +17,7 @@ import {
   type Auth,
   OAUTH_SCOPE_GRANTS,
   OAUTH_SCOPES,
+  PERSON_ONLY_ACTIONS,
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
   resolvePrincipal,
@@ -43,6 +44,21 @@ export interface HqAppOptions {
 
 /** The largest request body /v1 and /mcp read, in bytes. */
 const MAX_BODY_BYTES = 1024 * 1024
+
+/** The caller with every person-only action taken out of its grants; empty grants are dropped. */
+function withoutPersonOnly(caller: Caller): Caller {
+  const banned: Record<string, readonly string[]> = PERSON_ONLY_ACTIONS
+  const grants: Record<string, string[]>[] = []
+  for (const grant of caller.grants) {
+    const kept: Record<string, string[]> = {}
+    for (const [resource, actions] of Object.entries(grant)) {
+      const allowed = actions.filter((action) => !banned[resource]?.includes(action))
+      if (allowed.length > 0) kept[resource] = allowed
+    }
+    if (Object.keys(kept).length > 0) grants.push(kept)
+  }
+  return { ...caller, grants }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
@@ -83,8 +99,12 @@ export function createHqApp(opts: HqAppOptions) {
   const health = createHealthHandler({})
   const registryRecord = serverJson(info, DEFAULT_REGISTRY_META)
 
-  const authenticate = (req: Request): Promise<Caller | null> =>
-    resolvePrincipal(auth, req.headers, { audience: [baseURL, mcpUrl] })
+  // The trust rule, enforced wherever a key comes from: only a signed-in person holds a
+  // person-only action (PERSON_ONLY_ACTIONS). A key or token that carries one has it stripped.
+  const authenticate = async (req: Request): Promise<Caller | null> => {
+    const caller = await resolvePrincipal(auth, req.headers, { audience: [baseURL, mcpUrl] })
+    return caller?.via === "session" ? caller : caller && withoutPersonOnly(caller)
+  }
 
   const mcp = createMcpHandler({
     name: info.title,

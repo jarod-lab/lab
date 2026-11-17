@@ -24,6 +24,19 @@ const echo = defineOperation({
   handler: (input) => ({ text: input.text }),
 })
 
+/** What a key must never be able to do: an operation behind a person-only action. */
+const decide = defineOperation({
+  name: "decide",
+  method: "POST",
+  path: "/v1/decide",
+  summary: "Decide",
+  description: "Needs a person-only action.",
+  permissions: { hq_proposal: ["decide"] },
+  input: z.object({}),
+  output: z.object({ decided: z.boolean() }),
+  handler: () => ({ decided: true }),
+})
+
 describe("hq app (real Postgres via PGlite)", () => {
   let close: () => Promise<void>
   let app: ReturnType<typeof createHqApp>
@@ -51,7 +64,7 @@ describe("hq app (real Postgres via PGlite)", () => {
       auth,
       now: () => new Date("2026-11-17T12:00:00Z"),
       baseURL: BASE,
-      extraOperations: [echo],
+      extraOperations: [echo, decide],
     })
     close = async () => t.close()
 
@@ -148,5 +161,39 @@ describe("hq app (real Postgres via PGlite)", () => {
     expect((await post("[1]")).status).toBe(400)
     expect((await post("", { origin: "https://evil.example" })).status).toBe(403)
     expect((await post("x".repeat(2 * 1024 * 1024))).status).toBe(400)
+  })
+
+  it("refuses key permissions for the person-only hq actions through better-auth's key endpoint", async () => {
+    for (const permissions of [
+      { hq_proposal: ["decide"] },
+      { hq_spend: ["grant"] },
+      { hq_entry: ["update"] },
+    ]) {
+      const res = await app.request(`${BASE}/api/auth/api-key/create`, {
+        method: "POST",
+        body: JSON.stringify({ organizationId: founder.orgId, permissions }),
+        headers: { cookie: founder.cookie, origin: BASE, "content-type": "application/json" },
+      })
+      expect(res.status, JSON.stringify(permissions)).toBe(400)
+      expect(await res.json(), JSON.stringify(permissions)).toMatchObject({
+        code: "SERVER_ONLY_PROPERTY",
+      })
+    }
+  })
+
+  it("never lets a key act on a person-only action, even one minted server-side", async () => {
+    const call = (headers: Record<string, string>) =>
+      app.request(`${BASE}/v1/decide`, {
+        method: "POST",
+        headers: { origin: BASE, ...headers },
+      })
+    // A founder session decides.
+    expect((await call({ cookie: founder.cookie })).status).toBe(200)
+    // A key holding the action (as a server-side mint could give it) is refused.
+    const key = await keyFor({ hq_proposal: ["decide"], hq_entry: ["read"] })
+    const refused = await call({ "x-api-key": key })
+    expect(refused.status).toBe(403)
+    // Its other grants survive the strip.
+    expect((await req("/v1/status", { "x-api-key": key })).status).toBe(200)
   })
 })

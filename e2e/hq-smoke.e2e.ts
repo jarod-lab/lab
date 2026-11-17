@@ -5,9 +5,11 @@ import { expect } from "e2e"
 // serve the product's web app and API, so the test does nothing there.
 test("hq answers GET /v1/status for a signed-in founder", async ({ app }) => {
   if (!app.baseUrl) throw new Error("the app has no base URL")
-  const llms = await (await fetch(new URL("/llms.txt", app.baseUrl))).text()
-  // Not apps/hq (a desktop or phone target): nothing to check here.
-  if (!llms.includes("hq_status")) return
+  // The desktop and phone targets serve the product API, which has /v1/whoami (hq has no such
+  // route): nothing to check there. Anything else is taken for hq, so an hq that breaks fails
+  // below instead of passing here.
+  const product = await fetch(new URL("/v1/whoami", app.baseUrl))
+  if (product.status === 401) return
 
   // A founder: signing up makes a personal organization the person owns.
   const email = `founder.${Date.now()}@example.com`

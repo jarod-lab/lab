@@ -32,15 +32,6 @@ vi.mock("eve/sandbox/vercel", async (original) => ({
   },
 }))
 
-/**
- * The connector's metadata is unreachable here, which is what a station
- * sees when Connect is briefly down: resolving the bot's name from it fails.
- */
-vi.mock("@vercel/connect", async (original) => ({
-  ...(await original<typeof import("@vercel/connect")>()),
-  getConnectorMetadata: () => Promise.reject(new Error("connector metadata unavailable")),
-}))
-
 type Step =
   | { kind: "policy"; policy: unknown }
   | { command: string; env: Record<string, string> | undefined; kind: "run" }
@@ -90,10 +81,16 @@ beforeEach(() => {
   vi.stubEnv("FACTORY_TOKEN_FALLBACK", "")
   vi.stubEnv("FACTORY_ALLOW_WORKFLOW_CHANGES", "")
   vi.stubEnv("FACTORY_ALLOW_INSTALL_SCRIPTS", "")
+  // A station's commit identity is resolved from the bot name; with none set, resolving it asks
+  // GitHub, so a suite that must not touch the network fails if it does.
+  vi.stubGlobal("fetch", () => {
+    throw new Error("The network was used: this suite must stay offline.")
+  })
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 

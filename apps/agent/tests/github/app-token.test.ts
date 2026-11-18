@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 import {
   APP_JWT_MAX_LIFETIME_SECONDS,
   createAppJwt,
+  fetchAppSlug,
   mintInstallationToken,
   normalizePem,
   parsePermissions,
@@ -46,6 +47,7 @@ interface Seen {
   url: string
   method: string
   authorization: string
+  headers: Record<string, string>
   body: unknown
 }
 
@@ -63,6 +65,7 @@ function fakeGitHub(
       url: String(input),
       method: init?.method ?? "GET",
       authorization: headers.get("authorization") ?? "",
+      headers: Object.fromEntries(headers.entries()),
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
     }
     seen.push(record)
@@ -127,6 +130,10 @@ describe("mintInstallationToken", () => {
     expect(claims.iss).toBe("12345")
     expect((claims.exp as number) - nowSeconds).toBeLessThanOrEqual(600)
     expect(claims.iat as number).toBeLessThanOrEqual(nowSeconds - 60)
+    // The headers GitHub requires on this route.
+    expect(request?.headers.accept).toBe("application/vnd.github+json")
+    expect(request?.headers["x-github-api-version"]).toBe("2022-11-28")
+    expect(request?.headers["content-type"]).toBe("application/json")
     // No narrowing asked for: an empty body, so the token carries what the installation grants.
     expect(request?.body).toEqual({})
   })
@@ -215,6 +222,46 @@ describe("mintInstallationToken", () => {
       ).rejects.toThrow()
     }
     expect(github.seen).toEqual([])
+  })
+})
+
+describe("fetchAppSlug", () => {
+  test("GETs /app under the app JWT with the headers GitHub requires, and returns the slug", async () => {
+    const github = fakeGitHub(() => ({ status: 200, body: { id: 12345, slug: "acme-factory" } }))
+    expect(
+      await fetchAppSlug({
+        appId: "12345",
+        privateKeyPem: privatePem,
+        fetch: github.fetch,
+        now: () => NOW,
+      }),
+    ).toBe("acme-factory")
+    const [request] = github.seen
+    expect(github.seen).toHaveLength(1)
+    expect(request?.method).toBe("GET")
+    expect(request?.url).toBe("https://api.github.com/app")
+    expect(request?.headers.accept).toBe("application/vnd.github+json")
+    expect(request?.headers["x-github-api-version"]).toBe("2022-11-28")
+    const { header, claims, valid } = readJwt(request?.authorization.replace(/^Bearer /, "") ?? "")
+    expect([header.alg, claims.iss, valid]).toEqual(["RS256", "12345", true])
+    expect(request?.body).toBeUndefined()
+  })
+
+  test("a refusal or an answer without a slug is an error that carries no JWT, key or body", async () => {
+    const refused = fakeGitHub(() => ({
+      status: 401,
+      body: { message: "A JSON web token could not be decoded" },
+    }))
+    const failure = await fetchAppSlug({
+      appId: "12345",
+      privateKeyPem: privatePem,
+      fetch: refused.fetch,
+    }).catch((e: unknown) => e)
+    expect(String((failure as Error).message)).toBe("GitHub refused the app lookup (HTTP 401)")
+    const empty = fakeGitHub(() => ({ status: 200, body: {} }))
+    await expect(
+      fetchAppSlug({ appId: "12345", privateKeyPem: privatePem, fetch: empty.fetch }),
+    ).rejects.toThrow(/no slug/)
   })
 })
 

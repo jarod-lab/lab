@@ -1,4 +1,3 @@
-import { getConnectorMetadata } from "@vercel/connect"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { bashPolicy, stationPolicy } from "#lib/github/approval.js"
 import {
@@ -20,6 +19,7 @@ import {
   workItemIssue,
 } from "#lib/trust.js"
 import { approvalContext, ghCommand, outcome } from "../helpers.js"
+import { stubGitHubApp } from "./support/github-app.js"
 
 /**
  * The dispatch hooks decide, on the signed webhook, whether a GitHub event
@@ -32,13 +32,12 @@ import { approvalContext, ghCommand, outcome } from "../helpers.js"
  */
 type Role = "admin" | "maintain" | "write" | "triage" | "read" | "none"
 
-// The factory's name normally comes from `FACTORY_BOT_NAME`, stubbed below.
-// With that unset it is read from the connector's metadata, which this makes
-// fail, so the path where the name cannot be resolved runs offline.
-vi.mock("@vercel/connect", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@vercel/connect")>()),
-  getConnectorMetadata: vi.fn(() => Promise.reject(new Error("metadata unreachable"))),
-}))
+// The factory's name normally comes from `FACTORY_BOT_NAME`, stubbed below. With that unset it is
+// read from GitHub (`GET /app`); every test here runs on a `fetch` that fails the test if it is
+// called, so the suite proves it stays offline. The one test that needs the lookup supplies a fake.
+const offline = () => {
+  throw new Error("The network was used: this suite must stay offline.")
+}
 
 /**
  * A webhook context whose `github.request` stands in for the
@@ -109,10 +108,12 @@ const can = (auth: unknown, ...args: string[]) =>
 
 beforeEach(() => {
   vi.stubEnv("FACTORY_BOT_NAME", "foreman")
+  vi.stubGlobal("fetch", offline)
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
 })
 
 describe("onComment: who can start a run by mentioning the factory", () => {
@@ -167,10 +168,12 @@ describe("onComment: who can start a run by mentioning the factory", () => {
   test("when the factory's own name cannot be resolved, a mention dispatches nothing, even from an owner", async () => {
     vi.stubEnv("FACTORY_BOT_NAME", "")
     vi.stubEnv("GITHUB_APP_SLUG", "")
-    vi.mocked(getConnectorMetadata).mockClear()
+    const app = stubGitHubApp(undefined, "")
     expect(await onComment(context().ctx, comment("@foreman fix this", "OWNER"))).toBeNull()
-    // The name was looked up, and the lookup is what failed.
-    expect(getConnectorMetadata).toHaveBeenCalledTimes(1)
+    // The name was looked up (GET /app), and the answer without a slug is what failed.
+    expect(app.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "GET https://api.github.com/app",
+    ])
   })
 
   test("bots and the factory's own comments never dispatch", async () => {

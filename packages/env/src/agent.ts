@@ -17,7 +17,6 @@ export const AGENT_ENV_NAMES = [
   "FACTORY_SETUP_COMMAND",
   "FACTORY_BOT_NAME",
   "GITHUB_APP_SLUG",
-  "GITHUB_CONNECTOR",
   "FACTORY_TOKEN_FALLBACK",
   "FACTORY_ALLOW_WORKFLOW_CHANGES",
   "FACTORY_SIGNED_COMMITS",
@@ -54,6 +53,8 @@ export const AGENT_ENV_NAMES = [
   "GITHUB_APP_ID",
   "GITHUB_APP_PRIVATE_KEY",
   "GITHUB_INSTALLATION_ID",
+  // The secret GitHub signs webhooks with; the channel refuses every delivery without it.
+  "GITHUB_WEBHOOK_SECRET",
 ] as const
 
 export type AgentEnvName = (typeof AGENT_ENV_NAMES)[number]

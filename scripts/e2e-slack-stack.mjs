@@ -123,7 +123,6 @@ try {
       AGENT_OFFLINE: "1",
       EVE_TELEMETRY_DISABLED: "1",
       FACTORY_REPO: "acme/widgets",
-      GITHUB_CONNECTOR: "github/foreman-agent",
       HQ_BASE_URL: hqUrl,
       HQ_AGENT_API_KEY: agentKey,
       SLACK_SIGNING_SECRET: secret,

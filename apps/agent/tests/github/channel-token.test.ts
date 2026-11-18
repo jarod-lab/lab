@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { githubCredentials } from "#lib/github/credentials.js"
+import {
+  githubAppId,
+  githubCredentials,
+  githubPrivateKey,
+  githubWebhookSecret,
+} from "#lib/github/credentials.js"
 import {
   mintChannelToken,
   mintScopedToken,
@@ -155,7 +160,7 @@ describe("mintChannelToken: the token the GitHub channel itself uses", () => {
 
 describe("the channel is wired to the narrowed token", () => {
   interface ChannelConfig {
-    credentials: Record<string, unknown> & {
+    credentials: typeof githubCredentials & {
       installationToken: () => Promise<string>
     }
   }
@@ -178,37 +183,59 @@ describe("the channel is wired to the narrowed token", () => {
   test("the channel's installationToken asks GitHub for the repo-triage permissions on the factory repository alone", async () => {
     const { credentials } = await channelConfig()
     expect(await credentials.installationToken()).toBe(APP_TOKEN)
-    expect(app.requests).toEqual([
-      {
-        url: "https://api.github.com/app/installations/987/access_tokens",
-        body: {
-          repositories: ["widgets"],
-          permissions: {
-            contents: "read",
-            issues: "write",
-            pull_requests: "write",
-            actions: "read",
-            checks: "read",
-            statuses: "read",
-          },
+    expect(app.requests).toHaveLength(1)
+    const [request] = app.requests
+    // The route, verb and headers GitHub requires (the fake refuses a request that lacks them).
+    expect(request?.method).toBe("POST")
+    expect(request?.headers.accept).toBe("application/vnd.github+json")
+    expect(request?.headers["x-github-api-version"]).toBe("2022-11-28")
+    expect(request?.headers.authorization).toMatch(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/)
+    expect({ url: request?.url, body: request?.body }).toEqual({
+      url: "https://api.github.com/app/installations/987/access_tokens",
+      body: {
+        repositories: ["widgets"],
+        permissions: {
+          contents: "read",
+          issues: "write",
+          pull_requests: "write",
+          actions: "read",
+          checks: "read",
+          statuses: "read",
         },
       },
+    })
+  })
+
+  test("the channel is given the shared credentials, whose token is the narrowed one", async () => {
+    const config = await channelConfig()
+    expect(config.credentials).toBe(githubCredentials)
+    expect(Object.keys(githubCredentials).sort()).toEqual([
+      "appId",
+      "installationToken",
+      "privateKey",
+      "webhookSecret",
     ])
   })
 
-  test("it is not the connector's own installationToken, which carries every permission the app holds", async () => {
-    const { credentials } = await channelConfig()
-    expect(typeof githubCredentials.installationToken).toBe("function")
-    expect(credentials.installationToken).not.toBe(githubCredentials.installationToken)
+  test("the credentials are read when used: the app id, the key (newlines unescaped) and the webhook secret", async () => {
+    vi.stubEnv("GITHUB_WEBHOOK_SECRET", " whsec-test ")
+    expect(githubAppId()).toBe("12345")
+    expect(githubPrivateKey()).toMatch(
+      /^-----BEGIN PRIVATE KEY-----\n[\s\S]+\n-----END PRIVATE KEY-----\n?$/,
+    )
+    expect(githubWebhookSecret()).toBe("whsec-test")
   })
 
-  test("it keeps the connector's webhook verifier and app slug: every other credential is the shared one", async () => {
-    const { credentials } = await channelConfig()
-    const { installationToken: _narrowed, ...kept } = credentials
-    const { installationToken: _wide, ...shared } = githubCredentials
-    expect(Object.keys(kept).sort()).toEqual(["appSlug", "webhookVerifier"])
-    for (const [name, value] of Object.entries(shared)) {
-      expect(kept[name]).toBe(value)
+  test("an unset or blank credential fails closed naming the variable, never an empty HMAC key", () => {
+    for (const blank of ["", "   "]) {
+      for (const name of ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"]) {
+        vi.stubEnv(name, blank)
+      }
+      expect(githubAppId).toThrow(/GITHUB_APP_ID is not set/)
+      expect(githubPrivateKey).toThrow(/GITHUB_APP_PRIVATE_KEY is not set/)
+      expect(githubWebhookSecret).toThrow(/GITHUB_WEBHOOK_SECRET is not set/)
     }
+    vi.stubEnv("GITHUB_WEBHOOK_SECRET", undefined)
+    expect(githubWebhookSecret).toThrow(/GITHUB_WEBHOOK_SECRET is not set/)
   })
 })

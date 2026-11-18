@@ -216,6 +216,9 @@ export const spendGrantRequests = hq.table(
   (t) => [
     index("spend_grant_requests_created_idx").on(t.createdAt),
     check("spend_grant_requests_amount_positive", sql`${t.amountUsd} > 0`),
+    // The most one request (and so one click) may grant: the row is the last line of defence,
+    // since a redeem trusts its amount. Keep in step with MAX_GRANT_REQUEST_USD (data/grant-requests.ts).
+    check("spend_grant_requests_amount_max", sql`${t.amountUsd} <= 25`),
   ],
 )
 

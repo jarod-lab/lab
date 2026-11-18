@@ -5,7 +5,10 @@
 // deployment), and the key goes straight into the org's vault as HQ_AGENT_API_KEY. A key's
 // permissions can only be set server-side (better-auth refuses them over HTTP), which is also why
 // no API caller can mint one with more. The scope is the agent's and nothing more: read the brain,
-// propose, record runs and spend. Decide, edit and grant are person-only and can never be on a key.
+// propose, record runs and spend, and ask for a spend grant (`hq_spend:request`: a pending request a
+// founder redeems with a Slack click). Decide, edit and grant are person-only and can never be on a
+// key. Keys minted before the grant-request change lack `request`: mint a new one, put it in the
+// vault, and revoke the old.
 import { createDb, member, user } from "@lab/db"
 import { and, eq } from "drizzle-orm"
 

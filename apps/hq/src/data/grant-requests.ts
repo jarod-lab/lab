@@ -32,7 +32,7 @@ export interface GrantRequest {
  * Record a pending request. Counts the day's requests (any status) under a per-day advisory lock,
  * so two requests that arrive together cannot both take the last place; refuses the eleventh.
  */
-export function requestSpendGrant(
+export async function requestSpendGrant(
   db: Database,
   input: { amount: Units; reason: string; runId?: string; requestedBy: string; now: Date },
 ): Promise<GrantRequest> {
@@ -47,7 +47,15 @@ export function requestSpendGrant(
     const [made] = await tx
       .select({ n: sql<string>`count(*)::text` })
       .from(spendGrantRequests)
-      .where(gte(spendGrantRequests.createdAt, new Date(`${day}T00:00:00Z`)))
+      .where(
+        and(
+          gte(spendGrantRequests.createdAt, new Date(`${day}T00:00:00Z`)),
+          lt(
+            spendGrantRequests.createdAt,
+            new Date(new Date(`${day}T00:00:00Z`).getTime() + 86_400_000),
+          ),
+        ),
+      )
     if (Number(made?.n ?? 0) >= MAX_GRANT_REQUESTS_PER_DAY) {
       throw new AppError(
         "RATE_LIMITED",

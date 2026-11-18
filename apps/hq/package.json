@@ -14,6 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "create-founder": "tsx src/create-founder.ts",
+    "predeploy": "tsx src/predeploy.ts && tsx src/founder-principals.ts --check",
     "founders:principals": "tsx src/founder-principals.ts",
     "mint-agent-key": "tsx src/mint-agent-key.ts"
   },

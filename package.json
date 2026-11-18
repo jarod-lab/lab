@@ -11,7 +11,7 @@
     "e2e": "e2e run --target desktop,phone",
     "e2e:hq": "e2e run e2e/hq-smoke.e2e.ts e2e/hq-brain-api.e2e.ts e2e/hq-admin.e2e.ts --target hq",
     "e2e:slack": "e2e run e2e/slack-actions.e2e.ts --target slack",
-    "hq:predeploy": "pnpm --filter @lab/hq founders:principals --check",
+    "hq:predeploy": "pnpm --filter @lab/hq predeploy",
     "baseline": "baseline scan .",
     "format": "biome format --write .",
     "test:coverage": "turbo run test:coverage",

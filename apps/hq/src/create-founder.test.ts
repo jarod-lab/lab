@@ -3,8 +3,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { createAuth } from "@lab/auth"
-import { session, user } from "@lab/db"
-import { eq } from "drizzle-orm"
+import { member, session, user } from "@lab/db"
+import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createHqApp } from "./app"
@@ -147,6 +147,57 @@ describe("create-founder (real Postgres via PGlite)", () => {
     // The skipped line names the entry, never the address.
     expect(JSON.stringify(byEmail.skipped)).not.toContain("example.com")
     expect(await isFounder(t.db, created.userId)).toBe(false)
+  })
+
+  it("the account owns an organization, so mint-agent-key can make its agent key, and that key reaches hq", async () => {
+    const created = await createFounder(deps(), {
+      email: "owner@example.com",
+      slackUserId: "UOWNER",
+    })
+    // What mint-agent-key looks up: an organization the founder owns.
+    const [owned] = await t.db
+      .select({ organizationId: member.organizationId })
+      .from(member)
+      .where(and(eq(member.userId, created.userId), eq(member.role, "owner")))
+    expect(owned?.organizationId).toBeTruthy()
+    const key = await inProcess.api.createApiKey({
+      body: {
+        organizationId: owned?.organizationId ?? "",
+        userId: created.userId,
+        permissions: { hq_entry: ["read"], hq_spend: ["read", "record", "request"] },
+      },
+    })
+    const status = await app.request(`${BASE}/v1/status`, { headers: { "x-api-key": key.key } })
+    expect(status.status).toBe(200)
+  })
+
+  it("when linking the founder fails, the new account is removed and a re-run goes through", async () => {
+    const before = await accounts()
+    // Between the checks and the link, another founder takes the Slack user.
+    const error = await createFounder(
+      deps({
+        deliver: async () => {
+          await t.db
+            .insert(founders)
+            .values({ userId: "taken-by-someone", slackUserId: "ULINKFAIL", createdAt: NOW })
+        },
+      }),
+      { email: "link-fail@example.com", slackUserId: "ULINKFAIL" },
+    ).catch((e: unknown) => e)
+    expect(error).not.toBeInstanceOf(CreateFounderRefused)
+    expect((error as Error).message).toMatch(/could not be linked.*account was removed/)
+    expect(await accounts()).toBe(before)
+    expect(await t.db.select().from(user).where(eq(user.email, "link-fail@example.com"))).toEqual(
+      [],
+    )
+
+    // The Slack user is free again; the same command now works, not refused as a squatter's.
+    await t.db.delete(founders).where(eq(founders.userId, "taken-by-someone"))
+    const again = await createFounder(deps(), {
+      email: "link-fail@example.com",
+      slackUserId: "ULINKFAIL",
+    })
+    expect(await isFounder(t.db, again.userId)).toBe(true)
   })
 
   it("refuses an address that already has an unverified account (a squatter's), and creates nothing", async () => {

@@ -104,9 +104,21 @@ export async function createFounder(
       await addFounder(tx, { userId, slackUserId: input.slackUserId, now: deps.now() })
     })
   } catch (error) {
+    // The first line only: a database error goes on to quote the statement's parameters.
+    const why = (error instanceof Error ? error.message : String(error)).split("\n")[0]
+    // Undo the account, so a re-run starts clean instead of finding an unverified account with an
+    // address it cannot tell from a squatter's (the password was never given to anyone).
+    try {
+      await (await auth.$context).internalAdapter.deleteUser(userId)
+    } catch (cleanup) {
+      throw new Error(
+        `The account ${userId} was created but could not be linked as a founder (${why}), and it ` +
+          `could not be removed (${cleanup instanceof Error ? cleanup.message : String(cleanup)}). ` +
+          "Delete it from hq's database, then run again.",
+      )
+    }
     throw new Error(
-      `The account ${userId} was created but could not be linked as a founder: ` +
-        `${error instanceof Error ? error.message : String(error)}. Delete it and run again.`,
+      `The founder could not be linked (${why}); the new account was removed. Run again.`,
     )
   }
   return { userId, entry: `id:${userId}=${input.slackUserId}` }

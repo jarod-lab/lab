@@ -409,7 +409,7 @@ describe("Slack actions (real hq on PGlite)", () => {
           }),
         ),
       )
-      expect(clicks.map((c) => c.status).sort()).toEqual([200, 409, 409])
+      expect(clicks.map((c) => c.status).sort((x, y) => x - y)).toEqual([200, 409, 409])
       expect((await allowance()).grantedUsd).toBe(before + 3)
       expect(await hq.db.select().from(spendGrants)).toHaveLength(rows + 1)
     })
@@ -514,10 +514,24 @@ describe("Slack actions (real hq on PGlite)", () => {
       expect((await clickGrant(e)).status).toBe(409)
     })
 
+    it("a founder's own grant_spend is outside the Slack total: $40 granted by hand leaves both $25 clicks through", async () => {
+      const byHand = await hq.call({ cookie: founder.cookie }, "POST", "/v1/spend/grants", {
+        amountUsd: 40,
+        reason: "by hand",
+      })
+      expect(byHand.status).toBe(200)
+      const [a, b, c] = [await ask(25), await ask(25), await ask(25)]
+      expect((await clickGrant(a)).status).toBe(200)
+      expect((await clickGrant(b)).status).toBe(200)
+      expect((await clickGrant(c)).status).toBe(409)
+      // 40 by hand plus the Slack $50: the cap bounds only what clicks add.
+      expect((await allowance()).grantedUsd).toBe(90)
+    })
+
     it("clicks at once cannot pass the cap together", async () => {
       const ids = [await ask(25), await ask(25), await ask(25), await ask(25)]
       const clicks = await Promise.all(ids.map((id) => clickGrant(id)))
-      expect(clicks.map((c) => c.status).sort()).toEqual([200, 200, 409, 409])
+      expect(clicks.map((c) => c.status).sort((x, y) => x - y)).toEqual([200, 200, 409, 409])
       expect((await allowance()).grantedUsd).toBe(50)
     })
 

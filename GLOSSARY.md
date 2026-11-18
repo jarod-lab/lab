@@ -159,6 +159,9 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 - **Allowance** — what is left of today's cap: cap plus **spend grants**, less settled spend and holds.
 - **Spend grant** — a founder's extra allowance for one day (`grant_spend`). A person's action, never a
   key's. Not an auth **grant**.
+- **Bigger-model request** — the agent's `request_bigger_model` tool: it asks a founder, in Slack, to
+  approve a dearer model for one hard question, with an estimate. Nothing runs on the bigger model
+  before a listed founder approves.
 
 ## The web app
 

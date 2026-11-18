@@ -1,4 +1,4 @@
-import { type Dirent, readdirSync } from "node:fs"
+import { type Dirent, existsSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -13,7 +13,9 @@ import { slackConfig } from "#lib/slack/config.js"
  * not through the policy alone, and the list of tools is read from the mounts as eve reads them:
  * every module under `tools/` (subfolders too) of the agent and of each station, and every tool a
  * memory slot's provider returns. A tool that gains an `approval` later without the founder
- * response is picked up and fails here, with no list to forget to update.
+ * response is picked up and fails here, with no list to forget to update. What the scan cannot read
+ * fails too, naming it: a module under `tools/` that is not a `defineTool` tool or `disableTool()`
+ * (a `defineDynamic` module builds its tools at run time), a station's own stations, `extensions/`.
  *
  * `stationPolicy` and `proposalPolicy` never ask a person (they allow or deny), so for those tools
  * the response policy is defense in depth: it holds if a request policy ever starts to ask.
@@ -51,11 +53,11 @@ const answer = (decision: "approve" | "deny", principalId: string, requester = F
   }) as never
 
 type Responder = (ctx: never) => unknown
-const responseOf = (tool: unknown): Responder => {
+const responseOf = (tool: unknown, name: string): Responder => {
   const { approval } = tool as { approval?: { response?: Responder } }
   const response = approval?.response
   if (typeof response !== "function") {
-    throw new Error("the tool has no response policy")
+    throw new Error(`${name}: the tool has no response policy`)
   }
   return response
 }
@@ -106,21 +108,75 @@ const under = (root: string, dir: string) => (root === "" ? dir : `${root}/${dir
 const defaultExportOf = async (file: string): Promise<unknown> =>
   ((await import(pathToFileURL(join(AGENT_DIR, file)).href)) as { default?: unknown }).default
 
+/** eve's brands (`Symbol.for`), on what `defineTool` / `defineWorkflowTool` and `disableTool` make. */
+const TOOL_BRANDS = [Symbol.for("eve:tool-brand"), Symbol.for("eve:workflow-tool-brand")]
+const DISABLED_TOOL = Symbol.for("eve.disabled-tool")
+
+const isTool = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  TOOL_BRANDS.some((brand) => (value as Record<symbol, unknown>)[brand] === true)
+
+const isDisabledTool = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as Record<symbol, unknown>)[DISABLED_TOOL] === true
+
 const hasApproval = (tool: unknown): boolean =>
   (tool as { approval?: unknown } | undefined)?.approval !== undefined
 
 /**
+ * What eve mounts from `agent/` that this test cannot read tools from, so it fails instead of
+ * passing without a word: a station's own stations and `extensions/` (their tools are mounted
+ * under a namespace) are not scanned, and a `defineDynamic` module under `tools/` builds its tools
+ * at run time from a session, so they cannot be listed here either.
+ */
+const unscannedMounts = (): string[] =>
+  agentRoots().flatMap((root) =>
+    ["extensions", "subagents"]
+      // The root's own `subagents/` is the list of stations; a station's is a nested station.
+      .filter((dir) => !(root === "" && dir === "subagents"))
+      .filter((dir) => existsSync(join(AGENT_DIR, under(root, dir))))
+      .map(
+        (dir) =>
+          `${under(root, dir)}/ is mounted by eve but this test does not read it: extend the scan`,
+      ),
+  )
+
+/** The context eve gives a memory provider's `tools()` (`memory/definition.js`), as a stub. */
+const memoryToolsContext = {
+  abortSignal: new AbortController().signal,
+  channel: { name: "test" },
+  memory: { scope: { kind: "org" }, slot: "test" },
+  session: { auth: { attributes: {}, principalId: FOUNDER }, id: "session-test" },
+} as never
+
+interface Mounted {
+  /** Every tool that stops for a person, by where it is mounted from. */
+  cases: [string, unknown][]
+  /** What the scan could not check: each is a reason to fail. */
+  problems: string[]
+}
+
+/**
  * Every mounted tool that stops for a person: each module under every `tools/` (the root's and each
  * station's, subfolders too), and every tool each memory slot's provider returns (`memory/*` and
- * each station's), by where it is mounted from.
+ * each station's), by where it is mounted from. A module it cannot classify, or a mount it does not
+ * read, is a problem, never a silent skip.
  */
-const families = async (): Promise<[string, unknown][]> => {
-  const found: [string, unknown][] = []
+const mounted = async (): Promise<Mounted> => {
+  const cases: [string, unknown][] = []
+  const problems = unscannedMounts()
   for (const root of agentRoots()) {
     for (const file of modulesUnder(under(root, "tools"))) {
       const tool = await defaultExportOf(file)
-      if (hasApproval(tool)) {
-        found.push([file.replace(MODULE, ""), tool])
+      if (!isTool(tool) && !isDisabledTool(tool)) {
+        problems.push(
+          `unrecognised tool module ${file}: cannot check its approval policy; ` +
+            "add handling or a case (a defineDynamic module builds its tools at run time)",
+        )
+      } else if (hasApproval(tool)) {
+        cases.push([file.replace(MODULE, ""), tool])
       }
     }
     // A slot is `memory/<slot>.ts` or `memory.ts`: the module's default is `defineMemory`'s
@@ -134,20 +190,42 @@ const families = async (): Promise<[string, unknown][]> => {
     ]
     for (const file of slots) {
       const slot = (await defaultExportOf(file)) as {
-        provider?: { tools?: () => Promise<Record<string, unknown>> | Record<string, unknown> }
+        provider?: { tools?: (ctx: never) => unknown }
       }
-      for (const [name, tool] of Object.entries((await slot?.provider?.tools?.()) ?? {})) {
+      if (slot?.provider === undefined) {
+        problems.push(`unrecognised memory module ${file}: it has no provider to read tools from`)
+        continue
+      }
+      if (typeof slot.provider.tools !== "function") {
+        continue // a provider with no tools has nothing to check
+      }
+      const tools = (await slot.provider.tools(memoryToolsContext)) as Record<
+        string,
+        unknown
+      > | null
+      if (tools === null || tools === undefined || Object.keys(tools).length === 0) {
+        problems.push(
+          `memory module ${file}: tools() returned none without a session; ` +
+            "the scan cannot tell whether it has approval tools: extend the test",
+        )
+        continue
+      }
+      for (const [name, tool] of Object.entries(tools)) {
         if (hasApproval(tool)) {
-          found.push([`${file.replace(MODULE, "")} ${name}`, tool])
+          cases.push([`${file.replace(MODULE, "")} ${name}`, tool])
         }
       }
     }
   }
-  return found
+  return { cases, problems }
 }
 
 describe("every approval tool answers to a listed founder only", async () => {
-  const cases = await families()
+  const { cases, problems } = await mounted()
+
+  test("every mounted module and directory could be checked", () => {
+    expect(problems).toEqual([])
+  })
 
   test("the mounted tools were found: the four shells and every tool known to ask", () => {
     // A scan that found nothing would pass everything below; these are the tools known to ask.
@@ -171,9 +249,9 @@ describe("every approval tool answers to a listed founder only", async () => {
 
   test.each(cases)(
     "%s: a listed founder is accepted, even for a request someone else made",
-    async (_name, tool) => {
+    async (name, tool) => {
       vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", `${FOUNDER}, ${OTHER_FOUNDER}`)
-      const response = responseOf(tool)
+      const response = responseOf(tool, name)
       expect(await response(answer("approve", FOUNDER))).toEqual({ status: "allowed" })
       // A different listed founder than the one whose turn asked may approve it.
       expect(await response(answer("approve", OTHER_FOUNDER, FOUNDER))).toEqual({
@@ -185,9 +263,9 @@ describe("every approval tool answers to a listed founder only", async () => {
 
   test.each(cases)(
     "%s: a non-founder is refused, whoever asked, and the request stays open",
-    async (_name, tool) => {
+    async (name, tool) => {
       vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", FOUNDER)
-      const response = responseOf(tool)
+      const response = responseOf(tool, name)
       for (const principal of [
         MEMBER,
         "slack:T9:UFOUNDER",
@@ -207,20 +285,20 @@ describe("every approval tool answers to a listed founder only", async () => {
     },
   )
 
-  test.each(cases)("%s: with no founders listed nobody approves", async (_name, tool) => {
+  test.each(cases)("%s: with no founders listed nobody approves", async (name, tool) => {
     vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", "")
-    const response = responseOf(tool)
+    const response = responseOf(tool, name)
     expect(await response(answer("approve", FOUNDER))).toMatchObject({ status: "rejected" })
   })
 
-  test.each(cases)("%s: anyone may dismiss, as founderOnly already allows", async (_name, tool) => {
+  test.each(cases)("%s: anyone may dismiss, as founderOnly already allows", async (name, tool) => {
     vi.stubEnv("AGENT_FOUNDER_PRINCIPALS", FOUNDER)
-    expect(await responseOf(tool)(answer("deny", MEMBER))).toEqual({ status: "allowed" })
+    expect(await responseOf(tool, name)(answer("deny", MEMBER))).toEqual({ status: "allowed" })
   })
 
   test("the founder response is the one shared policy, not a copy per tool", async () => {
     for (const [name, tool] of cases.filter(([n]) => n !== "tools/request_bigger_model")) {
-      expect(responseOf(tool), name).toBe(founderResponse)
+      expect(responseOf(tool, name), name).toBe(founderResponse)
     }
   })
 })

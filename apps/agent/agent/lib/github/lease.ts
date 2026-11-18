@@ -246,7 +246,7 @@ export interface MintOptions {
 export class NarrowTokenError extends Error {
   constructor(scope: TokenScope, required: readonly string[], cause?: unknown) {
     super(
-      `Could not mint a GitHub token for scope "${scope}" with permissions [${required.join(", ")}]. Check that the GitHub connector's app is installed on the factory repository and holds those permissions. If the installation cannot issue narrowed tokens at all, ${TOKEN_FALLBACK_ENV}=repository allows a wider one.`,
+      `Could not mint a GitHub token for scope "${scope}" with permissions [${required.join(", ")}]. Check that the org's GitHub App is installed on the factory repository and holds those permissions. If the installation cannot issue narrowed tokens at all, ${TOKEN_FALLBACK_ENV}=repository allows a wider one.`,
       { cause },
     )
     this.name = "NarrowTokenError"

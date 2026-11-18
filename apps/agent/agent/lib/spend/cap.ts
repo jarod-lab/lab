@@ -43,10 +43,14 @@ const MAX_ESTIMATE_USD = 5
 /**
  * The per-turn estimate: AGENT_TURN_ESTIMATE_USD when it is a sensible amount, else the larger of
  * the default and what a normal turn costs on the chat model by its tokens (never above the clamp).
+ * `model` is the chat model it is sized for: the configured one, not `chatModelId()`, because
+ * offline that is a mock priced as unknown. A test passes its own.
  */
-export function turnEstimateUsd(): number {
-  // The configured chat model, not `chatModelId()`: offline that is a mock priced as unknown.
-  const sized = Math.min(Math.max(DEFAULT_TURN_ESTIMATE_USD, normalTurnUsd()), MAX_ESTIMATE_USD)
+export function turnEstimateUsd(model: string = MODELS.orchestrator): number {
+  const sized = Math.min(
+    Math.max(DEFAULT_TURN_ESTIMATE_USD, normalTurnUsd(model)),
+    MAX_ESTIMATE_USD,
+  )
   const raw = agentEnv("AGENT_TURN_ESTIMATE_USD")
   if (raw === undefined || raw.trim() === "") {
     return sized

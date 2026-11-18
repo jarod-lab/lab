@@ -44,7 +44,8 @@ function callLedger(fn: () => void): void {
  * announces each call first (`decisionExpected`) so the record that call emits is skipped, not
  * counted a second time. A "decision" record nobody announced (eve's own `decide()`, for instance
  * LLM tool approval or auto model routing; the agent uses neither today) is still counted by the
- * usage hook. `build: true` marks pretriage, which is build spend (outside the cap, no run).
+ * usage hook. `build: true` marks pretriage, which is build spend (outside the cap, no run);
+ * pretriage's `decide()` runs inside a session too, so its record is announced and counted once.
  *
  * - `decide()`'s result carries tokens and no cost, so the call is charged at the larger of the
  *   decision estimate and its token floor (`prices.ts`), which over-counts the gateway's own figure.

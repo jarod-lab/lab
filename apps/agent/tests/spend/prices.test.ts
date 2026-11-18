@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest"
+import { describe, expect, test } from "vitest"
 import { DEFAULT_TURN_ESTIMATE_USD, normalTurnUsd, turnEstimateUsd } from "#lib/spend/cap.js"
 import { MODELS } from "#lib/models.js"
 import {
@@ -36,9 +36,14 @@ describe("the price table", () => {
     expect(priceOf(` ${HAIKU.toUpperCase()} `)).toBe(MODEL_PRICES[HAIKU])
   })
 
-  test("the decision model is at its list price: $0.1 in, output free, so 1,313 tokens is $0.0001313", () => {
+  test("the decision model's output is charged at its input price, $0.1 per million, though the catalog lists it free", () => {
     const decision = "google/gemini-decision-1"
+    // 1,313 x $0.1/M is $0.0001313 and 40 more tokens add $0.000004: up to $0.0002 either way.
     expect(tokenFloorUsd(decision, { inputTokens: 1_313, outputTokens: 40 })).toBe(0.0002)
+    // 10,000 output tokens separate the two: charged, $0.0001313 + $0.001 is up to $0.0012; free,
+    // it would stay $0.0002.
+    expect(tokenFloorUsd(decision, { inputTokens: 1_313, outputTokens: 10_000 })).toBe(0.0012)
+    expect(MODEL_PRICES[decision]?.output).toBe(MODEL_PRICES[decision]?.input)
     expect(MODELS.decision).toBe(decision)
   })
 
@@ -199,11 +204,6 @@ describe("the turn estimate is sized for the prompt", () => {
   test("a chat model missing from the table raises the estimate to its token price, up to the clamp", () => {
     // 72,000 x $25/M + 3,000 x $125/M = $1.80 + $0.375, up to a cent.
     expect(normalTurnUsd(NOT_IN_THE_TABLE)).toBe(2.18)
-    vi.spyOn(MODELS, "orchestrator", "get").mockReturnValue(NOT_IN_THE_TABLE as never)
-    try {
-      expect(turnEstimateUsd()).toBe(2.18)
-    } finally {
-      vi.restoreAllMocks()
-    }
+    expect(turnEstimateUsd(NOT_IN_THE_TABLE)).toBe(2.18)
   })
 })

@@ -66,7 +66,13 @@ const hooksFor = (model: string, client: () => HqClient = () => hq.client) => {
   const store = memoryStore()
   return {
     store,
-    hooks: createSpendHooks({ hq: client, store, estimateUsd: () => 0.1, modelId: () => model }),
+    hooks: createSpendHooks({
+      hq: client,
+      store,
+      estimateUsd: () => 0.1,
+      modelId: () => model,
+      decisionModelId: () => NOT_IN_THE_TABLE,
+    }),
   }
 }
 
@@ -238,55 +244,97 @@ describe("each decision call is counted once", () => {
     answers: { team: { choice: "support" } },
     usage: { inputTokens: 1_313, outputTokens: 40, totalTokens: 1_353 },
   }
-  const decisionFloor = tokenFloorUsd(NOT_IN_THE_TABLE, { inputTokens: 1_313, outputTokens: 40 })
+  const decisionTokens = { inputTokens: 1_313, outputTokens: 40 }
+  /** The metered call is charged at this: the decision estimate, or its token floor if larger. */
+  const decisionFloor = tokenFloorUsd(NOT_IN_THE_TABLE, decisionTokens)
+  const meteredCharge = Math.max(DECISION_ESTIMATE_USD, decisionFloor)
+  /** What eve's `decide()` emits: owner null, kind "decision", the gateway's cost. */
+  const decisionRecord = (costUsd: number) =>
+    usage({ kind: "decision", owner: null, usage: { costUsd, ...decisionTokens } })
 
-  test("inside a turn, eve's decision usage record and the metered call add one charge, not two", async () => {
-    const { hooks } = hooksFor(HAIKU)
-    await hooks.turnStarted({}, context().ctx)
-    await hooks.usageRecorded(usage({ kind: "model", usage: { costUsd: 0.03 } }), context().ctx)
-    // What eve emits for decide(): owner null, kind "decision", the gateway's cost.
-    await hooks.usageRecorded(
-      usage({
-        kind: "decision",
-        owner: null,
-        usage: { costUsd: 0.0001313, inputTokens: 1_313, outputTokens: 40 },
-      }),
-      context().ctx,
-    )
-    const decide = createMeteredDecide({
-      decide: (() => Promise.resolve(answer)) as never,
-      ledger: hooks,
-      model: NOT_IN_THE_TABLE,
-    })
-    await decide()({} as never)
-    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+  /** `decide()` as eve runs it in a session: the usage record is emitted before it returns. */
+  const decideEmitting = (hooks: Hooks, costUsd = 0.0001313, when: "during" | "after" = "during") =>
+    (async () => {
+      if (when === "during") {
+        await hooks.usageRecorded(decisionRecord(costUsd), context().ctx)
+      }
+      return answer
+    }) as never
 
-    const expected = 0.03 + Math.max(DECISION_ESTIMATE_USD, decisionFloor)
+  const meteredOn = (hooks: Hooks, decide: never) =>
+    createMeteredDecide({ decide, ledger: hooks, model: NOT_IN_THE_TABLE })
+
+  test("a metered call and the record eve emits for it add one charge, not two", async () => {
     expect(decisionFloor).toBeGreaterThan(DECISION_ESTIMATE_USD)
-    expect((await allowance()).spentUsd).toBeCloseTo(expected, 4)
+    for (const when of ["during", "after"] as const) {
+      hq.newDay()
+      const { hooks } = hooksFor(HAIKU)
+      await hooks.turnStarted({}, context().ctx)
+      await hooks.usageRecorded(usage({ kind: "model", usage: { costUsd: 0.03 } }), context().ctx)
+      await meteredOn(hooks, decideEmitting(hooks, 0.0001313, when))()({} as never)
+      if (when === "after") {
+        // The record arrives after the wrapper has returned: it still finds the announcement.
+        await hooks.usageRecorded(decisionRecord(0.0001313), context().ctx)
+      }
+      await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+      expect((await allowance()).spentUsd, when).toBeCloseTo(0.03 + meteredCharge, 4)
+    }
   })
 
-  test("the decision usage record alone adds nothing: the metered call is the only source", async () => {
+  test("two parallel metered calls skip two records, and a third unannounced record is counted", async () => {
     const { hooks } = hooksFor(HAIKU)
     await hooks.turnStarted({}, context().ctx)
-    await hooks.usageRecorded(usage({ kind: "model", usage: { costUsd: 0.03 } }), context().ctx)
-    const before = hq.client
-    const sent: unknown[] = []
-    const watching = {
-      ...before,
+    const decide = meteredOn(hooks, decideEmitting(hooks))
+    await Promise.all([decide()({} as never), decide()({} as never)])
+    // eve's own decide() (LLM tool approval, say): nobody announced it, so it is counted.
+    await hooks.usageRecorded(decisionRecord(0.05), context().ctx)
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    expect((await allowance()).spentUsd).toBeCloseTo(2 * meteredCharge + 0.05, 4)
+  })
+
+  test("a decision record nobody announced (eve's own decide) is counted, at its floor when it reports 0", async () => {
+    const { hooks } = hooksFor(HAIKU)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded(decisionRecord(0), context().ctx)
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    // Priced as the decision model (here an unlisted one, at the conservative price): never zero.
+    expect((await allowance()).spentUsd).toBeCloseTo(decisionFloor, 4)
+  })
+
+  test("a metered call that throws leaves no announcement behind to swallow a later record", async () => {
+    const { hooks, store } = hooksFor(HAIKU)
+    await hooks.turnStarted({}, context().ctx)
+    const failing = (() => Promise.reject(new Error("the provider refused"))) as never
+    await expect(meteredOn(hooks, failing)()({} as never)).rejects.toThrow("the provider refused")
+    expect(store.state().decisionCredits).toBe(0)
+    await hooks.usageRecorded(decisionRecord(0.05), context().ctx)
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    expect((await allowance()).spentUsd).toBeCloseTo(0.05, 4)
+  })
+
+  test("a state saved before announcements existed (no decisionCredits) still works", async () => {
+    const { hooks, store } = hooksFor(HAIKU)
+    await hooks.turnStarted({}, context().ctx)
+    expect(store.state().decisionCredits).toBeUndefined()
+    await hooks.usageRecorded(decisionRecord(0.05), context().ctx)
+    expect(store.state().withCost).toBe(1)
+    expect(store.state().knownUsd).toBeCloseTo(0.05, 6)
+  })
+
+  test("in a build turn the metered call and its record are one build charge", async () => {
+    const sent: Parameters<HqClient["recordSpend"]>[0][] = []
+    const recorder = {
       recordSpend: (input: Parameters<HqClient["recordSpend"]>[0]) => {
         sent.push(input)
-        return before.recordSpend(input)
+        return Promise.resolve({ id: "x", amountUsd: 0, estimated: false })
       },
-    } as HqClient
-    const probe = hooksFor(HAIKU, () => watching)
-    await probe.hooks.usageRecorded(
-      usage({ kind: "decision", owner: null, usage: { costUsd: 0.5, inputTokens: 1_313 } }),
-      context().ctx,
-    )
-    expect(sent).toEqual([])
-    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
-    expect((await allowance()).spentUsd).toBeCloseTo(0.03, 4)
+      recordRun: () => Promise.resolve({ id: "run-1" }),
+    } as unknown as HqClient
+    const { hooks } = hooksFor(HAIKU, () => recorder)
+    await hooks.turnStarted({}, context(CALLERS.autonomous).ctx)
+    await meteredOn(hooks, decideEmitting(hooks))()({} as never)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ source: "build", estimatedUsd: meteredCharge })
   })
 
   test("outside a session eve emits no record: the metered call alone is recorded, once", async () => {
@@ -297,19 +345,20 @@ describe("each decision call is counted once", () => {
         return Promise.resolve({ id: "x", amountUsd: 0, estimated: false })
       },
     } as HqClient
-    const { hooks } = hooksFor(HAIKU, () => recorder)
+    const { hooks, store } = hooksFor(HAIKU, () => recorder)
     const decide = createMeteredDecide({
       decide: (() => Promise.resolve(answer)) as never,
       ledger: hooks,
       model: NOT_IN_THE_TABLE,
     })
     await decide({ build: true })({} as never)
+    expect(store.state().decisionCredits).toBeUndefined()
     expect(sent).toEqual([
       {
         runId: undefined,
         source: "build",
         amountUsd: undefined,
-        estimatedUsd: Math.max(DECISION_ESTIMATE_USD, decisionFloor),
+        estimatedUsd: meteredCharge,
         model: NOT_IN_THE_TABLE,
       },
     ])

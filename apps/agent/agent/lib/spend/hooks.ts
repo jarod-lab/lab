@@ -23,10 +23,12 @@ import { priceUsage, type UsageWithCost } from "./prices.js"
  *   summed in state and settled once, at `turn.settled`. A record's cost is never taken from a bare
  *   zero: the gateway reports `costUsd: 0` on calls that used thousands of tokens, so a zero (or no
  *   cost) on a call with tokens is priced at the token floor (`prices.ts`, which states the rule).
- *   A record of kind "decision" is skipped here: eve's `decide()` emits one inside a session, and
- *   `decisionSpent` (the metered wrapper in `ledger.ts`) already counts that same call, so each
- *   decision call is counted once, by the wrapper, which also covers calls made outside a session
- *   (no usage record is emitted there). Usage that arrives with no open hold
+ *   A decision call is counted once. eve's `decide()` emits a `usage.recorded` of kind "decision"
+ *   (owner null) when it runs inside a session, and none outside one. The metered wrapper in
+ *   `ledger.ts` announces each call before making it (`decisionExpected`) and counts it itself
+ *   (`decisionSpent`); the record that call then emits consumes the announcement and is skipped.
+ *   A "decision" record nobody announced, such as one from eve's own `decide()` (LLM tool
+ *   approval, auto model routing), is counted like any other record: it is real spend. Usage that arrives with no open hold
  *   (late delegated spend, a build) goes to `record_spend`. Hooks are not exactly-once: each
  *   record is keyed on `ctx.occurrence.idempotencyKey` and skipped when seen. hq's `record_spend`
  *   has no idempotency field, so this guard is best effort (see the report).
@@ -73,6 +75,12 @@ export interface SpendState {
   withoutCost: number
   /** Decision-model calls this turn (and floor excess over the estimate), priced as estimates. */
   extraEstimatedUsd: number
+  /**
+   * Decision calls the metered wrapper has announced and counts itself, whose own `usage.recorded`
+   * (kind "decision") has not arrived yet: each such record is skipped once. Optional, read as 0,
+   * so state persisted before this field existed still works.
+   */
+  decisionCredits?: number
   /** Idempotency keys already handled (the last 200). */
   seen: string[]
   pending: PendingRecord[]
@@ -142,6 +150,8 @@ export interface SpendHookDeps {
   estimateUsd: () => number
   /** The model name recorded with the cost. */
   modelId: () => string
+  /** The decision model's id, to price a decision record nobody announced; unknown when left out. */
+  decisionModelId?: () => string
 }
 
 const SEEN_LIMIT = 200
@@ -402,12 +412,17 @@ export function createSpendHooks(deps: SpendHookDeps) {
     remember(key)
     await flush()
     const state = store.get()
-    if (event.data.kind === "decision") {
-      // Counted by `decisionSpent`: the same call, once (see the header). Not a free pass: the
-      // wrapper prices it at max(decision estimate, token floor).
+    if (event.data.kind === "decision" && (state.decisionCredits ?? 0) > 0) {
+      // The metered wrapper announced this call and counts it (see the header): once, not twice.
+      store.update((s) => ({ ...s, decisionCredits: (s.decisionCredits ?? 0) - 1 }))
       return
     }
-    const model = event.data.owner && "callId" in event.data.owner ? "delegated" : deps.modelId()
+    const model =
+      event.data.kind === "decision"
+        ? (deps.decisionModelId?.() ?? "decision")
+        : event.data.owner && "callId" in event.data.owner
+          ? "delegated"
+          : deps.modelId()
     const priced = priceUsage(model, event.data.usage)
 
     if (state.kind === "eve" && state.holdId !== null && !state.settled) {
@@ -433,9 +448,19 @@ export function createSpendHooks(deps: SpendHookDeps) {
     await record({ key, source, model, ...recordedAs(priced, fallback) })
   }
 
+  /** The wrapper is about to make a decision call that `decisionSpent` will count. */
+  function decisionExpected(): void {
+    store.update((s) => ({ ...s, decisionCredits: (s.decisionCredits ?? 0) + 1 }))
+  }
+
+  /** The announced decision call threw before it recorded any usage: nothing to skip. */
+  function decisionAbandoned(): void {
+    store.update((s) => ({ ...s, decisionCredits: Math.max(0, (s.decisionCredits ?? 0) - 1) }))
+  }
+
   /**
-   * A decision-model call (`decide()`): the one place it is counted (its own `usage.recorded` of kind
-   * "decision" is skipped by `usageRecorded`, so a call is never counted twice). Inside an open eve
+   * A decision-model call (`decide()`): the one place it is counted (the `usage.recorded` the call emits
+   * is skipped by `usageRecorded` against `decisionExpected`, so a call is never counted twice). Inside an open eve
    * turn it joins the turn's sum (at its reported cost, else the decision estimate); anywhere else
    * it is recorded straight away, as build spend when it is for a build (`build: true`, pretriage).
    */
@@ -522,5 +547,13 @@ export function createSpendHooks(deps: SpendHookDeps) {
     }
   }
 
-  return { turnStarted, modelRequested, usageRecorded, decisionSpent, turnSettled }
+  return {
+    turnStarted,
+    modelRequested,
+    usageRecorded,
+    decisionExpected,
+    decisionAbandoned,
+    decisionSpent,
+    turnSettled,
+  }
 }

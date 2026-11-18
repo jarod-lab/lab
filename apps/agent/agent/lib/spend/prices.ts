@@ -33,22 +33,42 @@ export interface ModelPrice {
   output: number
   cacheRead: number
   cacheWrite: number
+  /**
+   * The dearer price a call is charged at when its prompt (input plus cache tokens) is longer than
+   * `aboveTokens`, as the gateway's tiered list price has it.
+   */
+  longContext?: { aboveTokens: number; price: Omit<ModelPrice, "longContext"> }
 }
 
 /**
- * The price table, by gateway model id, at the gateway's LIST price. It is a table of list prices
- * and must be re-checked against the gateway whenever a model is added or changed: a stale entry
- * makes the floor, and so the cap, misreport spend to founders.
+ * The price table, by gateway model id, at the gateway's LIST price (read off the gateway's model
+ * catalog). It is a table of list prices and must be re-checked against the gateway whenever a
+ * model is added or changed: a stale entry makes the floor, and so the cap, misreport spend to
+ * founders.
  *
- * `anthropic/claude-haiku-5.5` is listed at $0.1 in / $0.5 out per million tokens (the spike read it
- * off the gateway's model list), with cache reads at a tenth of input and writes at 1.25x. The
- * gateway nevertheless reported it as free ($0, and its own credit counter agreed): why is not
- * established, so the floor charges the list price instead of trusting the zero. Every other model
- * we run (decision, reviewer, implementer, researcher, analyst) has no entry yet and is priced at
- * `UNKNOWN_MODEL_PRICE` until someone enters its real list price here.
+ * - `anthropic/claude-haiku-5.5` (the chat model): $0.1 in / $0.5 out per million tokens, cache
+ *   reads $0.01, cache writes $0.125, and five times that for a prompt over 100,000 tokens. The
+ *   gateway nevertheless reported it as free ($0, and its own credit counter agreed): why is not
+ *   established, so the floor charges the list price instead of trusting the zero.
+ * - `google/gemini-decision-1` (the decision model): $0.1 in, output free, no cache prices listed
+ *   (cache tokens are charged as input, never lower).
+ *
+ * The other models we run (reviewer, implementer, researcher, analyst) have no entry: their usage
+ * arrives as delegated calls that carry no model id, so they are priced as `delegated`, at
+ * `UNKNOWN_MODEL_PRICE`, and they report a positive cost in any case.
  */
 export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
-  "anthropic/claude-haiku-5.5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
+  "anthropic/claude-haiku-5.5": {
+    input: 0.1,
+    output: 0.5,
+    cacheRead: 0.01,
+    cacheWrite: 0.125,
+    longContext: {
+      aboveTokens: 100_000,
+      price: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 },
+    },
+  },
+  "google/gemini-decision-1": { input: 0.1, output: 0, cacheRead: 0.1, cacheWrite: 0.1 },
 }
 
 /**
@@ -91,7 +111,13 @@ const units = (usdPerMillion: number) => Math.round(usdPerMillion * UNITS_PER_US
  * money unit ($0.0001). 0 only when no token was reported.
  */
 export function tokenFloorUsd(model: string, usage: UsageTokens): number {
-  const price = priceOf(model)
+  const listed = priceOf(model)
+  const prompt =
+    count(usage.inputTokens) + count(usage.cacheReadTokens) + count(usage.cacheWriteTokens)
+  const price =
+    listed.longContext !== undefined && prompt > listed.longContext.aboveTokens
+      ? listed.longContext.price
+      : listed
   const unitsOwed =
     (count(usage.inputTokens) * units(price.input) +
       count(usage.outputTokens) * units(price.output) +

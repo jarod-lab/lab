@@ -36,6 +36,19 @@ describe("the price table", () => {
     expect(priceOf(` ${HAIKU.toUpperCase()} `)).toBe(MODEL_PRICES[HAIKU])
   })
 
+  test("the decision model is at its list price: $0.1 in, output free, so 1,313 tokens is $0.0001313", () => {
+    const decision = "google/gemini-decision-1"
+    expect(tokenFloorUsd(decision, { inputTokens: 1_313, outputTokens: 40 })).toBe(0.0002)
+    expect(MODELS.decision).toBe(decision)
+  })
+
+  test("a prompt over 100,000 tokens is charged haiku's dearer tier, never the base price", () => {
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 100_000 })).toBe(0.01)
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 100_001 })).toBe(0.0501)
+    // Cache tokens count toward the prompt: 60,000 + 50,000 is over the line.
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 60_000, cacheReadTokens: 50_000 })).toBe(0.0325)
+  })
+
   test("an unknown model is priced above every model in the table, never below", () => {
     expect(priceOf(NOT_IN_THE_TABLE)).toBe(UNKNOWN_MODEL_PRICE)
     expect(priceOf("")).toBe(UNKNOWN_MODEL_PRICE)

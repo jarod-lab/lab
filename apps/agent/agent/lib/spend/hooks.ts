@@ -3,6 +3,7 @@ import type { HqClient, RunOutcome, RunSummary } from "../hq/client.js"
 import { log } from "../log.js"
 import { isAutonomous, isSummaryOnly } from "../trust.js"
 import { BUILD_ESTIMATE_USD, checkCap, DECISION_ESTIMATE_USD, refusalText } from "./cap.js"
+import { priceUsage, type UsageWithCost } from "./prices.js"
 
 /**
  * The spend ledger's hooks: the cap before a turn, the cost after it.
@@ -19,8 +20,18 @@ import { BUILD_ESTIMATE_USD, checkCap, DECISION_ESTIMATE_USD, refusalText } from
  *   eve turn with no hold, is cancelled (a crash between the marker and the hold would otherwise
  *   let the turn run uncapped).
  * - `usage.recorded` fires once per model run and once per delegated call, so a turn's usage is
- *   summed in state and settled once, at `turn.settled`. Usage that arrives with no open hold
- *   (late delegated spend, a build) goes to `record_spend`. Hooks are not exactly-once: each
+ *   summed in state and settled once, at `turn.settled`. A record's cost is never taken from a bare
+ *   zero: the gateway reports `costUsd: 0` on calls that used thousands of tokens, so a zero (or no
+ *   cost) on a call with tokens is priced at the token floor (`prices.ts`, which states the rule). A
+ *   floor is an estimate: it is kept in its own bucket (`floorUsd`), recorded estimated beside the
+ *   hold, and the hold settles at the reported part only (0 when only floors arrived).
+ *   A decision call is counted once. eve's `decide()` emits a `usage.recorded` of kind "decision"
+ *   (owner null) when it runs inside a session, and none outside one. The metered wrapper in
+ *   `ledger.ts` announces each call before making it (`decisionExpected`) and counts it itself
+ *   (`decisionSpent`); the record that call then emits consumes the announcement and is skipped.
+ *   A "decision" record nobody announced, such as one from eve's own `decide()` (LLM tool
+ *   approval, auto model routing), is counted like any other record: it is real spend.
+ *   Usage that arrives with no open hold (late delegated spend, a build) goes to `record_spend`. Hooks are not exactly-once: each
  *   record is keyed on `ctx.occurrence.idempotencyKey` and skipped when seen. hq's `record_spend`
  *   has no idempotency field, so this guard is best effort (see the report).
  * - A turn's cost is never dropped. The hold settles at the exact cost up to its estimate; the rest
@@ -64,8 +75,20 @@ export interface SpendState {
   /** How many records reported a cost, and how many did not. */
   withCost: number
   withoutCost: number
-  /** Decision-model calls this turn, priced at an estimate (the decision model reports no cost). */
+  /** Decision-model calls this turn (and floor excess over the estimate), priced as estimates. */
   extraEstimatedUsd: number
+  /**
+   * Token-floor costs of records the provider reported as 0: an estimate, never a reported cost, so
+   * they are kept out of `knownUsd`, recorded as estimated and never settled into the hold as exact.
+   * Optional, read as 0, so state persisted before this field existed still works.
+   */
+  floorUsd?: number
+  /**
+   * Decision calls the metered wrapper has announced and counts itself, whose own `usage.recorded`
+   * (kind "decision") has not arrived yet: each such record is skipped once. Optional, read as 0,
+   * so state persisted before this field existed still works.
+   */
+  decisionCredits?: number
   /** Idempotency keys already handled (the last 200). */
   seen: string[]
   pending: PendingRecord[]
@@ -115,9 +138,11 @@ export interface SpendHookContext {
 
 export interface UsageEvent {
   data: {
-    owner?: { runId: string } | { callId: string } | { changeId: string }
+    /** Absent or null for usage nothing owns (a decision call, cache warming). */
+    owner?: { runId: string } | { callId: string } | { changeId: string } | null
     kind: string
-    usage: { costUsd?: number }
+    /** Eve fills every count with 0 when the provider reported none; the cost may be 0 or absent. */
+    usage: UsageWithCost
   }
 }
 
@@ -133,6 +158,8 @@ export interface SpendHookDeps {
   estimateUsd: () => number
   /** The model name recorded with the cost. */
   modelId: () => string
+  /** The decision model's id, to price a decision record nobody announced; unknown when left out. */
+  decisionModelId?: () => string
 }
 
 const SEEN_LIMIT = 200
@@ -163,20 +190,39 @@ export function inCalls(amountUsd: number): number[] {
   return pieces
 }
 
-const costOf = (usage: { costUsd?: number }): number | undefined =>
-  typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd) && usage.costUsd >= 0
-    ? usage.costUsd
-    : undefined
-
 const round4 = (amount: number) => Math.round(amount * 10_000) / 10_000
+
+/**
+ * A priced record as `record_spend` takes it: a reported cost is exact; a token floor or an
+ * unreported cost is an estimate (at least `fallbackUsd`, and at least the floor), so hq marks it so.
+ */
+function recordedAs(
+  priced: ReturnType<typeof priceUsage>,
+  fallbackUsd: number,
+): { amountUsd?: number; estimatedUsd?: number } {
+  if (priced.kind === "reported") {
+    return { amountUsd: priced.amountUsd }
+  }
+  if (priced.kind === "floor") {
+    return { estimatedUsd: priced.amountUsd }
+  }
+  return { estimatedUsd: Math.max(fallbackUsd, priced.floorUsd) }
+}
 
 /** How a finished turn's cost is split between the hold's settlement and separate records. */
 export interface Settlement {
-  /** What the hold settles at; undefined, hq settles at the hold's estimate, marked estimated. */
+  /**
+   * What the hold settles at, exact (reported cost only, never a floor). Undefined: hq settles at
+   * the hold's estimate, marked estimated. 0 is not undefined: it closes the hold at nothing and
+   * leaves the turn's cost to the records.
+   */
   settleAt: number | undefined
   /** Exact cost above the hold's estimate: recorded on its own. */
   excessUsd: number
-  /** Cost the provider did not report, priced at an estimate: recorded on its own, estimated. */
+  /**
+   * Cost not reported by the provider, priced at an estimate (or at a token floor): recorded on
+   * its own, estimated.
+   */
   estimatedUsd: number
 }
 
@@ -184,29 +230,35 @@ export interface Settlement {
  * What to settle a turn at, and what to record beside it.
  *
  * Every record without a cost is priced at one estimate, whichever branch: N such records cost N
- * estimates, with or without a record that reported a cost.
+ * estimates, with or without a record that reported a cost. A token floor (a reported 0 on a call
+ * with tokens) is an estimate of its own amount: it is recorded estimated and never settled into
+ * the hold as if the gateway had reported it.
  * - No record reported a cost: the hold settles at its estimate (marked estimated by hq), which
- *   covers the first record without a cost; the other N - 1 are recorded estimated.
+ *   covers the first record without a cost; the other N - 1 are recorded estimated. When there is
+ *   no record without a cost either, only floors (`floorUsd`), the hold settles at 0 and the floors
+ *   are the turn's cost: settling at the estimate on top of them would charge a turn far more than
+ *   its tokens cost. A turn with nothing at all still settles at the estimate.
  * - Some did: the hold settles at the reported cost up to its estimate and the rest of it is
- *   recorded exact; each of the N records without a cost, and each decision-model call, is priced at
- *   an estimate and recorded estimated. A missing cost is never taken as zero.
+ *   recorded exact; each of the N records without a cost, each floor and each decision-model call
+ *   is priced at an estimate and recorded estimated. A missing cost is never taken as zero.
  */
 export function settlementOf(state: SpendState): Settlement {
+  const floors = state.floorUsd ?? 0
   if (state.withCost === 0) {
     // The hold's own estimate stands for the first record without a cost (hq marks it estimated);
     // each further one is priced at the estimate too, as in the branch below: N records, N estimates.
     return {
-      settleAt: undefined,
+      settleAt: state.withoutCost === 0 && floors > 0 ? 0 : undefined,
       excessUsd: 0,
       estimatedUsd: round4(
-        Math.max(0, state.withoutCost - 1) * state.estimateUsd + state.extraEstimatedUsd,
+        Math.max(0, state.withoutCost - 1) * state.estimateUsd + state.extraEstimatedUsd + floors,
       ),
     }
   }
   return {
     settleAt: Math.min(state.knownUsd, state.estimateUsd),
     excessUsd: round4(Math.max(0, state.knownUsd - state.estimateUsd)),
-    estimatedUsd: round4(state.withoutCost * state.estimateUsd + state.extraEstimatedUsd),
+    estimatedUsd: round4(state.withoutCost * state.estimateUsd + state.extraEstimatedUsd + floors),
   }
 }
 
@@ -381,19 +433,34 @@ export function createSpendHooks(deps: SpendHookDeps) {
     remember(key)
     await flush()
     const state = store.get()
-    const cost = costOf(event.data.usage)
+    if (event.data.kind === "decision" && (state.decisionCredits ?? 0) > 0) {
+      // The metered wrapper announced this call and counts it (see the header): once, not twice.
+      store.update((s) => ({ ...s, decisionCredits: (s.decisionCredits ?? 0) - 1 }))
+      return
+    }
     const model =
-      "owner" in event.data && event.data.owner && "callId" in event.data.owner
-        ? "delegated"
-        : deps.modelId()
+      event.data.kind === "decision"
+        ? (deps.decisionModelId?.() ?? "decision")
+        : event.data.owner && "callId" in event.data.owner
+          ? "delegated"
+          : deps.modelId()
+    const priced = priceUsage(model, event.data.usage)
 
     if (state.kind === "eve" && state.holdId !== null && !state.settled) {
-      store.update((s) => ({
-        ...s,
-        knownUsd: s.knownUsd + (cost ?? 0),
-        withCost: s.withCost + (cost === undefined ? 0 : 1),
-        withoutCost: s.withoutCost + (cost === undefined ? 1 : 0),
-      }))
+      store.update((s) =>
+        priced.kind === "unreported"
+          ? {
+              ...s,
+              // Priced at the turn's estimate as ever; tokens that cost more than the estimate add
+              // the difference, so the record counts at its floor and stays marked estimated.
+              withoutCost: s.withoutCost + 1,
+              extraEstimatedUsd:
+                s.extraEstimatedUsd + Math.max(0, round4(priced.floorUsd - s.estimateUsd)),
+            }
+          : priced.kind === "floor"
+            ? { ...s, floorUsd: (s.floorUsd ?? 0) + priced.amountUsd }
+            : { ...s, knownUsd: s.knownUsd + priced.amountUsd, withCost: s.withCost + 1 },
+      )
       return
     }
 
@@ -401,42 +468,52 @@ export function createSpendHooks(deps: SpendHookDeps) {
     const source = state.kind === "build" ? "build" : "eve"
     const fallback =
       source === "build" ? BUILD_ESTIMATE_USD : Math.max(state.estimateUsd, deps.estimateUsd())
-    await record({
-      key,
-      source,
-      amountUsd: cost,
-      estimatedUsd: cost === undefined ? fallback : undefined,
-      model,
-    })
+    await record({ key, source, model, ...recordedAs(priced, fallback) })
+  }
+
+  /** The wrapper is about to make a decision call that `decisionSpent` will count. */
+  function decisionExpected(): void {
+    store.update((s) => ({ ...s, decisionCredits: (s.decisionCredits ?? 0) + 1 }))
+  }
+
+  /** The announced decision call threw before it recorded any usage: nothing to skip. */
+  function decisionAbandoned(): void {
+    store.update((s) => ({ ...s, decisionCredits: Math.max(0, (s.decisionCredits ?? 0) - 1) }))
   }
 
   /**
-   * A decision-model call (`decide()`): eve emits no `usage.recorded` for it. Inside an open eve
+   * A decision-model call (`decide()`): the one place it is counted (the `usage.recorded` the call emits
+   * is skipped by `usageRecorded` against `decisionExpected`, so a call is never counted twice). Inside an open eve
    * turn it joins the turn's sum (at its reported cost, else the decision estimate); anywhere else
    * it is recorded straight away, as build spend when it is for a build (`build: true`, pretriage).
    */
-  async function decisionSpent(input: {
-    costUsd?: number
-    model: string
-    build?: boolean
-  }): Promise<void> {
-    const cost = costOf({ costUsd: input.costUsd })
+  async function decisionSpent(
+    input: UsageWithCost & { model: string; build?: boolean },
+  ): Promise<void> {
+    // `decide()`'s result carries tokens and no cost (its own usage record has the gateway's, which
+    // `usageRecorded` skips), so this is in practice max(decision estimate, token floor).
+    const priced = priceUsage(input.model, input)
     const state = store.get()
     if (!input.build && state.kind === "eve" && state.holdId !== null && !state.settled) {
       store.update((s) =>
-        cost === undefined
-          ? { ...s, extraEstimatedUsd: s.extraEstimatedUsd + DECISION_ESTIMATE_USD }
-          : { ...s, knownUsd: s.knownUsd + cost, withCost: s.withCost + 1 },
+        priced.kind === "unreported"
+          ? {
+              ...s,
+              extraEstimatedUsd:
+                s.extraEstimatedUsd + Math.max(DECISION_ESTIMATE_USD, priced.floorUsd),
+            }
+          : priced.kind === "floor"
+            ? { ...s, floorUsd: (s.floorUsd ?? 0) + priced.amountUsd }
+            : { ...s, knownUsd: s.knownUsd + priced.amountUsd, withCost: s.withCost + 1 },
       )
       return
     }
     await record({
       key: "decision",
       source: input.build || state.kind === "build" ? "build" : "eve",
-      amountUsd: cost,
-      estimatedUsd: cost === undefined ? DECISION_ESTIMATE_USD : undefined,
       model: input.model,
       runId: input.build ? null : undefined,
+      ...recordedAs(priced, DECISION_ESTIMATE_USD),
     })
   }
 
@@ -460,23 +537,25 @@ export function createSpendHooks(deps: SpendHookDeps) {
         amountUsd: settleAt,
         model: deps.modelId(),
       }
-      let closed = false
-      for (let attempt = 0; attempt < SETTLE_ATTEMPTS && !closed; attempt++) {
-        closed = await settle(hold)
-      }
-      // Not lost either way: parked, it is retried by the next hook, and the cost above the hold
-      // is recorded below whether or not the settle reached hq.
-      store.update((s) => ({
-        ...s,
-        holdId: null,
-        unsettled: closed ? s.unsettled : [...s.unsettled, hold],
-      }))
+      // The records first, then the settle: closing the hold releases its reservation, so a record
+      // written after it would leave the day's spend short in between (a floor-only turn settles
+      // at 0). In this order the day is briefly over-counted, never under. A record that fails is
+      // parked and retried by the next hook, as is a settle that fails.
       if (excessUsd > 0) {
         await record({ key, source: "eve", amountUsd: excessUsd, model: deps.modelId() })
       }
       if (estimatedUsd > 0) {
         await record({ key, source: "eve", estimatedUsd, model: deps.modelId() })
       }
+      let closed = false
+      for (let attempt = 0; attempt < SETTLE_ATTEMPTS && !closed; attempt++) {
+        closed = await settle(hold)
+      }
+      store.update((s) => ({
+        ...s,
+        holdId: null,
+        unsettled: closed ? s.unsettled : [...s.unsettled, hold],
+      }))
     }
 
     if (state.runId !== null) {
@@ -495,5 +574,13 @@ export function createSpendHooks(deps: SpendHookDeps) {
     }
   }
 
-  return { turnStarted, modelRequested, usageRecorded, decisionSpent, turnSettled }
+  return {
+    turnStarted,
+    modelRequested,
+    usageRecorded,
+    decisionExpected,
+    decisionAbandoned,
+    decisionSpent,
+    turnSettled,
+  }
 }

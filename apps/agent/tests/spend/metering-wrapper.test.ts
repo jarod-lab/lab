@@ -99,14 +99,25 @@ describe("meteredDecide", () => {
     expect(t.store.get().withCost).toBe(1)
   })
 
-  test("a call that throws is not swallowed and is not priced", async () => {
+  test("a call that throws is not swallowed and is charged the decision estimate, once", async () => {
     const t = setup()
     const failing = (() => Promise.reject(new Error("the provider refused"))) as never
     await expect(metered(t.ledger, failing)({ build: true })({} as never)).rejects.toThrow(
       "the provider refused",
     )
-    expect(t.sent).toEqual([])
+    // It may have emitted its usage record before it failed (that record is skipped against the
+    // announcement), so the failed call is charged at the estimate, not dropped.
+    expect(t.sent).toEqual([
+      {
+        runId: undefined,
+        source: "build",
+        amountUsd: undefined,
+        estimatedUsd: DECISION_ESTIMATE_USD,
+        model: "decision-model",
+      },
+    ])
     expect(t.store.get().extraEstimatedUsd).toBe(0)
+    expect(t.store.get().decisionCredits).toBe(0)
   })
 
   test("metering that fails never fails the call: the answer is still returned", async () => {

@@ -394,8 +394,10 @@ describe("settling a turn", () => {
     expect(store.state().unsettled).toHaveLength(1)
     expect(store.state().pending).toHaveLength(1)
     up = true
-    // The day's next hook of any kind flushes both.
-    await hooks.usageRecorded({ data: { kind: "model", usage: { costUsd: 0 } } }, context().ctx)
+    // The day's next hook of any kind flushes both. The probe is an announced decision record,
+    // which adds no spend of its own: a bare zero-cost "model" record is priced now, never free.
+    hooks.decisionExpected()
+    await hooks.usageRecorded({ data: { kind: "decision", usage: { costUsd: 0 } } }, context().ctx)
     const today = await allowance()
     expect(today.reservedUsd).toBe(0)
     expect(today.spentUsd).toBeCloseTo(2, 4)

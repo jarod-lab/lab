@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals"
 import { satisfies } from "eve/evals/expect"
-import { allowance, freshDay, hq, latestRun, OFFLINE_TAG, probeEvents } from "../offline.js"
+import { allowance, freshDay, hq, latestFinishedRun, OFFLINE_TAG, probeEvents } from "../offline.js"
 
 export default defineEval({
   description:
@@ -27,6 +27,8 @@ export default defineEval({
     )
 
     // hq holds nothing for the refused turn, has spent nothing more, and logged why it stopped.
+    // The refusal cancels the turn before the hook has finished the run: wait for that last step.
+    const run = await latestFinishedRun()
     const today = await allowance()
     t.check(
       today.reservedUsd,
@@ -36,7 +38,6 @@ export default defineEval({
       today.spentUsd,
       satisfies((n: number) => n === 10, "the day stays at 10.00"),
     )
-    const run = await latestRun()
     t.check(
       run?.outcome,
       satisfies((o) => o === "stopped", "the refused run is logged stopped"),

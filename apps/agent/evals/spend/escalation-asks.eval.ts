@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals"
 import { satisfies } from "eve/evals/expect"
-import { allowance, freshDay, OFFLINE_TAG, probeEvents } from "../offline.js"
+import { allowance, freshDay, latestFinishedRun, OFFLINE_TAG, probeEvents } from "../offline.js"
 
 const biggerModelRuns = async () =>
   (await probeEvents()).filter((entry) => entry.event === "bigger-model-run").length
@@ -53,6 +53,8 @@ export default defineEval({
     )
 
     // The turn ended and its hold was settled at the estimate (the scripted model reports no cost).
+    // The turn resolves before the spend hook has settled: wait for the hook's last step.
+    await latestFinishedRun()
     const settled = await allowance()
     t.check(
       settled.reservedUsd,

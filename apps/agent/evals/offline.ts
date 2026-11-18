@@ -70,6 +70,36 @@ export async function latestRun(): Promise<RunRow | undefined> {
   return ((await reply.json()) as { runs: RunRow[] }).runs[0]
 }
 
+/**
+ * Waits until the newest run is finished, then returns it. A turn resolves in the eval when eve
+ * emits `turn.settled`, not when the spend hook that listens to it is done: that hook records the
+ * turn's cost, settles the hold and only then finishes the run (`lib/spend/hooks.ts`). So the run's
+ * outcome is the hook's last step, and an eval that reads the allowance before it can catch the
+ * hold half way between the record and the settle. Throws, failing the eval with a clear message,
+ * if the run is not finished within `timeoutMs`: the wait is never skipped and never a fixed sleep.
+ */
+export async function latestFinishedRun({
+  timeoutMs = 10_000,
+  pollMs = 25,
+}: {
+  timeoutMs?: number
+  pollMs?: number
+} = {}): Promise<RunRow> {
+  const deadline = Date.now() + timeoutMs
+  let run = await latestRun()
+  while (run?.outcome == null) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `the turn's run was not finished in hq within ${timeoutMs}ms: the spend hook's ` +
+          "turn.settled never reached finish_run, so the hold and the cost cannot be read",
+      )
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
+    run = await latestRun()
+  }
+  return run
+}
+
 /** hq's pending proposals, read with the agent's key. */
 export async function pendingProposals(): Promise<
   { title: string; status: string; entryId: string | null }[]

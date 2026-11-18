@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals"
 import { satisfies } from "eve/evals/expect"
-import { allowance, freshDay, latestRun, OFFLINE_TAG } from "../offline.js"
+import { allowance, freshDay, latestFinishedRun, OFFLINE_TAG } from "../offline.js"
 
 export default defineEval({
   description:
@@ -12,7 +12,10 @@ export default defineEval({
     await t.send("What time is it in Lisbon?")
     t.succeeded()
 
-    // The scripted model reports tokens and no costUsd, so hq charges the turn's estimate.
+    // The turn resolves before the spend hook has settled: wait for the hook's last step (the run
+    // is finished), then read what hq charged. The scripted model reports tokens and no costUsd,
+    // so hq charges the turn's estimate.
+    const run = await latestFinishedRun()
     const today = await allowance()
     t.check(
       today.reservedUsd,
@@ -22,7 +25,6 @@ export default defineEval({
       today.spentUsd,
       satisfies((n: number) => Math.abs(n - 0.1) < 1e-6, "settled at the 0.10 estimate"),
     )
-    const run = await latestRun()
     t.check(
       run?.costEstimated,
       satisfies((e) => e === true, "marked estimated"),

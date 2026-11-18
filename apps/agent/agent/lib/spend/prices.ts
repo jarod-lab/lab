@@ -67,7 +67,7 @@ export interface ModelPrice {
  *
  * The other models we run (reviewer, implementer, researcher, analyst) have no entry: their usage
  * arrives as delegated calls that carry no model id, so they are priced as `delegated`, at
- * `UNKNOWN_MODEL_PRICE`, and they report a positive cost in any case.
+ * `UNKNOWN_MODEL_PRICE`.
  */
 export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
   "anthropic/claude-haiku-5.5": {

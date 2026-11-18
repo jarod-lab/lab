@@ -3,10 +3,11 @@ import { join, relative } from "node:path"
 import { describe, expect, test } from "vitest"
 
 /**
- * eve's `decide()` emits a `usage.recorded` of kind "decision" only inside a session and none outside
- * one (pretriage). The wrapper announces each call and counts it, and the usage hook skips the record
- * that call emits, so a call the wrapper never saw would be counted only as that record: every
- * decision call the agent makes must go through `meteredDecide` (`agent/lib/spend/ledger.ts`), which adds the
+ * eve's `decide()` emits a `usage.recorded` of kind "decision" inside a session, and every call the
+ * agent makes runs in one: pretriage's `decide()` too (it runs in a dynamic instruction, inside a
+ * model step), so it emits a record like any other. The wrapper announces each call and counts it,
+ * and the usage hook skips the record that call emits, so a call the wrapper never saw would be
+ * counted only as that record: every decision call the agent makes must go through `meteredDecide` (`agent/lib/spend/ledger.ts`), which adds the
  * cost to the turn or records it as build spend. This holds that line: nothing but the ledger may
  * import the real `decide`, and the three call sites (triage, CI diagnosis, pretriage) use the
  * metered one.

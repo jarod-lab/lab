@@ -14,8 +14,8 @@ export const FALLBACK_BOT_NAME = "Foreman"
  */
 const MAX_BOT_NAME_LENGTH = 80
 
-/** What GitHub allows in an App slug: lower-case letters, digits and hyphens. */
-const SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*$/
+/** What GitHub gives an App slug: lower-case letters, digits and hyphens, never upper case. */
+const SLUG = /^[a-z0-9][a-z0-9-]*$/
 
 let resolvedFromApp: string | undefined
 

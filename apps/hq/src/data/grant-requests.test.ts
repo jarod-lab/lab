@@ -106,8 +106,12 @@ describe("the $25 limit on a grant request, below the operation's own check (in-
 // show two transactions interleaving, so on it deleting either advisory lock passes every test.
 // These run against a worktree's database (`pnpm wt new` makes `lab_wt_<name>`, migrated with hq's
 // tables; `pnpm wt reset-db` after pulling in a migration) or HQ_TEST_DATABASE_URL, and only a
-// database named `*_wt_*` or `*_test`: they write (then delete) rows dated in the year 2200.
-// Anywhere else they are skipped, and the skip says so.
+// database named `*_wt_*` or `*_test`: they write (then delete) rows dated in the year 2300, which
+// is this file's own: spend.test.ts's real block owns 2200 and runs in parallel on the same
+// database, so neither may write or delete in the other's year. Anywhere else they are skipped,
+// and the skip says so.
+const YEAR: number = 2300
+const SPEND_TEST_YEAR: number = 2200
 const dbName = (url: string | undefined) => (url ? new URL(url).pathname.slice(1) : "")
 const explicitUrl = process.env.HQ_TEST_DATABASE_URL
 const ambientUrl = process.env.DATABASE_URL
@@ -125,13 +129,19 @@ describe.skipIf(!REAL)(
     const clients = REAL && realUrl ? [createDb(realUrl), createDb(realUrl)] : []
     const [a, b] = clients as [ReturnType<typeof createDb>, ReturnType<typeof createDb>]
     const either = (i: number) => (i % 2 === 0 ? a : b)
-    const dayStart = new Date(Date.UTC(2200, 0, 1))
+    const dayStart = new Date(Date.UTC(YEAR, 0, 1))
+    const from = `${YEAR}-01-01`
+    const to = `${YEAR + 1}-01-01`
     const cleanup = async () => {
+      // Never the range spend.test.ts's own real block writes and deletes: vitest may run the two
+      // files at the same moment, on the same database.
+      if (YEAR === SPEND_TEST_YEAR) throw new Error(`the year ${YEAR} belongs to spend.test.ts`)
       await a?.$client.unsafe(
-        "delete from hq.spend_grant_requests where created_at >= '2200-01-01' and created_at < '2201-01-01'",
+        `delete from hq.spend_grant_requests where created_at >= '${from}' and created_at < '${to}'`,
       )
+      // Only the grants a redeem wrote (their reason says so), and only in this year.
       await a?.$client.unsafe(
-        "delete from hq.spend_grants where day >= '2200-01-01' and day < '2201-01-01'",
+        `delete from hq.spend_grants where day >= '${from}' and day < '${to}' and reason like 'Slack approval %'`,
       )
     }
     beforeAll(cleanup)
@@ -140,7 +150,7 @@ describe.skipIf(!REAL)(
       await Promise.all(clients.map((c) => c.$client.end()))
     })
 
-    /** Noon UTC of day `round` of 2200. */
+    /** Noon UTC of day `round` of this block's year. */
     const at = (round: number) => new Date(dayStart.getTime() + round * 86_400_000 + 12 * 3_600_000)
     const ask = (client: typeof a, round: number, amount: number) =>
       requestSpendGrant(client, {

@@ -10,7 +10,7 @@
 // named). It is never returned, logged or printed.
 import { randomBytes } from "node:crypto"
 
-import type { Auth } from "@lab/auth"
+import { type Auth, removeUnusedAccount } from "@lab/auth"
 import { type Database, session, user } from "@lab/db"
 import { eq } from "drizzle-orm"
 
@@ -98,8 +98,15 @@ export async function createFounder(
   try {
     await db.transaction(async (tx) => {
       // Made on the server by the operator: the address counts as verified, and the sign-up's
-      // session (it signs the new user in) is not a login anyone holds.
-      await tx.update(user).set({ emailVerified: true }).where(eq(user.id, userId))
+      // session (it signs the new user in) is not a login anyone holds. Exactly one row must be
+      // the account: sign-up can answer with an id that names none (a duplicate it hid), and a
+      // founder row for no account must never be written.
+      const verified = await tx
+        .update(user)
+        .set({ emailVerified: true })
+        .where(eq(user.id, userId))
+        .returning({ id: user.id })
+      if (verified.length !== 1) throw new Error("the new account was not found to verify")
       await tx.delete(session).where(eq(session.userId, userId))
       await addFounder(tx, { userId, slackUserId: input.slackUserId, now: deps.now() })
     })
@@ -109,12 +116,13 @@ export async function createFounder(
     // Undo the account, so a re-run starts clean instead of finding an unverified account with an
     // address it cannot tell from a squatter's (the password was never given to anyone).
     try {
-      await (await auth.$context).internalAdapter.deleteUser(userId)
+      // The account and its empty personal organization (the pieces sign-up made).
+      await removeUnusedAccount(auth, userId)
     } catch (cleanup) {
+      const first = (cleanup instanceof Error ? cleanup.message : String(cleanup)).split("\n")[0]
       throw new Error(
         `The account ${userId} was created but could not be linked as a founder (${why}), and it ` +
-          `could not be removed (${cleanup instanceof Error ? cleanup.message : String(cleanup)}). ` +
-          "Delete it from hq's database, then run again.",
+          `could not be removed (${first}). Delete it from hq's database, then run again.`,
       )
     }
     throw new Error(

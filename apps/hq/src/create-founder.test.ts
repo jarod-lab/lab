@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { createAuth } from "@lab/auth"
-import { member, session, user } from "@lab/db"
+import { member, organization, session, user } from "@lab/db"
 import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
@@ -171,8 +171,29 @@ describe("create-founder (real Postgres via PGlite)", () => {
     expect(status.status).toBe(200)
   })
 
+  it("fails closed when sign-up answers with an id that names no account: no founder row for nothing", async () => {
+    // A duplicate that better-auth hides answers with a made-up user id and creates nothing.
+    const hidden: typeof inProcess = Object.create(inProcess, {
+      api: {
+        value: { ...inProcess.api, signUpEmail: async () => ({ user: { id: "ghost-account" } }) },
+      },
+    })
+    const before = await accounts()
+    const error = await createFounder(
+      { ...deps(), auth: hidden },
+      { email: "ghost@example.com", slackUserId: "UGHOST" },
+    ).catch((e: unknown) => e)
+    expect((error as Error).message).toMatch(/not found to verify/)
+    expect(await t.db.select().from(founders).where(eq(founders.userId, "ghost-account"))).toEqual(
+      [],
+    )
+    expect(await founderForSlackUser(t.db, "UGHOST")).toBeNull()
+    expect(await accounts()).toBe(before)
+  })
+
   it("when linking the founder fails, the new account is removed and a re-run goes through", async () => {
     const before = await accounts()
+    const orgsBefore = (await t.db.select({ id: organization.id }).from(organization)).length
     // Between the checks and the link, another founder takes the Slack user.
     const error = await createFounder(
       deps({
@@ -190,6 +211,8 @@ describe("create-founder (real Postgres via PGlite)", () => {
     expect(await t.db.select().from(user).where(eq(user.email, "link-fail@example.com"))).toEqual(
       [],
     )
+    // Its personal organization went with it: no empty organization is left behind.
+    expect((await t.db.select({ id: organization.id }).from(organization)).length).toBe(orgsBefore)
 
     // The Slack user is free again; the same command now works, not refused as a squatter's.
     await t.db.delete(founders).where(eq(founders.userId, "taken-by-someone"))

@@ -30,7 +30,7 @@ import {
 } from "#lib/github/lease.js"
 import { log } from "#lib/log.js"
 
-const TOKEN = "ghs_REALTOKEN0123456789abcdefghijklmnop"
+const TOKEN = "ghs_REALTOKEN0123456789abcdefghijklmnop" // gitleaks:allow
 const basic = (secret: string) =>
   `Basic ${Buffer.from(`x-access-token:${secret}`).toString("base64")}`
 

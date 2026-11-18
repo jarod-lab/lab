@@ -19,7 +19,7 @@ import {
 import { FACTORY_TOOLING_VERSION, installFactoryTooling } from "#lib/github/tooling.js"
 import { log } from "#lib/log.js"
 
-const TOKEN = "ghs_INITTOKEN0123456789abcdefghijklmnop"
+const TOKEN = "ghs_INITTOKEN0123456789abcdefghijklmnop" // gitleaks:allow
 
 /**
  * Stands in for `VercelSandbox.environment`, so the sandbox modules can be
@@ -270,7 +270,7 @@ describe("factoryInit: a station's checkout", () => {
 
   test("a credential a failing setup command printed does not reach the error", async () => {
     vi.stubEnv("FACTORY_SETUP_COMMAND", "pnpm install")
-    const printed = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    const printed = "ghp_0123456789abcdefghijklmnopqrstuvwxyz" // gitleaks:allow
     const { sandbox } = fakeSandbox((command) =>
       command.startsWith("cd repo")
         ? { exitCode: 1, stderr: `npm ERR! 401 for token ${printed}` }

@@ -41,7 +41,7 @@ import { bashTool, githubNotes } from "#lib/github/tools.js"
  * the allowlist, recording every policy the sandbox is given.
  */
 
-const TOKEN = "ghs_EGRESSTOKEN0123456789abcdefghijklmn"
+const TOKEN = "ghs_EGRESSTOKEN0123456789abcdefghijklmn" // gitleaks:allow
 
 /**
  * Stands in for `VercelSandbox.environment`, so the sandbox modules can be

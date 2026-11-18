@@ -326,13 +326,13 @@ describe("redaction keeps the evidence and loses the secret", () => {
   test.each([
     [
       "a token glued to the text before it",
-      "token=ghs_abcdefghijklmnopqrstuvwxyz0123456789",
-      "ghs_abcdefghijklmnopqrstuvwxyz0123456789",
+      "token=ghs_abcdefghijklmnopqrstuvwxyz0123456789", // gitleaks:allow
+      "ghs_abcdefghijklmnopqrstuvwxyz0123456789", // gitleaks:allow
     ],
     [
       "a token after an underscore",
-      "x_ghp_abcdefghijklmnopqrstuvwxyz0123456789",
-      "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+      "x_ghp_abcdefghijklmnopqrstuvwxyz0123456789", // gitleaks:allow
+      "ghp_abcdefghijklmnopqrstuvwxyz0123456789", // gitleaks:allow
     ],
     [
       "a credential in a URL",

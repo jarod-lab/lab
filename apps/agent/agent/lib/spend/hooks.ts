@@ -183,14 +183,25 @@ export interface Settlement {
 /**
  * What to settle a turn at, and what to record beside it.
  *
- * - No record reported a cost: the hold settles at its estimate (marked estimated by hq).
+ * Every record without a cost is priced at one estimate, whichever branch: N such records cost N
+ * estimates, with or without a record that reported a cost.
+ * - No record reported a cost: the hold settles at its estimate (marked estimated by hq), which
+ *   covers the first record without a cost; the other N - 1 are recorded estimated.
  * - Some did: the hold settles at the reported cost up to its estimate and the rest of it is
- *   recorded exact; each record without a cost, and each decision-model call, is priced at an
- *   estimate and recorded estimated. A missing cost is never taken as zero.
+ *   recorded exact; each of the N records without a cost, and each decision-model call, is priced at
+ *   an estimate and recorded estimated. A missing cost is never taken as zero.
  */
 export function settlementOf(state: SpendState): Settlement {
   if (state.withCost === 0) {
-    return { settleAt: undefined, excessUsd: 0, estimatedUsd: round4(state.extraEstimatedUsd) }
+    // The hold's own estimate stands for the first record without a cost (hq marks it estimated);
+    // each further one is priced at the estimate too, as in the branch below: N records, N estimates.
+    return {
+      settleAt: undefined,
+      excessUsd: 0,
+      estimatedUsd: round4(
+        Math.max(0, state.withoutCost - 1) * state.estimateUsd + state.extraEstimatedUsd,
+      ),
+    }
   }
   return {
     settleAt: Math.min(state.knownUsd, state.estimateUsd),
@@ -356,6 +367,8 @@ export function createSpendHooks(deps: SpendHookDeps) {
     const unmarked = state.turnId === null || (turnId !== null && state.turnId !== turnId)
     const unheld = state.kind === "eve" && state.holdId === null && !state.settled
     if (unmarked || unheld) {
+      // Tell the thread why it is quiet (the Slack renderer posts the refusal from state).
+      store.update((s) => ({ ...s, refusal: { remainingUsd: 0, unavailable: true } }))
       ctx.cancel(refusalText({ remainingUsd: 0, unavailable: true }))
     }
   }

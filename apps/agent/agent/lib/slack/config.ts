@@ -9,8 +9,10 @@ import { postCapRefusal } from "./refusal.js"
  * tested directly.
  *
  * - Mentions and DMs start a turn only for a person from a listed workspace and never for a bot.
- * - `onAnswers` admits only a listed founder, for every approval and question: someone who may
- *   start a turn may not approve the writes it asks for. A rejected answer leaves the request open.
+ * - `onAnswers` admits only a listed founder, for every approval and question, so someone who may
+ *   start a turn cannot approve what it asks for. A rejected answer leaves the request open. It
+ *   combines with each tool's own response policy (see `founderAnswerAuth`): a founder approves
+ *   only the writes they asked for, except a bigger model, which any founder may approve.
  * - `capRefusal` posts the refusal text when `agent/hooks/spend.ts` cancels a turn.
  */
 export const capRefusal = defineSlackRenderer({

@@ -73,6 +73,24 @@ describe("the hq memory slot", () => {
     expect(outcome(proposalPolicy(approvalContext(CALLERS.summary, input)))).toBe("denied")
   })
 
+  test("in a shared thread the caller of this turn decides, not the one who started the session", () => {
+    const shared = (startedBy: keyof typeof CALLERS, turnOf: keyof typeof CALLERS) =>
+      ({
+        abortSignal: new AbortController().signal,
+        callId: "call_test",
+        session: {
+          auth: { current: CALLERS[turnOf], initiator: CALLERS[startedBy] },
+          id: "session_test",
+        },
+        toolInput: { text: "x" },
+        toolName: "test",
+      }) as never
+    // A trusted person started it, then a pull request's summary run took the turn: denied.
+    expect(outcome(proposalPolicy(shared("trusted", "summary")))).toBe("denied")
+    // A summary run started it, then a trusted person took the turn: allowed.
+    expect(outcome(proposalPolicy(shared("summary", "trusted")))).toBe("not-applicable")
+  })
+
   test("a write goes to proposeEntry: a pending proposal, no entry, the run attached", async () => {
     const tools = await toolsOf()
     const result = (await run(tools.propose_entry, {

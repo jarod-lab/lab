@@ -6,8 +6,8 @@ import { get, put } from "@vercel/blob"
  *
  * @remarks
  * The store is private and holds handoff artifacts only. Memory does not go
- * through this module: user preferences and the factory brain are eve
- * memory slots (`agent/memory/`), stored by eve's own file-memory backend.
+ * through this module: the agent's memory is the org brain in hq
+ * (`agent/memory/hq.ts`), read and proposed to over hq's API.
  *
  * The helpers carry the store's posture (private access, exact pathnames,
  * Markdown) in one place. They stay neutral about errors: API failures

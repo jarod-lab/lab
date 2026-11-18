@@ -6,6 +6,7 @@ import {
   createSpendHooks,
   EMPTY_SPEND_STATE,
   inCalls,
+  settlementOf,
   type SpendHookContext,
   type SpendState,
   type SpendStore,
@@ -224,6 +225,40 @@ describe("settling a turn", () => {
     expect((await runCost())?.costEstimated).toBe(true)
   })
 
+  test("two records without a cost settle at $0.20, estimated: each is priced, not just the first", async () => {
+    const { hooks } = hooksOn(() => hq.client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded({ data: { kind: "model", usage: {} } }, context().ctx)
+    await hooks.usageRecorded(
+      { data: { kind: "model", owner: { callId: "station" }, usage: {} } },
+      context().ctx,
+    )
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    const today = await allowance()
+    expect(today.spentUsd).toBeCloseTo(0.2, 4)
+    expect(today.reservedUsd).toBe(0)
+    expect((await runCost())?.costEstimated).toBe(true)
+  })
+
+  test("N records without a cost price at N estimates, with or without a record that reported one", () => {
+    const base = { ...EMPTY_SPEND_STATE, estimateUsd: 0.1 }
+    // What a turn counts in the end: the hold's settlement (an unreported one is the estimate).
+    const total = (state: SpendState) => {
+      const { settleAt, excessUsd, estimatedUsd } = settlementOf(state)
+      return (settleAt ?? state.estimateUsd) + excessUsd + estimatedUsd
+    }
+    for (const n of [1, 2, 3, 5]) {
+      expect(total({ ...base, withoutCost: n }), `${n} unreported`).toBeCloseTo(n * 0.1, 6)
+      // One record that reported $0.01 beside them: that cost, plus the same N estimates.
+      expect(
+        total({ ...base, withCost: 1, knownUsd: 0.01, withoutCost: n }),
+        `${n} unreported beside one reported`,
+      ).toBeCloseTo(0.01 + n * 0.1, 6)
+    }
+    // A decision call is an estimate of its own in either branch.
+    expect(total({ ...base, withoutCost: 1, extraEstimatedUsd: 0.02 })).toBeCloseTo(0.12, 6)
+  })
+
   test("$0.30 reported plus one record without a cost settles above $0.30, marked estimated", async () => {
     const { hooks } = hooksOn(() => hq.client)
     await hooks.turnStarted({}, context().ctx)
@@ -430,6 +465,8 @@ describe("the model.requested guard", () => {
     const call = context()
     hooks.modelRequested({}, { ...call.ctx, turn: { id: "turn_0" } })
     expect(call.cancel).toHaveBeenCalledTimes(1)
+    // The thread is told why it is quiet.
+    expect(store.state().refusal).toEqual({ remainingUsd: 0, unavailable: true })
   })
 })
 

@@ -2,6 +2,7 @@ import { meteredDecide } from "../lib/spend/ledger.js"
 import { defineTool } from "eve/tools"
 import { z } from "zod"
 import { labelDecision } from "../lib/github/approval.js"
+import { founderApproval } from "../lib/github/founder-response.js"
 import { COMPLEXITIES, PRIORITIES, WORK_ITEM_TYPES } from "../lib/triage/decisions.js"
 import { runTriage, sandboxGhRunner } from "../lib/triage/run.js"
 import { environment } from "../sandbox.js"
@@ -45,10 +46,11 @@ const inputSchema = z.object({
  * asked first. Reads need no approval.
  */
 export default defineTool({
-  approval: (ctx) =>
+  approval: founderApproval<z.infer<typeof inputSchema>>((ctx) =>
     ctx.toolInput?.issue_number !== undefined && ctx.toolInput.apply_labels !== false
       ? labelDecision(ctx.session.auth.current)
       : "not-applicable",
+  ),
   description:
     "Triage a work item in one fast step: type, priority, complexity, whether it is actionable or needs clarification or outside research, which existing repository labels fit, and whether it duplicates an existing issue. Pass issue_number for a GitHub issue (its labels are applied for you), or title and body for anything else. Returns a lane saying what to do next: pipeline, clarify, answer, or duplicate. Call this first for every work item, unless a triage result for it is already in your context.",
   async execute(input, ctx) {

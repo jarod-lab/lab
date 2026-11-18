@@ -39,13 +39,11 @@ export function isFounderPrincipal(principalId: string): boolean {
  * request open. Only a listed founder who also passes the workspace check gets through, so a
  * non-founder can neither approve nor deny anything in Slack. This is a ceiling, not the whole
  * rule: it is set once on the channel because eve has no agent-wide response policy, and it
- * combines with each tool's own response policy. Tools with no policy of their own (a repository
- * write, the ship gate) keep eve's default, "only the person whose turn requested the call can
- * answer it", so a founder can approve only a write they asked for themselves; a non-founder's
- * request can never be approved in Slack and stays open until withdrawn. That fails closed.
- * `request_bigger_model` has its own founder policy, so any founder may approve that one.
- * Open for P0 and Task 8: accept "founders ask and approve their own", or give the write and ship
- * tools a founder `response` policy.
+ * combines with each tool's own response policy. Every tool that can stop for a person carries the
+ * founder response policy (`founderResponse`, `lib/github/founder-response.ts`), so any listed
+ * founder may approve a repository write, the ship gate, a proposal or a bigger model, whoever
+ * asked; a non-founder can neither approve nor deny anything in Slack, and their request stays
+ * open until withdrawn. That fails closed.
  */
 export function founderAnswerAuth(auth: SessionAuthContext | null): SessionAuthContext | null {
   const allowed = allowedSlackAuth(auth)

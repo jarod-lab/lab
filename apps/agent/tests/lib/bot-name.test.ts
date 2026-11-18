@@ -1,49 +1,52 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { FALLBACK_BOT_NAME, mentionPattern } from "#lib/github/bot-name.js"
+import { stubGitHubApp } from "../github/support/github-app.js"
 
-// `resolveBotName` reads the connector's metadata over the network. That one
-// call is replaced here; everything `resolveBotName` does with the answer
-// is the real code.
-const getConnectorMetadata = vi.hoisted(() => vi.fn())
-vi.mock("@vercel/connect", async (original) => ({
-  ...(await original<object>()),
-  getConnectorMetadata,
-}))
-
+// `resolveBotName` asks GitHub for the app's slug (`GET /app`, signed with the app's JWT). The fake
+// GitHub in `support/github-app.ts` answers it and refuses a request GitHub would refuse.
 describe("resolveBotName", () => {
-  // The resolved name is kept for the life of the module, so each test
-  // loads the module afresh.
+  // The resolved name is kept for the life of the module, so each test loads the module afresh.
   const load = async () => (await import("#lib/github/bot-name.js")).resolveBotName
-  const slug = (appSlug: unknown) => ({ vendor: { appSlug } })
+  let app: ReturnType<typeof stubGitHubApp> | undefined
+  const slugRequests = () => app?.requests.filter((r) => r.url.endsWith("/app")) ?? []
 
   beforeEach(() => {
     vi.resetModules()
-    getConnectorMetadata.mockReset()
     vi.stubEnv("FACTORY_BOT_NAME", undefined)
     vi.stubEnv("GITHUB_APP_SLUG", undefined)
   })
 
   afterEach(() => {
+    app?.restore()
+    app = undefined
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
   })
 
-  test("FACTORY_BOT_NAME wins, then GITHUB_APP_SLUG, and neither asks the connector", async () => {
+  test("FACTORY_BOT_NAME wins, then GITHUB_APP_SLUG, and neither asks GitHub", async () => {
+    app = stubGitHubApp()
     const resolveBotName = await load()
     vi.stubEnv("GITHUB_APP_SLUG", "from-slug")
     expect(await resolveBotName()).toBe("from-slug")
     vi.stubEnv("FACTORY_BOT_NAME", "from-name")
     expect(await resolveBotName()).toBe("from-name")
-    expect(getConnectorMetadata).not.toHaveBeenCalled()
+    expect(app.requests).toEqual([])
   })
 
-  test("with no override, the name is the connector's app slug, asked for once", async () => {
-    getConnectorMetadata.mockResolvedValue(slug("foreman-agent"))
+  test("with no override, the name is the app's slug from GET /app, asked for once", async () => {
+    app = stubGitHubApp(undefined, "foreman-agent")
     const resolveBotName = await load()
 
     expect(await resolveBotName()).toBe("foreman-agent")
     expect(await resolveBotName()).toBe("foreman-agent")
-    expect(getConnectorMetadata).toHaveBeenCalledTimes(1)
-    expect(getConnectorMetadata).toHaveBeenCalledWith("github/test-agent")
+    expect(slugRequests()).toHaveLength(1)
+    const [request] = slugRequests()
+    expect(request?.method).toBe("GET")
+    expect(request?.url).toBe("https://api.github.com/app")
+    // The fake only answers a valid RS256 app JWT, the Accept and the API version; it did.
+    expect(request?.headers.authorization).toMatch(/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/)
+    expect(request?.headers.accept).toBe("application/vnd.github+json")
+    expect(request?.headers["x-github-api-version"]).toBe("2022-11-28")
   })
 
   test.each([
@@ -51,31 +54,57 @@ describe("resolveBotName", () => {
     ["empty", ""],
     ["not text", 42],
     ["longer than a name may be before it goes into a pattern", "a".repeat(81)],
-  ])("refuses a slug that is %s", async (_case, appSlug) => {
-    getConnectorMetadata.mockResolvedValue(slug(appSlug))
+    ["not a slug", "evil name (x)"],
+  ])("refuses a slug that is %s", async (_case, slug) => {
+    app = stubGitHubApp(undefined, slug)
     const resolveBotName = await load()
 
-    await expect(resolveBotName()).rejects.toThrow(
-      "Connector github/test-agent metadata carries no usable GitHub App slug.",
-    )
+    await expect(resolveBotName()).rejects.toThrow(/no (usable )?(GitHub App )?slug/i)
   })
 
   test("accepts a slug at the length limit", async () => {
-    getConnectorMetadata.mockResolvedValue(slug("a".repeat(80)))
+    app = stubGitHubApp(undefined, "a".repeat(80))
 
     expect(await (await load())()).toBe("a".repeat(80))
   })
 
-  test.each([
-    ["an unreachable connector", () => Promise.reject(new Error("offline"))],
-    ["an unusable slug", () => Promise.resolve(slug(""))],
-  ])("does not remember %s: the next call asks again", async (_case, first) => {
-    getConnectorMetadata.mockImplementationOnce(first).mockResolvedValue(slug("foreman-agent"))
+  test("does not remember a failure: the next call asks again", async () => {
+    app = stubGitHubApp(undefined, "")
+    const resolveBotName = await load()
+    await expect(resolveBotName()).rejects.toThrow()
+
+    app.restore()
+    app = stubGitHubApp(undefined, "foreman-agent")
+    expect(await resolveBotName()).toBe("foreman-agent")
+    expect(slugRequests()).toHaveLength(1)
+  })
+
+  test("an unreachable GitHub is an error naming no secret", async () => {
+    app = stubGitHubApp()
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("fetch failed: secret-host")))
     const resolveBotName = await load()
 
-    await expect(resolveBotName()).rejects.toThrow()
-    expect(await resolveBotName()).toBe("foreman-agent")
-    expect(getConnectorMetadata).toHaveBeenCalledTimes(2)
+    const failure = await resolveBotName().catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toMatch(/could not be reached/)
+    expect((failure as Error).message).not.toMatch(/BEGIN|Bearer|secret-host/)
+  })
+
+  test("a refusal from GitHub (bad credentials) is an error with the status only", async () => {
+    app = stubGitHubApp()
+    vi.stubEnv("GITHUB_APP_ID", "99999")
+    const resolveBotName = await load()
+
+    await expect(resolveBotName()).rejects.toThrow("GitHub refused the app lookup (HTTP 401)")
+  })
+
+  test("without the app's id and key it fails closed before any request", async () => {
+    app = stubGitHubApp()
+    vi.stubEnv("GITHUB_APP_PRIVATE_KEY", "")
+    const resolveBotName = await load()
+
+    await expect(resolveBotName()).rejects.toThrow(/GITHUB_APP_PRIVATE_KEY is not set/)
+    expect(app.requests).toEqual([])
   })
 })
 

@@ -3,7 +3,6 @@ import { resolveBotName } from "../lib/github/bot-name.js"
 import { checkoutForTurn, isCheckoutSandbox } from "../lib/github/checkout.js"
 import { githubCredentials } from "../lib/github/credentials.js"
 import { onCheckSuite, onComment, onIssue, onPullRequest } from "../lib/github/hooks.js"
-import { mintChannelToken } from "../lib/github/lease.js"
 import { log } from "../lib/log.js"
 
 /**
@@ -11,21 +10,22 @@ import { log } from "../lib/log.js"
  * "Foreman".
  *
  * @remarks
- * - Credentials are brokered by Vercel Connect through the shared handle in
- *   `agent/lib/github/credentials.ts`; tokens are resolved per call and never
- *   exposed to the model. `installationToken` replaces the connector's
- *   default token (every permission the app holds, on every repository the
+ * - Credentials are the org's own GitHub App, from the shared handle in
+ *   `agent/lib/github/credentials.ts`: its id, private key and webhook
+ *   secret from the environment, each read at the moment of use and never
+ *   exposed to the model. `installationToken` replaces the token eve would
+ *   mint itself (every permission the app holds, on every repository the
  *   installation covers) with one narrowed to issues and pull requests on
  *   the factory repository (`mintChannelToken` in
  *   `agent/lib/github/lease.ts`). That is all the channel does with it: read
  *   the thread, reply, react, and check a labeler's permission.
  * - `botName` is resolved from the GitHub App's own slug
- *   (`agent/lib/github/bot-name.ts`), so the mention follows whatever the
- *   deployer named their app with no configuration, and a hardcoded handle
- *   can't collide with an unrelated GitHub user. It is passed as the
- *   resolver function, not a resolved value: eve calls it on first use
- *   inside request handling, where the deployment's OIDC token exists (at
- *   module load it doesn't, so a value resolved here would pin the
+ *   (`GET /app` under the app's JWT, `agent/lib/github/bot-name.ts`), so the
+ *   mention follows whatever the deployer named their app with no
+ *   configuration, and a hardcoded handle can't collide with an unrelated
+ *   GitHub user. It is passed as the resolver function, not a resolved
+ *   value: eve calls it on first use inside request handling (at module load
+ *   the credentials may not be there, so a value resolved here would pin the
  *   fallback), caches a fulfilled name, and retries a rejection on the next
  *   event.
  * - `onComment` keeps the built-in mention and ignore rules and adds an
@@ -62,7 +62,7 @@ import { log } from "../lib/log.js"
  *   red PR never triggers an uninvited fix. The session runs unattended under
  *   the autonomous principal, anchored to the pull request, and the injected
  *   task bounds the loop by counting earlier fix-attempt comments on the
- *   thread. Requires the connector to subscribe to the `check_suite` webhook
+ *   thread. Requires the GitHub App to subscribe to the `check_suite` webhook
  *   event.
  * - `turn.started` is the factory's own handler, not the channel's default.
  *   Both react to the triggering comment and check the repository out into
@@ -80,10 +80,7 @@ import { log } from "../lib/log.js"
  */
 export default githubChannel({
   botName: resolveBotName,
-  credentials: {
-    ...githubCredentials,
-    installationToken: () => mintChannelToken(),
-  },
+  credentials: githubCredentials,
   events: {
     // The factory's own handler (the header says why). Like the built-in, a
     // failed reaction or checkout is logged and the turn goes on without it.

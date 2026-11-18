@@ -1,6 +1,7 @@
 import { defineWorkflowTool } from "eve/tools"
 import { z } from "zod"
 import { stationPolicy } from "../lib/github/approval.js"
+import { founderApproval } from "../lib/github/founder-response.js"
 import { stationOutput } from "../lib/stations/result.js"
 import { CLASSIFIER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
 
@@ -16,7 +17,7 @@ import { CLASSIFIER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
  * name.
  */
 export default defineWorkflowTool({
-  approval: stationPolicy,
+  approval: founderApproval(stationPolicy),
   description:
     "Classify a work item with a language model and write the specific clarifying " +
     "questions to ask about it: type, priority, complexity, affected area, whether it is " +

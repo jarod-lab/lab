@@ -88,7 +88,7 @@ interface Answer {
 }
 
 interface Tool {
-  approval: (ctx: never) => unknown
+  approval: { request: (ctx: never) => unknown; response: (ctx: never) => unknown }
   description: string
   execute: (input: BashToolInput, ctx: never) => Promise<BashToolOutput>
   inputSchema: unknown
@@ -829,7 +829,7 @@ describe("the orchestrator: no shell, only gh, whoever is asking", () => {
       async (command) => {
         const h = harness()
         const tool = h.tool("orchestrator")
-        expect(tool.approval(approvalContext(CALLERS[caller], { command }))).toEqual({
+        expect(tool.approval.request(approvalContext(CALLERS[caller], { command }))).toEqual({
           reason: GH_ONLY,
           type: "denied",
         })
@@ -847,7 +847,7 @@ describe("the orchestrator: no shell, only gh, whoever is asking", () => {
       async (command) => {
         const h = harness()
         const tool = h.tool("orchestrator")
-        const status = tool.approval(approvalContext(CALLERS[caller], { command }))
+        const status = tool.approval.request(approvalContext(CALLERS[caller], { command }))
         expect(outcome(status)).toBe("denied")
         expect(reasonOf(status)).toMatch(/The orchestrator never pushes/)
         await expect(tool.execute({ command }, h.as(caller))).rejects.toThrow(GH_ONLY)
@@ -865,7 +865,7 @@ describe("the orchestrator: no shell, only gh, whoever is asking", () => {
       const read = "gh issue view 12"
       const command = `${read}${" ".repeat(MAX_ANALYZED_LENGTH)}`
       expect(analyzeCommand(`${read}   `).kind).toBe("gh")
-      expect(tool.approval(approvalContext(CALLERS[caller], { command }))).toEqual({
+      expect(tool.approval.request(approvalContext(CALLERS[caller], { command }))).toEqual({
         reason: GH_ONLY,
         type: "denied",
       })
@@ -900,7 +900,9 @@ describe("the orchestrator: no shell, only gh, whoever is asking", () => {
       async (command, expected) => {
         const h = harness({ respond: () => ({ stdout: "Login 500\n" }) })
         const tool = h.tool("orchestrator")
-        expect(tool.approval(approvalContext(CALLERS[caller], { command }))).toBe("not-applicable")
+        expect(tool.approval.request(approvalContext(CALLERS[caller], { command }))).toBe(
+          "not-applicable",
+        )
         const result = await tool.execute({ command }, h.as(caller))
         expect(result).toEqual(completed({ stdout: expected.map(() => "Login 500").join("\n") }))
         expect(h.shellCommands()).toEqual([])
@@ -993,7 +995,9 @@ describe("the orchestrator: no shell, only gh, whoever is asking", () => {
     async (caller, command, expected) => {
       const h = harness({ respond: () => ({ stdout: "ok\n" }) })
       const tool = h.tool("orchestrator")
-      expect(tool.approval(approvalContext(CALLERS[caller], { command }))).toBe("not-applicable")
+      expect(tool.approval.request(approvalContext(CALLERS[caller], { command }))).toBe(
+        "not-applicable",
+      )
       const result = await tool.execute({ command }, h.as(caller))
       expect(result).toEqual(completed({ stdout: "ok" }))
       expect(h.commands()).toEqual([expected])
@@ -1193,7 +1197,9 @@ describe.each(STATIONS)("%s: who started the run changes nothing about the shell
     (caller) => {
       const tool = harness().tool(role)
       for (const command of ["ls -la", "git fetch origin main", "gh --help"]) {
-        expect(tool.approval(approvalContext(CALLERS[caller], { command }))).toBe("not-applicable")
+        expect(tool.approval.request(approvalContext(CALLERS[caller], { command }))).toBe(
+          "not-applicable",
+        )
       }
     },
   )
@@ -1965,9 +1971,9 @@ describe("the orchestrator: a list the runtime runs holds a dozen commands at mo
     const tool = h.tool("orchestrator")
     // Twelve of the same pass approval; the thirteenth is what denies it.
     expect(
-      tool.approval(approvalContext(CALLERS.trusted, { command: labels(12, separator) })),
+      tool.approval.request(approvalContext(CALLERS.trusted, { command: labels(12, separator) })),
     ).toBe("not-applicable")
-    expect(tool.approval(approvalContext(CALLERS.trusted, { command }))).toEqual({
+    expect(tool.approval.request(approvalContext(CALLERS.trusted, { command }))).toEqual({
       reason: TOO_MANY,
       type: "denied",
     })
@@ -2024,7 +2030,7 @@ describe.each(STATIONS)("%s: a gh command that changes GitHub", (role) => {
       const h = harness({ files: { "notes.md": "x" } })
       const tool = h.tool(role)
       for (const caller of Object.values(CALLERS)) {
-        const status = tool.approval(approvalContext(caller, { command }))
+        const status = tool.approval.request(approvalContext(caller, { command }))
         expect(outcome(status)).toBe("denied")
         expect(reasonOf(status)).toMatch(/Stations read GitHub/)
       }
@@ -2264,7 +2270,7 @@ describe("a credential that writes is never live while the shell holds a lease",
     const { h } = gated()
     const tool = h.tool("orchestrator")
     const piped = "gh issue view 12 --json body | jq -r .body > body.md"
-    expect(tool.approval(approvalContext(CALLERS.trusted, { command: piped }))).toEqual({
+    expect(tool.approval.request(approvalContext(CALLERS.trusted, { command: piped }))).toEqual({
       reason: GH_ONLY,
       type: "denied",
     })
@@ -2610,7 +2616,7 @@ describe("whatever the command says, a shell never runs it under a credential th
 
 describe("approval", () => {
   const ask = (role: ShellRole, caller: CallerClass, command: string) =>
-    harness().tool(role).approval(approvalContext(CALLERS[caller], { command }))
+    harness().tool(role).approval.request(approvalContext(CALLERS[caller], { command }))
 
   const UNREADABLE = [
     "ls -la",
@@ -2921,7 +2927,8 @@ describe("each agent mounts the tool with its own role", () => {
     expect(tool.description).toBe(harness().tool(role).description)
     expect(tool.inputSchema).toBe(bash.inputSchema)
 
-    const decide = (command: string) => tool.approval(approvalContext(CALLERS.trusted, { command }))
+    const decide = (command: string) =>
+      tool.approval.request(approvalContext(CALLERS.trusted, { command }))
 
     // Only the stations have a shell.
     for (const command of ["ls -la", "gh pr view 34 --json title | jq .title"]) {
@@ -2966,9 +2973,9 @@ describe("the orchestrator: a body file's text cannot change what the command do
         const h = harness({ files: { "notes.md": text } })
         const tool = h.tool("orchestrator")
         // The policy reads the command before the file is read: a draft runs.
-        expect(outcome(tool.approval(approvalContext(CALLERS[caller], { command: DRAFT })))).toBe(
-          "not-applicable",
-        )
+        expect(
+          outcome(tool.approval.request(approvalContext(CALLERS[caller], { command: DRAFT }))),
+        ).toBe("not-applicable")
         await tool.execute({ command: DRAFT }, h.as(caller))
         expect(h.of("write").map((write) => write.content)).toEqual([text])
         const ran =

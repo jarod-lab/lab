@@ -156,3 +156,50 @@ export async function mintInstallationToken(
     expiresAt: typeof reply.expires_at === "string" ? reply.expires_at : "",
   }
 }
+
+export interface AppSlugRequest {
+  appId: string
+  /** The app's private key, PEM. From the vault; never logged. */
+  privateKeyPem: string
+  /** Injected in tests: a fake GitHub. Defaults to the global fetch at the time of the call. */
+  fetch?: typeof fetch
+  /** The clock in milliseconds, for tests. */
+  now?: () => number
+  /** GitHub's API host. Tests and GitHub Enterprise change it. */
+  apiBaseUrl?: string
+}
+
+/**
+ * The app's own slug, from `GET /app` under the app JWT (no installation involved). It is the
+ * handle people `@mention`. A refusal or an answer without a slug is an Error naming GitHub's
+ * status; no error carries the JWT, the key or the response body.
+ */
+export async function fetchAppSlug(request: AppSlugRequest): Promise<string> {
+  const send = request.fetch ?? globalThis.fetch
+  const jwt = createAppJwt(request.appId, request.privateKeyPem, (request.now ?? Date.now)())
+  const base = (request.apiBaseUrl ?? "https://api.github.com").replace(/\/+$/, "")
+  let response: Response
+  try {
+    response = await send(`${base}/app`, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    throw new Error(
+      `GitHub could not be reached for the app's slug: ${error instanceof Error ? error.name : "error"}`,
+    )
+  }
+  if (!response.ok) {
+    throw new Error(`GitHub refused the app lookup (HTTP ${response.status})`)
+  }
+  const reply = (await response.json().catch(() => ({}))) as { slug?: unknown }
+  if (typeof reply.slug !== "string" || reply.slug === "") {
+    throw new Error("GitHub answered the app lookup with no slug.")
+  }
+  return reply.slug
+}

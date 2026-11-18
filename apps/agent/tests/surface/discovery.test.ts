@@ -265,6 +265,8 @@ describe("discover: reading a report", () => {
 
   test("it runs eve info --json in the project, with placeholders only for what the environment lacks", async () => {
     report({ status: "ready" })
+    vi.stubEnv("FACTORY_REPO", "kept/repo")
+    vi.stubEnv("EVE_TELEMETRY_DISABLED", undefined)
     const engine = await load()
     engine.discover()
     vi.unstubAllEnvs()
@@ -278,8 +280,10 @@ describe("discover: reading a report", () => {
       "--json",
     ])
     expect(options.cwd).toBe(engine.PROJECT_ROOT)
-    // Set by the suite, so kept; unset above, so filled in.
-    expect(options.env.GITHUB_CONNECTOR).toBe("github/test-agent")
+    // Set above, so kept; unset above, so filled in. The GitHub App's credentials are not read at
+    // load, so none is among the placeholders.
+    expect(options.env.FACTORY_REPO).toBe("kept/repo")
+    expect(options.env.EVE_TELEMETRY_DISABLED).toBe("1")
   })
 
   test("tools, stations, and memory slots are read from the report and its compiled manifest, sorted", async () => {

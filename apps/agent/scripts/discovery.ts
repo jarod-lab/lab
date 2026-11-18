@@ -24,7 +24,6 @@ export const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..
 export const DISCOVERY_ENVIRONMENT: Readonly<Record<string, string>> = {
   EVE_TELEMETRY_DISABLED: "1",
   FACTORY_REPO: "acme/widgets",
-  GITHUB_CONNECTOR: "github/foreman-agent",
 }
 
 export interface DiscoveredRoute {

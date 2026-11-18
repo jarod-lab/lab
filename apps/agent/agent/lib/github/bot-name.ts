@@ -1,6 +1,6 @@
-import { getConnectorMetadata } from "@vercel/connect"
-import { GITHUB_CONNECTOR } from "./credentials.js"
 import { agentEnv } from "@lab/env/agent"
+import { fetchAppSlug } from "./app-token.js"
+import { githubAppId, githubPrivateKey } from "./credentials.js"
 
 /**
  * Name used where a resolution failure must not stop the work, like the
@@ -14,7 +14,10 @@ export const FALLBACK_BOT_NAME = "Foreman"
  */
 const MAX_BOT_NAME_LENGTH = 80
 
-let resolvedFromConnector: string | undefined
+/** What GitHub allows in an App slug: lower-case letters, digits and hyphens. */
+const SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*$/
+
+let resolvedFromApp: string | undefined
 
 /**
  * The name the factory answers to in `@mentions`, resolved without setup.
@@ -22,39 +25,42 @@ let resolvedFromConnector: string | undefined
  * @remarks
  * Resolution order:
  * 1. `FACTORY_BOT_NAME`, then `GITHUB_APP_SLUG`, for explicit overrides.
- * 2. The GitHub App's own slug from the Connect connector's metadata
- *    (`vendor.appSlug`), so the mention automatically follows whatever the
- *    deployer named their app. Fetched with the deployment's OIDC token and
- *    cached for the life of the instance.
+ * 2. The GitHub App's own slug, from `GET /app` under the app's JWT
+ *    (`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`), so the mention
+ *    automatically follows whatever the deployer named their app. Cached for
+ *    the life of the instance.
  *
  * A failure throws and is never cached. That contract is what the channel's
  * lazy `botName` resolution relies on: eve calls this on first use inside
- * request handling (where the OIDC token exists), caches a fulfilled name,
- * and retries a rejection on the next event, so a transient outage can't
- * pin a wrong name. Callers that need an answer no matter what catch and
+ * request handling, caches a fulfilled name, and retries a rejection on the
+ * next event, so a transient outage can't pin a wrong name. Callers that need an answer no matter what catch and
  * use {@link FALLBACK_BOT_NAME}.
  *
  * A hardcoded name is wrong here because the app's slug is chosen by whoever
  * registers it, and a guessed handle can belong to a real GitHub user.
  *
- * @throws When the connector metadata is unreachable or carries no usable
- * slug.
+ * @throws When the app's credentials are not set, GitHub is unreachable or
+ * refuses, or the answer carries no usable slug.
  */
 export async function resolveBotName(): Promise<string> {
   const override = agentEnv("FACTORY_BOT_NAME") ?? agentEnv("GITHUB_APP_SLUG")
   if (override) {
     return override
   }
-  if (resolvedFromConnector !== undefined) {
-    return resolvedFromConnector
+  if (resolvedFromApp !== undefined) {
+    return resolvedFromApp
   }
-  const metadata = await getConnectorMetadata(GITHUB_CONNECTOR)
-  const slug = (metadata.vendor as { appSlug?: unknown }).appSlug
-  if (typeof slug !== "string" || slug.length === 0 || slug.length > MAX_BOT_NAME_LENGTH) {
-    throw new Error(`Connector ${GITHUB_CONNECTOR} metadata carries no usable GitHub App slug.`)
+  const slug = await fetchAppSlug({ appId: githubAppId(), privateKeyPem: githubPrivateKey() })
+  if (slug.length > MAX_BOT_NAME_LENGTH || !SLUG.test(slug)) {
+    throw new Error("GitHub's answer carries no usable GitHub App slug.")
   }
-  resolvedFromConnector = slug
+  resolvedFromApp = slug
   return slug
+}
+
+/** Forgets the cached slug. For tests. */
+export function resetBotNameCache(): void {
+  resolvedFromApp = undefined
 }
 
 /**
@@ -63,7 +69,7 @@ export async function resolveBotName(): Promise<string> {
  *
  * @remarks
  * The name is escaped for literal matching before interpolation, and
- * {@link resolveBotName} bounds its length, so connector-supplied data can
+ * {@link resolveBotName} bounds its length, so GitHub-supplied data can
  * never change the pattern's meaning.
  */
 export function mentionPattern(botName: string): RegExp {

@@ -3,6 +3,7 @@ import { defineTool } from "eve/tools"
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval"
 import { z } from "zod"
 import type { EntryHit, HqClient } from "../hq/client.js"
+import { founderApproval } from "../github/founder-response.js"
 import { log } from "../log.js"
 import { isSummaryOnly } from "../trust.js"
 
@@ -121,7 +122,7 @@ export function hqMemory(deps: HqMemoryDeps) {
     async tools() {
       return {
         propose_entry: defineTool({
-          approval: proposalPolicy,
+          approval: founderApproval(proposalPolicy),
           description:
             "Propose a new brain entry, or a change to one, for a founder to approve. Use it when " +
             "someone asks you to remember a fact, a decision or how the org does something. It does " +

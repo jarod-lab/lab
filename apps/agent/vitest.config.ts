@@ -25,7 +25,6 @@ export default defineConfig({
       FACTORY_INTAKE_TOKEN: "test-intake-token-0123456789abcdef",
       FACTORY_REPO: "acme/widgets",
       FACTORY_SANDBOX_EGRESS: "open",
-      GITHUB_CONNECTOR: "github/test-agent",
     },
     environment: "node",
     // The lab base's limits (packages/config/vitest.base.ts): turbo runs every package's tests at

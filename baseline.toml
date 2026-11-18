@@ -276,7 +276,7 @@ type = "ratchet"
 severity = "error"
 glob = "**/*.test.{ts,tsx}"
 # Exactly the nine vendored Foreman test files (vercel-labs/eve-software-factory-template, commit
-# 2e1652f) that mock the Vercel SDK boundaries (@vercel/connect, @vercel/blob) and sibling modules.
+# 2e1652f) that mock the Vercel SDK boundaries (@vercel/blob) and sibling modules.
 # They are upstream's tests, kept so Foreman's behaviour stays proven. Our own tests in apps/agent
 # (tests/hq, tests/spend, evals) stay under the rule and use injected fakes. The ceiling is unchanged.
 exclude_glob = [

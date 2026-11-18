@@ -1,5 +1,7 @@
 import { agentEnv } from "@lab/env/agent"
 import type { HqClient } from "../hq/client.js"
+import { MODELS } from "../models.js"
+import { NORMAL_TURN_TOKENS, tokenFloorUsd } from "./prices.js"
 
 /**
  * The daily Eve spend cap ($10.00 a day per org, set in hq): the check a turn passes before any
@@ -12,27 +14,46 @@ import type { HqClient } from "../hq/client.js"
  * Nothing here weakens or reads the cap's size.
  */
 
-/** What a turn is assumed to cost until its real cost is known, when nothing says otherwise. */
+/**
+ * The least a turn is assumed to cost until its real cost is known. The estimate is also what a
+ * model call that reports no cost settles at, so it is never lowered below this.
+ */
 export const DEFAULT_TURN_ESTIMATE_USD = 0.1
+
+/**
+ * What a normal chat turn costs on the chat model by its tokens: the ~12,000-token Foreman prompt
+ * on each of about six calls, plus the reply (`NORMAL_TURN_TOKENS`), priced from the table in
+ * `prices.ts`, rounded up to a cent. At haiku-5.5's list price that is 72,000 x $0.1/M + 3,000 x
+ * $0.5/M = $0.0087, so `DEFAULT_TURN_ESTIMATE_USD` still governs (it covers it eleven times over);
+ * a chat model that is repriced or missing from the table raises the estimate by itself.
+ */
+export function normalTurnUsd(model: string = MODELS.orchestrator): number {
+  return Math.ceil(tokenFloorUsd(model, NORMAL_TURN_TOKENS) * 100) / 100
+}
 
 /** What one unattended build model run is recorded at when the provider reports no cost. */
 export const BUILD_ESTIMATE_USD = 0.25
 
-/** What one decision-model call (`decide()`, which reports no cost to the ledger) is priced at. */
+/** What one decision-model call (`decide()`; its result carries tokens, never a cost) is priced at. */
 export const DECISION_ESTIMATE_USD = 0.02
 
 /** The most an estimate may be set to: a typo must not hold the day's whole cap. */
 const MAX_ESTIMATE_USD = 5
 
-/** The per-turn estimate: AGENT_TURN_ESTIMATE_USD when it is a sensible amount, else the default. */
+/**
+ * The per-turn estimate: AGENT_TURN_ESTIMATE_USD when it is a sensible amount, else the larger of
+ * the default and what a normal turn costs on the chat model by its tokens (never above the clamp).
+ */
 export function turnEstimateUsd(): number {
+  // The configured chat model, not `chatModelId()`: offline that is a mock priced as unknown.
+  const sized = Math.min(Math.max(DEFAULT_TURN_ESTIMATE_USD, normalTurnUsd()), MAX_ESTIMATE_USD)
   const raw = agentEnv("AGENT_TURN_ESTIMATE_USD")
   if (raw === undefined || raw.trim() === "") {
-    return DEFAULT_TURN_ESTIMATE_USD
+    return sized
   }
   const value = Number(raw)
   if (!Number.isFinite(value) || value <= 0) {
-    return DEFAULT_TURN_ESTIMATE_USD
+    return sized
   }
   // Too large an amount is clamped, not ignored: an operator who asked for more gets the most.
   return Math.min(value, MAX_ESTIMATE_USD)

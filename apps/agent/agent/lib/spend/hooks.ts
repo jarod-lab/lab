@@ -3,6 +3,7 @@ import type { HqClient, RunOutcome, RunSummary } from "../hq/client.js"
 import { log } from "../log.js"
 import { isAutonomous, isSummaryOnly } from "../trust.js"
 import { BUILD_ESTIMATE_USD, checkCap, DECISION_ESTIMATE_USD, refusalText } from "./cap.js"
+import { priceUsage, type UsageWithCost } from "./prices.js"
 
 /**
  * The spend ledger's hooks: the cap before a turn, the cost after it.
@@ -19,7 +20,13 @@ import { BUILD_ESTIMATE_USD, checkCap, DECISION_ESTIMATE_USD, refusalText } from
  *   eve turn with no hold, is cancelled (a crash between the marker and the hold would otherwise
  *   let the turn run uncapped).
  * - `usage.recorded` fires once per model run and once per delegated call, so a turn's usage is
- *   summed in state and settled once, at `turn.settled`. Usage that arrives with no open hold
+ *   summed in state and settled once, at `turn.settled`. A record's cost is never taken from a bare
+ *   zero: the gateway reports `costUsd: 0` on calls that used thousands of tokens, so a zero (or no
+ *   cost) on a call with tokens is priced at the token floor (`prices.ts`, which states the rule).
+ *   A record of kind "decision" is skipped here: eve's `decide()` emits one inside a session, and
+ *   `decisionSpent` (the metered wrapper in `ledger.ts`) already counts that same call, so each
+ *   decision call is counted once, by the wrapper, which also covers calls made outside a session
+ *   (no usage record is emitted there). Usage that arrives with no open hold
  *   (late delegated spend, a build) goes to `record_spend`. Hooks are not exactly-once: each
  *   record is keyed on `ctx.occurrence.idempotencyKey` and skipped when seen. hq's `record_spend`
  *   has no idempotency field, so this guard is best effort (see the report).
@@ -64,7 +71,7 @@ export interface SpendState {
   /** How many records reported a cost, and how many did not. */
   withCost: number
   withoutCost: number
-  /** Decision-model calls this turn, priced at an estimate (the decision model reports no cost). */
+  /** Decision-model calls this turn (and floor excess over the estimate), priced as estimates. */
   extraEstimatedUsd: number
   /** Idempotency keys already handled (the last 200). */
   seen: string[]
@@ -115,9 +122,11 @@ export interface SpendHookContext {
 
 export interface UsageEvent {
   data: {
-    owner?: { runId: string } | { callId: string } | { changeId: string }
+    /** Absent or null for usage nothing owns (a decision call, cache warming). */
+    owner?: { runId: string } | { callId: string } | { changeId: string } | null
     kind: string
-    usage: { costUsd?: number }
+    /** Eve fills every count with 0 when the provider reported none; the cost may be 0 or absent. */
+    usage: UsageWithCost
   }
 }
 
@@ -163,12 +172,24 @@ export function inCalls(amountUsd: number): number[] {
   return pieces
 }
 
-const costOf = (usage: { costUsd?: number }): number | undefined =>
-  typeof usage.costUsd === "number" && Number.isFinite(usage.costUsd) && usage.costUsd >= 0
-    ? usage.costUsd
-    : undefined
-
 const round4 = (amount: number) => Math.round(amount * 10_000) / 10_000
+
+/**
+ * A priced record as `record_spend` takes it: a reported cost is exact; a token floor or an
+ * unreported cost is an estimate (at least `fallbackUsd`, and at least the floor), so hq marks it so.
+ */
+function recordedAs(
+  priced: ReturnType<typeof priceUsage>,
+  fallbackUsd: number,
+): { amountUsd?: number; estimatedUsd?: number } {
+  if (priced.kind === "reported") {
+    return { amountUsd: priced.amountUsd }
+  }
+  if (priced.kind === "floor") {
+    return { estimatedUsd: priced.amountUsd }
+  }
+  return { estimatedUsd: Math.max(fallbackUsd, priced.floorUsd) }
+}
 
 /** How a finished turn's cost is split between the hold's settlement and separate records. */
 export interface Settlement {
@@ -381,19 +402,27 @@ export function createSpendHooks(deps: SpendHookDeps) {
     remember(key)
     await flush()
     const state = store.get()
-    const cost = costOf(event.data.usage)
-    const model =
-      "owner" in event.data && event.data.owner && "callId" in event.data.owner
-        ? "delegated"
-        : deps.modelId()
+    if (event.data.kind === "decision") {
+      // Counted by `decisionSpent`: the same call, once (see the header). Not a free pass: the
+      // wrapper prices it at max(decision estimate, token floor).
+      return
+    }
+    const model = event.data.owner && "callId" in event.data.owner ? "delegated" : deps.modelId()
+    const priced = priceUsage(model, event.data.usage)
 
     if (state.kind === "eve" && state.holdId !== null && !state.settled) {
-      store.update((s) => ({
-        ...s,
-        knownUsd: s.knownUsd + (cost ?? 0),
-        withCost: s.withCost + (cost === undefined ? 0 : 1),
-        withoutCost: s.withoutCost + (cost === undefined ? 1 : 0),
-      }))
+      store.update((s) =>
+        priced.kind === "unreported"
+          ? {
+              ...s,
+              // Priced at the turn's estimate as ever; tokens that cost more than the estimate add
+              // the difference, so the record counts at its floor and stays marked estimated.
+              withoutCost: s.withoutCost + 1,
+              extraEstimatedUsd:
+                s.extraEstimatedUsd + Math.max(0, round4(priced.floorUsd - s.estimateUsd)),
+            }
+          : { ...s, knownUsd: s.knownUsd + priced.amountUsd, withCost: s.withCost + 1 },
+      )
       return
     }
 
@@ -401,42 +430,40 @@ export function createSpendHooks(deps: SpendHookDeps) {
     const source = state.kind === "build" ? "build" : "eve"
     const fallback =
       source === "build" ? BUILD_ESTIMATE_USD : Math.max(state.estimateUsd, deps.estimateUsd())
-    await record({
-      key,
-      source,
-      amountUsd: cost,
-      estimatedUsd: cost === undefined ? fallback : undefined,
-      model,
-    })
+    await record({ key, source, model, ...recordedAs(priced, fallback) })
   }
 
   /**
-   * A decision-model call (`decide()`): eve emits no `usage.recorded` for it. Inside an open eve
+   * A decision-model call (`decide()`): the one place it is counted (its own `usage.recorded` of kind
+   * "decision" is skipped by `usageRecorded`, so a call is never counted twice). Inside an open eve
    * turn it joins the turn's sum (at its reported cost, else the decision estimate); anywhere else
    * it is recorded straight away, as build spend when it is for a build (`build: true`, pretriage).
    */
-  async function decisionSpent(input: {
-    costUsd?: number
-    model: string
-    build?: boolean
-  }): Promise<void> {
-    const cost = costOf({ costUsd: input.costUsd })
+  async function decisionSpent(
+    input: UsageWithCost & { model: string; build?: boolean },
+  ): Promise<void> {
+    // `decide()`'s result carries tokens and no cost (its own usage record has the gateway's, which
+    // `usageRecorded` skips), so this is in practice max(decision estimate, token floor).
+    const priced = priceUsage(input.model, input)
     const state = store.get()
     if (!input.build && state.kind === "eve" && state.holdId !== null && !state.settled) {
       store.update((s) =>
-        cost === undefined
-          ? { ...s, extraEstimatedUsd: s.extraEstimatedUsd + DECISION_ESTIMATE_USD }
-          : { ...s, knownUsd: s.knownUsd + cost, withCost: s.withCost + 1 },
+        priced.kind === "unreported"
+          ? {
+              ...s,
+              extraEstimatedUsd:
+                s.extraEstimatedUsd + Math.max(DECISION_ESTIMATE_USD, priced.floorUsd),
+            }
+          : { ...s, knownUsd: s.knownUsd + priced.amountUsd, withCost: s.withCost + 1 },
       )
       return
     }
     await record({
       key: "decision",
       source: input.build || state.kind === "build" ? "build" : "eve",
-      amountUsd: cost,
-      estimatedUsd: cost === undefined ? DECISION_ESTIMATE_USD : undefined,
       model: input.model,
       runId: input.build ? null : undefined,
+      ...recordedAs(priced, DECISION_ESTIMATE_USD),
     })
   }
 

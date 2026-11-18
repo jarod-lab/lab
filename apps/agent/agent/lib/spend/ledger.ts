@@ -26,12 +26,16 @@ export interface MeteringDeps {
 }
 
 /**
- * Wraps `decide()` so its cost is recorded. eve emits no `usage.recorded` for a decision-model call
- * (it works outside any session), so every decision call the agent makes goes through the wrapper:
- * inside a chat turn it joins the turn's sum, inside a build it is recorded as build spend.
- * `build: true` is for calls made before a build's first turn (pretriage), where there is no turn.
+ * Wraps `decide()` so its cost is recorded, once. Inside a session eve's `decide()` also emits a
+ * `usage.recorded` of kind "decision" (owner null) carrying the gateway's cost; outside one (a
+ * build's pretriage) it emits nothing. The usage hook skips the former so this wrapper, which every
+ * decision call goes through, is the single source: inside a chat turn the call joins the turn's
+ * sum, inside a build it is recorded as build spend. `build: true` is for calls made before a
+ * build's first turn (pretriage), where there is no turn.
  *
- * - The cost is the call's `usage.costUsd` when it reports one, else the decision estimate.
+ * - `decide()`'s result carries tokens and no cost, so the call is charged at the larger of the
+ *   decision estimate and its token floor (`prices.ts`), which over-counts the gateway's own figure.
+ *   A result that does carry `usage.costUsd` > 0 is charged at that cost.
  * - A call that throws is not metered and its error is not swallowed: no answer, nothing to price.
  * - Metering failing never fails the call: it is logged, and the call's answer is returned.
  */
@@ -40,9 +44,16 @@ export function createMeteredDecide(deps: MeteringDeps) {
     (async (...args: Parameters<typeof decide>) => {
       const result = await deps.decide(...args)
       try {
-        const usage = (result as { usage?: { costUsd?: unknown } }).usage
+        const usage = (result as { usage?: Record<string, unknown> }).usage
+        const count = (value: unknown) => (typeof value === "number" ? value : undefined)
         await deps.ledger.decisionSpent({
-          costUsd: typeof usage?.costUsd === "number" ? usage.costUsd : undefined,
+          costUsd: count(usage?.costUsd),
+          ...(count(usage?.inputTokens) !== undefined && {
+            inputTokens: count(usage?.inputTokens),
+          }),
+          ...(count(usage?.outputTokens) !== undefined && {
+            outputTokens: count(usage?.outputTokens),
+          }),
           model: deps.model,
           build: options.build,
         })

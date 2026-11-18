@@ -54,6 +54,7 @@ describe("resolveBotName", () => {
     ["empty", ""],
     ["not text", 42],
     ["longer than a name may be before it goes into a pattern", "a".repeat(81)],
+    ["upper case (GitHub slugs are lower case)", "Acme-Factory"],
     ["not a slug", "evil name (x)"],
   ])("refuses a slug that is %s", async (_case, slug) => {
     app = stubGitHubApp(undefined, slug)

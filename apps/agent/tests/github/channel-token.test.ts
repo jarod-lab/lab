@@ -218,12 +218,20 @@ describe("the channel is wired to the narrowed token", () => {
   })
 
   test("the credentials are read when used: the app id, the key (newlines unescaped) and the webhook secret", async () => {
-    vi.stubEnv("GITHUB_WEBHOOK_SECRET", " whsec-test ")
+    vi.stubEnv("GITHUB_WEBHOOK_SECRET", "whsec-test")
     expect(githubAppId()).toBe("12345")
     expect(githubPrivateKey()).toMatch(
       /^-----BEGIN PRIVATE KEY-----\n[\s\S]+\n-----END PRIVATE KEY-----\n?$/,
     )
     expect(githubWebhookSecret()).toBe("whsec-test")
+  })
+
+  test("the webhook secret is the HMAC key exactly as set: edge whitespace is kept, not trimmed", () => {
+    vi.stubEnv("GITHUB_WEBHOOK_SECRET", " whsec-test\n")
+    expect(githubWebhookSecret()).toBe(" whsec-test\n")
+    // Blank is judged on the trimmed value only: whitespace alone still fails closed.
+    vi.stubEnv("GITHUB_WEBHOOK_SECRET", " \t\n ")
+    expect(githubWebhookSecret).toThrow(/GITHUB_WEBHOOK_SECRET is not set/)
   })
 
   test("an unset or blank credential fails closed naming the variable, never an empty HMAC key", () => {

@@ -1,20 +1,19 @@
-import { readdirSync } from "node:fs"
+import { type Dirent, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { founderResponse } from "#lib/github/founder-response.js"
-import { hqMemory } from "#lib/memory/hq.js"
 import { slackConfig } from "#lib/slack/config.js"
 
 /**
  * The trust rule: only a signed-in founder approves anything the agent asks for. Every tool that
  * can stop for a person carries the founder response policy, not eve's default ("only the person
  * whose turn requested the call"), so a founder may approve a write someone else asked for and a
- * collaborator may not approve their own. Each tool is checked through the module the agent mounts
- * (the file eve discovers under `agent/tools` and `agent/subagents/<station>/tools`, and the hq
- * memory slot's tools), not through the policy alone, and the list of tools is read from those
- * mounts: a tool that gains an `approval` later without the founder response is picked up and
- * fails here, with no list to forget to update.
+ * collaborator may not approve their own. Each tool is checked through the module the agent mounts,
+ * not through the policy alone, and the list of tools is read from the mounts as eve reads them:
+ * every module under `tools/` (subfolders too) of the agent and of each station, and every tool a
+ * memory slot's provider returns. A tool that gains an `approval` later without the founder
+ * response is picked up and fails here, with no list to forget to update.
  *
  * `stationPolicy` and `proposalPolicy` never ask a person (they allow or deny), so for those tools
  * the response policy is defense in depth: it holds if a request policy ever starts to ask.
@@ -61,47 +60,89 @@ const responseOf = (tool: unknown): Responder => {
   return response
 }
 
-const memoryTools = async () => {
-  const tools = await hqMemory({ hq: () => ({}) as never, runId: () => undefined }).tools?.()
-  if (!tools) {
-    throw new Error("the hq memory slot has no tools")
-  }
-  return tools
-}
-
 const AGENT_DIR = join(import.meta.dirname, "../../agent")
 
-/** The tool modules eve mounts: `agent/tools/*.ts` and `agent/subagents/<station>/tools/*.ts`. */
-const mountedToolFiles = (): string[] => {
-  const tsFiles = (dir: string) =>
-    readdirSync(join(AGENT_DIR, dir), { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-      .map((entry) => `${dir}/${entry.name.replace(/\.ts$/, "")}`)
-  const stations = readdirSync(join(AGENT_DIR, "subagents"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .flatMap((entry) => {
-      try {
-        return tsFiles(`subagents/${entry.name}/tools`)
-      } catch {
-        return [] // a station with no tools of its own
-      }
-    })
-  return [...tsFiles("tools"), ...stations].sort()
+/** eve's module extensions, and what its discovery skips (`discover/filesystem.js`). */
+const MODULE = /\.(?:ts|mts|cts|js|mjs|cjs)$/
+const DECLARATION = /\.d\.(?:cts|mts|ts)$/
+const AUTHORED_TEST = /(?:^|[/\\])__tests__(?:[/\\]|$)|\.(?:test|spec)\.[cm]?[jt]s$/
+
+/**
+ * Every module eve mounts under `dir` (a path under `agent/`), walking subfolders as eve does
+ * (`tools/github/merge_pr.ts` mounts as `github-merge_pr`). Names are paths under `agent/`
+ * without their extension. A missing directory has no modules.
+ */
+const modulesUnder = (dir: string): string[] => {
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(join(AGENT_DIR, dir), { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries.flatMap((entry) => {
+    const path = `${dir}/${entry.name}`
+    if (entry.isDirectory()) {
+      return entry.name === "__tests__" ? [] : modulesUnder(path)
+    }
+    const mounted =
+      entry.isFile() &&
+      MODULE.test(entry.name) &&
+      !DECLARATION.test(entry.name) &&
+      !AUTHORED_TEST.test(entry.name)
+    return mounted ? [path] : []
+  })
 }
 
-/** Every mounted tool that stops for a person, by the file it is mounted from, plus hq's. */
+/** The agent's root and each station: `""` and `subagents/<station>`. */
+const agentRoots = (): string[] => [
+  "",
+  ...readdirSync(join(AGENT_DIR, "subagents"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `subagents/${entry.name}`),
+]
+
+const under = (root: string, dir: string) => (root === "" ? dir : `${root}/${dir}`)
+
+const defaultExportOf = async (file: string): Promise<unknown> =>
+  ((await import(pathToFileURL(join(AGENT_DIR, file)).href)) as { default?: unknown }).default
+
+const hasApproval = (tool: unknown): boolean =>
+  (tool as { approval?: unknown } | undefined)?.approval !== undefined
+
+/**
+ * Every mounted tool that stops for a person: each module under every `tools/` (the root's and each
+ * station's, subfolders too), and every tool each memory slot's provider returns (`memory/*` and
+ * each station's), by where it is mounted from.
+ */
 const families = async (): Promise<[string, unknown][]> => {
   const found: [string, unknown][] = []
-  for (const file of mountedToolFiles()) {
-    const mounted = (await import(pathToFileURL(join(AGENT_DIR, `${file}.ts`)).href)) as {
-      default?: unknown
+  for (const root of agentRoots()) {
+    for (const file of modulesUnder(under(root, "tools"))) {
+      const tool = await defaultExportOf(file)
+      if (hasApproval(tool)) {
+        found.push([file.replace(MODULE, ""), tool])
+      }
     }
-    const { approval } = (mounted.default ?? {}) as { approval?: unknown }
-    if (approval !== undefined) {
-      found.push([file, mounted.default])
+    // A slot is `memory/<slot>.ts` or `memory.ts`: the module's default is `defineMemory`'s
+    // definition, whose provider's `tools()` returns the slot's tools by name.
+    const slots = [
+      ...modulesUnder(under(root, "memory")),
+      ...readdirSync(join(AGENT_DIR, root), { withFileTypes: true })
+        .filter((entry) => entry.isFile() && MODULE.test(entry.name))
+        .filter((entry) => entry.name.replace(MODULE, "") === "memory")
+        .map((entry) => under(root, entry.name)),
+    ]
+    for (const file of slots) {
+      const slot = (await defaultExportOf(file)) as {
+        provider?: { tools?: () => Promise<Record<string, unknown>> | Record<string, unknown> }
+      }
+      for (const [name, tool] of Object.entries((await slot?.provider?.tools?.()) ?? {})) {
+        if (hasApproval(tool)) {
+          found.push([`${file.replace(MODULE, "")} ${name}`, tool])
+        }
+      }
     }
   }
-  found.push(["memory/hq propose_entry", (await memoryTools()).propose_entry])
   return found
 }
 

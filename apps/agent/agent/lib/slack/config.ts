@@ -1,8 +1,10 @@
 import { defaultSlackAuth, defineSlackRenderer, type SlackChannelConfig } from "eve/channels/slack"
 import { log } from "../log.js"
 import { sessionSpendStore } from "../spend/state.js"
+import { handleCardClick } from "./interaction.js"
 import { allowedSlackAuth, founderAnswerAuth } from "./policy.js"
 import { postCapRefusal } from "./refusal.js"
+import { createSlackWebhookVerifier } from "./webhook-verifier.js"
 
 /**
  * The Slack channel's configuration, kept apart from `agent/channels/slack.ts` so its handlers are
@@ -30,6 +32,18 @@ export const capRefusal = defineSlackRenderer({
 
 export const slackConfig = {
   botName: "Org agent",
+  // Our own verifier, because hq must verify the same raw bytes: it checks the signature as eve's
+  // would (and refuses everything else), and keeps a card click's body for `onInteraction`.
+  credentials: { webhookVerifier: createSlackWebhookVerifier() },
+  // A click on one of hq's cards (a proposal, a spend grant) is forwarded to hq, which decides it
+  // as the founder the Slack user maps to. eve routes only non-HITL actions here.
+  async onInteraction(action) {
+    try {
+      await handleCardClick(action)
+    } catch (error) {
+      log.warn("slack: could not forward a card click", error)
+    }
+  },
   onAppMention(ctx, message) {
     if (message.author?.isBot !== false) {
       return null

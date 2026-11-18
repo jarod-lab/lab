@@ -30,8 +30,9 @@ import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 
 import { createAdminApp } from "./admin/routes"
-import { type FounderPolicy, mayUseHq, NO_FOUNDERS } from "./data/founders"
+import { mayUseHq } from "./data/founders"
 import { createHqOperations, HQ_VERSION } from "./operations"
+import { createSlackActionHandler } from "./slack/actions"
 
 export interface HqAppOptions {
   db: Database
@@ -39,10 +40,11 @@ export interface HqAppOptions {
   /** The clock: timestamps and windows read it, so tests can move time. */
   now: () => Date
   /**
-   * Who may decide proposals and edit entries (the founder allowlist). Unset, nobody can: a
-   * signed-in person is not a founder just by signing up.
+   * Slack approvals (`POST /v1/slack/actions`): the app's signing secret and the one workspace
+   * whose clicks count. Either unset and every click is refused. Who may click is the `founders`
+   * table, not an option.
    */
-  founders?: FounderPolicy
+  slack?: { signingSecret?: string; teamId?: string }
   /** Public base URL, no trailing slash (OAuth issuer, docs links). Default http://localhost:3100. */
   baseURL?: string
   /** More operations beside hq's own. For tests (a write, to reach the body and origin checks). */
@@ -78,9 +80,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function createHqApp(opts: HqAppOptions) {
   const { auth } = opts
   const baseURL = (opts.baseURL ?? "http://localhost:3100").replace(/\/$/, "")
-  const founders = opts.founders ?? NO_FOUNDERS
   const operations: readonly AnyOperation[] = [
-    ...createHqOperations({ db: opts.db, now: opts.now, founders }),
+    ...createHqOperations({ db: opts.db, now: opts.now }),
     ...(opts.extraOperations ?? []),
   ]
   const issuer = `${baseURL}${AUTH_BASE_PATH}`
@@ -109,12 +110,12 @@ export function createHqApp(opts: HqAppOptions) {
 
   // The trust rule, enforced wherever a key comes from: only a signed-in person holds a
   // person-only action (PERSON_ONLY_ACTIONS). A key or token that carries one has it stripped.
-  // And only a founder, or a key or token of a founder's organization, reaches hq at all (sign-up
-  // is open, so a stranger has a session and an organization too): everything else is FORBIDDEN.
+  // And only a founder (a row of hq.founders), or a key or token of a founder's organization,
+  // reaches hq at all: everything else is FORBIDDEN, whoever signed up.
   const authenticate = async (req: Request): Promise<Caller | null> => {
     const caller = await resolvePrincipal(auth, req.headers, { audience: [baseURL, mcpUrl] })
     if (!caller) return null
-    if (!(await mayUseHq(opts.db, founders, caller))) {
+    if (!(await mayUseHq(opts.db, caller))) {
       throw new AppError("FORBIDDEN", "This brain is for the organization's founders", {
         hint: "Your account is not on this org's founder list.",
       })
@@ -189,6 +190,26 @@ export function createHqApp(opts: HqAppOptions) {
   })
   app.use("/v1/*", limit)
   app.use("/mcp", limit)
+
+  // A founder's click on a Slack card, forwarded by the agent. Like /api/auth/*, a protocol route
+  // outside the operation registry: its credential is Slack's signature over the raw body, checked
+  // in handleSlackAction, so it reads the bytes as received and takes no API key. The decision runs
+  // as the founder the Slack user maps to, never as the forwarder.
+  const handleSlackAction = createSlackActionHandler({
+    db: opts.db,
+    now: opts.now,
+    signingSecret: opts.slack?.signingSecret,
+    teamId: opts.slack?.teamId,
+  })
+  app.post("/v1/slack/actions", async (c) => {
+    const rawBody = new Uint8Array(await c.req.raw.arrayBuffer())
+    const result = await handleSlackAction({
+      rawBody,
+      signature: c.req.header("x-slack-signature") ?? "",
+      timestamp: c.req.header("x-slack-request-timestamp") ?? "",
+    })
+    return c.json({ response_type: "ephemeral", text: result.text }, result.status)
+  })
 
   app.all("/mcp", (c) => mcp(c.req.raw, { requestId: c.get("requestId") }))
 

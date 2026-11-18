@@ -20,6 +20,10 @@ export const AGENT_KEY_SCOPE = {
 
 export const HQ_BASE_URL = "http://localhost:3100"
 
+/** The founder's Slack user in hq's founders table, and the signing secret and workspace hq accepts. */
+export const FOUNDER_SLACK_USER = "UFOUNDER"
+export { TEST_SLACK_SECRET, TEST_SLACK_TEAM } from "@lab/hq/src/app.test.helpers"
+
 /** The parts of an hq reply these tests read. */
 export interface HqJson {
   error?: { code: string; message: string }
@@ -44,6 +48,10 @@ export interface HqFixture {
   asAgent: Call
   /** Calls hq as the signed-in founder. */
   asFounder: Call
+  /** The founder's Slack user id, as hq's founders table holds it. */
+  founderSlack: string
+  /** hq's clock: what a Slack request must be signed near. */
+  now: () => Date
   /** Moves hq's clock to the start of a fresh UTC day, so a test starts with an empty ledger. */
   newDay: () => void
   close: () => Promise<void>
@@ -52,10 +60,9 @@ export interface HqFixture {
 export async function createHqFixture(): Promise<HqFixture> {
   let day = 0
   let now = new Date(Date.UTC(2031, 0, 1, 12))
-  const founders = { userIds: [] as string[], emails: [] as string[] }
-  const hq = await createHqHarness({ founders, now: () => now })
+  const hq = await createHqHarness({ now: () => now })
   const person = await hq.signUp("founder@example.com")
-  founders.userIds.push(person.userId)
+  const founderSlack = await hq.addFounder(person, FOUNDER_SLACK_USER)
   const key = await hq.keyFor(person, AGENT_KEY_SCOPE)
 
   const inProcess: typeof fetch = (input, init) =>
@@ -72,6 +79,8 @@ export async function createHqFixture(): Promise<HqFixture> {
     fetch: inProcess,
     asAgent: as({ key }),
     asFounder: as({ cookie: person.cookie }),
+    founderSlack,
+    now: () => now,
     newDay: () => {
       now = new Date(Date.UTC(2031, 0, ++day + 1, 12))
     },

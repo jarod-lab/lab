@@ -12,7 +12,9 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "founders:principals": "tsx src/founder-principals.ts",
+    "mint-agent-key": "tsx src/mint-agent-key.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

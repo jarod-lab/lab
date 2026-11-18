@@ -2,7 +2,13 @@ import type { E2EConfig } from "e2e"
 import { web } from "@e2e-dev/web"
 import { gateway } from "ai"
 
-import { HQ_FOUNDER_EMAIL, HQ_FOUNDER_PASSWORD } from "./e2e/support/hq-stack"
+import {
+  E2E_SLACK_SIGNING_SECRET,
+  E2E_SLACK_TEAM,
+  HQ_FOUNDER_EMAIL,
+  HQ_FOUNDER_PASSWORD,
+  HQ_FOUNDER_SLACK_USER,
+} from "./e2e/support/hq-stack"
 import {
   DKIM_DIR,
   OPERATOR_ORGANIZATION_ID,
@@ -80,8 +86,13 @@ const hqEnv: Record<string, string> = {
   BETTER_AUTH_URL: "http://127.0.0.1:{port}",
   DATABASE_URL: process.env.DATABASE_URL ?? "",
   HQ_DATABASE_URL: process.env.HQ_DATABASE_URL ?? process.env.DATABASE_URL ?? "",
-  // hq lets in only founders: scripts/e2e-hq-stack.mjs seeds this one (e2e/support/hq-stack.ts).
-  HQ_FOUNDER_EMAILS: HQ_FOUNDER_EMAIL,
+  // hq lets in only founders (the founders table, written from HQ_FOUNDERS at boot):
+  // scripts/e2e-hq-stack.mjs signs this one up before the real hq starts (e2e/support/hq-stack.ts).
+  HQ_FOUNDERS: `${HQ_FOUNDER_EMAIL}=${HQ_FOUNDER_SLACK_USER}`,
+  HQ_SLACK_TEAM_ID: E2E_SLACK_TEAM,
+  SLACK_SIGNING_SECRET: E2E_SLACK_SIGNING_SECRET,
+  // Sign-up is closed by default on hq; this stack opens it, to seed its one founder.
+  HQ_ALLOW_SIGNUP: "true",
   E2E_HQ_FOUNDER_EMAIL: HQ_FOUNDER_EMAIL,
   E2E_HQ_FOUNDER_PASSWORD: HQ_FOUNDER_PASSWORD,
 }
@@ -95,6 +106,21 @@ const hq = {
     env: hqEnv,
     log: ".e2e/logs/hq.log",
     startupTimeout: 120_000,
+  },
+}
+
+// The lab agent and hq side by side, for the Slack approval journey (e2e/slack-actions.e2e.ts): the
+// target's app is the agent's eve dev server on scripted models (AGENT_OFFLINE), with hq on its own
+// port in front of the same worktree database. scripts/e2e-slack-stack.mjs starts both and writes
+// where hq is. `pnpm e2e:slack` runs only that file on it. Nothing real is reached: no Slack, no model.
+const slack = {
+  url: "http://127.0.0.1:0",
+  command: {
+    executable: "node",
+    args: ["scripts/e2e-slack-stack.mjs", "{port}"],
+    env: hqEnv,
+    log: ".e2e/logs/slack.log",
+    startupTimeout: 240_000,
   },
 }
 
@@ -114,6 +140,7 @@ export default {
     { name: "desktop", engine: web(), app },
     { name: "phone", engine: web({ viewport: { width: 390, height: 844 } }), app },
     { name: "hq", engine: web(), app: hq },
+    { name: "slack", engine: web(), app: slack },
   ],
   // The model behind agent.* steps. The smoke and app-shell tests use none, so they run without a key.
   // gateway() reads AI_GATEWAY_API_KEY from the runner's own environment (not packages/env).

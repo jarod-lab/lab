@@ -17,7 +17,7 @@ describe("runs and spend operations (PGlite)", () => {
 
   beforeAll(async () => {
     hq = await createHqHarness({
-      founders: { emails: ["founder@example.com"], userIds: [] },
+      founderEmails: ["founder@example.com"],
       now: () => now,
     })
     founder = await hq.signUp("founder@example.com")
@@ -38,6 +38,9 @@ describe("runs and spend operations (PGlite)", () => {
     runs: { id: string; costUsd: number }[]
     day: string
     spentUsd: number
+    totalUsd: number
+    estimatedUsd: number
+    bySource: { source: string; amountUsd: number }[]
     reservedUsd: number
     capUsd: number
     grantedUsd: number
@@ -182,6 +185,43 @@ describe("runs and spend operations (PGlite)", () => {
     ).toBe(400)
   })
 
+  it("get_spend_summary reports a UTC day by source, and by default hq's own yesterday", async () => {
+    // Dates of their own, so the other tests' day counter is untouched.
+    now = new Date(Date.UTC(2040, 5, 10, 12))
+    const agent = await agentKey()
+    const yesterday = now.toISOString().slice(0, 10)
+    await call(agent, "POST", "/v1/spend", { source: "eve", amountUsd: 1.25, model: "m" })
+    await call(agent, "POST", "/v1/spend", { source: "build", estimatedUsd: 2, model: "m" })
+    await call(agent, "POST", "/v1/spend", { source: "box", amountUsd: 0.5, model: "m" })
+    now = new Date(Date.UTC(2040, 5, 11, 12))
+    await call(agent, "POST", "/v1/spend", { source: "eve", amountUsd: 9, model: "m" })
+
+    // Left out, the day is the one before hq's today (the agent's clock is never consulted).
+    const summary = await call(agent, "GET", "/v1/spend/summary")
+    expect(summary.status).toBe(200)
+    expect(summary.body).toMatchObject({
+      day: yesterday,
+      totalUsd: 3.75,
+      estimatedUsd: 2,
+      bySource: [
+        { source: "box", amountUsd: 0.5 },
+        { source: "build", amountUsd: 2 },
+        { source: "eve", amountUsd: 1.25 },
+      ],
+    })
+    expect((await call(agent, "GET", `/v1/spend/summary?day=${yesterday}`)).body).toMatchObject({
+      totalUsd: 3.75,
+    })
+    expect((await call(agent, "GET", "/v1/spend/summary?day=2020-01-01")).body).toMatchObject({
+      totalUsd: 0,
+      bySource: [],
+    })
+    expect((await call(agent, "GET", "/v1/spend/summary?day=yesterday")).status).toBe(400)
+    // Reading needs hq_spend:read.
+    const other = await key({ hq_run: ["read"] })
+    expect((await call(other, "GET", "/v1/spend/summary")).status).toBe(403)
+  })
+
   it("an API key calling grant_spend gets FORBIDDEN, whatever its permissions say", async () => {
     newDay()
     const grant = (as: As) =>
@@ -203,7 +243,6 @@ describe("runs and spend operations (PGlite)", () => {
     const ops = createHqOperations({
       db: hq.db,
       now: hq.now,
-      founders: { emails: [], userIds: ["k"] },
     })
     const op = ops.find((o) => o.name === "grant_spend")
     if (!op) throw new Error("grant_spend is not registered")
@@ -216,7 +255,12 @@ describe("runs and spend operations (PGlite)", () => {
         grants,
         via: "apikey",
       },
-      { organizationId: founder.orgId, actor: { type: "user", userId: "k" }, grants, via: "oauth" },
+      {
+        organizationId: founder.orgId,
+        actor: { type: "user", userId: founder.userId },
+        grants,
+        via: "oauth",
+      },
       {
         organizationId: stranger.orgId,
         actor: { type: "user", userId: stranger.userId },

@@ -220,6 +220,39 @@ export async function grantSpend(
   return { id: row.id, day: row.day }
 }
 
+/** The UTC day before the one `now` is in. */
+export const previousDay = (now: Date): string => dayOf(new Date(now.getTime() - 86_400_000))
+
+export interface DaySpend {
+  day: string
+  /** Every source, estimates included. */
+  total: Units
+  /** The part of the total that is an estimate (no provider cost was reported). */
+  estimated: Units
+  bySource: { source: SpendSource; amount: Units }[]
+}
+
+/** What one UTC day spent, by source: the ledger's rows for that day, nothing held or granted. */
+export async function spendOnDay(db: Database, day: string): Promise<DaySpend> {
+  const rows = await db
+    .select({
+      source: spend.source,
+      amount: total(spend.amountUsd),
+      estimated: sql<string>`coalesce(sum(${spend.amountUsd}) filter (where ${spend.estimated}), 0)::text`,
+    })
+    .from(spend)
+    .where(eq(spend.day, day))
+    .groupBy(spend.source)
+    .orderBy(spend.source)
+  const bySource = rows.map((r) => ({ source: r.source, amount: parseUnits(r.amount) }))
+  return {
+    day,
+    total: bySource.reduce((sum, r) => sum + r.amount, 0),
+    estimated: rows.reduce((sum, r) => sum + parseUnits(r.estimated), 0),
+    bySource,
+  }
+}
+
 export interface SpendSummaryRow {
   day: string
   source: SpendSource

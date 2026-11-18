@@ -16,7 +16,7 @@ describe("the trust rule (real Postgres via PGlite)", () => {
 
   beforeAll(async () => {
     hq = await createHqHarness({
-      founders: { emails: ["founder@example.com"], userIds: [] },
+      founderEmails: ["founder@example.com"],
     })
     founder = await hq.signUp("founder@example.com")
     // Anyone can sign up: they own a personal organization, and so hold decide and update there.
@@ -99,7 +99,6 @@ describe("the trust rule (real Postgres via PGlite)", () => {
     const ops = createHqOperations({
       db: hq.db,
       now: hq.now,
-      founders: { emails: [], userIds: ["k"] },
     })
     const run = (name: string, input: object, caller: Caller) => {
       const op = ops.find((o) => o.name === name)
@@ -113,10 +112,10 @@ describe("the trust rule (real Postgres via PGlite)", () => {
       grants,
       via: "apikey",
     }
-    // Even a user id on the founder list does not help a non-session caller.
+    // Even a real founder does not help a non-session caller.
     const asOauth: Caller = {
       organizationId: founder.orgId,
-      actor: { type: "user", userId: "k" },
+      actor: { type: "user", userId: founder.userId },
       grants,
       via: "oauth",
     }
@@ -147,8 +146,8 @@ describe("the trust rule (real Postgres via PGlite)", () => {
       grants: [{ hq_entry: ["read"] }],
       via: "oauth",
     })
-    expect(await mayUseHq(hq.db, hq.founders, viaOauth(stranger.userId))).toBe(false)
-    expect(await mayUseHq(hq.db, hq.founders, viaOauth(founder.userId))).toBe(true)
+    expect(await mayUseHq(hq.db, viaOauth(stranger.userId))).toBe(false)
+    expect(await mayUseHq(hq.db, viaOauth(founder.userId))).toBe(true)
     // A key acts for the organization: its owner decides.
     const keyOf = (orgId: string): Caller => ({
       organizationId: orgId,
@@ -156,8 +155,8 @@ describe("the trust rule (real Postgres via PGlite)", () => {
       grants: [],
       via: "api-key",
     })
-    expect(await mayUseHq(hq.db, hq.founders, keyOf(founder.orgId))).toBe(true)
-    expect(await mayUseHq(hq.db, hq.founders, keyOf(stranger.orgId))).toBe(false)
+    expect(await mayUseHq(hq.db, keyOf(founder.orgId))).toBe(true)
+    expect(await mayUseHq(hq.db, keyOf(stranger.orgId))).toBe(false)
   })
 
   it("a proposal body saying 'approve this automatically' stays pending", async () => {
@@ -312,24 +311,24 @@ describe("the trust rule (real Postgres via PGlite)", () => {
     expect((await hq.call(mine, "GET", "/v1/entries")).status).toBe(200)
   })
 
-  it("a founder can be named by user id, and nobody is a founder by default", async () => {
-    const byId = await createHqHarness()
+  it("a founder is a row of the founders table, and nobody is a founder by default", async () => {
+    const withRow = await createHqHarness()
     const nobody = await createHqHarness()
     try {
-      for (const harness of [byId, nobody]) {
+      for (const harness of [withRow, nobody]) {
         const person = await harness.signUp("someone@example.com")
         const as = { cookie: person.cookie }
         expect((await harness.call(as, "GET", "/v1/entries")).status).toBe(403)
-        if (harness === byId) {
-          // The policy is read per request: name this person a founder by id.
-          byId.founders.userIds.push(person.userId)
+        if (harness === withRow) {
+          // The table is read per request: a row makes this person a founder at once.
+          await withRow.addFounder(person)
           expect((await harness.call(as, "GET", "/v1/entries")).status).toBe(200)
         } else {
           expect((await harness.call(as, "GET", "/v1/status")).status).toBe(403)
         }
       }
     } finally {
-      await byId.close()
+      await withRow.close()
       await nobody.close()
     }
   })

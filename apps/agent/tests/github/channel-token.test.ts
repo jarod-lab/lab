@@ -8,37 +8,30 @@ import {
   type TokenMinter,
 } from "#lib/github/lease.js"
 import { log } from "#lib/log.js"
+import { APP_TOKEN, stubGitHubApp } from "./support/github-app.js"
 
 const NARROW = "ghs_NARROWCHANNEL0123456789abcdefghijkl"
 const WIDE = "ghs_WIDEINSTALLATION0123456789abcdefghi"
 
 /**
- * What the channel module hands to eve, and what it asks Vercel Connect for.
+ * What the channel module hands to eve, and what it asks GitHub for.
  *
  * @remarks
  * `agent/channels/github.ts` calls `githubChannel(...)` when it loads, so the
  * wiring tests replace that one function with a recorder and read the real
- * configuration the module passed. `getToken` is the Connect call every mint
- * ends in; it is replaced so a mint with no injected minter stays offline and
- * the request it would have sent can be read.
+ * configuration the module passed. A mint with no injected minter goes to the
+ * App-key minter (`app-token.ts`); a fake GitHub stands in for the global
+ * `fetch` (`support/github-app.ts`) so it stays offline and the request it
+ * sends can be read.
  */
 const recorded = vi.hoisted(() => ({
   channelConfigs: [] as unknown[],
-  tokenRequests: [] as unknown[][],
 }))
 
 vi.mock("eve/channels/github", () => ({
   githubChannel: (config: unknown) => {
     recorded.channelConfigs.push(config)
     return config
-  },
-}))
-
-vi.mock("@vercel/connect", async (original) => ({
-  ...(await original<typeof import("@vercel/connect")>()),
-  getToken: (...request: unknown[]) => {
-    recorded.tokenRequests.push(request)
-    return Promise.resolve("ghs_FROMCONNECT0123456789abcdefghijklmn")
   },
 }))
 
@@ -174,35 +167,32 @@ describe("the channel is wired to the narrowed token", () => {
     return recorded.channelConfigs[0] as ChannelConfig
   }
 
+  let app: ReturnType<typeof stubGitHubApp>
   beforeEach(() => {
-    recorded.tokenRequests.length = 0
+    app = stubGitHubApp()
+  })
+  afterEach(() => {
+    app.restore()
   })
 
-  test("the channel's installationToken asks Connect for the repo-triage permissions on the factory repository alone", async () => {
+  test("the channel's installationToken asks GitHub for the repo-triage permissions on the factory repository alone", async () => {
     const { credentials } = await channelConfig()
-    expect(await credentials.installationToken()).toBe("ghs_FROMCONNECT0123456789abcdefghijklmn")
-    expect(recorded.tokenRequests).toEqual([
-      [
-        "github/test-agent",
-        {
-          authorizationDetails: [
-            {
-              org: "acme",
-              permissions: [
-                "contents:read",
-                "issues:write",
-                "pull_requests:write",
-                "actions:read",
-                "checks:read",
-                "statuses:read",
-              ],
-              repositories: ["widgets"],
-              type: "github_app_installation",
-            },
-          ],
-          subject: { type: "app" },
+    expect(await credentials.installationToken()).toBe(APP_TOKEN)
+    expect(app.requests).toEqual([
+      {
+        url: "https://api.github.com/app/installations/987/access_tokens",
+        body: {
+          repositories: ["widgets"],
+          permissions: {
+            contents: "read",
+            issues: "write",
+            pull_requests: "write",
+            actions: "read",
+            checks: "read",
+            statuses: "read",
+          },
         },
-      ],
+      },
     ])
   })
 

@@ -44,6 +44,16 @@ export const AGENT_ENV_NAMES = [
   // Read only to refuse offline mode where the agent is real.
   "NODE_ENV",
   "SLACK_BOT_TOKEN",
+  // The Slack app's signing secret: the agent verifies Slack's request itself so it can forward the
+  // raw bytes to hq, which verifies them again (hq reads the same variable through @lab/env).
+  "SLACK_SIGNING_SECRET",
+  // Where the nightly digest posts (a channel id such as C01ABC). Unset, the digest posts nothing.
+  "SLACK_DIGEST_CHANNEL_ID",
+  // The org's GitHub App, for installation tokens (agent/lib/github/app-token.ts): its id, the
+  // private key PEM (from the vault; `\n` escapes are accepted) and the installation on the org.
+  "GITHUB_APP_ID",
+  "GITHUB_APP_PRIVATE_KEY",
+  "GITHUB_INSTALLATION_ID",
 ] as const
 
 export type AgentEnvName = (typeof AGENT_ENV_NAMES)[number]

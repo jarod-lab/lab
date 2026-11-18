@@ -5,7 +5,7 @@ import { AppError } from "@lab/errors"
 import { z } from "zod"
 
 import { type Author } from "../data/entries"
-import { type FounderPolicy, isFounder } from "../data/founders"
+import { isFounder } from "../data/founders"
 import { ENTRY_KINDS } from "../db/schema"
 
 export const defineOperation = operationsFor<Catalog>()
@@ -15,7 +15,6 @@ export interface HqDeps {
   db: Database
   /** The clock: timestamps read it, so tests can move time. */
   now: () => Date
-  founders: FounderPolicy
 }
 
 export const entryKind = z.enum(ENTRY_KINDS)
@@ -43,7 +42,7 @@ export function authorOf(caller: Caller): Author {
 
 /**
  * The trust rule's gate: only a signed-in person (never a key or an OAuth token) who is also a
- * founder (on the allowlist, see data/founders.ts) decides a proposal or edits an entry. hq's
+ * founder (a row of hq.founders, see data/founders.ts) decides a proposal or edits an entry. hq's
  * sign-up is open, so being a signed-in person is not enough. Returns the founder's user id.
  */
 export async function requireFounder(deps: HqDeps, caller: Caller): Promise<string> {
@@ -52,7 +51,7 @@ export async function requireFounder(deps: HqDeps, caller: Caller): Promise<stri
       hint: "Ask a founder to approve it in the admin UI or Slack. API keys and AI clients can't.",
     })
   }
-  if (!(await isFounder(deps.db, deps.founders, caller.actor.userId))) {
+  if (!(await isFounder(deps.db, caller.actor.userId))) {
     throw new AppError("FORBIDDEN", "Only a founder can do this", {
       hint: "Your account is not on this org's founder list.",
     })

@@ -1,7 +1,16 @@
+import { AppError } from "@lab/errors"
 import { z } from "zod"
 
 import { DAILY_CAP, toPositiveUnits, toUnits, unitsToUsd } from "../data/money"
-import { grantSpend, readAllowance, recordSpend, reserveSpend, settleSpend } from "../data/spend"
+import {
+  grantSpend,
+  previousDay,
+  readAllowance,
+  recordSpend,
+  reserveSpend,
+  settleSpend,
+  spendOnDay,
+} from "../data/spend"
 import { SPEND_SOURCES } from "../db/schema"
 import { defineOperation, type HqDeps, requireFounder } from "./shared"
 
@@ -149,6 +158,49 @@ export function spendOperations(deps: HqDeps) {
     },
   })
 
+  const get_spend_summary = defineOperation({
+    name: "get_spend_summary",
+    method: "GET",
+    path: "/v1/spend/summary",
+    summary: "What one UTC day spent, by source",
+    description:
+      "Returns the ledger's spend for one UTC day, total and by source (eve, build, box), and how " +
+      "much of it is an estimate. Leave day out for yesterday as hq counts it: hq's clock decides " +
+      "which day that is, never the caller's. A day with no spend reports 0 and no sources.",
+    permissions: { hq_spend: ["read"] },
+    input: z.object({
+      day: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
+        .optional()
+        .describe("A UTC day, YYYY-MM-DD; default yesterday"),
+    }),
+    output: z.object({
+      day: z.string().describe("The UTC day, YYYY-MM-DD"),
+      totalUsd: z.number(),
+      estimatedUsd: z.number(),
+      bySource: z.array(z.object({ source: z.enum(SPEND_SOURCES), amountUsd: z.number() })),
+    }),
+    hints: { readOnly: true, idempotent: true },
+    examples: [{ input: {} }],
+    handler: async (input) => {
+      const day = input.day ?? previousDay(now())
+      if (Number.isNaN(new Date(`${day}T00:00:00Z`).getTime())) {
+        throw new AppError("BAD_REQUEST", "day must be a real date, YYYY-MM-DD")
+      }
+      const summary = await spendOnDay(db, day)
+      return {
+        day: summary.day,
+        totalUsd: unitsToUsd(summary.total),
+        estimatedUsd: unitsToUsd(summary.estimated),
+        bySource: summary.bySource.map((r) => ({
+          source: r.source,
+          amountUsd: unitsToUsd(r.amount),
+        })),
+      }
+    },
+  })
+
   const grant_spend = defineOperation({
     name: "grant_spend",
     method: "POST",
@@ -173,5 +225,12 @@ export function spendOperations(deps: HqDeps) {
     },
   })
 
-  return [reserve_spend, settle_spend, record_spend, get_spend_allowance, grant_spend] as const
+  return [
+    reserve_spend,
+    settle_spend,
+    record_spend,
+    get_spend_allowance,
+    get_spend_summary,
+    grant_spend,
+  ] as const
 }

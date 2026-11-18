@@ -28,6 +28,17 @@ export async function freshDay(): Promise<void> {
   await fetch(`${need("AGENT_PROBE_URL")}/day/next`, { method: "POST" })
 }
 
+/**
+ * Puts hq on the real clock and clears the probe: a signed Slack click is checked by the agent and
+ * by hq at the same real time. The next `freshDay` puts hq back on its scripted clock.
+ */
+export async function useRealClock(): Promise<void> {
+  await fetch(`${need("AGENT_PROBE_URL")}/clock/real`, { method: "POST" })
+}
+
+/** The probe's address, for a click's `response_url` (where Slack would show the reply). */
+export const probeUrl = (): string => need("AGENT_PROBE_URL")
+
 export interface ProbeEvent {
   event: string
   detail: unknown
@@ -71,4 +82,27 @@ export async function pendingProposals(): Promise<
       proposals: { title: string; status: string; entryId: string | null }[]
     }
   ).proposals
+}
+
+/**
+ * Waits for the scripted agent to report an event to the probe (a Slack post, say), then returns
+ * every event with that name. Schedules run after the dispatch route has answered, so a check has
+ * to wait for them; this gives up after `timeoutMs` and returns what there is.
+ */
+export async function waitForProbeEvents(
+  event: string,
+  { timeoutMs = 15_000, settleMs = 1_000 }: { timeoutMs?: number; settleMs?: number } = {},
+): Promise<ProbeEvent[]> {
+  const deadline = Date.now() + timeoutMs
+  let seen: ProbeEvent[] = []
+  while (Date.now() < deadline) {
+    seen = (await probeEvents()).filter((entry) => entry.event === event)
+    if (seen.length > 0) {
+      // Stay a moment: a second post, if the digest wrongly made one, must still be counted.
+      await new Promise((resolve) => setTimeout(resolve, settleMs))
+      return (await probeEvents()).filter((entry) => entry.event === event)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  return seen
 }

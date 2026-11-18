@@ -47,6 +47,22 @@ function base() {
 }
 
 describe("env", () => {
+  it("hq's sign-up is closed unless HQ_ALLOW_SIGNUP says true", async () => {
+    base()
+    vi.stubEnv("HQ_ALLOW_SIGNUP", "")
+    expect((await import("./index")).env.HQ_ALLOW_SIGNUP).toBe(false)
+    for (const [raw, want] of [
+      ["true", true],
+      ["false", false],
+      ["1", true],
+      ["0", false],
+    ] as const) {
+      base()
+      vi.stubEnv("HQ_ALLOW_SIGNUP", raw)
+      expect((await import("./index")).env.HQ_ALLOW_SIGNUP, raw).toBe(want)
+    }
+  })
+
   it("fails fast on missing variables", async () => {
     vi.resetModules()
     vi.stubEnv("SKIP_ENV_VALIDATION", "")

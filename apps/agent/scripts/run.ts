@@ -38,14 +38,16 @@ const readBody = (request: IncomingMessage): Promise<string> =>
 
 async function evalOffline(extraArgs: string[]): Promise<number> {
   const { serve } = await import("@hono/node-server")
-  const { createHqHarness } = await import("@lab/hq/src/app.test.helpers")
+  const { createHqHarness, TEST_SLACK_SECRET } = await import("@lab/hq/src/app.test.helpers")
 
   let day = 0
   let now = new Date(Date.UTC(2032, 0, 1, 12))
-  const founders = { userIds: [] as string[], emails: [] as string[] }
-  const hq = await createHqHarness({ founders, now: () => now })
+  // A Slack click is signed once and checked by the agent (real time) and by hq (this clock), so
+  // the Slack evals switch hq to the real clock; every other eval starts from `/day/next`.
+  let realClock = false
+  const hq = await createHqHarness({ now: () => (realClock ? new Date() : now) })
   const founder = await hq.signUp("founder@example.com")
-  founders.userIds.push(founder.userId)
+  await hq.addFounder(founder, "UFOUNDER")
   // Exactly the agent's scope: read all, propose, runs and spend only.
   const key = await hq.keyFor(founder, {
     hq_entry: ["read"],
@@ -78,9 +80,20 @@ async function evalOffline(extraArgs: string[]): Promise<number> {
         return reply({ ok: true })
       }
       if (request.method === "POST" && path === "/day/next") {
+        realClock = false
         now = new Date(Date.UTC(2032, 0, ++day + 1, 12))
         events.length = 0
         return reply({ day: now.toISOString() })
+      }
+      if (request.method === "POST" && path === "/clock/real") {
+        realClock = true
+        events.length = 0
+        return reply({ now: new Date().toISOString() })
+      }
+      // Where a card click's `response_url` points: what the founder would be shown in Slack.
+      if (request.method === "POST" && path === "/response") {
+        events.push({ event: "slack-response", detail: JSON.parse(await readBody(request)) })
+        return reply({ ok: true })
       }
       response.statusCode = 404
       reply({ error: "not found" })
@@ -98,6 +111,10 @@ async function evalOffline(extraArgs: string[]): Promise<number> {
       HQ_AGENT_API_KEY: key,
       HQ_BASE_URL: `http://127.0.0.1:${hqPort}`,
       SLACK_ALLOWED_TEAM_IDS: "T0",
+      // The nightly digest posts here; offline, the post goes to the probe and nowhere else.
+      SLACK_DIGEST_CHANNEL_ID: "C0OFFLINE",
+      // The agent verifies Slack clicks with the secret hq holds (the harness's), then forwards.
+      SLACK_SIGNING_SECRET: TEST_SLACK_SECRET,
     })
   } finally {
     probe.close()

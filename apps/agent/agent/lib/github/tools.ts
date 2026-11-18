@@ -6,6 +6,7 @@ import { FACTORY_BRANCH_PREFIX, FACTORY_REPO } from "../constants.js"
 import { bashPolicy, GH_ONLY, MAX_GH_STEPS, shellAvailable } from "./approval.js"
 import { type GhInvocation, MAX_GH_ARG_LENGTH, parseGh, shellQuote } from "./cli.js"
 import { EGRESS_NOTE, egressMode } from "./egress.js"
+import { founderApproval } from "./founder-response.js"
 import { CURRENT_BRANCH_COMMAND, isRepoDirectory, parseGitFetch, parseGitPush } from "./git-cli.js"
 import { validateBranch } from "./git-remote.js"
 import {
@@ -503,7 +504,7 @@ export const bashTool = (options: {
   const shell: Shell = options.shell ?? eveShell
   return defineTool({
     ...bash,
-    approval: bashPolicy(role),
+    approval: founderApproval(bashPolicy(role)),
     description: `${bash.description}\n\n${githubNotes(role)}`,
     async execute(input: BashToolInput, ctx): Promise<BashToolOutput> {
       const analysis = analyzeCommand(input.command)

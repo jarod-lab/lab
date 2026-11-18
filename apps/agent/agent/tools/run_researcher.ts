@@ -1,6 +1,7 @@
 import { defineWorkflowTool } from "eve/tools"
 import { z } from "zod"
 import { stationPolicy } from "../lib/github/approval.js"
+import { founderApproval } from "../lib/github/founder-response.js"
 import { stationOutput } from "../lib/stations/result.js"
 import { RESEARCHER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
 
@@ -16,7 +17,7 @@ import { RESEARCHER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
  * name.
  */
 export default defineWorkflowTool({
-  approval: stationPolicy,
+  approval: founderApproval(stationPolicy),
   description:
     "Research a topic on the open web for facts, statistics, primary sources, and links the " +
     "caller doesn't already have. Runs refined searches against reliable sources and returns " +

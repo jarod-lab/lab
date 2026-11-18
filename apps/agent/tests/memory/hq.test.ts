@@ -60,9 +60,10 @@ describe("the hq memory slot", () => {
 
   test("a summary-only run, the least trusted principal, cannot propose; builds and Slack can", async () => {
     const tools = await toolsOf()
-    const { approval } = tools.propose_entry as unknown as {
-      approval: (ctx: never) => unknown
+    const { approval: config } = tools.propose_entry as unknown as {
+      approval: { request: (ctx: never) => unknown }
     }
+    const approval = config.request
     const input = { text: "x" }
     expect(outcome(approval(approvalContext(CALLERS.summary, input)))).toBe("denied")
     for (const caller of ["autonomous", "ticket", "untrusted", "trusted", "schedule"] as const) {

@@ -1,6 +1,7 @@
 import { defineWorkflowTool } from "eve/tools"
 import { z } from "zod"
 import { stationPolicy } from "../lib/github/approval.js"
+import { founderApproval } from "../lib/github/founder-response.js"
 import { stationOutput } from "../lib/stations/result.js"
 import { IMPLEMENTER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
 
@@ -16,7 +17,7 @@ import { IMPLEMENTER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
  * name.
  */
 export default defineWorkflowTool({
-  approval: stationPolicy,
+  approval: founderApproval(stationPolicy),
   description:
     "Execute an approved implementation plan in a checkout of the factory repository: " +
     "write the code on a feature branch, run the repository's own checks, commit, and " +

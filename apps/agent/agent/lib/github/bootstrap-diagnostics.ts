@@ -54,7 +54,7 @@ export function sanitizeCommandOutput(text: string): string {
  * outright.
  */
 export function appAccessMessage(repo: string): string {
-  return `Cannot access ${repo}. Install the selected GitHub connector's app with access to this repository, then try again.`
+  return `Cannot access ${repo}. Install the org's GitHub App with access to this repository, then try again.`
 }
 
 /**

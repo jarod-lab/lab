@@ -238,7 +238,7 @@ describe("factoryInit: a station's checkout", () => {
         : {},
     )
     await expect(factoryInit(sandbox, lease().dependencies)).rejects.toThrow(
-      /Cannot access acme\/widgets\. Install the selected GitHub connector's app/,
+      /Cannot access acme\/widgets\. Install the org's GitHub App/,
     )
   })
 

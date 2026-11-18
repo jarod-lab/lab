@@ -26,6 +26,8 @@ export function hqEnv(portArg?: string) {
     slack: { signingSecret: env.SLACK_SIGNING_SECRET, teamId: env.HQ_SLACK_TEAM_ID },
     // Anything but an explicit true is closed (even a raw string, when validation is skipped).
     allowSignUp: env.HQ_ALLOW_SIGNUP === true,
+    /** `development` and `test` are local stacks; anything else is deployed (deploy-mode.ts). */
+    nodeEnv: env.NODE_ENV,
     secret: env.BETTER_AUTH_SECRET,
     emailFrom: env.EMAIL_FROM,
   }

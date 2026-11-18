@@ -27,6 +27,9 @@ export interface Reply {
   error: { code: string; message: string }
   status: string
   proposalId: string
+  requestId: string
+  amountUsd: number
+  expiresAt: string
   entryId: string
   version: number
   latestVersion: number

@@ -61,8 +61,12 @@ describe("the founders table (real Postgres via PGlite)", () => {
       at,
     )
     expect(result.added).toEqual([ann.userId])
-    expect(result.skipped.join("|")).toContain("squatter@example.com: the address is not verified")
-    expect(result.skipped.join("|")).toContain("nobody@example.com: no such account yet")
+    // Which entry of the list and why: never the address itself, which would end up in a log.
+    expect(result.skipped).toEqual([
+      { entry: 2, kind: "email", why: "the address is not verified" },
+      { entry: 3, kind: "email", why: "no such account yet" },
+    ])
+    expect(JSON.stringify(result.skipped)).not.toContain("example.com")
     expect(await isFounder(hq.db, ann.userId)).toBe(true)
     expect(await isFounder(hq.db, squatter.userId)).toBe(false)
     expect(await founderForSlackUser(hq.db, "UANN")).toEqual({ userId: ann.userId })

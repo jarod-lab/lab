@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import {
   createHqHarness,
@@ -8,7 +8,7 @@ import {
   TEST_SLACK_TEAM,
   type TestPerson,
 } from "../app.test.helpers"
-import { founders } from "../db/schema"
+import { founders, spendGrantRequests, spendGrants } from "../db/schema"
 import { createSlackActionHandler, grantActionId, parseActionId, proposalActionId } from "./actions"
 import { slackSignature } from "./verify"
 
@@ -20,9 +20,11 @@ describe("Slack actions (real hq on PGlite)", () => {
   let founder: TestPerson
   let founderSlack: string
   let agentKey: { key: string }
+  // The harness clock: the grant tests move it (a day of their own each, and past a request's TTL).
+  let clock = new Date("2026-11-17T12:00:00Z")
 
   beforeAll(async () => {
-    hq = await createHqHarness({ founderEmails: ["founder@example.com"] })
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"], now: () => clock })
     founder = await hq.signUp("founder@example.com")
     founderSlack = "UFOUNDER"
     await hq.addFounder(founder, founderSlack)
@@ -32,7 +34,7 @@ describe("Slack actions (real hq on PGlite)", () => {
         hq_entry: ["read"],
         hq_proposal: ["read", "create"],
         hq_run: ["read", "create", "update"],
-        hq_spend: ["read", "record"],
+        hq_spend: ["read", "record", "request"],
       }),
     }
   })
@@ -308,9 +310,64 @@ describe("Slack actions (real hq on PGlite)", () => {
   })
 
   describe("a spend grant", () => {
+    // A day of its own for each test: requests are counted per UTC day.
+    let day = 0
+    beforeEach(() => {
+      clock = new Date(Date.UTC(2031, 0, ++day, 12))
+    })
+
+    /** What the agent does: ask hq for a grant, and get the id the card will carry. */
+    async function ask(amountUsd = 5, reason = "A hard pricing question") {
+      const res = await hq.call(agentKey, "POST", "/v1/spend/grant-requests", { amountUsd, reason })
+      expect(res.status).toBe(200)
+      return res.body.requestId
+    }
+    const clickGrant = (requestId: string, over: { cents?: number; slackUserId?: string } = {}) =>
+      hq.slackClick({
+        slackUserId: over.slackUserId ?? founderSlack,
+        actionId: grantActionId(true, requestId, over.cents ?? 500),
+      })
+    const requestRow = async (id: string) =>
+      (await hq.db.select().from(spendGrantRequests).where(eq(spendGrantRequests.id, id)))[0]
+
+    it("a valid click on a request id hq never recorded grants nothing, however it is signed", async () => {
+      // The N8 finding: the signing secret alone used to be enough to mint grants. Now the click
+      // must name a request hq recorded.
+      const before = (await allowance()).grantedUsd
+      const rows = (await hq.db.select().from(spendGrants)).length
+      const forgeries = ["fresh-request-1", "fresh-request-2", crypto.randomUUID()]
+      for (const forged of forgeries) {
+        const click = await clickGrant(forged, { cents: 2500 })
+        expect(click.status, forged).toBe(409)
+        expect(click.text).toMatch(/no such grant request/)
+      }
+      // An id that exists, but is a proposal's, is no grant request either.
+      const proposalId = await propose()
+      expect((await clickGrant(proposalId)).status).toBe(409)
+      expect((await allowance()).grantedUsd).toBe(before)
+      expect(await hq.db.select().from(spendGrants)).toHaveLength(rows)
+    })
+
+    it("grants the recorded amount whatever amount the click carries", async () => {
+      const before = (await allowance()).grantedUsd
+      const small = await ask(5)
+      // A click edited to name $25.00 on a $5.00 request.
+      const inflated = await clickGrant(small, { cents: 2500 })
+      expect(inflated.status).toBe(200)
+      expect(inflated.text).toBe("Granted $5.00 for today.")
+      expect((await allowance()).grantedUsd).toBe(before + 5)
+      // And the other way: a click naming $0.01 on a $7.25 request grants $7.25.
+      const odd = await ask(7.25)
+      const deflated = await clickGrant(odd, { cents: 1 })
+      expect(deflated.text).toBe("Granted $7.25 for today.")
+      expect((await allowance()).grantedUsd).toBe(before + 12.25)
+      expect((await requestRow(small))?.status).toBe("granted")
+      expect((await requestRow(small))?.decidedBy).toBe(founder.userId)
+    })
+
     it("a founder's click grants once; the same request replayed or clicked again grants nothing more", async () => {
       const before = (await allowance()).grantedUsd
-      const request = "bigger-model-req-1"
+      const request = await ask(5)
       const first = await hq.slackClick({
         slackUserId: founderSlack,
         actionId: grantActionId(true, request, 500),
@@ -342,63 +399,109 @@ describe("Slack actions (real hq on PGlite)", () => {
 
     it("two clicks at once on one request grant once", async () => {
       const before = (await allowance()).grantedUsd
+      const rows = (await hq.db.select().from(spendGrants)).length
+      const request = await ask(3)
       const clicks = await Promise.all(
         [1, 2, 3].map(() =>
           hq.slackClick({
             slackUserId: founderSlack,
-            actionId: grantActionId(true, "bigger-model-req-race", 300),
+            actionId: grantActionId(true, request, 300),
           }),
         ),
       )
       expect(clicks.map((c) => c.status).sort()).toEqual([200, 409, 409])
       expect((await allowance()).grantedUsd).toBe(before + 3)
+      expect(await hq.db.select().from(spendGrants)).toHaveLength(rows + 1)
     })
 
-    it("a non-founder's grant click is 403 and grants nothing; a denied request cannot be approved later", async () => {
-      const before = (await allowance()).grantedUsd
-      const stranger = await hq.slackClick({
-        slackUserId: "UNOTFOUNDER",
-        actionId: grantActionId(true, "req-stranger", 500),
+    it("an expired request is refused and grants nothing; one just inside the day still works", async () => {
+      const stale = await ask(5)
+      const fresh = await ask(4)
+      // 24 hours and a second later: past the TTL. The day has moved on too, so the grant would
+      // have landed in a new day's allowance.
+      const asked = clock
+      clock = new Date(asked.getTime() + 24 * 60 * 60 * 1000 + 1000)
+      const refused = await clickGrant(stale)
+      expect(refused.status).toBe(409)
+      expect(refused.text).toMatch(/expired/)
+      expect((await allowance()).grantedUsd).toBe(0)
+      expect((await requestRow(stale))?.status).toBe("expired")
+      // Expired stays expired, and a dismiss on it changes nothing either.
+      expect((await clickGrant(stale)).status).toBe(409)
+      const dismiss = await hq.slackClick({
+        slackUserId: founderSlack,
+        actionId: grantActionId(false, stale, 500),
       })
-      expect(stranger.status).toBe(403)
+      expect(dismiss.status).toBe(409)
+      expect((await requestRow(stale))?.status).toBe("expired")
+
+      // Another request, clicked a minute before its day is up.
+      clock = new Date(asked.getTime() - 1000)
+      const early = await ask(4)
+      clock = new Date(asked.getTime() + 24 * 60 * 60 * 1000 - 60_000 - 1000)
+      expect((await clickGrant(early)).status).toBe(200)
+      expect((await allowance()).grantedUsd).toBe(4)
+      expect((await requestRow(fresh))?.status).toBe("pending")
+    })
+
+    it("a non-founder's grant click is 403 and grants nothing; a dismissed request cannot be granted later", async () => {
+      const before = (await allowance()).grantedUsd
+      const stranger = await ask(5)
+      const dismissed = await ask(5)
+      const refused = await clickGrant(stranger, { slackUserId: "UNOTFOUNDER" })
+      expect(refused.status).toBe(403)
+      expect((await requestRow(stranger))?.status).toBe("pending")
       const deny = await hq.slackClick({
         slackUserId: founderSlack,
-        actionId: grantActionId(false, "req-denied", 500),
+        actionId: grantActionId(false, dismissed, 500),
       })
       expect(deny.status).toBe(200)
-      const late = await hq.slackClick({
-        slackUserId: founderSlack,
-        actionId: grantActionId(true, "req-denied", 500),
-      })
-      expect(late.status).toBe(409)
+      expect((await requestRow(dismissed))?.status).toBe("rejected")
+      expect((await clickGrant(dismissed)).status).toBe(409)
       expect((await allowance()).grantedUsd).toBe(before)
       // The stranger's request is still open for a founder.
-      expect(
-        (
-          await hq.slackClick({
-            slackUserId: founderSlack,
-            actionId: grantActionId(true, "req-stranger", 500),
-          })
-        ).status,
-      ).toBe(200)
+      expect((await clickGrant(stranger)).status).toBe(200)
     })
 
-    it("a click can grant at most the ceiling", async () => {
-      const before = (await allowance()).grantedUsd
-      const click = await hq.slackClick({
-        slackUserId: founderSlack,
-        actionId: grantActionId(true, "req-huge", 2501),
+    it("a request is recorded by hq with the amount fixed: at most $25, more than $0", async () => {
+      const id = await ask(25, "  Launch day  ")
+      expect(await requestRow(id)).toMatchObject({
+        amountUsd: "25.0000",
+        reason: "Launch day",
+        status: "pending",
+        decidedAt: null,
+        decidedBy: null,
       })
-      expect(click.status).toBe(403)
-      expect((await allowance()).grantedUsd).toBe(before)
-      expect(
-        (
-          await hq.slackClick({
-            slackUserId: founderSlack,
-            actionId: grantActionId(true, "req-max", 2500),
-          })
-        ).status,
-      ).toBe(200)
+      // Asking grants nothing by itself.
+      expect((await allowance()).grantedUsd).toBe(0)
+      for (const amountUsd of [25.01, 26, 1000, 0, -1]) {
+        const res = await hq.call(agentKey, "POST", "/v1/spend/grant-requests", {
+          amountUsd,
+          reason: "too much",
+        })
+        expect(res.status, String(amountUsd)).toBe(400)
+      }
+      const noReason = await hq.call(agentKey, "POST", "/v1/spend/grant-requests", { amountUsd: 1 })
+      expect(noReason.status).toBe(400)
+    })
+
+    it("takes at most ten requests a UTC day, however they were decided, and a new day starts again", async () => {
+      const ids: string[] = []
+      for (let i = 0; i < 10; i++) ids.push(await ask(1, `request ${i}`))
+      // Deciding some does not free places: the cap is on cards sent to the founders.
+      await clickGrant(ids[0] ?? "")
+      const eleventh = await hq.call(agentKey, "POST", "/v1/spend/grant-requests", {
+        amountUsd: 1,
+        reason: "one too many",
+      })
+      expect(eleventh.status).toBe(429)
+      expect(eleventh.body.error.code).toBe("RATE_LIMITED")
+      const today = clock.toISOString().slice(0, 10)
+      const made = await hq.db.select().from(spendGrantRequests)
+      expect(made.filter((r) => r.createdAt.toISOString().startsWith(today))).toHaveLength(10)
+
+      clock = new Date(clock.getTime() + 24 * 60 * 60 * 1000)
+      expect((await ask(1)) !== "").toBe(true)
     })
   })
 
@@ -427,6 +530,49 @@ describe("Slack actions (real hq on PGlite)", () => {
       })
       expect(grant.status).toBe(403)
       expect((await proposalOf(id))?.status).toBe("pending")
+    })
+
+    it("can call request_spend_grant, but never grant_spend or decide_proposal, even carrying grant", async () => {
+      clock = new Date("2032-03-01T12:00:00Z")
+      const allowed = await hq.call(agentKey, "POST", "/v1/spend/grant-requests", {
+        amountUsd: 5,
+        reason: "ask",
+      })
+      expect(allowed.status).toBe(200)
+      // A key without `request` (the older agent scope) is refused.
+      const older = {
+        key: await hq.keyFor(founder, { hq_spend: ["read", "record"], hq_proposal: ["read"] }),
+      }
+      const noRequest = await hq.call(older, "POST", "/v1/spend/grant-requests", {
+        amountUsd: 5,
+        reason: "ask",
+      })
+      expect(noRequest.status).toBe(403)
+
+      // A key minted server-side with grant and decide on it has them stripped by hq.
+      const minted = {
+        key: await hq.keyFor(founder, {
+          hq_spend: ["grant", "request", "read"],
+          hq_proposal: ["decide", "read", "create"],
+        }),
+      }
+      const id = await propose()
+      const grant = await hq.call(minted, "POST", "/v1/spend/grants", { amountUsd: 5, reason: "x" })
+      expect(grant.status).toBe(403)
+      const decide = await hq.call(minted, "POST", `/v1/proposals/${id}/decision`, {
+        decision: "approve",
+      })
+      expect(decide.status).toBe(403)
+      // Asking is all the key could do: nothing was granted or decided.
+      expect((await allowance()).grantedUsd).toBe(0)
+      expect((await proposalOf(id))?.status).toBe("pending")
+      // A stranger's session (no founders row) cannot ask either.
+      const stranger = await hq.signUp("not-a-founder@example.com")
+      const asked = await hq.call({ cookie: stranger.cookie }, "POST", "/v1/spend/grant-requests", {
+        amountUsd: 5,
+        reason: "ask",
+      })
+      expect(asked.status).toBe(403)
     })
 
     it("a valid click is decided as the founder, not the key's owner by default", async () => {

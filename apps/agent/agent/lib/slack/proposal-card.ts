@@ -83,7 +83,12 @@ export function proposalCard(proposal: PendingProposal): SlackBlock[] {
   ]
 }
 
-/** A spend grant request: the amount, why, and two buttons. `requestId` makes the click once-only. */
+/**
+ * A spend grant request: the amount, why, and two buttons. `requestId` and `amountUsd` are what hq
+ * returned from `request_spend_grant` (the client's `requestSpendGrant`), never an id made up here:
+ * hq redeems only a request it recorded, once, for the amount it recorded. The cents in the button
+ * ids only repeat what the card says; hq does not read them.
+ */
 export function grantCard(request: {
   requestId: string
   amountUsd: number

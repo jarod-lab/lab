@@ -6,4 +6,5 @@ export default baseConfig(undefined, [
   "src/env.ts",
   "src/founder-principals.ts",
   "src/mint-agent-key.ts",
+  "src/create-founder.ts",
 ])

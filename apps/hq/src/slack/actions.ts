@@ -6,9 +6,8 @@ import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
 
 import { founderForSlackUser } from "../data/founders"
-import { toPositiveUnits } from "../data/money"
+import { decideGrantRequest, dollars } from "../data/grant-requests"
 import { decideProposal, getProposal } from "../data/proposals"
-import { grantSpend } from "../data/spend"
 import { slackActions } from "../db/schema"
 import { verifySlackSignature } from "./verify"
 
@@ -36,14 +35,12 @@ export interface SlackActionDeps {
   teamId: string | undefined
 }
 
-/** The most one click may grant, in dollars (grant_spend itself allows more, to a signed-in founder). */
-export const MAX_SLACK_GRANT_USD = 25
-
 /**
  * What a card's button carries in its `action_id`. Proposal buttons name the proposal and the
- * version it was proposed against (`new` for a new entry); grant buttons name the request and the
- * amount in cents. The agent builds these (`agent/lib/slack/proposal-card.ts`); the two are held
- * together by a test.
+ * version it was proposed against (`new` for a new entry); grant buttons name the request hq
+ * recorded (`request_spend_grant`) and the amount in cents the card shows. The cents are only what
+ * the card said: hq grants the recorded request's own amount and never reads them. The agent builds
+ * these (`agent/lib/slack/proposal-card.ts`); the two are held together by a test.
  */
 export type CardAction =
   | {
@@ -207,34 +204,41 @@ export function createSlackActionHandler(deps: SlackActionDeps) {
     userId: string,
     click: Click,
   ): Promise<SlackActionResult> {
-    if (action.cents > MAX_SLACK_GRANT_USD * 100) {
-      return refuse(`A click can grant at most $${MAX_SLACK_GRANT_USD}.`)
-    }
+    // A click redeems a request hq recorded, by its id, and nothing else. The amount on the click
+    // (`action.cents`) is a label for the card and is never read: the row's amount is the grant.
+    // The claim (pending to granted) is one atomic UPDATE, in the same transaction as the grant,
+    // so a replay or a second click finds the row decided and grants nothing.
     const at = now()
-    // The key and the grant go in together: a replay finds the key and grants nothing.
     return db.transaction(async (tx) => {
-      const claimed = await tx
+      const decision = await decideGrantRequest(tx, {
+        id: action.requestId,
+        approve: action.approve,
+        decidedBy: userId,
+        now: at,
+      })
+      if (decision.outcome === "unavailable") {
+        const text = {
+          unknown: "hq has no such grant request.",
+          decided: "This request was already decided.",
+          expired: "This request has expired. Ask for a new one.",
+        }[decision.why]
+        return unchanged(text)
+      }
+      // The audit trail: which Slack click decided it. Not a guard (the claim above is).
+      await tx
         .insert(slackActions)
         .values({
           key: `grant:${action.requestId}`,
-          outcome: action.approve ? "grant" : "deny",
+          outcome: decision.outcome === "granted" ? "grant" : "deny",
           slackUserId: click.slackUserId,
           userId,
           actionTs: click.actionTs,
           createdAt: at,
         })
         .onConflictDoNothing()
-        .returning({ key: slackActions.key })
-      if (claimed.length === 0) return unchanged("This request was already decided.")
-      if (!action.approve) return { status: 200 as const, text: "Dismissed: nothing was granted." }
-      const dollars = action.cents / 100
-      await grantSpend(tx, {
-        amount: toPositiveUnits(dollars, "amount"),
-        reason: `Slack approval ${action.requestId}`,
-        grantedBy: userId,
-        now: at,
-      })
-      return { status: 200 as const, text: `Granted $${dollars.toFixed(2)} for today.` }
+      return decision.outcome === "granted"
+        ? { status: 200 as const, text: `Granted ${dollars(decision.amount)} for today.` }
+        : { status: 200 as const, text: "Dismissed: nothing was granted." }
     })
   }
 }

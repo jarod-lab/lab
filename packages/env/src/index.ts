@@ -48,8 +48,9 @@ export const env = createEnv({
     SLACK_SIGNING_SECRET: z.string().min(1).optional(),
     /**
      * apps/hq only: whether anyone may create an account on hq. Off by default: hq's people are the
-     * founders, so a stranger cannot self-register. Turn it on only to bootstrap the first founders'
-     * accounts (and in the e2e stack, which seeds one), then off again.
+     * founders, so a stranger cannot self-register. For the e2e and test stacks only (NODE_ENV
+     * development or test, which seed their founder by signing up): a deployed hq refuses to boot
+     * with it on, and makes its founders with `create-founder` on the server instead.
      */
     HQ_ALLOW_SIGNUP: z.stringbool().default(false),
     /**

@@ -17,7 +17,8 @@ const AGENT_SCOPE = {
   hq_entry: ["read"],
   hq_proposal: ["read", "create"],
   hq_run: ["read", "create", "update"],
-  hq_spend: ["read", "record"],
+  // `request` asks for a grant (a pending request a founder redeems in Slack); grant is never here.
+  hq_spend: ["read", "record", "request"],
 }
 
 const flag = process.argv.indexOf("--email")

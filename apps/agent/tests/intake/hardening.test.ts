@@ -313,14 +313,14 @@ describe("redaction keeps the evidence and loses the secret", () => {
 
   test("a clone refused for credentials is still diagnosed as an app access problem", () => {
     expect(describeCloneFailure("acme/widgets", "fatal: basic authentication failed")).toMatch(
-      /Install the selected GitHub connector's app/,
+      /Install the org's GitHub App/,
     )
     expect(
       describeCloneFailure(
         "acme/widgets",
         "remote: Permission to acme/widgets.git denied to foreman[bot].",
       ),
-    ).toMatch(/Install the selected GitHub connector's app/)
+    ).toMatch(/Install the org's GitHub App/)
   })
 
   test.each([

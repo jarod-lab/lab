@@ -66,7 +66,7 @@ export function appAccessMessage(repo: string): string {
  * to cover both fixes.
  */
 export function missingRepoMessage(repo: string): string {
-  return `Cannot clone ${repo}: GitHub reports the repository as not found. FACTORY_REPO must reference an existing repository in owner/repo format, and for a private repository the selected GitHub connector's app must be installed with access to it (GitHub reports both cases as not found). Fix FACTORY_REPO or the app installation, then redeploy.`
+  return `Cannot clone ${repo}: GitHub reports the repository as not found. FACTORY_REPO must reference an existing repository in owner/repo format, and for a private repository the org's GitHub App must be installed with access to it (GitHub reports both cases as not found). Fix FACTORY_REPO or the app installation, then redeploy.`
 }
 
 const NOT_FOUND_EVIDENCE =

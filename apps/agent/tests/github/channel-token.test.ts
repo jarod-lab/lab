@@ -10,8 +10,8 @@ import {
 import { log } from "#lib/log.js"
 import { APP_TOKEN, stubGitHubApp } from "./support/github-app.js"
 
-const NARROW = "ghs_NARROWCHANNEL0123456789abcdefghijkl"
-const WIDE = "ghs_WIDEINSTALLATION0123456789abcdefghi"
+const NARROW = "ghs_NARROWCHANNEL0123456789abcdefghijkl" // gitleaks:allow
+const WIDE = "ghs_WIDEINSTALLATION0123456789abcdefghi" // gitleaks:allow
 
 /**
  * What the channel module hands to eve, and what it asks GitHub for.

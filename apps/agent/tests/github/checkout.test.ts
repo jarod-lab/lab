@@ -29,7 +29,7 @@ import { stubGitHubApp } from "./support/github-app.js"
  * that nothing is left behind when the command ends.
  */
 
-const TOKEN = "ghs_REALTOKEN0123456789abcdefghijklmnop"
+const TOKEN = "ghs_REALTOKEN0123456789abcdefghijklmnop" // gitleaks:allow
 
 /*
  * Two stand-ins, both at the edge of the factory's own code, so the channel

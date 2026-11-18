@@ -1,14 +1,9 @@
 import { env } from "@lab/env"
 
+import { parseFounders } from "./data/founders"
+
 /** The default port when neither a launcher nor PORT names one. */
 const DEFAULT_PORT = 3100
-
-/** A comma-separated env value as a list: trimmed, empty items dropped. */
-const listOf = (value: string | undefined) =>
-  (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
 
 /**
  * What apps/hq needs to boot, from @lab/env (the only place env vars are read). `portArg` is the
@@ -26,10 +21,11 @@ export function hqEnv(portArg?: string) {
     databaseUrl,
     port,
     baseURL: (env.HQ_BASE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, ""),
-    founders: {
-      userIds: listOf(env.HQ_FOUNDER_USER_IDS),
-      emails: listOf(env.HQ_FOUNDER_EMAILS).map((email) => email.toLowerCase()),
-    },
+    // Written to the founders table at boot (and the table set to match): see data/founders.ts.
+    founders: parseFounders(env.HQ_FOUNDERS),
+    slack: { signingSecret: env.SLACK_SIGNING_SECRET, teamId: env.HQ_SLACK_TEAM_ID },
+    // Anything but an explicit true is closed (even a raw string, when validation is skipped).
+    allowSignUp: env.HQ_ALLOW_SIGNUP === true,
     secret: env.BETTER_AUTH_SECRET,
     emailFrom: env.EMAIL_FROM,
   }

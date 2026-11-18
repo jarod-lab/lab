@@ -96,6 +96,36 @@ export const proposals = hq.table(
   (t) => [index("proposals_status_created_idx").on(t.status, t.createdAt)],
 )
 
+/**
+ * The founders: the one source for who may decide a proposal, edit an entry, grant spend or click
+ * Approve in Slack. A row maps an hq account to a Slack user. Nothing in the API writes it: hq
+ * syncs it from HQ_FOUNDERS at boot (data/founders.ts), adding the listed and removing the rest.
+ */
+export const founders = hq.table(
+  "founders",
+  {
+    userId: text("user_id").primaryKey(),
+    slackUserId: text("slack_user_id").notNull(),
+    createdAt: at("created_at").notNull(),
+  },
+  (t) => [unique("founders_slack_user_id_unique").on(t.slackUserId)],
+)
+
+/**
+ * What a Slack click already did, so a replay does nothing twice. `key` names the thing decided
+ * (`grant:<request id>`); the first click to insert it wins, in the same transaction as its effect.
+ */
+export const slackActions = hq.table("slack_actions", {
+  key: text("key").primaryKey(),
+  /** What the click did: `grant` or `deny`. */
+  outcome: text("outcome").notNull(),
+  slackUserId: text("slack_user_id").notNull(),
+  userId: text("user_id").notNull(),
+  /** Slack's `action_ts` for the click, for the audit trail. */
+  actionTs: text("action_ts"),
+  createdAt: at("created_at").notNull(),
+})
+
 /** An entry's content: prose in `text`, plus any structured fields the kind needs. */
 export interface EntryBody {
   text: string

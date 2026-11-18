@@ -19,6 +19,9 @@
 never mix. New migration: `pnpm --filter @lab/hq db:generate`, then commit the SQL. `pnpm wt`
 applies both sets to a worktree's database (`hq`'s tests get both from `createHqTestDb`,
 `apps/hq/src/testing.ts`). `entry_versions` is append-only: a trigger refuses any update or delete.
+`founders` (0003_slack_approvals) is the one source of who the founders are: hq writes it from
+`HQ_FOUNDERS` at every boot and nothing in the API does. `slack_actions` records what a Slack click
+already did, so a replayed grant click grants nothing twice.
 Applying hq's migrations anywhere else (`pnpm --filter @lab/hq db:migrate`) is denied for agents like
 the rest; `scripts/release.mjs` does not run them yet.
 

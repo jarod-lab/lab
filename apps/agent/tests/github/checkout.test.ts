@@ -16,6 +16,7 @@ import { rewriteGuard } from "#lib/github/git-cli.js"
 import { REMOTE_URL } from "#lib/github/git-remote.js"
 import { resetTokenScopeMemo, type TokenMinter } from "#lib/github/lease.js"
 import { log } from "#lib/log.js"
+import { stubGitHubApp } from "./support/github-app.js"
 
 /**
  * The orchestrator's per-turn checkout.
@@ -37,23 +38,15 @@ const TOKEN = "ghs_REALTOKEN0123456789abcdefghijklmnop"
  *
  * - `githubChannel` hands back the config it is given. Everything in that
  *   config is the factory's, and that is what is under test.
- * - Vercel Connect's `getToken` returns a fixed token and records what was
+ * - A fake GitHub (`support/github-app.ts`) answers the App-key minter's
+ *   installation token request with a fixed token and records what was
  *   asked of it. The handler passes no lease overrides, so this is where
  *   its token comes from. Every other test here injects its own minter and
  *   never reaches it.
  */
-const connect = vi.hoisted(() => ({
-  getToken: vi.fn(async (_connector: string, _options: unknown) => ""),
-}))
-
 vi.mock("eve/channels/github", async (importOriginal) => ({
   ...(await importOriginal<typeof import("eve/channels/github")>()),
   githubChannel: (config: unknown) => config,
-}))
-
-vi.mock("@vercel/connect", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@vercel/connect")>()),
-  getToken: connect.getToken,
 }))
 const SHA = "a".repeat(40)
 const BASE = "b".repeat(40)
@@ -461,14 +454,19 @@ describe("the channel's turn.started handler is the factory's own, not eve's bui
 
   const warnings = () => vi.spyOn(log, "warn").mockImplementation(() => undefined)
 
+  let app: ReturnType<typeof stubGitHubApp>
   beforeAll(() => {
     resetTokenScopeMemo()
-    connect.getToken.mockImplementation(async () => TOKEN)
+    app = stubGitHubApp(TOKEN)
+  })
+
+  afterAll(() => {
+    app.restore()
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    connect.getToken.mockClear()
+    app.requests.length = 0
   })
 
   test("it reacts, checks the repository out under a read-only lease that is taken off again, and records where the checkout is and its commit", async () => {
@@ -492,12 +490,11 @@ describe("the channel's turn.started handler is the factory's own, not eve's bui
 
     // The token is the one minted here, for reading only, and it sits behind
     // a placeholder: the command holds the placeholder, never the token.
-    expect(connect.getToken).toHaveBeenCalledTimes(1)
-    const [, request] = connect.getToken.mock.calls[0] ?? []
-    const [details] = (request as { authorizationDetails: { permissions?: string[] }[] })
-      .authorizationDetails
-    expect(details?.permissions).toContain("contents:read")
-    expect(details?.permissions?.filter((entry) => !entry.endsWith(":read"))).toEqual([])
+    expect(app.requests).toHaveLength(1)
+    const permissions = app.requests[0]?.body.permissions ?? {}
+    expect(app.requests[0]?.body.repositories).toEqual(["widgets"])
+    expect(permissions.contents).toBe("read")
+    expect(Object.values(permissions).filter((level) => level !== "read")).toEqual([])
     expect(JSON.stringify(run)).not.toContain(TOKEN)
     const header = run?.kind === "run" ? run.env.GIT_CONFIG_VALUE_0 : ""
     const [, credential = ""] = header.split("Authorization: Basic ")
@@ -521,7 +518,7 @@ describe("the channel's turn.started handler is the factory's own, not eve's bui
     await handler({}, ctx)
     expect(reactions).toEqual(["eyes"])
     expect(steps).toEqual([{ command: headCommand("/workspace"), env: {}, kind: "run" }])
-    expect(connect.getToken).not.toHaveBeenCalled()
+    expect(app.requests).toEqual([])
     expect(ctx.channel.state.checkoutPath).toBe("/workspace")
     expect(ctx.channel.state.headSha).toBe(SHA)
   })
@@ -584,7 +581,7 @@ describe("the channel's turn.started handler is the factory's own, not eve's bui
       "The checkout needs a sandbox with a network policy",
     )
     expect(commands).toEqual([])
-    expect(connect.getToken).not.toHaveBeenCalled()
+    expect(app.requests).toEqual([])
     expect(ctx.channel.state.checkoutPath).toBeNull()
   })
 

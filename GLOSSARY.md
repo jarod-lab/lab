@@ -137,9 +137,22 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
 
 ## The brain (`apps/hq`)
 
-- **Founder** — a person on hq's allowlist (`HQ_FOUNDER_EMAILS`, once the email is verified, or
-  `HQ_FOUNDER_USER_IDS`). hq's sign-up is open, so signing up makes no one a founder. Only a founder uses
-  hq, and only a founder decides a proposal or edits an entry.
+- **Founder** — a row of hq's `founders` table: an hq account and its Slack user. The table is the one
+  source of who the founders are. It is set from `HQ_FOUNDERS` at every boot (the listed are added, the
+  rest removed; an unverified or unknown address is skipped) and nothing in the API writes it, so no key
+  can add one. hq's sign-up is closed unless `HQ_ALLOW_SIGNUP`, and signing up makes no one a founder.
+  Only a founder uses hq, and only a founder decides a proposal, edits an entry, grants spend or clicks
+  Approve in Slack. The agent's `AGENT_FOUNDER_PRINCIPALS` is derived from the table
+  (`pnpm --filter @lab/hq founders:principals`, with `--check` to fail on drift).
+- **Card** — a Slack message block with buttons a founder clicks: a **proposal** card (Approve, Reject;
+  its button ids carry the proposal and the version it was proposed against) or a **grant** card. The
+  agent forwards the click, unchanged, to hq, which verifies Slack's signature over the same bytes and
+  decides it as the founder the Slack user maps to. A replayed or stale click changes nothing.
+- **Digest** — the nightly 07:00 UTC Slack message: yesterday's runs and spend and one card per pending
+  proposal. Posted by the agent without a model call; its own run and a zero cost are recorded in hq.
+- **Installation token** — a short-lived GitHub App token the agent mints from the app's private key
+  (`apps/agent/agent/lib/github/app-token.ts`), narrowed to one repository and the permissions a lease
+  needs.
 - **Entry** — one thing the org knows: a `fact`, `voice`, `decision`, `playbook` or `customer`, named by
   a slug unique within its kind. Its content is in its **versions**.
 - **Version** — one numbered, dated state of an entry, with its author (a person or an agent) and where it

@@ -13,7 +13,7 @@ describe("the admin pages (PGlite)", () => {
   let agent: { key: string }
 
   beforeAll(async () => {
-    hq = await createHqHarness({ founders: { emails: ["founder@example.com"], userIds: [] } })
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"] })
     founder = await hq.signUp("founder@example.com")
     stranger = await hq.signUp("stranger@example.com")
     agent = {

@@ -60,7 +60,47 @@ const allowanceReply = z.object({
   remainingUsd: z.number(),
 })
 
+const proposalRow = z.object({
+  id: z.string(),
+  entryId: z.string().nullable(),
+  kind: z.string(),
+  slug: z.string(),
+  baseVersion: z.number().nullable(),
+  title: z.string(),
+  body: z.object({ text: z.string() }).passthrough(),
+  reason: z.string(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  createdAt: z.string(),
+})
+const proposalsReply = z.object({
+  proposals: z.array(proposalRow),
+  nextCursor: z.string().nullable(),
+})
+const runRow = z.object({
+  id: z.string(),
+  task: z.string(),
+  trigger: z.string(),
+  runner: z.string(),
+  startedAt: z.string(),
+  outcome: z.string().nullable(),
+  summary: z
+    .object({ worked: z.array(z.string()), failed: z.array(z.string()), stop: z.array(z.string()) })
+    .nullable(),
+  costUsd: z.number(),
+  costEstimated: z.boolean(),
+})
+const runsReply = z.object({ runs: z.array(runRow), nextCursor: z.string().nullable() })
+const spendSummaryReply = z.object({
+  day: z.string(),
+  totalUsd: z.number(),
+  estimatedUsd: z.number(),
+  bySource: z.array(z.object({ source: z.string(), amountUsd: z.number() })),
+})
+
 export type EntryHit = z.infer<typeof searchReply>["hits"][number]
+export type ProposalRow = z.infer<typeof proposalRow>
+export type RunRow = z.infer<typeof runRow>
+export type SpendSummary = z.infer<typeof spendSummaryReply>
 export type Entry = z.infer<typeof entryReply>
 export type Reservation = z.infer<typeof reserveReply>
 export type Allowance = z.infer<typeof allowanceReply>
@@ -108,6 +148,19 @@ export interface HqClient {
     model: string
   }): Promise<{ id: string; amountUsd: number; estimated: boolean }>
   getSpendAllowance(): Promise<Allowance>
+  /** One page of proposals, newest first (the nightly digest reads the pending ones). */
+  listProposals(input?: {
+    status?: "pending" | "approved" | "rejected"
+    cursor?: string
+    limit?: number
+  }): Promise<{ proposals: ProposalRow[]; nextCursor: string | null }>
+  /** One page of runs, newest first, with their cost. */
+  listRuns(input?: {
+    cursor?: string
+    limit?: number
+  }): Promise<{ runs: RunRow[]; nextCursor: string | null }>
+  /** What one UTC day spent, by source. `day` left out is yesterday as hq counts it. */
+  getSpendSummary(input?: { day?: string }): Promise<SpendSummary>
 }
 
 export interface HqClientOptions {
@@ -181,6 +234,13 @@ export function createHqClient(options: HqClientOptions): HqClient {
   }
 
   const enc = encodeURIComponent
+  /** A query string from the defined values only: `?a=1&b=2`, or nothing. */
+  const query = (params: Record<string, string | number | undefined>) => {
+    const parts = Object.entries(params)
+      .filter(([, value]) => value !== undefined)
+      .map(([name, value]) => `${name}=${enc(String(value))}`)
+    return parts.length === 0 ? "" : `?${parts.join("&")}`
+  }
 
   return {
     searchEntries: async ({ query, kinds, limit }) =>
@@ -202,5 +262,11 @@ export function createHqClient(options: HqClientOptions): HqClient {
       call("POST", `/v1/spend/holds/${enc(holdId)}/settlement`, settleReply, { amountUsd, model }),
     recordSpend: (input) => call("POST", "/v1/spend", recordSpendReply, input),
     getSpendAllowance: () => call("GET", "/v1/spend/allowance", allowanceReply),
+    listProposals: ({ status, cursor, limit } = {}) =>
+      call("GET", `/v1/proposals${query({ status, cursor, limit })}`, proposalsReply),
+    listRuns: ({ cursor, limit } = {}) =>
+      call("GET", `/v1/runs${query({ cursor, limit })}`, runsReply),
+    getSpendSummary: ({ day } = {}) =>
+      call("GET", `/v1/spend/summary${query({ day })}`, spendSummaryReply),
   }
 }

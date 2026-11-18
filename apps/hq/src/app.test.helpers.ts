@@ -5,10 +5,19 @@ import { user } from "@lab/db"
 import { eq } from "drizzle-orm"
 
 import { createHqApp } from "./app"
+import { addFounder as addFounderRow } from "./data/founders"
+import { slackSignature } from "./slack/verify"
 import { createHqTestDb } from "./testing"
 
 const BASE = "http://localhost:3100"
 const SECRET = "a-test-secret-that-is-long-enough-123456" // gitleaks:allow
+/** The Slack app's signing secret and the workspace hq accepts clicks from, in tests. */
+export const TEST_SLACK_SECRET = "slack-signing-secret-for-tests-only" // gitleaks:allow
+export const TEST_SLACK_TEAM = "T0TEST"
+
+/** A Slack interactivity body: `payload=<url-encoded JSON>`, as Slack posts it. */
+export const slackFormBody = (payload: unknown) =>
+  `payload=${encodeURIComponent(JSON.stringify(payload))}`
 
 /**
  * What an hq reply's JSON holds, as the tests read it: every operation's output, error and list
@@ -48,10 +57,15 @@ export interface TestPerson {
  * keys, and call it. The clock is fixed unless `now` is given.
  */
 export async function createHqHarness(
-  opts: { founders?: { userIds: string[]; emails: string[] }; now?: () => Date } = {},
+  opts: {
+    /** Addresses that become founders (a `hq.founders` row) when they sign up through `signUp`. */
+    founderEmails?: string[]
+    now?: () => Date
+    /** Sign-up is open in the harness (it signs its people up); a test of the closed default says so. */
+    allowSignUp?: boolean
+  } = {},
 ) {
-  // Read on every request, so a test may add a founder after sign-up (their user id is new).
-  const founders = opts.founders ?? { userIds: [], emails: [] }
+  const founderEmails = opts.founderEmails ?? []
   const test = await createHqTestDb()
   const auth = createAuth({
     db: test.db,
@@ -66,11 +80,26 @@ export async function createHqHarness(
     },
     passwordBreachCheck: false,
     rateLimit: false,
+    allowSignUp: opts.allowSignUp ?? true,
   })
   const now = opts.now ?? (() => new Date("2026-11-17T12:00:00Z"))
-  const app = createHqApp({ db: test.db, auth, now, baseURL: BASE, founders })
+  const app = createHqApp({
+    db: test.db,
+    auth,
+    now,
+    baseURL: BASE,
+    slack: { signingSecret: TEST_SLACK_SECRET, teamId: TEST_SLACK_TEAM },
+  })
 
-  /** Sign a person up (open sign-up: they get a personal organization they own). */
+  let slackSeq = 0
+  /** Make a person a founder: a `hq.founders` row, as hq's boot sync writes it. */
+  async function addFounder(person: Pick<TestPerson, "userId">, slackUserId?: string) {
+    const slack = slackUserId ?? `UTEST${++slackSeq}`
+    await addFounderRow(test.db, { userId: person.userId, slackUserId: slack, now: now() })
+    return slack
+  }
+
+  /** Sign a person up (they get a personal organization they own). A listed address is a founder. */
   async function signUp(email: string, { verified = true } = {}): Promise<TestPerson> {
     const res = await auth.api.signUpEmail({
       body: { email, password: "correct-horse-battery", name: email },
@@ -82,7 +111,9 @@ export async function createHqHarness(
     if (!orgId) throw new Error("signup did not activate a personal organization")
     const userId = res.response.user.id
     if (verified) await test.db.update(user).set({ emailVerified: true }).where(eq(user.id, userId))
-    return { email, cookie, userId, orgId }
+    const person = { email, cookie, userId, orgId }
+    if (founderEmails.includes(email.toLowerCase())) await addFounder(person)
+    return person
   }
 
   /** An organization API key with exactly these permissions, as the person's. */
@@ -114,5 +145,63 @@ export async function createHqHarness(
     return { status: res.status, body: (await res.json()) as Reply }
   }
 
-  return { ...test, auth, app, now, founders, signUp, keyFor, call }
+  /**
+   * POST a Slack click to hq as the agent forwards it: the raw body and Slack's headers, signed
+   * with the test secret unless `signature` says otherwise. Returns hq's status and text.
+   */
+  async function slackClick(input: {
+    slackUserId: string
+    actionId: string
+    teamId?: string
+    actionTs?: string
+    /** Replace the signature (a bad one), or `null` to send none. */
+    signature?: string | null
+    /** Sign this instant instead of the harness clock. */
+    signedAt?: Date
+    /** Send these exact bytes instead of building a payload (signed over them all the same). */
+    rawBody?: string
+    /** Extra headers, such as an API key that must not matter. */
+    headers?: Record<string, string>
+  }): Promise<{ status: number; text: string; rawBody: string; timestamp: string }> {
+    const rawBody =
+      input.rawBody ??
+      slackFormBody({
+        type: "block_actions",
+        team: { id: input.teamId ?? TEST_SLACK_TEAM },
+        user: { id: input.slackUserId, team_id: input.teamId ?? TEST_SLACK_TEAM },
+        trigger_id: `trigger-${++slackSeq}`,
+        response_url: "http://127.0.0.1:9/response",
+        actions: [
+          {
+            action_id: input.actionId,
+            block_id: "b1",
+            action_ts: input.actionTs ?? `${Math.floor(now().getTime() / 1000)}.${++slackSeq}`,
+            value: input.actionId,
+          },
+        ],
+      })
+    const timestamp = String(Math.floor((input.signedAt ?? now()).getTime() / 1000))
+    const signature =
+      input.signature === undefined
+        ? slackSignature(TEST_SLACK_SECRET, timestamp, rawBody)
+        : input.signature
+    const res = await app.request(`${BASE}/v1/slack/actions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-slack-request-timestamp": timestamp,
+        ...(signature === null ? {} : { "x-slack-signature": signature }),
+        ...input.headers,
+      },
+      body: rawBody,
+    })
+    return {
+      status: res.status,
+      text: ((await res.json()) as { text: string }).text,
+      rawBody,
+      timestamp,
+    }
+  }
+
+  return { ...test, auth, app, now, addFounder, signUp, keyFor, call, slackClick }
 }

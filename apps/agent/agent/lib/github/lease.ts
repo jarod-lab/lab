@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import { getToken } from "@vercel/connect"
 import type { SandboxNetworkPolicy, SandboxNetworkRule } from "eve/sandbox"
 import { factoryRepo } from "../constants.js"
 import {
@@ -9,10 +8,9 @@ import {
   ghCommandLine,
   RUNNER_PATH,
 } from "./cli.js"
-import { GITHUB_CONNECTOR, githubCredentials } from "./credentials.js"
 import { basePolicy, withBasePolicy } from "./egress.js"
 import { pushCommandLine } from "./git-cli.js"
-import { mintInstallationToken } from "./git-remote.js"
+import { mintInstallationToken as mintAppToken, parsePermissions } from "./app-token.js"
 import {
   PUSH_SIGNED_SCRIPT,
   SIGNED_PUSH_TIMEOUT_MS,
@@ -106,32 +104,55 @@ export const permissionsFor = (scope: TokenScope): ScopePermissions => {
 export type TokenMinter = (permissions: readonly string[] | null) => Promise<string>
 
 /**
- * Mints an installation token for the factory repository through Vercel
- * Connect.
+ * The org's GitHub App, from the environment at the moment of use: its id, its private key (from
+ * the org's vault) and the installation on the org. Read per call, never at load: discovery and
+ * the build run with placeholders, and a test sets its own.
  *
- * @param permissions - The permissions to limit the token to, or null for
- * every permission the app holds.
+ * @throws Naming the missing variable (never a value).
  */
-export const connectMinter: TokenMinter = (permissions) =>
-  getToken(GITHUB_CONNECTOR, {
-    authorizationDetails: [
-      {
-        org: factoryRepo.owner,
-        repositories: [factoryRepo.repo],
-        type: "github_app_installation",
-        ...(permissions === null ? {} : { permissions: [...permissions] }),
-      },
-    ],
-    subject: { type: "app" },
-  })
+const githubAppFromEnv = () => {
+  const appId = agentEnv("GITHUB_APP_ID")?.trim()
+  const privateKeyPem = agentEnv("GITHUB_APP_PRIVATE_KEY")
+  const installationId = agentEnv("GITHUB_INSTALLATION_ID")?.trim()
+  for (const [name, value] of [
+    ["GITHUB_APP_ID", appId],
+    ["GITHUB_APP_PRIVATE_KEY", privateKeyPem?.trim()],
+    ["GITHUB_INSTALLATION_ID", installationId],
+  ] as const) {
+    if (!value) {
+      throw new Error(`${name} is not set: the GitHub App's credentials are needed to mint tokens.`)
+    }
+  }
+  return {
+    appId: appId ?? "",
+    privateKeyPem: privateKeyPem ?? "",
+    installationId: installationId ?? "",
+  }
+}
 
 /**
- * The connector's own installation token, not narrowed: every permission
- * the app holds, on every repository the installation covers. The last
+ * Mints an installation token for the factory repository from the GitHub App's private key
+ * (`app-token.ts`), narrowed to that one repository and the permissions asked for.
+ *
+ * @param permissions - The permissions to limit the token to, or null for
+ * every permission the app holds (still on the factory repository alone).
+ */
+export const pemMinter: TokenMinter = async (permissions) =>
+  (
+    await mintAppToken({
+      ...githubAppFromEnv(),
+      repositories: [factoryRepo.repo],
+      permissions: parsePermissions(permissions),
+    })
+  ).token
+
+/**
+ * The app's own installation token, not narrowed: every permission the app
+ * holds, on every repository the installation covers. The last
  * rung of the ladder, and the channel's fallback ({@link mintChannelToken}).
  */
-export const channelInstallationToken = (): Promise<string> =>
-  mintInstallationToken(githubCredentials)
+export const channelInstallationToken = async (): Promise<string> =>
+  (await mintAppToken(githubAppFromEnv())).token
 
 /**
  * How long a narrower-than-ideal result is remembered before the full
@@ -321,7 +342,7 @@ const mintForLease = async (
   options: MintOptions = {},
 ): Promise<MintedToken> => {
   const strict = options.strict === true
-  const mint = dependencies.mint ?? connectMinter
+  const mint = dependencies.mint ?? pemMinter
   const now = dependencies.now ?? Date.now
   // An injected minter is a test's whole world: it gets no real fallback
   // unless the test also provides one.

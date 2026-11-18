@@ -35,7 +35,10 @@ Worktrees: `pnpm wt new`, `ls`, `rm <branch>`, `prune` (after merging; `--yes` a
   `docs/site.md`.
 - `apps/agent` — `@lab/agent`, the org's eve agent, built from Foreman (vercel-labs/eve-software-factory-template,
   MIT, commit `2e1652f`, eve pinned `1.0.0`): Slack, hq memory (reads from hq, writes only as proposals) and
-  the daily spend cap (`agent/hooks/spend.ts`, `agent/lib/spend/`). Its env is `@lab/env/agent`. Install with
+  the daily spend cap (`agent/hooks/spend.ts`, `agent/lib/spend/`), founder-only Slack approvals (it
+  verifies a card click and forwards the raw bytes to hq, which decides it: `agent/lib/slack/`,
+  `apps/hq/src/slack/`), the nightly digest (`agent/schedules/nightly-digest.ts`) and GitHub App
+  installation tokens (`agent/lib/github/app-token.ts`). Its env is `@lab/env/agent`. Install with
   `pnpm install --ignore-scripts`. `pnpm --filter @lab/agent eval` runs the offline evals against the real hq.
 - `packages/api` — operation registry (`defineOperation`, `defineRegistry`, `invoke`), OpenAPI,
   llms.txt, server.json, pagination. Framework-agnostic.

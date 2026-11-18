@@ -3,12 +3,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { defineOperation } from "@lab/api"
 import { createAuth } from "@lab/auth"
 import { user } from "@lab/db"
-import { createTestDb } from "@lab/db/testing"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { createHqApp } from "./app"
+import { addFounder } from "./data/founders"
+import { createHqTestDb } from "./testing"
 
 const BASE = "http://localhost:3100"
 const SECRET = "a-test-secret-that-is-long-enough-123456" // gitleaks:allow
@@ -46,7 +47,7 @@ describe("hq app (real Postgres via PGlite)", () => {
   let keyFor: (permissions: Record<string, string[]>) => Promise<string>
 
   beforeAll(async () => {
-    const t = await createTestDb()
+    const t = await createHqTestDb()
     const auth = createAuth({
       db: t.db,
       secret: SECRET,
@@ -66,7 +67,6 @@ describe("hq app (real Postgres via PGlite)", () => {
       auth,
       now: () => new Date("2026-11-17T12:00:00Z"),
       baseURL: BASE,
-      founders: { userIds: [], emails: ["founder@example.com"] },
       extraOperations: [echo, decide],
     })
     close = async () => t.close()
@@ -80,8 +80,13 @@ describe("hq app (real Postgres via PGlite)", () => {
     const session = await auth.api.getSession({ headers: new Headers({ cookie }) })
     const orgId = session?.session.activeOrganizationId
     if (!orgId) throw new Error("signup did not activate a personal organization")
-    // hq lets in only founders: this address is on the list once the account has verified it.
+    // hq lets in only founders: this person is a row of the founders table.
     await t.db.update(user).set({ emailVerified: true }).where(eq(user.id, res.response.user.id))
+    await addFounder(t.db, {
+      userId: res.response.user.id,
+      slackUserId: "UFOUNDER1",
+      now: new Date("2026-11-17T12:00:00Z"),
+    })
     founder = { cookie, userId: res.response.user.id, orgId }
     keyFor = async (permissions) =>
       (

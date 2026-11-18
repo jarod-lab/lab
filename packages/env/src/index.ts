@@ -35,12 +35,23 @@ export const env = createEnv({
     /** apps/hq only: its public base URL (OAuth issuer, docs links). Unset, http://127.0.0.1:<port>. */
     HQ_BASE_URL: z.url().optional(),
     /**
-     * apps/hq only: the founders, who alone decide proposals and edit entries (hq's sign-up is open,
-     * so signing up makes no one a founder). Comma-separated emails, which count once the account
-     * has verified the address, and/or user ids. Empty, nobody can approve anything.
+     * apps/hq only: the founders, who alone decide proposals, edit entries and click Approve in
+     * Slack. Comma-separated `<email>=<slack user id>` pairs (an email counts once its account has
+     * verified the address; `id:<user id>=<slack user id>` names a user by id). hq writes them to
+     * its `founders` table at boot and removes any row not listed, so this is the only way a
+     * founder is added or removed; empty, nobody is a founder. Nothing in the API writes it.
      */
-    HQ_FOUNDER_EMAILS: z.string().optional(),
-    HQ_FOUNDER_USER_IDS: z.string().optional(),
+    HQ_FOUNDERS: z.string().optional(),
+    /** apps/hq only: the Slack workspace (team id) whose clicks hq accepts. Unset, hq refuses every click. */
+    HQ_SLACK_TEAM_ID: z.string().min(1).optional(),
+    /** The Slack app's signing secret: hq verifies the forwarded click over the exact bytes (apps/hq, apps/agent). */
+    SLACK_SIGNING_SECRET: z.string().min(1).optional(),
+    /**
+     * apps/hq only: whether anyone may create an account on hq. Off by default: hq's people are the
+     * founders, so a stranger cannot self-register. Turn it on only to bootstrap the first founders'
+     * accounts (and in the e2e stack, which seeds one), then off again.
+     */
+    HQ_ALLOW_SIGNUP: z.stringbool().default(false),
     /**
      * Tests only (apps/hq's real-Postgres spend race, apps/hq/src/data/spend.test.ts, which reads
      * it directly): a database named `*_test` it may write to. Nothing in the app reads it.

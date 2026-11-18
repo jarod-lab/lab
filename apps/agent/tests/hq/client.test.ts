@@ -137,6 +137,36 @@ describe("runs and spend", () => {
     expect(allowance.spentUsd).toBeCloseTo(0.01, 4)
   })
 
+  test("listProposals, listRuns and getSpendSummary read what hq holds, with the agent's read scope", async () => {
+    hq.newDay()
+    const proposed = await hq.client.proposeEntry({
+      kind: "fact",
+      slug: "digest-read",
+      title: "Digest read",
+      body: { text: "Readable by the agent." },
+      reason: "test",
+    })
+    const pending = await hq.client.listProposals({ status: "pending" })
+    const mine = pending.proposals.find((p) => p.id === proposed.proposalId)
+    expect(mine).toMatchObject({ title: "Digest read", status: "pending", baseVersion: null })
+    expect(pending.nextCursor === null || typeof pending.nextCursor === "string").toBe(true)
+
+    const run = await hq.client.recordRun({ task: "summary-read", trigger: "test", runner: "eve" })
+    await hq.client.recordSpend({ runId: run.id, source: "eve", amountUsd: 0.5, model: "m" })
+    const runs = await hq.client.listRuns({ limit: 100 })
+    expect(runs.runs.find((r) => r.id === run.id)).toMatchObject({
+      task: "summary-read",
+      costUsd: 0.5,
+    })
+
+    // Yesterday is hq's, not the caller's.
+    hq.newDay()
+    const summary = await hq.client.getSpendSummary()
+    expect(summary.totalUsd).toBeCloseTo(0.5, 4)
+    expect(summary.bySource).toEqual([{ source: "eve", amountUsd: 0.5 }])
+    expect((await hq.client.getSpendSummary({ day: "2000-01-01" })).totalUsd).toBe(0)
+  })
+
   test("an unreachable hq is an UNREACHABLE error, not a hang", async () => {
     const down = createHqClient({
       baseUrl: "http://localhost:3100",

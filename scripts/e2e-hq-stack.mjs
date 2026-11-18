@@ -1,5 +1,6 @@
 // The e2e hq app: apps/hq started by the runner on the port it picked, with one founder seeded.
-// hq lets in only founders (HQ_FOUNDER_EMAILS) whose address is verified, and it has no dev mail sink
+// hq lets in only founders (HQ_FOUNDERS, written to its founders table at boot, for an address that
+// is verified), and it has no dev mail sink
 // to verify through, so, as scripts/e2e-stack.mjs does for the platform admin: sign the founder up
 // through the API (an existing one answers 422 and keeps its password), then mark the address
 // verified in the database.

@@ -1,5 +1,7 @@
-import { describe, expect, test } from "vitest"
+import { decide as eveDecide } from "eve/ai"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import type { HqClient } from "#lib/hq/client.js"
+import { MODELS } from "#lib/models.js"
 import { DECISION_ESTIMATE_USD } from "#lib/spend/cap.js"
 import {
   createSpendHooks,
@@ -7,7 +9,12 @@ import {
   type SpendState,
   type SpendStore,
 } from "#lib/spend/hooks.js"
-import { createMeteredDecide } from "#lib/spend/ledger.js"
+import {
+  createMeteredDecide,
+  meteredDecide,
+  meteredDecideDeps,
+  spendLedger,
+} from "#lib/spend/ledger.js"
 
 /**
  * The decision-model wrapper itself, with the eve `decide()` replaced by a fake that is passed in
@@ -112,5 +119,46 @@ describe("meteredDecide", () => {
     })
     const result = await decide({ build: true })({} as never)
     expect(result).toMatchObject({ answers: { team: { choice: "support" } } })
+  })
+})
+
+/**
+ * The production binding: `meteredDecide` is what triage, CI diagnosis and pretriage call. The
+ * wrapper tests above build their own instance, so they cannot see this one swapped for eve's bare
+ * `decide` or given a no-op ledger. Nothing here reaches a model: the real `decide` is replaced
+ * with a spy on the deps object (`createMeteredDecide` reads it on every call) and the real
+ * ledger's `decisionSpent` is spied, so no hq client is touched.
+ */
+describe("the production meteredDecide", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test("is built from eve's real decide, the agent's ledger and the decision model", () => {
+    expect(meteredDecideDeps.decide).toBe(eveDecide)
+    expect(meteredDecideDeps.ledger).toBe(spendLedger)
+    expect(meteredDecideDeps.model).toBe(MODELS.decision)
+  })
+
+  test("is the wrapper, not eve's bare decide", () => {
+    // Checked before any call so a bare `decide` is never invoked.
+    expect(meteredDecide()).not.toBe(eveDecide)
+    expect(meteredDecide({ build: true })).not.toBe(eveDecide)
+  })
+
+  test("calls the deps' decide and records the call on the deps' ledger", async () => {
+    const answer = { answers: { team: { choice: "support" } }, usage: { costUsd: 0.05 } }
+    const underlying = vi.spyOn(meteredDecideDeps, "decide").mockResolvedValue(answer as never)
+    const recorded = vi.spyOn(spendLedger, "decisionSpent").mockResolvedValue(undefined)
+
+    const result = await meteredDecide({ build: true })({} as never)
+
+    expect(result).toBe(answer)
+    expect(underlying).toHaveBeenCalledTimes(1)
+    expect(recorded).toHaveBeenCalledExactlyOnceWith({
+      costUsd: 0.05,
+      model: MODELS.decision,
+      build: true,
+    })
   })
 })

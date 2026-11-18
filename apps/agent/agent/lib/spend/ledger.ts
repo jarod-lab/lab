@@ -53,9 +53,16 @@ export function createMeteredDecide(deps: MeteringDeps) {
     }) as typeof decide
 }
 
-/** `decide()` with its cost recorded, on the agent's real ledger. */
-export const meteredDecide = createMeteredDecide({
+/**
+ * What the production `meteredDecide` is built from: eve's real `decide()`, the agent's one ledger
+ * and the decision model's name. Exported so a test can pin them by identity; `createMeteredDecide`
+ * reads this object on every call, so the test can also replace a member and watch it being used.
+ */
+export const meteredDecideDeps: MeteringDeps = {
   decide,
   ledger: spendLedger,
   model: MODELS.decision,
-})
+}
+
+/** `decide()` with its cost recorded, on the agent's real ledger. */
+export const meteredDecide = createMeteredDecide(meteredDecideDeps)

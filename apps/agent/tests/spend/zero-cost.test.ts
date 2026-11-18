@@ -138,24 +138,106 @@ describe("zero-cost turns trip the daily cap", () => {
   })
 })
 
-describe("a zero cost never settles a hold at zero", () => {
-  test("costUsd 0 with tokens settles the hold at the token floor, closed, not at $0.00", async () => {
-    const { hooks } = hooksFor(NOT_IN_THE_TABLE)
-    await turn(hooks, { kind: "model", usage: ZERO_COST_TURN })
-    const today = await allowance()
-    // The hold (0.10) settles at its estimate; the floor above it is recorded beside it.
-    expect(today.spentUsd).toBeCloseTo(0.3, 4)
-    expect(today.spentUsd).toBeGreaterThan(0)
-    expect(today.reservedUsd).toBe(0)
-  })
+/** hq as the hooks see it, with every settle and every record_spend logged in order. */
+const loggedClient = () => {
+  const calls: {
+    call: "settle" | "record"
+    input: Record<string, unknown>
+    spentBefore: number
+  }[] = []
+  const client: HqClient = {
+    ...hq.client,
+    settleSpend: async (input) => {
+      calls.push({ call: "settle", input, spentBefore: (await allowance()).spentUsd })
+      return hq.client.settleSpend(input)
+    },
+    recordSpend: async (input) => {
+      calls.push({ call: "record", input, spentBefore: (await allowance()).spentUsd })
+      return hq.client.recordSpend(input)
+    },
+  }
+  return { client, calls }
+}
 
-  test("a floor below the estimate settles the hold at the floor, not at the estimate and not at 0", async () => {
-    const { hooks } = hooksFor(HAIKU)
+describe("a zero cost is priced at its token floor: estimated, never settled as exact, never at zero", () => {
+  test("a zero-cost haiku turn in a hold settles at reported 0 and records one estimated floor", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(HAIKU, () => client)
     await turn(hooks, { kind: "model", usage: ZERO_COST_TURN })
+    const settles = calls.filter((c) => c.call === "settle")
+    const records = calls.filter((c) => c.call === "record")
+    // The hold closes at the reported part, 0 (not undefined, which would settle at 0.10)...
+    expect(settles).toHaveLength(1)
+    expect(settles[0]?.input).toMatchObject({ amountUsd: 0 })
+    // ...and the floor is one estimated record beside it: the day is charged the floor, once.
+    expect(records).toHaveLength(1)
+    expect(records[0]?.input).toMatchObject({ source: "eve", estimatedUsd: 0.0012 })
+    expect(records[0]?.input.amountUsd).toBeUndefined()
     const today = await allowance()
     expect(today.spentUsd).toBeCloseTo(0.0012, 6)
     expect(today.reservedUsd).toBe(0)
-    expect((await runCost())?.costUsd).toBeCloseTo(0.0012, 6)
+    const run = await runCost()
+    expect(run?.costUsd).toBeCloseTo(0.0012, 6)
+    expect(run?.costEstimated).toBe(true)
+  })
+
+  test("the floor is written before the hold closes, so the day's spend never dips", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(HAIKU, () => client)
+    await turn(hooks, { kind: "model", usage: ZERO_COST_TURN })
+    expect(calls.map((c) => c.call)).toEqual(["record", "settle"])
+    // When the hold closed, the floor was already in the ledger.
+    expect(calls[1]?.spentBefore).toBeCloseTo(0.0012, 6)
+  })
+
+  test("on an unlisted model a zero-cost turn is settled at 0 and recorded estimated at 0.30", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(NOT_IN_THE_TABLE, () => client)
+    await turn(hooks, { kind: "model", usage: ZERO_COST_TURN })
+    expect(calls.find((c) => c.call === "settle")?.input).toMatchObject({ amountUsd: 0 })
+    expect(calls.filter((c) => c.call === "record").map((c) => c.input.estimatedUsd)).toEqual([0.3])
+    const today = await allowance()
+    expect(today.spentUsd).toBeCloseTo(0.3, 4)
+    expect(today.spentUsd).toBeGreaterThan(0)
+    expect(today.reservedUsd).toBe(0)
+    expect((await runCost())?.costEstimated).toBe(true)
+  })
+
+  test("a floor beside a reported cost: the hold settles at the reported part, the floor is estimated", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(NOT_IN_THE_TABLE, () => client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded(usage({ kind: "model", usage: { costUsd: 0.05 } }), context().ctx)
+    await hooks.usageRecorded(
+      usage({ kind: "model", owner: { callId: "station" }, usage: ZERO_COST_TURN }),
+      context().ctx,
+    )
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    expect(calls.find((c) => c.call === "settle")?.input).toMatchObject({ amountUsd: 0.05 })
+    expect(calls.filter((c) => c.call === "record").map((c) => c.input)).toMatchObject([
+      { estimatedUsd: 0.3 },
+    ])
+    expect((await allowance()).spentUsd).toBeCloseTo(0.35, 4)
+  })
+
+  test("a positive reported cost still settles the hold exact, with nothing estimated", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(HAIKU, () => client)
+    await turn(hooks, { kind: "model", usage: { ...ZERO_COST_TURN, costUsd: 0.03 } })
+    expect(calls.map((c) => c.call)).toEqual(["settle"])
+    expect(calls[0]?.input).toMatchObject({ amountUsd: 0.03 })
+    expect((await allowance()).spentUsd).toBeCloseTo(0.03, 4)
+    expect((await runCost())?.costEstimated).toBe(false)
+  })
+
+  test("a turn with nothing at all still settles at its estimate, as before", async () => {
+    const { client, calls } = loggedClient()
+    const { hooks } = hooksFor(HAIKU, () => client)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.turnSettled({ data: { outcome: "cancelled" } }, context().ctx)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.input.amountUsd).toBeUndefined()
+    expect((await allowance()).spentUsd).toBeCloseTo(0.1, 4)
   })
 
   test("costUsd 0 with no tokens is an unreported cost: the turn settles at its estimate, estimated", async () => {
@@ -189,7 +271,7 @@ describe("a zero cost never settles a hold at zero", () => {
     expect((await allowance()).spentUsd).toBeCloseTo(0.6, 4)
   })
 
-  test("zero-cost usage after the turn settled is recorded at its floor, not lost", async () => {
+  test("zero-cost usage after the turn settled is recorded estimated at its floor, not lost", async () => {
     const { hooks } = hooksFor(NOT_IN_THE_TABLE)
     await hooks.turnStarted({}, context().ctx)
     await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
@@ -301,15 +383,33 @@ describe("each decision call is counted once", () => {
     expect((await allowance()).spentUsd).toBeCloseTo(decisionFloor, 4)
   })
 
-  test("a metered call that throws leaves no announcement behind to swallow a later record", async () => {
+  test("a metered call that throws before any record is charged the estimate and leaves no announcement", async () => {
     const { hooks, store } = hooksFor(HAIKU)
     await hooks.turnStarted({}, context().ctx)
     const failing = (() => Promise.reject(new Error("the provider refused"))) as never
     await expect(meteredOn(hooks, failing)()({} as never)).rejects.toThrow("the provider refused")
     expect(store.state().decisionCredits).toBe(0)
+    // A record nobody announced is still counted: the abandoned call left no credit to swallow it.
     await hooks.usageRecorded(decisionRecord(0.05), context().ctx)
     await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
-    expect((await allowance()).spentUsd).toBeCloseTo(0.05, 4)
+    expect((await allowance()).spentUsd).toBeCloseTo(0.05 + DECISION_ESTIMATE_USD, 4)
+  })
+
+  test("a call that emits its record and then throws is charged exactly once, at the estimate", async () => {
+    const { hooks, store } = hooksFor(HAIKU)
+    await hooks.turnStarted({}, context().ctx)
+    await hooks.usageRecorded(usage({ kind: "model", usage: { costUsd: 0.03 } }), context().ctx)
+    const emitsThenThrows = (async () => {
+      await hooks.usageRecorded(decisionRecord(0.0001313), context().ctx)
+      throw new Error("the answer did not parse")
+    }) as never
+    await expect(meteredOn(hooks, emitsThenThrows)()({} as never)).rejects.toThrow(
+      "the answer did not parse",
+    )
+    expect(store.state().decisionCredits).toBe(0)
+    await hooks.turnSettled({ data: { outcome: "completed" } }, context().ctx)
+    // The record consumed the announcement and was skipped; the failed call is charged once.
+    expect((await allowance()).spentUsd).toBeCloseTo(0.03 + DECISION_ESTIMATE_USD, 4)
   })
 
   test("a state saved before announcements existed (no decisionCredits) still works", async () => {
@@ -337,22 +437,20 @@ describe("each decision call is counted once", () => {
     expect(sent[0]).toMatchObject({ source: "build", estimatedUsd: meteredCharge })
   })
 
-  test("outside a session eve emits no record: the metered call alone is recorded, once", async () => {
+  test("a pretriage call (build: true) is announced too: its record is skipped, the call recorded once", async () => {
     const sent: Parameters<HqClient["recordSpend"]>[0][] = []
     const recorder = {
       recordSpend: (input: Parameters<HqClient["recordSpend"]>[0]) => {
         sent.push(input)
         return Promise.resolve({ id: "x", amountUsd: 0, estimated: false })
       },
-    } as HqClient
+      recordRun: () => Promise.resolve({ id: "run-1" }),
+    } as unknown as HqClient
     const { hooks, store } = hooksFor(HAIKU, () => recorder)
-    const decide = createMeteredDecide({
-      decide: (() => Promise.resolve(answer)) as never,
-      ledger: hooks,
-      model: NOT_IN_THE_TABLE,
-    })
-    await decide({ build: true })({} as never)
-    expect(store.state().decisionCredits).toBeUndefined()
+    // Pretriage is a dynamic instruction eve resolves inside a model step, in the build's turn.
+    await hooks.turnStarted({}, context(CALLERS.autonomous).ctx)
+    await meteredOn(hooks, decideEmitting(hooks))({ build: true })({} as never)
+    expect(store.state().decisionCredits).toBe(0)
     expect(sent).toEqual([
       {
         runId: undefined,

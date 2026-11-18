@@ -45,8 +45,11 @@ describe("the price table", () => {
   test("a prompt over 100,000 tokens is charged haiku's dearer tier, never the base price", () => {
     expect(tokenFloorUsd(HAIKU, { inputTokens: 100_000 })).toBe(0.01)
     expect(tokenFloorUsd(HAIKU, { inputTokens: 100_001 })).toBe(0.0501)
-    // Cache tokens count toward the prompt: 60,000 + 50,000 is over the line.
-    expect(tokenFloorUsd(HAIKU, { inputTokens: 60_000, cacheReadTokens: 50_000 })).toBe(0.0325)
+    // haiku's input count includes its cache tokens, so a 60,000-token prompt of which 50,000 were
+    // cache reads is under the line: 10,000 x $0.1/M + 50,000 x $0.01/M.
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 60_000, cacheReadTokens: 50_000 })).toBe(0.0015)
+    // A 120,000-token prompt is over it: 70,000 x $0.5/M + 50,000 x $0.05/M.
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 120_000, cacheReadTokens: 50_000 })).toBe(0.0375)
   })
 
   test("an unknown model is priced above every model in the table, never below", () => {
@@ -79,11 +82,13 @@ describe("tokenFloorUsd", () => {
     expect(tokenFloorUsd(HAIKU, { inputTokens: 12_001 })).toBe(0.0013)
   })
 
-  test("prices input, output and both cache counts, cache on top of the input count", () => {
-    // 12,039 x 0.1 + 24 x 0.5 + 11,926 x 0.01 + 109 x 0.125 = 1203.9 + 12 + 119.26 + 13.625 per M
-    // = 1348.785 units per million... in dollars: $0.001348785 -> $0.0014 rounded up.
-    expect(tokenFloorUsd(HAIKU, SPIKE_CALL)).toBe(0.0014)
-    // The same call at the unknown-model price: 12,039 x 25 + 24 x 125 + 11,926 x 2.5 + 109 x 31.25
+  test("haiku's cached tokens are charged at the cache rate out of the input count, not on top of it", () => {
+    // Fresh input is 12,039 - 11,926 - 109 = 4: 4 x 0.1 + 24 x 0.5 + 11,926 x 0.01 + 109 x 0.125 =
+    // 145.285 per million, so $0.000145285, rounded up to $0.0002.
+    expect(tokenFloorUsd(HAIKU, SPIKE_CALL)).toBe(0.0002)
+    // An input count smaller than its cache tokens does not include them: they go on top.
+    expect(tokenFloorUsd(HAIKU, { inputTokens: 100, cacheReadTokens: 12_000 })).toBe(0.0002)
+    // The same call at the unknown-model price (not known to include its cache: on top): 12,039 x 25 + 24 x 125 + 11,926 x 2.5 + 109 x 31.25
     // = 300,975 + 3,000 + 29,815 + 3,406.25 = 337,196.25 per M -> $0.3372 rounded up.
     expect(tokenFloorUsd(NOT_IN_THE_TABLE, SPIKE_CALL)).toBe(0.3372)
   })
@@ -101,6 +106,19 @@ describe("tokenFloorUsd", () => {
   })
 })
 
+describe("a list price that is not a whole money unit rounds up, never to nearest", () => {
+  test("$0.00004 per million tokens is charged as one unit per million, not none", () => {
+    const table = MODEL_PRICES as Record<string, (typeof MODEL_PRICES)[string]>
+    table["test/fractional-price"] = { input: 0.00004, output: 0, cacheRead: 0, cacheWrite: 0 }
+    try {
+      // To nearest, 0.4 of a unit would round to 0 and a million tokens would be free.
+      expect(tokenFloorUsd("test/fractional-price", { inputTokens: 1_000_000 })).toBe(0.0001)
+    } finally {
+      delete table["test/fractional-price"]
+    }
+  })
+})
+
 describe("priceUsage: the zero-cost rule", () => {
   test("a positive reported cost stands as reported, even below the token floor", () => {
     expect(priceUsage(NOT_IN_THE_TABLE, { ...SPIKE_CALL, costUsd: 0.0001313 })).toEqual({
@@ -111,7 +129,7 @@ describe("priceUsage: the zero-cost rule", () => {
   })
 
   test("a reported zero on a call with tokens is charged at the token floor, not zero", () => {
-    expect(priceUsage(HAIKU, SPIKE_CALL)).toEqual({ kind: "floor", amountUsd: 0.0014 })
+    expect(priceUsage(HAIKU, SPIKE_CALL)).toEqual({ kind: "floor", amountUsd: 0.0002 })
     expect(priceUsage(NOT_IN_THE_TABLE, { costUsd: 0, inputTokens: 12_000 })).toEqual({
       kind: "floor",
       amountUsd: 0.3,
@@ -155,8 +173,8 @@ describe("how many zero-cost turns trip the $10 cap", () => {
   test("haiku-5.5, 12,000 input tokens a turn: about 8,300 turns, finite not never", () => {
     expect(tokenFloorUsd(HAIKU, { inputTokens: 12_000 })).toBe(0.0012)
     expect(turnsToTrip(HAIKU, { inputTokens: 12_000 })).toBe(8_334)
-    // The spike's real call (cache and output counted too) trips it sooner.
-    expect(turnsToTrip(HAIKU, SPIKE_CALL)).toBe(7_143)
+    // The spike's real call (mostly cached, so cheaper) trips it later.
+    expect(turnsToTrip(HAIKU, SPIKE_CALL)).toBe(50_000)
   })
 
   test("a model that is not in the table, 12,000 input tokens a turn: the cap trips in 34 turns", () => {

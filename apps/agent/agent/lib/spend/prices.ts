@@ -17,9 +17,15 @@
  *
  * Prices are US dollars per million tokens, converted to integer money units ($0.0001, hq's unit)
  * and rounded up, never down. A model not in the table is priced at `UNKNOWN_MODEL_PRICE`, which is
- * deliberately above any model we run: an unknown price is a reason to hold more, not less. Cache
- * tokens are priced on top of `inputTokens` and never discounted out of it: whether a provider
- * counts cached tokens inside its input count differs, and counting them twice only errs high.
+ * deliberately above any model we run: an unknown price is a reason to hold more, not less.
+ *
+ * Cache tokens: eve fills a record's `inputTokens` from the AI SDK's normalised usage, where it is
+ * the whole prompt and the cache read and write counts are the part of it that was cached
+ * (`inputTokenDetails`); the spike's haiku record agrees (12,039 input tokens, of which 11,926 were
+ * cache reads and 109 cache writes). For a table entry marked `inputIncludesCache` the cached part
+ * is therefore charged at its cache rate out of `inputTokens`, and only the rest at the input
+ * rate. For every other model it is not shown, so cache tokens are charged on top of the input
+ * count, which can only over-count.
  */
 
 /** One money unit is $0.0001, the unit hq's ledger stores. */
@@ -33,6 +39,11 @@ export interface ModelPrice {
   output: number
   cacheRead: number
   cacheWrite: number
+  /**
+   * True when the model's `inputTokens` already counts its cache tokens (so a cache read is part
+   * of the input count, not on top of it). Set only where that is shown: see `MODEL_PRICES`.
+   */
+  inputIncludesCache?: true
   /**
    * The dearer price a call is charged at when its prompt (input plus cache tokens) is longer than
    * `aboveTokens`, as the gateway's tiered list price has it.
@@ -50,8 +61,9 @@ export interface ModelPrice {
  *   reads $0.01, cache writes $0.125, and five times that for a prompt over 100,000 tokens. The
  *   gateway nevertheless reported it as free ($0, and its own credit counter agreed): why is not
  *   established, so the floor charges the list price instead of trusting the zero.
- * - `google/gemini-decision-1` (the decision model): $0.1 in, output free, no cache prices listed
- *   (cache tokens are charged as input, never lower).
+ * - `google/gemini-decision-1` (the decision model): $0.1 in; the catalog lists its output as free,
+ *   but the floor charges output at the input price too (one record's cost does not prove it), and
+ *   no cache prices are listed, so cache tokens are charged as input, never lower.
  *
  * The other models we run (reviewer, implementer, researcher, analyst) have no entry: their usage
  * arrives as delegated calls that carry no model id, so they are priced as `delegated`, at
@@ -59,6 +71,7 @@ export interface ModelPrice {
  */
 export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
   "anthropic/claude-haiku-5.5": {
+    inputIncludesCache: true,
     input: 0.1,
     output: 0.5,
     cacheRead: 0.01,
@@ -68,7 +81,7 @@ export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
       price: { input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 },
     },
   },
-  "google/gemini-decision-1": { input: 0.1, output: 0, cacheRead: 0.1, cacheWrite: 0.1 },
+  "google/gemini-decision-1": { input: 0.1, output: 0.1, cacheRead: 0.1, cacheWrite: 0.1 },
 }
 
 /**
@@ -103,8 +116,12 @@ export interface UsageWithCost extends UsageTokens {
 const count = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0
 
-/** The price in money units per million tokens (an integer), so the arithmetic stays integral. */
-const units = (usdPerMillion: number) => Math.round(usdPerMillion * UNITS_PER_USD)
+/**
+ * The price in money units per million tokens, as an integer so the arithmetic stays integral. A
+ * price that is not a whole number of units is rounded UP (the epsilon only absorbs float noise
+ * such as 0.0001 x 10,000), never to nearest: the floor must not undershoot a list price.
+ */
+const units = (usdPerMillion: number) => Math.ceil(usdPerMillion * UNITS_PER_USD - 1e-9)
 
 /**
  * The least a call's tokens can have cost at this model's price, in dollars rounded up to a whole
@@ -112,14 +129,20 @@ const units = (usdPerMillion: number) => Math.round(usdPerMillion * UNITS_PER_US
  */
 export function tokenFloorUsd(model: string, usage: UsageTokens): number {
   const listed = priceOf(model)
-  const prompt =
-    count(usage.inputTokens) + count(usage.cacheReadTokens) + count(usage.cacheWriteTokens)
+  const cache = count(usage.cacheReadTokens) + count(usage.cacheWriteTokens)
+  // Where the model's input count includes its cache tokens, the cached part is charged at its
+  // cache rate and only the rest at the input rate, and the prompt is the input count alone. A
+  // count that is smaller than the cache it should contain says it does not include it after all:
+  // then (as for every model not known to) the cache tokens are charged on top of the input.
+  const included = listed.inputIncludesCache === true && count(usage.inputTokens) >= cache
+  const freshInput = included ? count(usage.inputTokens) - cache : count(usage.inputTokens)
+  const prompt = included ? count(usage.inputTokens) : count(usage.inputTokens) + cache
   const price =
     listed.longContext !== undefined && prompt > listed.longContext.aboveTokens
       ? listed.longContext.price
       : listed
   const unitsOwed =
-    (count(usage.inputTokens) * units(price.input) +
+    (freshInput * units(price.input) +
       count(usage.outputTokens) * units(price.output) +
       count(usage.cacheReadTokens) * units(price.cacheRead) +
       count(usage.cacheWriteTokens) * units(price.cacheWrite)) /

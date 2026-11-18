@@ -5,7 +5,7 @@ import { createLogger } from "@lab/logger"
 
 import { createHqApp } from "./app"
 import { createHqAuth } from "./auth"
-import { syncFounders } from "./data/founders"
+import { prepareBoot } from "./boot"
 import { hqEnv } from "./env"
 
 const logger = createLogger({ name: "hq" })
@@ -16,16 +16,23 @@ setErrorReporter((error, context) => {
 // The e2e runner passes the port it picked as the first argument.
 const config = hqEnv(process.argv[2])
 const db = createDb(config.databaseUrl)
-// Closed unless HQ_ALLOW_SIGNUP: a stranger cannot self-register on hq.
-const auth = createHqAuth(db, config)
 
 // The founders table is set to HQ_FOUNDERS at every boot: the listed are added, the rest removed.
-const synced = await syncFounders(db, config.founders, new Date())
+// A deployed hq refuses to start with public sign-up on (founders are made on the server, by
+// create-founder) and takes only the entries pinned by user id. The decisions are in boot.ts.
+const synced = await prepareBoot(config, db, new Date())
+// Closed unless HQ_ALLOW_SIGNUP: a stranger cannot self-register on hq.
+const auth = createHqAuth(db, config)
 logger.info(
   { founders: config.founders.length, added: synced.added.length, removed: synced.removed.length },
   "founders synced",
 )
-for (const skipped of synced.skipped) logger.warn(`founder not synced, ${skipped}`)
+// Where the entry is in the list and why, never the address: a log is not a place for it.
+for (const skipped of synced.skipped) {
+  logger.warn(
+    `founder not synced: HQ_FOUNDERS entry ${skipped.entry} (${skipped.kind}): ${skipped.why}`,
+  )
+}
 if (config.founders.length === 0) {
   logger.warn("HQ_FOUNDERS is empty: nobody can approve proposals, in the admin or in Slack")
 }

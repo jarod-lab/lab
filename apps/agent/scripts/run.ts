@@ -53,7 +53,7 @@ async function evalOffline(extraArgs: string[]): Promise<number> {
     hq_entry: ["read"],
     hq_proposal: ["read", "create"],
     hq_run: ["read", "create", "update"],
-    hq_spend: ["read", "record"],
+    hq_spend: ["read", "record", "request"],
   })
   const hqServer = serve({ fetch: hq.app.fetch, hostname: "127.0.0.1", port: 0 })
   await new Promise<void>((resolve) => hqServer.once("listening", resolve))

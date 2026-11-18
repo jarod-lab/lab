@@ -26,11 +26,12 @@ export const statements = {
   // The org brain (apps/hq). Prefixed because `run` above is the product's runs. `hq_entry` is
   // the brain's facts, voice, decisions and playbooks; `hq_proposal` is a change waiting for a
   // founder; `hq_run` is a build, review or chat the factory ran; `hq_spend` is the daily model
-  // spend ledger and its grants (`record` is what a key does: reserve, settle and record spend).
+  // spend ledger and its grants (`record` is what a key does: reserve, settle and record spend;
+  // `request` is asking for a grant: hq records a pending request a founder may redeem in Slack).
   hq_entry: ["read", "update"],
   hq_proposal: ["read", "create", "decide"],
   hq_run: ["read", "create", "update"],
-  hq_spend: ["read", "record", "grant"],
+  hq_spend: ["read", "record", "request", "grant"],
   // Feature flag rollouts. Owners and admins hold it in every organization, but the operations
   // using it are for the operator organization only (audience "operator"), refused anywhere else.
   featureFlag: ["read", "update", "delete"],

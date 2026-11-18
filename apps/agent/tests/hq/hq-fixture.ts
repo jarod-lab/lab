@@ -15,7 +15,7 @@ export const AGENT_KEY_SCOPE = {
   hq_entry: ["read"],
   hq_proposal: ["read", "create"],
   hq_run: ["read", "create", "update"],
-  hq_spend: ["read", "record"],
+  hq_spend: ["read", "record", "request"],
 }
 
 export const HQ_BASE_URL = "http://localhost:3100"

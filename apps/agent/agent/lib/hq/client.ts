@@ -6,8 +6,10 @@ import { z } from "zod"
  *
  * @remarks
  * The key's scope is read all, propose, runs and spend only: `hq_entry:read`, `hq_proposal:create`,
- * `hq_run:*`, `hq_spend:read` and `hq_spend:record`. It cannot decide a proposal, edit an entry or
- * grant spend, and nothing here tries to: those are a signed-in founder's. The paths are held to
+ * `hq_run:*`, `hq_spend:read`, `hq_spend:record` and `hq_spend:request` (asking for a grant). It
+ * cannot decide a proposal, edit an entry or grant spend, and nothing here tries to: those are a
+ * signed-in founder's, and a grant is redeemed only by a founder's click on a card that carries the
+ * request id hq returned. The paths are held to
  * hq's operations by `tests/hq/client.test.ts`, which runs this client against hq itself.
  */
 
@@ -51,6 +53,11 @@ const reserveReply = z.union([
 ])
 const settleReply = z.object({ amountUsd: z.number(), estimated: z.boolean() })
 const recordSpendReply = z.object({ id: z.string(), amountUsd: z.number(), estimated: z.boolean() })
+const grantRequestReply = z.object({
+  requestId: z.string(),
+  amountUsd: z.number(),
+  expiresAt: z.string(),
+})
 const allowanceReply = z.object({
   day: z.string(),
   spentUsd: z.number(),
@@ -104,6 +111,7 @@ export type SpendSummary = z.infer<typeof spendSummaryReply>
 export type Entry = z.infer<typeof entryReply>
 export type Reservation = z.infer<typeof reserveReply>
 export type Allowance = z.infer<typeof allowanceReply>
+export type GrantRequest = z.infer<typeof grantRequestReply>
 
 export interface RunSummary {
   worked: string[]
@@ -148,6 +156,16 @@ export interface HqClient {
     model: string
   }): Promise<{ id: string; amountUsd: number; estimated: boolean }>
   getSpendAllowance(): Promise<Allowance>
+  /**
+   * Ask for a spend grant of up to $25: hq records a pending request and returns its id, to put on
+   * the Slack grant card. It grants nothing; a founder's click on the card redeems it, once, for
+   * the amount hq recorded, within 24 hours. hq takes ten requests a UTC day (RATE_LIMITED after).
+   */
+  requestSpendGrant(input: {
+    amountUsd: number
+    reason: string
+    runId?: string
+  }): Promise<GrantRequest>
   /** One page of proposals, newest first (the nightly digest reads the pending ones). */
   listProposals(input?: {
     status?: "pending" | "approved" | "rejected"
@@ -262,6 +280,8 @@ export function createHqClient(options: HqClientOptions): HqClient {
       call("POST", `/v1/spend/holds/${enc(holdId)}/settlement`, settleReply, { amountUsd, model }),
     recordSpend: (input) => call("POST", "/v1/spend", recordSpendReply, input),
     getSpendAllowance: () => call("GET", "/v1/spend/allowance", allowanceReply),
+    requestSpendGrant: (input) =>
+      call("POST", "/v1/spend/grant-requests", grantRequestReply, input),
     listProposals: ({ status, cursor, limit } = {}) =>
       call("GET", `/v1/proposals${query({ status, cursor, limit })}`, proposalsReply),
     listRuns: ({ cursor, limit } = {}) =>

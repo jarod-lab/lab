@@ -23,9 +23,15 @@ export function hqEnv(portArg?: string) {
     baseURL: (env.HQ_BASE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, ""),
     // Written to the founders table at boot (and the table set to match): see data/founders.ts.
     founders: parseFounders(env.HQ_FOUNDERS),
-    slack: { signingSecret: env.SLACK_SIGNING_SECRET, teamId: env.HQ_SLACK_TEAM_ID },
+    slack: {
+      signingSecret: env.SLACK_SIGNING_SECRET,
+      teamId: env.HQ_SLACK_TEAM_ID,
+      dailyGrantCapUsd: env.HQ_SLACK_DAILY_GRANT_CAP_USD,
+    },
     // Anything but an explicit true is closed (even a raw string, when validation is skipped).
     allowSignUp: env.HQ_ALLOW_SIGNUP === true,
+    /** `development` and `test` are local stacks; anything else is deployed (deploy-mode.ts). */
+    nodeEnv: env.NODE_ENV,
     secret: env.BETTER_AUTH_SECRET,
     emailFrom: env.EMAIL_FROM,
   }

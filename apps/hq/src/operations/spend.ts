@@ -1,6 +1,11 @@
 import { AppError } from "@lab/errors"
 import { z } from "zod"
 
+import {
+  MAX_GRANT_REQUEST_USD,
+  MAX_GRANT_REQUESTS_PER_DAY,
+  requestSpendGrant,
+} from "../data/grant-requests"
 import { DAILY_CAP, toPositiveUnits, toUnits, unitsToUsd } from "../data/money"
 import {
   grantSpend,
@@ -12,7 +17,7 @@ import {
   spendOnDay,
 } from "../data/spend"
 import { SPEND_SOURCES } from "../db/schema"
-import { defineOperation, type HqDeps, requireFounder } from "./shared"
+import { authorOf, defineOperation, type HqDeps, requireFounder } from "./shared"
 
 /** One call's amount, in dollars: a realistic ceiling (grant_spend's), well under a column's. */
 const usd = z.number().min(0).max(1000)
@@ -225,12 +230,53 @@ export function spendOperations(deps: HqDeps) {
     },
   })
 
+  const request_spend_grant = defineOperation({
+    name: "request_spend_grant",
+    method: "POST",
+    path: "/v1/spend/grant-requests",
+    summary: "Ask a founder to raise today's Eve spend allowance",
+    description:
+      `Records a pending request for up to $${MAX_GRANT_REQUEST_USD} and returns its requestId. ` +
+      "It grants nothing: put the requestId on a Slack grant card, and only a founder's click on " +
+      "that card redeems it, once, within 24 hours, for exactly this amount. hq takes at most " +
+      `${MAX_GRANT_REQUESTS_PER_DAY} requests a UTC day.`,
+    permissions: { hq_spend: ["request"] },
+    input: z.object({
+      amountUsd: z.number().gt(0).max(MAX_GRANT_REQUEST_USD),
+      reason: z.string().trim().min(1).max(2000).describe("Why the allowance is needed"),
+      runId,
+    }),
+    output: z.object({
+      requestId: z.string(),
+      amountUsd: z.number(),
+      expiresAt: z.string().describe("ISO 8601 time the request stops being redeemable"),
+    }),
+    hints: { readOnly: false, destructive: false },
+    examples: [{ input: { amountUsd: 5, reason: "A hard pricing question" } }],
+    handler: async (input, { caller }) => {
+      const amount = toPositiveUnits(input.amountUsd, "amountUsd")
+      const request = await requestSpendGrant(db, {
+        amount,
+        reason: input.reason,
+        runId: input.runId,
+        requestedBy: authorOf(caller).id,
+        now: now(),
+      })
+      return {
+        requestId: request.id,
+        amountUsd: unitsToUsd(request.amount),
+        expiresAt: request.expiresAt.toISOString(),
+      }
+    },
+  })
+
   return [
     reserve_spend,
     settle_spend,
     record_spend,
     get_spend_allowance,
     get_spend_summary,
+    request_spend_grant,
     grant_spend,
   ] as const
 }

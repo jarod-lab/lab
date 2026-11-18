@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
+import { createServer } from "node:http"
+import type { AddressInfo } from "node:net"
 import { join } from "node:path"
 import { test } from "@e2e-dev/web"
 import { expect } from "e2e"
@@ -76,6 +78,34 @@ test("a founder's Slack click approves a proposal through the agent; a stranger'
   const id = proposed.json.proposalId as string
   const approve = `hq_proposal_approve:${id}:new`
 
+  // Where the agent answers a click (Slack's `response_url`). The agent runs offline here, so it
+  // posts to loopback: this sink records what it says, and the test waits on those replies rather
+  // than on the clock. Every click the agent forwards ends in exactly one reply.
+  const replies: string[] = []
+  const sink = createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on("data", (chunk: Buffer) => chunks.push(chunk))
+    request.on("end", () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { text?: string }
+        replies.push(body.text ?? "")
+      } catch {
+        replies.push("")
+      }
+      response.end("ok")
+    })
+  })
+  await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", resolve))
+  const responseUrl = `http://127.0.0.1:${(sink.address() as AddressInfo).port}/response`
+  /** Waits until the agent has answered one more click than it had, and says what it answered. */
+  const nextReply = async (answered: number) => {
+    for (let i = 0; i < 100 && replies.length <= answered; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    expect(replies.length, "the agent answered the click").toBeGreaterThan(answered)
+    return replies[answered] ?? ""
+  }
+
   /** Slack's signed POST for a click, to the agent's own route. */
   const click = (
     user: string,
@@ -89,7 +119,7 @@ test("a founder's Slack click approves a proposal through the agent; a stranger'
         channel: { id: "C0E2E" },
         message: { ts: "1700000000.000100", thread_ts: "1700000000.000100" },
         trigger_id: `trigger-${crypto.randomUUID()}`,
-        response_url: "http://127.0.0.1:9/response",
+        response_url: responseUrl,
         actions: [
           { action_id: approve, block_id: "b", value: approve, action_ts: `${Date.now() / 1000}` },
         ],
@@ -109,35 +139,34 @@ test("a founder's Slack click approves a proposal through the agent; a stranger'
       body: rawBody,
     })
   }
-  const settle = async (want: string) => {
-    for (let i = 0; i < 50; i++) {
-      if ((await proposal(id))?.status === want) return
-      await new Promise((resolve) => setTimeout(resolve, 200))
-    }
+  try {
+    // A forgery and a stale request are refused at the agent's door and reach nothing: no reply.
+    expect((await click(HQ_FOUNDER_SLACK_USER, { badSignature: true })).status).toBe(401)
+    expect((await click(HQ_FOUNDER_SLACK_USER, { staleBySeconds: 400 })).status).toBe(401)
+    expect(replies).toEqual([])
+
+    // A workspace member who is no founder: Slack signed it, so the agent takes it and forwards
+    // it, and hq refuses. The agent's reply says so, and only after hq answered.
+    expect((await click("UNOTAFOUNDER")).status).toBe(200)
+    expect(await nextReply(0)).toMatch(/founder/i)
+    expect((await proposal(id))?.status).toBe("pending")
+
+    // The founder's click: the agent forwards the verified bytes and hq approves as that founder.
+    expect((await click(HQ_FOUNDER_SLACK_USER)).status).toBe(200)
+    expect(await nextReply(1)).toMatch(/approved/i)
+    const decided = await proposal(id)
+    expect(decided?.status).toBe("approved")
+    expect(decided?.decidedBy).toEqual(expect.any(String))
+
+    // And once only: the same click again is answered as already decided, and changes nothing.
+    expect((await click(HQ_FOUNDER_SLACK_USER)).status).toBe(200)
+    expect(await nextReply(2)).toMatch(/already/i)
+    expect(await proposal(id)).toEqual(decided)
+
+    // The brain now holds what the click approved.
+    const search = await hq("POST", "/v1/search/entries", { query: word })
+    expect((search.json.hits as unknown[]).length).toBeGreaterThan(0)
+  } finally {
+    sink.close()
   }
-  const quiet = () => new Promise((resolve) => setTimeout(resolve, 1500))
-
-  // A forgery and a stale request are refused at the agent's door and reach nothing.
-  expect((await click(HQ_FOUNDER_SLACK_USER, { badSignature: true })).status).toBe(401)
-  expect((await click(HQ_FOUNDER_SLACK_USER, { staleBySeconds: 400 })).status).toBe(401)
-  // A workspace member who is no founder: Slack signed it, so the agent takes it, and hq refuses.
-  expect((await click("UNOTAFOUNDER")).status).toBe(200)
-  await quiet()
-  expect((await proposal(id))?.status).toBe("pending")
-
-  // The founder's click: the agent forwards the verified bytes and hq approves as that founder.
-  expect((await click(HQ_FOUNDER_SLACK_USER)).status).toBe(200)
-  await settle("approved")
-  const decided = await proposal(id)
-  expect(decided?.status).toBe("approved")
-  expect(decided?.decidedBy).toEqual(expect.any(String))
-
-  // And once only: the same click again changes nothing.
-  expect((await click(HQ_FOUNDER_SLACK_USER)).status).toBe(200)
-  await quiet()
-  expect(await proposal(id)).toEqual(decided)
-
-  // The brain now holds what the click approved.
-  const search = await hq("POST", "/v1/search/entries", { query: word })
-  expect((search.json.hits as unknown[]).length).toBeGreaterThan(0)
 })

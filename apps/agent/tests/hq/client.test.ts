@@ -82,6 +82,32 @@ describe("the agent's key", () => {
     expect(stillPending.body.proposals?.map((p) => p.id)).toContain(proposed.proposalId)
   })
 
+  test("can ask for a grant, but only up to $25 and ten times a day, and gets nothing granted", async () => {
+    hq.newDay()
+    const before = (await hq.client.getSpendAllowance()).grantedUsd
+    const request = await hq.client.requestSpendGrant({ amountUsd: 5, reason: "a hard question" })
+    expect(request).toEqual({
+      requestId: expect.any(String),
+      amountUsd: 5,
+      expiresAt: expect.any(String),
+    })
+    // The request is the id a card carries; asking granted nothing.
+    expect((await hq.client.getSpendAllowance()).grantedUsd).toBe(before)
+
+    const tooMuch = await hq.client
+      .requestSpendGrant({ amountUsd: 25.01, reason: "more" })
+      .catch((e: unknown) => e)
+    expect(tooMuch).toBeInstanceOf(HqError)
+    expect((tooMuch as HqError).status).toBe(400)
+    for (let i = 1; i < 10; i++)
+      await hq.client.requestSpendGrant({ amountUsd: 1, reason: `r${i}` })
+    const over = await hq.client
+      .requestSpendGrant({ amountUsd: 1, reason: "one too many" })
+      .catch((e: unknown) => e)
+    expect((over as HqError).code).toBe("RATE_LIMITED")
+    expect((over as HqError).status).toBe(429)
+  })
+
   test("a wrong key is refused, and its text is not in the error", async () => {
     const stranger = createHqClient({
       baseUrl: "http://localhost:3100",

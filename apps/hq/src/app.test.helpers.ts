@@ -27,6 +27,9 @@ export interface Reply {
   error: { code: string; message: string }
   status: string
   proposalId: string
+  requestId: string
+  amountUsd: number
+  expiresAt: string
   entryId: string
   version: number
   latestVersion: number
@@ -63,6 +66,8 @@ export async function createHqHarness(
     now?: () => Date
     /** Sign-up is open in the harness (it signs its people up); a test of the closed default says so. */
     allowSignUp?: boolean
+    /** The cap on what Slack clicks may grant in a UTC day in all; unset, hq's default ($50). */
+    slackDailyGrantCapUsd?: number
   } = {},
 ) {
   const founderEmails = opts.founderEmails ?? []
@@ -88,7 +93,11 @@ export async function createHqHarness(
     auth,
     now,
     baseURL: BASE,
-    slack: { signingSecret: TEST_SLACK_SECRET, teamId: TEST_SLACK_TEAM },
+    slack: {
+      signingSecret: TEST_SLACK_SECRET,
+      teamId: TEST_SLACK_TEAM,
+      dailyGrantCapUsd: opts.slackDailyGrantCapUsd,
+    },
   })
 
   let slackSeq = 0

@@ -29,6 +29,20 @@
       "when": 1794961992489,
       "tag": "0003_slack_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794967936360,
+      "tag": "0004_spend_grant_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794970894262,
+      "tag": "0005_grant_request_amount_max",
+      "breakpoints": true
     }
   ]
 }

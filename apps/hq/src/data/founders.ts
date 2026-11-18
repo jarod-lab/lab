@@ -58,40 +58,71 @@ export function parseFounders(value: string | undefined): FounderSeed[] {
   return seeds
 }
 
+/**
+ * A listed person who could not be resolved to a usable account. Names the entry's place in the
+ * list and its kind, never the email or id itself: this goes in logs, and an address is personal.
+ */
+export interface SkippedFounder {
+  /** The entry's place in HQ_FOUNDERS, from 1. */
+  entry: number
+  kind: "email" | "id"
+  why: string
+}
+
 export interface FounderSync {
   /** User ids now in the table that were not before. */
   added: string[]
   /** User ids taken out because they are no longer listed (or no longer qualify). */
   removed: string[]
   /** Listed people who could not be resolved to a usable account, with why. */
-  skipped: string[]
+  skipped: SkippedFounder[]
+}
+
+export interface FounderSyncOptions {
+  /**
+   * A deployed hq: only an entry pinned by user id (`id:<user id>=<slack user id>`, the id
+   * `create-founder` prints) can make a founder. An email entry matches whoever holds that address,
+   * and an account made by public sign-up and verified through its emailed link is not the
+   * founder's, so a deployed hq never trusts one. Default false: local and e2e stacks seed founders
+   * by the address they sign up with.
+   */
+  pinnedOnly?: boolean
 }
 
 /**
- * Set the table to match the list. A listed person counts only as an existing, unbanned account;
- * an email also needs its address verified (anyone can sign up with an address they don't own).
- * Rows for anyone else are deleted, so removing a founder from HQ_FOUNDERS removes them at the
- * next boot, and an empty list leaves no founders: it fails closed. In one transaction.
+ * Set the table to match the list. A listed person counts only as an existing, unbanned account
+ * whose address is verified (anyone can sign up with an address they don't own), and, with
+ * `pinnedOnly`, only one named by id. Rows for anyone else are deleted, so removing a founder from
+ * HQ_FOUNDERS removes them at the next boot, and an empty list leaves no founders: it fails
+ * closed. In one transaction.
  */
 export function syncFounders(
   db: Database,
   seeds: readonly FounderSeed[],
   now: Date,
+  options: FounderSyncOptions = {},
 ): Promise<FounderSync> {
   return db.transaction(async (tx) => {
     const wanted = new Map<string, string>()
-    const skipped: string[] = []
-    for (const seed of seeds) {
+    const skipped: SkippedFounder[] = []
+    for (const [index, seed] of seeds.entries()) {
+      const pinned = "userId" in seed.who
+      const entry = { entry: index + 1, kind: pinned ? ("id" as const) : ("email" as const) }
+      if (!pinned && options.pinnedOnly) {
+        skipped.push({
+          ...entry,
+          why: "a deployed hq takes founders by id only: run create-founder, then list id:<user id>",
+        })
+        continue
+      }
       const [row] = await tx
         .select({ id: user.id, verified: user.emailVerified, banned: user.banned })
         .from(user)
         .where("userId" in seed.who ? eq(user.id, seed.who.userId) : eq(user.email, seed.who.email))
-      const label = "userId" in seed.who ? `id:${seed.who.userId}` : seed.who.email
-      if (!row) skipped.push(`${label}: no such account yet`)
-      else if (row.banned) skipped.push(`${label}: account is banned`)
-      else if ("email" in seed.who && !row.verified) {
-        skipped.push(`${label}: the address is not verified`)
-      } else wanted.set(row.id, seed.slackUserId)
+      if (!row) skipped.push({ ...entry, why: "no such account yet" })
+      else if (row.banned) skipped.push({ ...entry, why: "account is banned" })
+      else if (!row.verified) skipped.push({ ...entry, why: "the address is not verified" })
+      else wanted.set(row.id, seed.slackUserId)
     }
     const existing = await tx.select().from(founders)
     const removed = existing.filter((f) => !wanted.has(f.userId)).map((f) => f.userId)

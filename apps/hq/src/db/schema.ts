@@ -190,6 +190,38 @@ export const spend = hq.table(
   ],
 )
 
+/** Where a spend grant request stands. Only a pending one can be decided, once. */
+export const GRANT_REQUEST_STATUSES = ["pending", "granted", "rejected", "expired"] as const
+export type GrantRequestStatus = (typeof GRANT_REQUEST_STATUSES)[number]
+
+/**
+ * What a Slack grant card is bound to: a request hq itself recorded (an agent asked, with a reason
+ * and an amount fixed here). A click can only redeem a pending row by its id, once; the amount is
+ * the row's, never the click's. Nothing but `request_spend_grant` inserts one.
+ */
+export const spendGrantRequests = hq.table(
+  "spend_grant_requests",
+  {
+    id: text("id").primaryKey(),
+    amountUsd: numeric("amount_usd", { precision: 10, scale: 4 }).notNull(),
+    reason: text("reason").notNull(),
+    runId: text("run_id"),
+    status: text("status", { enum: GRANT_REQUEST_STATUSES }).notNull(),
+    /** The key (or person) that asked: an id from the caller, for the audit trail. */
+    requestedBy: text("requested_by").notNull(),
+    createdAt: at("created_at").notNull(),
+    decidedAt: at("decided_at"),
+    decidedBy: text("decided_by"),
+  },
+  (t) => [
+    index("spend_grant_requests_created_idx").on(t.createdAt),
+    check("spend_grant_requests_amount_positive", sql`${t.amountUsd} > 0`),
+    // The most one request (and so one click) may grant: the row is the last line of defence,
+    // since a redeem trusts its amount. Keep in step with MAX_GRANT_REQUEST_USD (data/grant-requests.ts).
+    check("spend_grant_requests_amount_max", sql`${t.amountUsd} <= 25`),
+  ],
+)
+
 /** A founder's extra allowance for one day (a spend grant); it raises that day's remaining. */
 export const spendGrants = hq.table(
   "spend_grants",

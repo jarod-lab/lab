@@ -1014,6 +1014,21 @@ function stripeBilling(
 
 export type Auth = ReturnType<typeof createAuth>
 
+/**
+ * Removes an account that was made on the server and never handed to anyone (a script that failed
+ * halfway), with its personal organization and that organization's entitlements rows: the pieces
+ * sign-up made. `internalAdapter.deleteUser` alone leaves the organization behind, because only the
+ * deleteUser endpoint's `beforeDelete` removes it. Not for a live account: it skips the checks that
+ * endpoint makes (billing, SCIM). There is no subscription model to clear unless Stripe is on.
+ */
+export async function removeUnusedAccount(auth: Auth, userId: string): Promise<void> {
+  const ctx = await auth.$context
+  await removePersonalOrganization(ctx.adapter, userId, false, (organizationId) =>
+    deleteOrganizationData(auth, organizationId),
+  )
+  await ctx.internalAdapter.deleteUser(userId)
+}
+
 export {
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,

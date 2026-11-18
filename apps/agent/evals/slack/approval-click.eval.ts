@@ -81,6 +81,18 @@ const responses = async () =>
     .filter((e) => e.event === "slack-response")
     .map((e) => e.detail as { text: string; replace_original?: boolean })
 
+/**
+ * Waits until the agent has answered one more click than `before` (it answers every forwarded
+ * click once, after hq has decided), so what is checked next is checked after hq acted: never a
+ * fixed pause. Gives up after 10 seconds, and the check that follows then fails on its own.
+ */
+async function nextResponse(before: number): Promise<void> {
+  const deadline = Date.now() + 10_000
+  while ((await responses()).length <= before && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+}
+
 export default defineEval({
   description:
     "A Slack click on a proposal card, through eve's route: refused unless Slack signed it, " +
@@ -143,8 +155,9 @@ export default defineEval({
     )
 
     // A workspace member who is no founder: Slack-signed, so eve takes it, but hq refuses it.
+    const answered = (await responses()).length
     await post(clickRequest({ user: "UNOTFOUNDER", actionId: approve }))
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await nextResponse(answered)
     t.check(
       await statusOf(target),
       satisfies(
@@ -172,8 +185,9 @@ export default defineEval({
     )
 
     // The same click again (Slack redelivery or a replay): nothing changes, the clicker is told.
+    const beforeReplay = (await responses()).length
     await post(clickRequest({ user: FOUNDER, actionId: approve }))
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await nextResponse(beforeReplay)
     t.check(
       await statusOf(target),
       satisfies((s: string | undefined) => s === "approved", "a replayed click leaves it approved"),

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 /** Variables the tests below set themselves, and expect unset otherwise. */
 const OPTIONAL_UNDER_TEST = [
   "WEB_ORIGINS",
+  "HQ_SLACK_DAILY_GRANT_CAP_USD",
   "DEV_MAIL_SINK",
   "AUTH_RATE_LIMIT",
   "STRIPE_SECRET_KEY",
@@ -61,6 +62,21 @@ describe("env", () => {
       vi.stubEnv("HQ_ALLOW_SIGNUP", raw)
       expect((await import("./index")).env.HQ_ALLOW_SIGNUP, raw).toBe(want)
     }
+  })
+
+  it("hq's daily cap on Slack grants is unset by default, and a positive number up to $1000", async () => {
+    base()
+    vi.stubEnv("HQ_SLACK_DAILY_GRANT_CAP_USD", "")
+    expect((await import("./index")).env.HQ_SLACK_DAILY_GRANT_CAP_USD).toBeUndefined()
+    base()
+    vi.stubEnv("HQ_SLACK_DAILY_GRANT_CAP_USD", "12.5")
+    expect((await import("./index")).env.HQ_SLACK_DAILY_GRANT_CAP_USD).toBe(12.5)
+    for (const bad of ["0", "-5", "abc", "1001"]) {
+      base()
+      vi.stubEnv("HQ_SLACK_DAILY_GRANT_CAP_USD", bad)
+      await expect(import("./index"), bad).rejects.toThrow(/Invalid environment variables/)
+    }
+    vi.unstubAllEnvs()
   })
 
   it("fails fast on missing variables", async () => {

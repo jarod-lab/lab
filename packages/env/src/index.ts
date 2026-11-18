@@ -44,6 +44,15 @@ export const env = createEnv({
     HQ_FOUNDERS: z.string().optional(),
     /** apps/hq only: the Slack workspace (team id) whose clicks hq accepts. Unset, hq refuses every click. */
     HQ_SLACK_TEAM_ID: z.string().min(1).optional(),
+    /**
+     * apps/hq only: the most, in dollars, that Slack grant clicks may add to the allowance in one
+     * UTC day, in total (a click that would pass it is refused and grants nothing). Unset, $50.
+     * grant_spend by a signed-in founder is outside it.
+     */
+    HQ_SLACK_DAILY_GRANT_CAP_USD: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.coerce.number().positive().max(1000).optional(),
+    ),
     /** The Slack app's signing secret: hq verifies the forwarded click over the exact bytes (apps/hq, apps/agent). */
     SLACK_SIGNING_SECRET: z.string().min(1).optional(),
     /**

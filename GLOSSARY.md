@@ -184,8 +184,10 @@ everywhere: a new concept gets a line here before it gets code. Keep each entry 
   it by id, once, within 24 hours, for that amount (the click's own amount is never read); an id hq never
   recorded, a replay or an expired request grants nothing. `SLACK_SIGNING_SECRET` is still a
   founder-level credential: with it, a click can approve any pending proposal, and whoever holds both
-  it and the agent's hq key can request a grant and redeem it, so grants through Slack are bounded to
-  10 requests of at most $25 a UTC day ($250), not unbounded. Treat the secret as a founder's.
+  it and the agent's hq key can request a grant and redeem it, so grants through Slack are bounded: at
+  most $25 a request, 10 requests a UTC day, and $50 a UTC day in all (`HQ_SLACK_DAILY_GRANT_CAP_USD`;
+  a click that would pass it is refused and the request stays pending). Treat the secret as a
+  founder's.
 - **Bigger-model request** — the agent's `request_bigger_model` tool: it asks a founder, in Slack, to
   approve a dearer model for one hard question, with an estimate. Nothing runs on the bigger model
   before a listed founder approves.

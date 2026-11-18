@@ -5,7 +5,7 @@
 // the table lives here.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
-import { and, eq, gt, gte, sql } from "drizzle-orm"
+import { and, eq, gt, gte, lt, sql } from "drizzle-orm"
 
 import { spendGrantRequests } from "../db/schema"
 import { columnText, formatUnits, parseUnits, type Units } from "./money"
@@ -73,11 +73,26 @@ export function requestSpendGrant(
   })
 }
 
+/** What Slack clicks may grant in one UTC day in all, in dollars, unless configured otherwise. */
+export const DEFAULT_SLACK_DAILY_GRANT_CAP_USD = 50
+
 /** What a click on a grant card did. */
 export type GrantDecision =
   | { outcome: "granted"; amount: Units; grantId: string }
   | { outcome: "dismissed" }
   | { outcome: "unavailable"; why: "unknown" | "decided" | "expired" }
+  /** The day's total through Slack would pass the cap: nothing was granted, the request stays pending. */
+  | { outcome: "capped"; cap: Units; grantedToday: Units }
+
+/** Thrown inside the redeem's transaction to undo its claim; never leaves this module. */
+class OverDailyCap extends Error {
+  constructor(
+    readonly cap: Units,
+    readonly grantedToday: Units,
+  ) {
+    super("over the daily cap on Slack grants")
+  }
+}
 
 /**
  * Redeem a request by its id, as the founder `decidedBy`: grant it, or dismiss it. The claim is one
@@ -86,11 +101,41 @@ export type GrantDecision =
  * amount is the row's. An id that is not a recorded request, or is already decided or expired,
  * changes nothing.
  */
-export function decideGrantRequest(
+export async function decideGrantRequest(
   db: Database,
-  input: { id: string; approve: boolean; decidedBy: string; now: Date },
+  input: {
+    id: string
+    approve: boolean
+    decidedBy: string
+    now: Date
+    /** The most Slack redeems may grant in this UTC day in all. */
+    dailyCap: Units
+  },
+): Promise<GrantDecision> {
+  try {
+    return await redeem(db, input)
+  } catch (error) {
+    // The claim was rolled back with the transaction: the request is still pending.
+    if (error instanceof OverDailyCap) {
+      return { outcome: "capped", cap: error.cap, grantedToday: error.grantedToday }
+    }
+    throw error
+  }
+}
+
+function redeem(
+  db: Database,
+  input: { id: string; approve: boolean; decidedBy: string; now: Date; dailyCap: Units },
 ): Promise<GrantDecision> {
   return db.transaction(async (tx) => {
+    const day = dayOf(input.now)
+    // Every redeem of a day goes one at a time, so the day's total below cannot be passed by two
+    // clicks that each looked at it before the other wrote.
+    if (input.approve) {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`hq_slack_grants:${day}`}, 0))`,
+      )
+    }
     const cutoff = new Date(input.now.getTime() - GRANT_REQUEST_TTL_MS)
     const [claimed] = await tx
       .update(spendGrantRequests)
@@ -127,6 +172,22 @@ export function decideGrantRequest(
     }
     if (!input.approve) return { outcome: "dismissed" as const }
     const amount = parseUnits(claimed.amountUsd)
+    // Counts this redeem too (its row is already `granted`): over the cap undoes the whole claim.
+    const [today] = await tx
+      .select({ total: sql<string>`coalesce(sum(${spendGrantRequests.amountUsd}), 0)::text` })
+      .from(spendGrantRequests)
+      .where(
+        and(
+          eq(spendGrantRequests.status, "granted"),
+          gte(spendGrantRequests.decidedAt, new Date(`${day}T00:00:00Z`)),
+          lt(
+            spendGrantRequests.decidedAt,
+            new Date(new Date(`${day}T00:00:00Z`).getTime() + 86_400_000),
+          ),
+        ),
+      )
+    const total = parseUnits(today?.total ?? "0")
+    if (total > input.dailyCap) throw new OverDailyCap(input.dailyCap, total - amount)
     const grant = await grantSpend(tx, {
       amount,
       reason: `Slack approval ${claimed.id}: ${claimed.reason}`.slice(0, MAX_REASON),

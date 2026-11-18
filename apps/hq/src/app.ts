@@ -44,7 +44,7 @@ export interface HqAppOptions {
    * whose clicks count. Either unset and every click is refused. Who may click is the `founders`
    * table, not an option.
    */
-  slack?: { signingSecret?: string; teamId?: string }
+  slack?: { signingSecret?: string; teamId?: string; dailyGrantCapUsd?: number }
   /** Public base URL, no trailing slash (OAuth issuer, docs links). Default http://localhost:3100. */
   baseURL?: string
   /** More operations beside hq's own. For tests (a write, to reach the body and origin checks). */
@@ -200,6 +200,7 @@ export function createHqApp(opts: HqAppOptions) {
     now: opts.now,
     signingSecret: opts.slack?.signingSecret,
     teamId: opts.slack?.teamId,
+    dailyGrantCapUsd: opts.slack?.dailyGrantCapUsd,
   })
   app.post("/v1/slack/actions", async (c) => {
     const rawBody = new Uint8Array(await c.req.raw.arrayBuffer())

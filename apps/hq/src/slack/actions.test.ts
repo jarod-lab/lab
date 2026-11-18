@@ -463,6 +463,64 @@ describe("Slack actions (real hq on PGlite)", () => {
       expect((await clickGrant(stranger)).status).toBe(200)
     })
 
+    it("the third $25 click in a UTC day is refused at the default $50 total, and grants nothing", async () => {
+      const [a, b, c] = [await ask(25), await ask(25), await ask(25)]
+      expect((await clickGrant(a, { cents: 2500 })).status).toBe(200)
+      // Exactly the cap is allowed.
+      expect((await clickGrant(b, { cents: 2500 })).status).toBe(200)
+      expect((await allowance()).grantedUsd).toBe(50)
+
+      const refused = await clickGrant(c, { cents: 2500 })
+      expect(refused.status).toBe(409)
+      expect(refused.text).toMatch(/at most \$50\.00 a day in all.*\$50\.00 is already granted/)
+      expect(refused.text).toMatch(/Nothing was granted/)
+      expect((await allowance()).grantedUsd).toBe(50)
+      // Refused whole: the request is still pending, not spent or expired.
+      expect((await requestRow(c))?.status).toBe("pending")
+      expect((await requestRow(c))?.decidedBy).toBeNull()
+      // A dismiss is not a grant: it still works on the capped request.
+      const dismissed = await hq.slackClick({
+        slackUserId: founderSlack,
+        actionId: grantActionId(false, c, 2500),
+      })
+      expect(dismissed.status).toBe(200)
+      expect((await allowance()).grantedUsd).toBe(50)
+    })
+
+    it("the cap counts the day's total, not one click: small grants add up to it", async () => {
+      const ids = [await ask(20), await ask(20), await ask(15)]
+      for (const id of ids.slice(0, 2)) expect((await clickGrant(id)).status).toBe(200)
+      // $40 granted: $15 would make $55.
+      expect((await clickGrant(ids[2] ?? "")).status).toBe(409)
+      const small = await ask(10)
+      expect((await clickGrant(small)).status).toBe(200)
+      expect((await allowance()).grantedUsd).toBe(50)
+    })
+
+    it("the cap resets with the next UTC day, and a refused request can be redeemed then", async () => {
+      const [a, b, c] = [await ask(25), await ask(25), await ask(25)]
+      await clickGrant(a)
+      await clickGrant(b)
+      expect((await clickGrant(c)).status).toBe(409)
+      // Half past midnight UTC, twelve and a half hours after the requests: still inside 24 hours.
+      day += 1 // the next test starts a day after this one
+      clock = new Date(Date.UTC(2031, 0, day, 0, 30))
+      expect((await allowance()).grantedUsd).toBe(0)
+      expect((await clickGrant(c)).status).toBe(200)
+      expect((await allowance()).grantedUsd).toBe(25)
+      // And the new day has its own $50: one more $25 fits, a third does not.
+      const [d, e] = [await ask(25), await ask(25)]
+      expect((await clickGrant(d)).status).toBe(200)
+      expect((await clickGrant(e)).status).toBe(409)
+    })
+
+    it("clicks at once cannot pass the cap together", async () => {
+      const ids = [await ask(25), await ask(25), await ask(25), await ask(25)]
+      const clicks = await Promise.all(ids.map((id) => clickGrant(id)))
+      expect(clicks.map((c) => c.status).sort()).toEqual([200, 200, 409, 409])
+      expect((await allowance()).grantedUsd).toBe(50)
+    })
+
     it("a request is recorded by hq with the amount fixed: at most $25, more than $0", async () => {
       const id = await ask(25, "  Launch day  ")
       expect(await requestRow(id)).toMatchObject({
@@ -610,6 +668,46 @@ describe("Slack actions (real hq on PGlite)", () => {
       expect(result.status).toBe(403)
       expect((await proposalOf(id))?.status).toBe("pending")
     }
+  })
+})
+
+describe("a configured cap on Slack grants (HQ_SLACK_DAILY_GRANT_CAP_USD)", () => {
+  let hq: Awaited<ReturnType<typeof createHqHarness>>
+  let agent: { key: string }
+  const slackUser = "UCAPFOUNDER"
+
+  beforeAll(async () => {
+    hq = await createHqHarness({
+      founderEmails: ["cap-founder@example.com"],
+      slackDailyGrantCapUsd: 12,
+    })
+    const founder = await hq.signUp("cap-founder@example.com")
+    await hq.addFounder(founder, slackUser)
+    agent = { key: await hq.keyFor(founder, { hq_spend: ["read", "request"] }) }
+  })
+  afterAll(() => hq.close())
+
+  const ask = async (amountUsd: number) =>
+    (
+      await hq.call(agent, "POST", "/v1/spend/grant-requests", {
+        amountUsd,
+        reason: "a lower cap",
+      })
+    ).body.requestId
+  const click = (id: string, cents: number) =>
+    hq.slackClick({ slackUserId: slackUser, actionId: grantActionId(true, id, cents) })
+
+  it("is honoured: $12 a day in all, whatever the default would allow", async () => {
+    const [a, b, c] = [await ask(10), await ask(5), await ask(2)]
+    expect((await click(a, 1000)).status).toBe(200)
+    // $10 granted: $5 more would make $15 over the $12 cap, and says so in the cap's own terms.
+    const refused = await click(b, 500)
+    expect(refused.status).toBe(409)
+    expect(refused.text).toMatch(/at most \$12\.00 a day in all.*\$10\.00 is already granted/)
+    // A smaller one that fits is still redeemable: exactly $12 in all.
+    expect((await click(c, 200)).status).toBe(200)
+    const allowance = await hq.call(agent, "GET", "/v1/spend/allowance")
+    expect((allowance.body as unknown as { grantedUsd: number }).grantedUsd).toBe(12)
   })
 })
 

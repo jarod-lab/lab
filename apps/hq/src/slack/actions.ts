@@ -6,7 +6,12 @@ import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
 
 import { founderForSlackUser } from "../data/founders"
-import { decideGrantRequest, dollars } from "../data/grant-requests"
+import {
+  DEFAULT_SLACK_DAILY_GRANT_CAP_USD,
+  decideGrantRequest,
+  dollars,
+} from "../data/grant-requests"
+import { toPositiveUnits } from "../data/money"
 import { decideProposal, getProposal } from "../data/proposals"
 import { slackActions } from "../db/schema"
 import { verifySlackSignature } from "./verify"
@@ -33,6 +38,8 @@ export interface SlackActionDeps {
   signingSecret: string | undefined
   /** The one workspace whose clicks count. Unset: every click is refused. */
   teamId: string | undefined
+  /** The most Slack clicks may grant in one UTC day in all, in dollars. Unset: $50. */
+  dailyGrantCapUsd?: number
 }
 
 /**
@@ -215,7 +222,18 @@ export function createSlackActionHandler(deps: SlackActionDeps) {
         approve: action.approve,
         decidedBy: userId,
         now: at,
+        dailyCap: toPositiveUnits(
+          deps.dailyGrantCapUsd ?? DEFAULT_SLACK_DAILY_GRANT_CAP_USD,
+          "dailyGrantCapUsd",
+        ),
       })
+      if (decision.outcome === "capped") {
+        return unchanged(
+          `Slack clicks can grant at most ${dollars(decision.cap)} a day in all, and ` +
+            `${dollars(decision.grantedToday)} is already granted today. Nothing was granted; ` +
+            "this request stays pending.",
+        )
+      }
       if (decision.outcome === "unavailable") {
         const text = {
           unknown: "hq has no such grant request.",

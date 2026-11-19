@@ -94,7 +94,7 @@ export interface FounderSyncOptions {
  * whose address is verified (anyone can sign up with an address they don't own), and, with
  * `pinnedOnly`, only one named by id. Rows for anyone else are deleted, so removing a founder from
  * HQ_FOUNDERS removes them at the next boot, and an empty list leaves no founders: it fails
- * closed. In one transaction.
+ * closed. In one transaction, and one at a time across instances.
  */
 export function syncFounders(
   db: Database,
@@ -103,6 +103,18 @@ export function syncFounders(
   options: FounderSyncOptions = {},
 ): Promise<FounderSync> {
   return db.transaction(async (tx) => {
+    // Several instances boot at once (Vercel cold starts, a rolling deploy) and each runs this.
+    // One transaction is not enough: at READ COMMITTED two of them both read the table, both
+    // compute their changes from that same stale read and both insert, so the second hits the
+    // primary key or the slack_user_id unique constraint, its boot rejects and that instance
+    // refuses every request; and two different lists could leave a table that matches neither.
+    // A transaction-scoped advisory lock makes the syncs run one after another: the next one
+    // takes the lock only after the previous commits and then reads the committed table, so it
+    // computes against the truth (usually no change). The deletes and inserts below are in this
+    // transaction, so no reader sees a founder missing in between. `_xact_` releases at commit
+    // or rollback, so a crashed instance cannot leave it held, and it holds through a pooled
+    // (transaction-mode) connection because the whole sync is one transaction.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('hq.founders.sync'))`)
     const wanted = new Map<string, string>()
     const skipped: SkippedFounder[] = []
     for (const [index, seed] of seeds.entries()) {

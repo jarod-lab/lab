@@ -31,8 +31,9 @@ function bootRefused(): Response {
  *    way into a half-configured state. Every request is answered 503 with `BOOT_REFUSED_BODY`; the
  *    reason goes to the log once, never to the caller. A fixed environment takes a new deployment
  *    (a fresh instance boots again).
- *  - Nothing runs when this is called: Vercel imports the entry at build time (to read its routes),
- *    and a boot there would read the build's environment and touch the database.
+ *  - Nothing runs when this is called: the function loads the entry when an instance starts, before
+ *    any request, and a boot there would read the environment and touch the database with no
+ *    request to refuse (and a tool that imports the entry at build time would boot at build).
  */
 export function createLazyHq(
   boot: () => Promise<HqFetch>,

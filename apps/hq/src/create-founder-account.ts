@@ -108,6 +108,9 @@ export async function createFounder(
         .returning({ id: user.id })
       if (verified.length !== 1) throw new Error("the new account was not found to verify")
       await tx.delete(session).where(eq(session.userId, userId))
+      // The second writer of the founders table (beside syncFounders): run against a deployed hq it
+      // adds a row HQ_FOUNDERS does not list yet, so new instances refuse until the entry is in
+      // HQ_FOUNDERS, `pnpm hq:predeploy` has run and hq is redeployed (data/founders.ts).
       await addFounder(tx, { userId, slackUserId: input.slackUserId, now: deps.now() })
     })
   } catch (error) {

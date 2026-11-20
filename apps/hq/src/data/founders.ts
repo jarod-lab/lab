@@ -13,7 +13,10 @@ import { founders } from "../db/schema"
  * How a row is created: `syncFounders`, from HQ_FOUNDERS. A local hq runs it at boot; a deployed
  * hq's `pnpm hq:predeploy` runs it at deploy time and the deployed boot only checks the table
  * against its list (`verifyFounders`). There is no operation, route or page that writes the
- * table, so no key and no unauthenticated caller can add a founder. To add or remove a founder,
+ * table, so no key and no unauthenticated caller can add a founder. The one other writer is
+ * `create-founder` (a command run on the server, `addFounder`): run against a deployed hq it adds
+ * a row HQ_FOUNDERS does not list yet, so new instances refuse (a deployed boot sees a row its
+ * list lacks) until the entry is added to HQ_FOUNDERS, predeploy runs and hq is redeployed. To add or remove a founder,
  * change HQ_FOUNDERS and restart a local hq, or redeploy (predeploy first) a deployed one: the
  * table is set to match the list.
  */
@@ -101,7 +104,11 @@ type Reader = Pick<Database, "select">
  * A listed person counts only as an existing, unbanned account whose address is verified (anyone
  * can sign up with an address they don't own), and, with `pinnedOnly`, only one named by id.
  */
-async function readPlan(db: Reader, seeds: readonly FounderSeed[], options: FounderSyncOptions) {
+async function resolveSeeds(
+  db: Reader,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions,
+) {
   const wanted = new Map<string, string>()
   const skipped: SkippedFounder[] = []
   for (const [index, seed] of seeds.entries()) {
@@ -123,8 +130,26 @@ async function readPlan(db: Reader, seeds: readonly FounderSeed[], options: Foun
     else if (!row.verified) skipped.push({ ...entry, why: "the address is not verified" })
     else wanted.set(row.id, seed.slackUserId)
   }
-  const existing = await db.select().from(founders)
-  return { wanted, skipped, existing }
+  return { wanted, skipped }
+}
+
+/** `resolveSeeds` and the table, for the two that compare them: sync and verify. */
+async function readPlan(db: Reader, seeds: readonly FounderSeed[], options: FounderSyncOptions) {
+  const { wanted, skipped } = await resolveSeeds(db, seeds, options)
+  return { wanted, skipped, existing: await db.select().from(founders) }
+}
+
+/**
+ * Who the list resolves to right now, without reading or writing the table: the founders a sync of
+ * this list would leave (user id -> Slack user) and the entries it would skip. Predeploy builds the
+ * agent's founder list from this before it writes anything, so a refused deploy changes nothing.
+ */
+export async function planFounders(
+  db: Database,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions = {},
+): Promise<{ wanted: ReadonlyMap<string, string>; skipped: SkippedFounder[] }> {
+  return resolveSeeds(db, seeds, options)
 }
 
 /**

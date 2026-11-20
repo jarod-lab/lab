@@ -24,6 +24,11 @@ export interface BootHqOptions {
   /** Tests give the config and the database; a real boot reads the environment. */
   config?: HqConfig
   db?: Database
+  /**
+   * Boot as a deployed hq whatever NODE_ENV is: sign-up must be closed and the founders table is
+   * only verified, never written. The Vercel entry sets it.
+   */
+  deployed?: boolean
   /** The clock; the founder rows and the app's timestamps read it. */
   now?: () => Date
 }
@@ -50,7 +55,10 @@ export async function bootHq(options: BootHqOptions = {}): Promise<BootedHq> {
   }
   // The environment is read here and not at import: @lab/env validates on first import, and a test
   // (or a refused boot) must be able to reach this function without it.
-  const config = options.config ?? (await import("./env")).hqEnv(options.portArg)
+  const read = options.config ?? (await import("./env")).hqEnv(options.portArg)
+  // The Vercel entry is always a deployed hq: whatever NODE_ENV says (a dashboard override to
+  // development would otherwise make this boot write the founders table and open sign-up).
+  const config: HqConfig = options.deployed ? { ...read, nodeEnv: "production" } : read
   const now = options.now ?? (() => new Date())
   // A database this call opened is closed again if the boot is refused: nothing else holds it.
   const owned = options.db ? undefined : createDb(config.databaseUrl)
@@ -99,3 +107,7 @@ export async function bootHq(options: BootHqOptions = {}): Promise<BootedHq> {
     throw error
   }
 }
+
+/** The Vercel entry's boot: `bootHq` as a deployed hq, which no environment variable can undo. */
+export const bootVercel = (options: Omit<BootHqOptions, "deployed"> = {}): Promise<BootedHq> =>
+  bootHq({ ...options, deployed: true })

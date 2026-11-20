@@ -26,7 +26,7 @@ export class FoundersOutOfDateError extends Error {
     super(
       `the founders table does not match this deployment's HQ_FOUNDERS (${counts.missing} missing or ` +
         `changed, ${counts.extra} not listed): a newer deploy changed it, or pnpm hq:predeploy has ` +
-        "not run for this one. Run pnpm hq:predeploy against this environment, or redeploy.",
+        "not run for this one. Run pnpm hq:predeploy against this environment, then redeploy.",
     )
     this.name = "FoundersOutOfDateError"
   }

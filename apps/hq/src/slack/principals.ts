@@ -1,4 +1,9 @@
-import { founderSlackUserIds } from "../data/founders"
+import {
+  type FounderSeed,
+  type FounderSyncOptions,
+  founderSlackUserIds,
+  planFounders,
+} from "../data/founders"
 import type { Database } from "@lab/db"
 
 /**
@@ -14,6 +19,22 @@ export function founderPrincipals(teamId: string, slackUserIds: readonly string[
 
 export const founderPrincipalsFromDb = async (db: Database, teamId: string): Promise<string[]> =>
   founderPrincipals(teamId, await founderSlackUserIds(db))
+
+/**
+ * The agent's founder list for an HQ_FOUNDERS list, without reading the founders table: who the
+ * list resolves to (an account that exists, unbanned, verified, and by id when deployed), which is
+ * what a sync of it would leave in the table. `pnpm hq:predeploy` compares AGENT_FOUNDER_PRINCIPALS
+ * with this before it writes, and the vault's list is minted from it before predeploy runs.
+ */
+export async function founderPrincipalsFromList(
+  db: Database,
+  teamId: string,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions = {},
+): Promise<string[]> {
+  const { wanted } = await planFounders(db, seeds, options)
+  return founderPrincipals(teamId, [...wanted.values()])
+}
 
 export interface PrincipalDrift {
   ok: boolean

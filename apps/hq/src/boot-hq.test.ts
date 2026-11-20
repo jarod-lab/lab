@@ -2,8 +2,8 @@ import type { Database } from "@lab/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { createHqHarness, type TestPerson } from "./app.test.helpers"
-import { publishFounders } from "./boot"
-import { bootHq, type HqConfig } from "./boot-hq"
+import { FoundersOutOfDateError, publishFounders } from "./boot"
+import { bootHq, bootVercel, type HqConfig } from "./boot-hq"
 import { founders } from "./db/schema"
 import { BOOT_REFUSED_BODY, createLazyHq } from "./lazy-hq"
 
@@ -157,6 +157,32 @@ describe("bootHq (real hq database on PGlite)", () => {
         expect((await lazy.request(`${BASE}${path}`)).status, path).toBe(503)
       }
       expect(serving).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("the Vercel entry's boot", () => {
+    it("is a deployed hq whatever NODE_ENV says: a development override neither writes nor opens sign-up", async () => {
+      await hq.db.delete(founders)
+      const overridden = (over: Partial<HqConfig> = {}) =>
+        config({ nodeEnv: "development", ...over })
+      // A table that is not its list: a local boot would write it, this one refuses and writes nothing.
+      await expect(
+        bootVercel({ config: overridden(), db: hq.db, now: () => at }),
+      ).rejects.toBeInstanceOf(FoundersOutOfDateError)
+      expect(await hq.db.select().from(founders)).toEqual([])
+      // Sign-up open is refused as it is in production.
+      await expect(
+        bootVercel({ config: overridden({ allowSignUp: true }), db: hq.db, now: () => at }),
+      ).rejects.toThrow(/HQ_ALLOW_SIGNUP is on in a deployed hq/)
+      // Through the shell: every request 503, nothing written.
+      const lazy = createLazyHq(
+        async () => (await bootVercel({ config: overridden(), db: hq.db, now: () => at })).app,
+      )
+      expect((await ask(lazy, "/v1/status")).status).toBe(503)
+      expect(await hq.db.select().from(founders)).toEqual([])
+      // And the plain bootHq with the same config is a local boot: it does write (the contrast).
+      await bootHq({ config: overridden(), db: hq.db, now: () => at })
+      expect((await hq.db.select().from(founders)).map((f) => f.userId)).toEqual([ann.userId])
     })
   })
 

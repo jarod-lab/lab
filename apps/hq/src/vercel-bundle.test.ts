@@ -60,6 +60,7 @@ describe("the Vercel function bundle", () => {
       handler: "index.mjs",
       launcherType: "Nodejs",
       shouldAddHelpers: false,
+      supportsResponseStreaming: true,
     })
     expect(existsSync(bundlePath)).toBe(true)
   })
@@ -81,8 +82,35 @@ describe("the Vercel function bundle", () => {
     const bare = [...bundle.matchAll(/^import[^"'\n]*?from\s*["']([^"'.][^"']*)["']/gm)].map(
       (m) => m[1] as string,
     )
+    const isBuiltin = (spec: string) => spec.startsWith("node:") || builtinModules.includes(spec)
+    expect(bare.filter((spec) => !isBuiltin(spec))).toEqual([])
+    // The same for run-time loads (the banner makes `require` real): a package left unresolved
+    // would be loaded from a directory with no node_modules. Only built-ins may be loaded by
+    // name, apart from the optional ones below, each of which its caller tries inside a
+    // try/catch (or names in a message or in generated code) and which hq's deployment does not
+    // use. A new entry here is a decision: add the package to hq's dependencies instead, so
+    // that it is bundled, unless it is optional in the same way.
+    const optionalAtRunTime = [
+      "@opentelemetry/api", // better-auth telemetry: try/catch, a no-op without it
+      "@aws-sdk/signature-v4-crt", // named in an error message
+      "@aws-sdk/signature-v4a", // named in an error message
+      "@react-email/components", // @wraps.dev/email: only when a React element is sent
+      "@vercel/oidc-aws-credentials-provider", // @wraps.dev/email: only with AWS_ROLE_ARN on Vercel
+    ]
+    const loaded = [
+      ...code.matchAll(/(?:\brequire|\bimport)\s*\(\s*["']([^"'.][^"']*)["']\s*\)/g),
+    ].map((m) => m[1] as string)
     expect(
-      bare.filter((spec) => !(spec.startsWith("node:") || builtinModules.includes(spec))),
+      loaded.filter(
+        (spec) =>
+          !(
+            isBuiltin(spec) ||
+            optionalAtRunTime.includes(spec) ||
+            // ajv's standalone code generator writes these into the source it generates.
+            spec.startsWith("ajv/") ||
+            spec.startsWith("ajv-formats/")
+          ),
+      ),
     ).toEqual([])
   })
 
@@ -90,7 +118,8 @@ describe("the Vercel function bundle", () => {
     for (const secret of Object.values(CANARIES)) expect(bundle).not.toContain(secret)
   })
 
-  it("loads under plain node and answers 503 {error} with no-store from an empty environment", () => {
+  /** Runs the built function as its own `node` process, serving two requests from `env`. */
+  function runFunction(env: Record<string, string>) {
     const driver = `
       import { createServer } from "node:http"
       const handler = (await import(process.argv[1])).default
@@ -112,29 +141,51 @@ describe("the Vercel function bundle", () => {
       console.log(JSON.stringify(replies))
     `
     const run = spawnSync(process.execPath, ["--input-type=module", "-e", driver, bundlePath], {
-      env: {},
+      env,
       cwd: out,
       encoding: "utf8",
       timeout: 60_000,
     })
     expect(run.status, `${run.stdout}${run.stderr}`).toBe(0)
     const replies = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "[]") as unknown[]
-    expect(replies).toEqual(
-      ["/health", "/mcp"].map(() => ({
-        status: 503,
-        body: JSON.stringify({ error: "service unavailable" }),
-        cacheControl: "no-store",
-        contentType: "application/json",
-      })),
-    )
+    // (The logger writes to stdout, the env validation to stderr.)
+    return { replies, logged: `${run.stdout}\n${run.stderr}` }
+  }
+
+  const refused = ["/health", "/mcp"].map(() => ({
+    status: 503,
+    body: JSON.stringify({ error: "service unavailable" }),
+    cacheControl: "no-store",
+    contentType: "application/json",
+  }))
+
+  it("loads under plain node and answers 503 {error} with no-store from an empty environment", () => {
+    const { replies, logged } = runFunction({})
+    expect(replies).toEqual(refused)
     // The 503 is the refusal of hq's own boot (src/env.ts rejects the empty environment, once),
     // not a module that failed to load: every module of the app was found and evaluated.
-    // (The logger writes to stdout, the env validation to stderr.)
-    const logged = `${run.stdout}\n${run.stderr}`
     expect(logged).toContain("hq refused to boot")
     expect(logged).toContain("Invalid environment variables")
     expect(logged).not.toMatch(/ERR_MODULE_NOT_FOUND|Cannot find (module|package)/)
     expect(logged.match(/hq refused to boot/g)).toHaveLength(1)
+  }, 90_000)
+
+  it("runs the boot itself, database driver included, from a fabricated environment", () => {
+    // A complete environment whose database is a closed local port: the boot reads and validates
+    // it, builds the database client and reaches the founders check, and is refused only because
+    // nothing listens there. Whatever the bundle failed to carry (a driver, a file next to it)
+    // would show as another error.
+    const dead = "postgres://user:password@127.0.0.1:1/hq"
+    const { replies, logged } = runFunction({
+      HQ_DATABASE_URL: dead,
+      DATABASE_URL: dead,
+      BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef0123456789", // gitleaks:allow
+      BETTER_AUTH_URL: "https://hq.invalid",
+      EMAIL_FROM: "hq@example.invalid",
+    })
+    expect(replies).toEqual(refused)
+    expect(logged).toContain("ECONNREFUSED")
+    expect(logged).not.toMatch(/ERR_MODULE_NOT_FOUND|Cannot find (module|package)|ReferenceError/)
   }, 90_000)
 })
 

@@ -60,6 +60,8 @@ export async function buildVercelOutput(outputDir = join(hqDir, ".vercel", "outp
         handler: FUNCTION_FILE,
         launcherType: "Nodejs",
         shouldAddHelpers: false,
+        // The (req, res) handler streams, as the bundled Hono app's streaming responses (MCP) need.
+        supportsResponseStreaming: true,
       },
       null,
       2,

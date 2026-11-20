@@ -17,7 +17,7 @@ beforeEach(() => {
 })
 
 describe("createLazyHq", () => {
-  it("boots nothing when it is created (Vercel imports the entry at build time)", () => {
+  it("boots nothing when it is created (the function loads the entry before any request)", () => {
     const boot = vi.fn(async () => ok)
     lazy(boot)
     expect(boot).not.toHaveBeenCalled()

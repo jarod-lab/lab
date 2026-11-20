@@ -10,6 +10,7 @@ import { createLogger } from "@lab/logger"
 import { createHqApp } from "./app"
 import { createHqAuth } from "./auth"
 import { prepareBoot } from "./boot"
+import { isProductionLike } from "./deploy-mode"
 import type { hqEnv } from "./env"
 
 const logger = createLogger({ name: "hq" })
@@ -36,8 +37,9 @@ let reporterRegistered = false
 
 /**
  * Boot hq. Throws, and serves nothing, when the environment is unsafe or incomplete: a deployed
- * hq with sign-up open, a missing database URL, a founder list it cannot parse, a failed sync.
- * The app it returns is only ever built after the founders table has been set to HQ_FOUNDERS.
+ * hq with sign-up open, a missing database URL, a founder list it cannot parse, a failed sync, a
+ * deployed founders table that is not this deployment's list. The app it returns is only ever
+ * built after the table has been set to HQ_FOUNDERS (local) or verified against it (deployed).
  */
 export async function bootHq(options: BootHqOptions = {}): Promise<BootedHq> {
   if (!reporterRegistered) {
@@ -55,10 +57,11 @@ export async function bootHq(options: BootHqOptions = {}): Promise<BootedHq> {
   const db = options.db ?? owned
   if (!db) throw new Error("hq has no database")
   try {
-    // The founders table is set to HQ_FOUNDERS at every boot: the listed are added, the rest
-    // removed. A deployed hq refuses to start with public sign-up on (founders are made on the
-    // server, by create-founder) and takes only the entries pinned by user id. The decisions are
-    // in boot.ts.
+    // A local hq sets the founders table to HQ_FOUNDERS at every boot. A deployed hq refuses to
+    // start with public sign-up on (founders are made on the server, by create-founder), takes
+    // only the entries pinned by user id, and WRITES NOTHING: it serves only if the table already
+    // equals its list (pnpm hq:predeploy wrote it), else this throws and every request is 503.
+    // The decisions are in boot.ts.
     const synced = await prepareBoot(config, db, now())
     // Closed unless HQ_ALLOW_SIGNUP: a stranger cannot self-register on hq.
     const auth = createHqAuth(db, config)
@@ -68,7 +71,7 @@ export async function bootHq(options: BootHqOptions = {}): Promise<BootedHq> {
         added: synced.added.length,
         removed: synced.removed.length,
       },
-      "founders synced",
+      isProductionLike(config.nodeEnv) ? "founders verified" : "founders synced",
     )
     // Where the entry is in the list and why, never the address: a log is not a place for it.
     for (const skipped of synced.skipped) {

@@ -99,7 +99,8 @@ export const proposals = hq.table(
 /**
  * The founders: the one source for who may decide a proposal, edit an entry, grant spend or click
  * Approve in Slack. A row maps an hq account to a Slack user. Nothing in the API writes it: hq
- * syncs it from HQ_FOUNDERS at boot (data/founders.ts), adding the listed and removing the rest.
+ * syncs it from HQ_FOUNDERS (data/founders.ts: a local hq at boot, a deployed one at predeploy),
+ * adding the listed and removing the rest.
  */
 export const founders = hq.table(
   "founders",

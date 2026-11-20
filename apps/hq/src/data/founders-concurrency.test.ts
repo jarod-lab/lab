@@ -3,7 +3,8 @@ import { inArray } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { founders } from "../db/schema"
-import { type FounderSeed, syncFounders } from "./founders"
+import { publishFounders } from "../boot"
+import { type FounderSeed, syncFounders, verifyFounders } from "./founders"
 
 // The founder sync runs at every boot, and on Vercel several instances boot at once. Its advisory
 // lock (data/founders.ts) is what keeps them from colliding, and PGlite has one connection and
@@ -128,6 +129,43 @@ describe.skipIf(!REAL)(
       stop = true
       await watch
       expect(missing).toBe(0)
+    })
+
+    it("six predeploys at once (publishFounders, deployed): all succeed, the table is the list", async () => {
+      const list = IDS.map((id, i) => pinned(id, `UN31P${i}`))
+      for (let round = 0; round < 10; round++) {
+        await admin.delete(founders)
+        const config = { nodeEnv: "production", allowSignUp: false, founders: list }
+        await Promise.all(
+          Array.from({ length: 6 }, (_, i) =>
+            publishFounders(config, clients[i % clients.length] as typeof admin, at),
+          ),
+        )
+        expect(await table()).toEqual(render(list))
+      }
+    })
+
+    it("a boot's check during a deploy's writes sees the old table or the new one, never a torn one", async () => {
+      const one = [pinned(IDS[0], "UN31V0"), pinned(IDS[1], "UN31V1")]
+      const two = [pinned(IDS[0], "UN31V0")]
+      await admin.delete(founders)
+      await sync(0, one)
+      let stop = false
+      const seen: string[] = []
+      const watch = (async () => {
+        const reader = clients[3] as typeof admin
+        while (!stop) {
+          const v = await verifyFounders(reader, one, { pinnedOnly: true })
+          seen.push(`${v.missing}/${v.extra}`)
+        }
+      })()
+      for (let i = 0; i < 25; i++) await sync(i % 2, i % 2 === 0 ? two : one)
+      stop = true
+      await watch
+      // Against `one`: the table is `one` (0 missing) or `two` (bob missing, 1). An empty or
+      // half-written table would show 2 missing, or an extra row.
+      expect(seen.length).toBeGreaterThan(0)
+      expect([...new Set(seen)].sort(byText).filter((x) => x !== "0/0" && x !== "1/0")).toEqual([])
     })
   },
 )

@@ -2,6 +2,7 @@ import type { Database } from "@lab/db"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { createHqHarness, type TestPerson } from "./app.test.helpers"
+import { publishFounders } from "./boot"
 import { bootHq, type HqConfig } from "./boot-hq"
 import { founders } from "./db/schema"
 import { BOOT_REFUSED_BODY, createLazyHq } from "./lazy-hq"
@@ -47,17 +48,19 @@ describe("bootHq (real hq database on PGlite)", () => {
   afterAll(() => hq.close())
 
   describe("a healthy boot, served the way Vercel serves it", () => {
-    it("syncs the founders before it answers, then serves /v1/status", async () => {
+    it("serves /v1/status once the table is this deployment's list, and writes nothing itself", async () => {
       const lazy = createLazyHq(async () => (await boot()).app)
-      expect(await hq.db.select().from(founders)).toEqual([])
+      // pnpm hq:predeploy ran for this deploy: the table is its list. The boot only checks it.
+      await publishFounders(config(), hq.db, at)
+      const before = await hq.db.select().from(founders)
 
       const res = await lazy.request(`${BASE}/v1/status`, {
         headers: { cookie: ann.cookie, origin: BASE },
       })
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ ok: true, version: "0.0.0" })
-      // The sync ran first: she is a founder because the boot made her one, nothing else did.
-      expect((await hq.db.select().from(founders)).map((f) => f.userId)).toEqual([ann.userId])
+      expect(await hq.db.select().from(founders)).toEqual(before)
+      expect(before.map((f) => f.userId)).toEqual([ann.userId])
 
       // The trust rule holds on the booted app: no credential is a 401, a signed-in non-founder 403.
       expect((await lazy.request(`${BASE}/v1/status`)).status).toBe(401)
@@ -94,6 +97,52 @@ describe("bootHq (real hq database on PGlite)", () => {
       )
     })
 
+    it("a deployment whose predeploy never ran: the table is empty, every request is 503, nothing is written", async () => {
+      await hq.db.delete(founders)
+      const lazy = createLazyHq(async () => (await boot()).app)
+      for (const headers of [{} as Record<string, string>, { cookie: ann.cookie, origin: BASE }]) {
+        expect((await ask(lazy, "/v1/status", headers)).status).toBe(503)
+      }
+      expect(await hq.db.select().from(founders)).toEqual([])
+    })
+
+    it("a stale deployment: the table was written by a newer list, so every request is 503 and the removed founder stays removed", async () => {
+      const older: HqConfig["founders"] = [
+        { who: { userId: ann.userId }, slackUserId: "UANN" },
+        { who: { userId: bob.userId }, slackUserId: "UBOB" },
+      ]
+      const newer: HqConfig["founders"] = [{ who: { userId: ann.userId }, slackUserId: "UANN" }]
+      await hq.db.delete(founders)
+      await publishFounders(config({ founders: older }), hq.db, at)
+      // The newest deploy runs predeploy with bob taken out.
+      await publishFounders(config({ founders: newer }), hq.db, at)
+
+      // Someone sends one request to the old deployment's URL: it cold starts with its old list.
+      const attempt = vi.fn(async () => (await boot({ founders: older })).app)
+      const stale = createLazyHq(attempt)
+      for (const path of ["/v1/status", "/mcp", "/", "/health", "/api/auth/ok"]) {
+        for (const headers of [
+          {} as Record<string, string>,
+          { cookie: ann.cookie, origin: BASE },
+          { cookie: bob.cookie, origin: BASE },
+        ]) {
+          const res = await ask(stale, path, headers)
+          expect(res.status, path).toBe(503)
+          expect(await res.text()).toBe(BOOT_REFUSED_BODY)
+        }
+      }
+      expect(attempt).toHaveBeenCalledTimes(1)
+      // It wrote nothing: bob is still not a founder, and the newest deployment still serves.
+      expect((await hq.db.select().from(founders)).map((f) => f.userId)).toEqual([ann.userId])
+      const current = createLazyHq(async () => (await boot({ founders: newer })).app)
+      expect((await ask(current, "/v1/status", { cookie: ann.cookie, origin: BASE })).status).toBe(
+        200,
+      )
+      expect((await ask(current, "/v1/status", { cookie: bob.cookie, origin: BASE })).status).toBe(
+        403,
+      )
+    })
+
     it("when the founder sync itself fails, nothing is served (never against an unsynced table)", async () => {
       const broken: Database = Object.assign(Object.create(hq.db), {
         transaction: () => Promise.reject(new Error("connection refused")),
@@ -111,15 +160,20 @@ describe("bootHq (real hq database on PGlite)", () => {
     })
   })
 
-  describe("two instances booting at once", () => {
-    it("both boot, the table is the list, and no founder is lost on the way", async () => {
+  describe("instances booting at once", () => {
+    const bothFounders = (): HqConfig["founders"] => [
+      { who: { userId: ann.userId }, slackUserId: "UANN" },
+      { who: { userId: bob.userId }, slackUserId: "UBOB" },
+    ]
+    const rendered = (rows: { userId: string; slackUserId: string }[]) =>
+      rows.map((f) => `${f.userId}=${f.slackUserId}`).sort(byText)
+
+    it("deployed: three cold starts after one predeploy all serve, and none writes", async () => {
       await hq.db.delete(founders)
-      const list: HqConfig["founders"] = [
-        { who: { userId: ann.userId }, slackUserId: "UANN" },
-        { who: { userId: bob.userId }, slackUserId: "UBOB" },
-      ]
+      await publishFounders(config({ founders: bothFounders() }), hq.db, at)
+      const before = await hq.db.select().from(founders)
       const lazies = [0, 1, 2].map(() =>
-        createLazyHq(async () => (await boot({ founders: list })).app),
+        createLazyHq(async () => (await boot({ founders: bothFounders() })).app),
       )
       const replies = await Promise.all(
         lazies.flatMap((lazy) => [
@@ -128,13 +182,22 @@ describe("bootHq (real hq database on PGlite)", () => {
         ]),
       )
       expect(replies.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 200])
-      const rows = await hq.db.select().from(founders)
-      expect(rows.map((f) => `${f.userId}=${f.slackUserId}`).sort(byText)).toEqual(
+      expect(await hq.db.select().from(founders)).toEqual(before)
+    })
+
+    it("local: two boots at once both succeed and the table is the list", async () => {
+      await hq.db.delete(founders)
+      const booted = await Promise.all([
+        boot({ nodeEnv: "test", founders: bothFounders() }),
+        boot({ nodeEnv: "test", founders: bothFounders() }),
+      ])
+      expect(booted).toHaveLength(2)
+      expect(rendered(await hq.db.select().from(founders))).toEqual(
         [`${ann.userId}=UANN`, `${bob.userId}=UBOB`].sort(byText),
       )
     })
 
-    it("two different lists at once leave exactly one of them, never a mix", async () => {
+    it("local: two different lists at once leave exactly one of them, never a mix", async () => {
       await hq.db.delete(founders)
       const one: HqConfig["founders"] = [
         { who: { userId: ann.userId }, slackUserId: "UONE" },
@@ -144,12 +207,10 @@ describe("bootHq (real hq database on PGlite)", () => {
         { who: { userId: ann.userId }, slackUserId: "UTWO" },
         { who: { userId: bob.userId }, slackUserId: "UONE" },
       ]
-      await Promise.all([boot({ founders: one }), boot({ founders: two }), boot({ founders: one })])
-      const rows = (await hq.db.select().from(founders))
-        .map((f) => `${f.userId}=${f.slackUserId}`)
-        .sort(byText)
-      const fmt = (list: HqConfig["founders"]) =>
-        list.map((f) => `${"userId" in f.who ? f.who.userId : ""}=${f.slackUserId}`).sort(byText)
+      await Promise.all([one, two, one].map((founders) => boot({ nodeEnv: "test", founders })))
+      const rows = rendered(await hq.db.select().from(founders))
+      const fmt = (l: HqConfig["founders"]) =>
+        l.map((f) => `${"userId" in f.who ? f.who.userId : ""}=${f.slackUserId}`).sort(byText)
       expect([fmt(one), fmt(two)]).toContainEqual(rows)
     })
   })

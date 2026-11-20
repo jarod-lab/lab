@@ -21,7 +21,8 @@ export function hqEnv(portArg?: string) {
     databaseUrl,
     port,
     baseURL: (env.HQ_BASE_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, ""),
-    // Written to the founders table at boot (and the table set to match): see data/founders.ts.
+    // Written to the founders table (and the table set to match) by a local hq at boot and by a
+    // deployed hq's predeploy; a deployed boot only checks it: see data/founders.ts.
     founders: parseFounders(env.HQ_FOUNDERS),
     slack: {
       signingSecret: env.SLACK_SIGNING_SECRET,

@@ -61,7 +61,8 @@ try {
   process.stdout.write(
     `Created the founder account ${created.userId}.\n` +
       `Password written to ${passwordOut} (mode 0600). Hand it over through the vault, then delete it.\n` +
-      `Add this to HQ_FOUNDERS and restart hq:\n  ${created.entry}\n`,
+      `Add this to HQ_FOUNDERS, then run pnpm hq:predeploy and redeploy (a local hq: restart):\n` +
+      `  ${created.entry}\n`,
   )
   process.exit(0)
 } catch (error) {

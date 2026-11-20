@@ -65,6 +65,13 @@ describe("the Vercel function bundle", () => {
     expect(existsSync(bundlePath)).toBe(true)
   })
 
+  it("declares a Node runtime at least the root engines", () => {
+    const engines = readJson(join(hqDir, "..", "..", "package.json")).engines as { node: string }
+    const wanted = Number(/\d+/.exec(engines.node)?.[0])
+    const runtime = readJson(join(functionDir, ".vc-config.json")).runtime as string
+    expect(Number(/^nodejs(\d+)\.x$/.exec(runtime)?.[1])).toBeGreaterThanOrEqual(wanted)
+  })
+
   it("is one self-contained file: no relative specifier, no import of a package", async () => {
     // Comments dropped: dependencies' JSDoc is full of `import('./x.js')` type references.
     const { code } = await transform(bundle, { minifyWhitespace: true, format: "esm" })
@@ -201,9 +208,11 @@ describe("vercel.json", () => {
     expect(existsSync(script)).toBe(true)
   })
 
-  it("installs only hq and what it needs, without running scripts", () => {
-    expect(config.installCommand).toContain(
-      "--frozen-lockfile --ignore-scripts --filter @lab/hq...",
+  it("installs hq's dependencies with devDependencies, whatever NODE_ENV says, without scripts", () => {
+    // The build needs esbuild and @lab/config (the tsconfig it extends), both devDependencies, and
+    // the production environment sets NODE_ENV=production, which some pnpm versions read as --prod.
+    expect(config.installCommand).toBe(
+      "cd ../.. && pnpm install --frozen-lockfile --ignore-scripts --prod=false --filter @lab/hq...",
     )
   })
 

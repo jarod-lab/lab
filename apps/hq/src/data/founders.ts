@@ -10,9 +10,15 @@ import { founders } from "../db/schema"
  * sign-up is closed by default and open sign-up would make a stranger a person with a session, so
  * being signed in makes no one a founder.
  *
- * How a row is created: `syncFounders` at boot, from HQ_FOUNDERS. There is no operation, route or
- * page that writes the table, so no key and no unauthenticated caller can add a founder. To add or
- * remove a founder, change HQ_FOUNDERS and restart hq: the table is set to match the list.
+ * How a row is created: `syncFounders`, from HQ_FOUNDERS. A local hq runs it at boot; a deployed
+ * hq's `pnpm hq:predeploy` runs it at deploy time and the deployed boot only checks the table
+ * against its list (`verifyFounders`). There is no operation, route or page that writes the
+ * table, so no key and no unauthenticated caller can add a founder. The one other writer is
+ * `create-founder` (a command run on the server, `addFounder`): run against a deployed hq it adds
+ * a row HQ_FOUNDERS does not list yet, so new instances refuse (a deployed boot sees a row its
+ * list lacks) until the entry is added to HQ_FOUNDERS, predeploy runs and hq is redeployed. To add or remove a founder,
+ * change HQ_FOUNDERS and restart a local hq, or redeploy (predeploy first) a deployed one: the
+ * table is set to match the list.
  */
 
 /** A Slack user id: `U` or `W` and capitals or digits. */
@@ -89,12 +95,72 @@ export interface FounderSyncOptions {
   pinnedOnly?: boolean
 }
 
+/** A database or the transaction on it: what a read of the founders needs. */
+type Reader = Pick<Database, "select">
+
 /**
- * Set the table to match the list. A listed person counts only as an existing, unbanned account
- * whose address is verified (anyone can sign up with an address they don't own), and, with
- * `pinnedOnly`, only one named by id. Rows for anyone else are deleted, so removing a founder from
- * HQ_FOUNDERS removes them at the next boot, and an empty list leaves no founders: it fails
- * closed. In one transaction.
+ * Who the list resolves to right now, and what is in the table: the one reading `syncFounders`
+ * writes from and `verifyFounders` compares against, so the two cannot disagree about the list.
+ * A listed person counts only as an existing, unbanned account whose address is verified (anyone
+ * can sign up with an address they don't own), and, with `pinnedOnly`, only one named by id.
+ */
+async function resolveSeeds(
+  db: Reader,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions,
+) {
+  const wanted = new Map<string, string>()
+  const skipped: SkippedFounder[] = []
+  for (const [index, seed] of seeds.entries()) {
+    const pinned = "userId" in seed.who
+    const entry = { entry: index + 1, kind: pinned ? ("id" as const) : ("email" as const) }
+    if (!pinned && options.pinnedOnly) {
+      skipped.push({
+        ...entry,
+        why: "a deployed hq takes founders by id only: run create-founder, then list id:<user id>",
+      })
+      continue
+    }
+    const [row] = await db
+      .select({ id: user.id, verified: user.emailVerified, banned: user.banned })
+      .from(user)
+      .where("userId" in seed.who ? eq(user.id, seed.who.userId) : eq(user.email, seed.who.email))
+    if (!row) skipped.push({ ...entry, why: "no such account yet" })
+    else if (row.banned) skipped.push({ ...entry, why: "account is banned" })
+    else if (!row.verified) skipped.push({ ...entry, why: "the address is not verified" })
+    else wanted.set(row.id, seed.slackUserId)
+  }
+  return { wanted, skipped }
+}
+
+/** `resolveSeeds` and the table, for the two that compare them: sync and verify. */
+async function readPlan(db: Reader, seeds: readonly FounderSeed[], options: FounderSyncOptions) {
+  const { wanted, skipped } = await resolveSeeds(db, seeds, options)
+  return { wanted, skipped, existing: await db.select().from(founders) }
+}
+
+/**
+ * Who the list resolves to right now, without reading or writing the table: the founders a sync of
+ * this list would leave (user id -> Slack user) and the entries it would skip. Predeploy builds the
+ * agent's founder list from this before it writes anything, so a refused deploy changes nothing.
+ */
+export async function planFounders(
+  db: Database,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions = {},
+): Promise<{ wanted: ReadonlyMap<string, string>; skipped: SkippedFounder[] }> {
+  return resolveSeeds(db, seeds, options)
+}
+
+/**
+ * Set the table to match the list. Rows for anyone not resolved are deleted, so removing a founder
+ * from HQ_FOUNDERS removes them at the next sync, and an empty list leaves no founders: it fails
+ * closed. In one transaction, and one at a time across processes.
+ *
+ * Who calls it: a local or e2e hq at every boot (`prepareBoot`), and a deployed hq's
+ * `pnpm hq:predeploy` at deploy time (`publishFounders`). A deployed hq's own boot never writes
+ * (`verifyFounders`): an older deployment that is still reachable must not put back a founder the
+ * newest deployment removed.
  */
 export function syncFounders(
   db: Database,
@@ -103,28 +169,19 @@ export function syncFounders(
   options: FounderSyncOptions = {},
 ): Promise<FounderSync> {
   return db.transaction(async (tx) => {
-    const wanted = new Map<string, string>()
-    const skipped: SkippedFounder[] = []
-    for (const [index, seed] of seeds.entries()) {
-      const pinned = "userId" in seed.who
-      const entry = { entry: index + 1, kind: pinned ? ("id" as const) : ("email" as const) }
-      if (!pinned && options.pinnedOnly) {
-        skipped.push({
-          ...entry,
-          why: "a deployed hq takes founders by id only: run create-founder, then list id:<user id>",
-        })
-        continue
-      }
-      const [row] = await tx
-        .select({ id: user.id, verified: user.emailVerified, banned: user.banned })
-        .from(user)
-        .where("userId" in seed.who ? eq(user.id, seed.who.userId) : eq(user.email, seed.who.email))
-      if (!row) skipped.push({ ...entry, why: "no such account yet" })
-      else if (row.banned) skipped.push({ ...entry, why: "account is banned" })
-      else if (!row.verified) skipped.push({ ...entry, why: "the address is not verified" })
-      else wanted.set(row.id, seed.slackUserId)
-    }
-    const existing = await tx.select().from(founders)
+    // Several processes can sync at once (two deploys, or local instances). One transaction is not
+    // enough: at READ COMMITTED two of them both read the table, both compute their changes from
+    // that same stale read and both insert, so the second hits the primary key or the
+    // slack_user_id unique constraint; and two different lists could leave a table that matches
+    // neither. A transaction-scoped advisory lock makes the syncs run one after another: the next
+    // one takes the lock only after the previous commits and then reads the committed table, so it
+    // computes against the truth (usually no change). The deletes and inserts below are in this
+    // transaction, so no reader sees a founder missing in between. `_xact_` releases at commit or
+    // rollback, so a crashed process cannot leave it held, and it holds through a pooled
+    // (transaction-mode) connection because the whole sync is one transaction. It relies on READ
+    // COMMITTED (Postgres's default): at REPEATABLE READ the snapshot is taken before the wait.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('hq.founders.sync', 0))`)
+    const { wanted, skipped, existing } = await readPlan(tx, seeds, options)
     const removed = existing.filter((f) => !wanted.has(f.userId)).map((f) => f.userId)
     if (removed.length > 0) await tx.delete(founders).where(inArray(founders.userId, removed))
     const changed = [...wanted].filter(
@@ -155,6 +212,44 @@ export function syncFounders(
       .filter((userId) => !existing.some((f) => f.userId === userId))
     return { added, removed, skipped }
   })
+}
+
+/** What `verifyFounders` found. Counts and kinds only: this goes in logs. */
+export interface FounderVerification {
+  /** The table is exactly what `syncFounders` would leave for this list. */
+  current: boolean
+  /** Founders this list has that the table lacks, or has with another Slack user. */
+  missing: number
+  /** Founders in the table that this list does not have. */
+  extra: number
+  skipped: SkippedFounder[]
+}
+
+/**
+ * Read-only: does the table equal what `syncFounders` would write for this list right now? A
+ * deployed hq boots on this and serves only when it does. It never writes, so a deployment that
+ * is not the newest cannot change who the founders are: only the newest deploy's
+ * `publishFounders` does, and an older deployment then finds the table differs from its own list
+ * and refuses to serve. One snapshot, so a sync committing between its reads cannot make it
+ * compare half of each.
+ */
+export function verifyFounders(
+  db: Database,
+  seeds: readonly FounderSeed[],
+  options: FounderSyncOptions = {},
+): Promise<FounderVerification> {
+  return db.transaction(
+    async (tx) => {
+      const { wanted, skipped, existing } = await readPlan(tx, seeds, options)
+      const missing = [...wanted].filter(
+        ([userId, slackUserId]) =>
+          existing.find((f) => f.userId === userId)?.slackUserId !== slackUserId,
+      ).length
+      const extra = existing.filter((f) => !wanted.has(f.userId)).length
+      return { current: missing === 0 && extra === 0, missing, extra, skipped }
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  )
 }
 
 /** Insert one founder row. What `syncFounders` does per person; tests use it to stand one up. */

@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "hono",
+  "framework": null,
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile --ignore-scripts --filter @lab/hq...",
-  "buildCommand": "echo 'hq has no build step: Vercel bundles index.ts into the function'"
+  "buildCommand": "node scripts/build-vercel.mjs"
 }

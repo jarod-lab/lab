@@ -39,6 +39,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "0.28.2",
     "jsdom": "catalog:",
     "oxlint": "catalog:",
     "tsx": "^4.23.15",

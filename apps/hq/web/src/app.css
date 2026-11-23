@@ -1,1 +1,5 @@
 @import "@lab/ui/styles.css";
+@import "./styles/tokens.css";
+@source "../../../../packages/ui/src/components/ui";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";

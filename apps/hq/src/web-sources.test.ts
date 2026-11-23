@@ -47,6 +47,16 @@ describe("web sources", () => {
     }
   })
 
+  it("no colour literal outside tokens.css", () => {
+    for (const { file, text } of shipped()) {
+      if (/\.test\.tsx?$/.test(file)) continue // tests are not shipped and pin the hex values
+      if (file === join("styles", "tokens.css")) continue
+      expect(text, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+      expect(text, file).not.toMatch(/\brgba?\(/)
+      expect(text, file).not.toMatch(/\bhsla?\(/)
+    }
+  })
+
   it("set no inline style and no raw HTML", () => {
     for (const { file, text } of shipped()) {
       expect(text, file).not.toMatch(/style=\{\{/)

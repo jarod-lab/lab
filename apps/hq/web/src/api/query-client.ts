@@ -21,8 +21,10 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
 export function createQueryClient(): QueryClient {
   const queryClient: QueryClient = new QueryClient({
     queryCache: new QueryCache({
-      onError: (error) => {
-        if (error instanceof HqError && error.kind === "unauthorized") {
+      onError: (error, query) => {
+        // Not for the status probe itself: its 401 would invalidate (refetch) itself, forever.
+        const isStatusProbe = query.queryKey[0] === hqKeys.status()[0]
+        if (error instanceof HqError && error.kind === "unauthorized" && !isStatusProbe) {
           void queryClient.invalidateQueries({ queryKey: hqKeys.status() })
         }
       },

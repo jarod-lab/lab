@@ -37,8 +37,8 @@ export interface FakeHq {
 }
 
 /** The password the fake accepts (the contract test signs real accounts up with the same one). */
-// Joined, not a literal: the baseline scan flags a password-named string (this one is a test value).
-export const FAKE_PASSWORD = ["correct", "horse", "battery"].join("-")
+// baseline:allow-next-line no-hardcoded-secrets
+export const FAKE_PASSWORD = "correct-horse-battery" // gitleaks:allow (a test value)
 const TRUSTED_ORIGIN = "http://localhost:3100"
 const SIGN_IN_LIMIT = 5
 const DECIDED_AT = "2026-11-17T12:00:00.000Z"
@@ -110,7 +110,11 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
   }
   const sent: Sent[] = []
 
-  /** An Origin a browser sends from another site. Absent is fine: the client never sets it. */
+  /**
+   * An Origin from another site. An absent one passes on purpose: the fake stands in for the
+   * browser plus hq, and a browser adds the Origin of a same-origin POST itself (the client never
+   * sets it). Real hq refuses a session write with no Origin at all.
+   */
   const foreignOrigin = (headers: Headers) => {
     const origin = headers.get("origin")
     return origin !== null && origin !== TRUSTED_ORIGIN
@@ -129,7 +133,10 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     }
     if (foreignOrigin(headers))
       return json(403, { code: "INVALID_ORIGIN", message: "Invalid origin" })
-    const contentType = headers.get("content-type")
+    // A string body sent with no content-type gets text/plain from the Request itself (as in a
+    // browser), so a sign-out that forgets the header is 415, like hq's.
+    const contentType =
+      headers.get("content-type") ?? (rawBody === "" ? null : "text/plain;charset=UTF-8")
     if (contentType !== null && !contentType.includes("application/json")) {
       const allowed =
         path === "/api/auth/sign-out"
@@ -181,6 +188,12 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
   }
 
   function decide(proposalId: string, body: Record<string, unknown>): Response {
+    // Input is parsed before the handler looks anything up (decide_proposal's zod input).
+    const note = body.note
+    const noteOk = note === undefined || (typeof note === "string" && note.trim().length <= 2000)
+    if ((body.decision !== "approve" && body.decision !== "reject") || !noteOk) {
+      return appError(400, "BAD_REQUEST", "Invalid input")
+    }
     const proposal = state.proposals.find((p) => p.id === proposalId)
     if (!proposal) return appError(404, "NOT_FOUND", "Proposal not found")
     if (proposal.status !== "pending") {
@@ -225,6 +238,15 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     if (state.caller === "signed-out") {
       return appError(401, "UNAUTHORIZED", "Send an API key or OAuth access token")
     }
+    // hq rejects a non-founder in authenticate, before the origin check and the body.
+    if (state.caller === "non-founder") {
+      return appError(
+        403,
+        "FORBIDDEN",
+        "This brain is for the organization's founders",
+        "Your account is not on this org's founder list.",
+      )
+    }
     if (method !== "GET" && foreignOrigin(headers)) {
       return appError(
         403,
@@ -238,14 +260,6 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       body = bodyText.trim() === "" ? {} : parseJson(bodyText)
       if (body === undefined) return appError(400, "BAD_REQUEST", "Body must be JSON")
       if (!isRecord(body)) return appError(400, "BAD_REQUEST", "Body must be a JSON object")
-    }
-    if (state.caller === "non-founder") {
-      return appError(
-        403,
-        "FORBIDDEN",
-        "This brain is for the organization's founders",
-        "Your account is not on this org's founder list.",
-      )
     }
     if (read) return read()
     return decide(decodeURIComponent(decision?.[1] ?? ""), body as Record<string, unknown>)

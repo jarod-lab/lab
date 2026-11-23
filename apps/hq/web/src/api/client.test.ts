@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient } from "@tanstack/react-query"
+import { QueryClient, QueryObserver } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
 import { createHqClient } from "./client"
@@ -239,6 +239,40 @@ describe("createQueryClient", () => {
       .catch(() => null)
     expect(spy).toHaveBeenCalledWith({ queryKey: hqKeys.status() })
     spy.mockRestore()
+  })
+})
+
+describe("an unauthorized status probe", () => {
+  it("does not invalidate itself: a signed-out visitor sends one GET /v1/status, not a loop", async () => {
+    const client = createQueryClient()
+    let calls = 0
+    const observer = new QueryObserver(client, {
+      queryKey: hqKeys.status(),
+      queryFn: () => {
+        calls += 1
+        throw new HqError({ kind: "unauthorized", status: 401, message: "no" })
+      },
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    await vi.waitFor(() => expect(observer.getCurrentResult().isError).toBe(true))
+    // A loop would refetch from inside onError; give it the time it would need.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    unsubscribe()
+    expect(calls).toBe(1)
+  })
+
+  it("another query's 401 still invalidates the status probe", async () => {
+    const client = createQueryClient()
+    const spy = vi.spyOn(client, "invalidateQueries")
+    await client
+      .fetchQuery({
+        queryKey: hqKeys.proposals("pending"),
+        queryFn: () => {
+          throw new HqError({ kind: "unauthorized", status: 401, message: "no" })
+        },
+      })
+      .catch(() => null)
+    expect(spy).toHaveBeenCalledWith({ queryKey: hqKeys.status() })
   })
 })
 

@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { z } from "zod"
 
 import { createHqClient, type HqClient } from "../web/src/api/client"
-import type { HqErrorKind } from "../web/src/api/errors"
+import { errorFromReply, type HqErrorKind } from "../web/src/api/errors"
 import {
   authErrorSchema,
   decisionSchema,
@@ -49,6 +49,10 @@ interface Step {
   /** The status and error code both targets must answer. */
   status: number
   code: string | null
+  /** The kind the client makes of the reply; real and fake must agree on it either way. */
+  kind?: HqErrorKind
+  /** Send no content-type header at all. */
+  noContentType?: boolean
 }
 
 interface Scenario {
@@ -159,6 +163,83 @@ const scenarios: Scenario[] = [
     ],
   },
   {
+    name: "a non-founder write with a foreign Origin is the founder 403, not the origin one",
+    as: "non-founder",
+    steps: [
+      decide("approve", {
+        headers: { origin: "https://evil.example" },
+        status: 403,
+        code: "FORBIDDEN",
+        kind: "forbidden",
+        schema: undefined,
+      }),
+    ],
+  },
+  {
+    name: "a non-founder write with a body that is not JSON is 403 before the body is read",
+    as: "non-founder",
+    steps: [
+      decide("approve", {
+        body: "not json",
+        status: 403,
+        code: "FORBIDDEN",
+        kind: "forbidden",
+        schema: undefined,
+      }),
+    ],
+  },
+  {
+    name: "a founder write with a foreign Origin is untrusted-origin",
+    as: "founder",
+    steps: [
+      decide("approve", {
+        headers: { origin: "https://evil.example" },
+        status: 403,
+        code: "FORBIDDEN",
+        kind: "untrusted-origin",
+        schema: undefined,
+      }),
+    ],
+  },
+  {
+    name: "decide_proposal with no decision is 400",
+    as: "founder",
+    steps: [decide("approve", { body: {}, status: 400, code: "BAD_REQUEST", schema: undefined })],
+  },
+  {
+    name: "decide_proposal with an unknown decision is 400, before the proposal is looked up",
+    as: "founder",
+    steps: [
+      decide("approve", {
+        body: { decision: "maybe" },
+        status: 400,
+        code: "BAD_REQUEST",
+        schema: undefined,
+      }),
+      decide("approve", {
+        path: () => "/v1/proposals/does-not-exist/decision",
+        body: { decision: "approved" },
+        status: 400,
+        code: "BAD_REQUEST",
+        schema: undefined,
+      }),
+      decide("approve", {
+        body: { decision: "approve", note: "x".repeat(2001) },
+        status: 400,
+        code: "BAD_REQUEST",
+        schema: undefined,
+      }),
+      decide("approve", {
+        body: { decision: "approve", note: 5 },
+        status: 400,
+        code: "BAD_REQUEST",
+        schema: undefined,
+      }),
+      // none of the above decided it
+      decide("reject"),
+    ],
+  },
+  {
     name: "an unknown path",
     as: "founder",
     steps: [{ method: "GET", path: () => "/v1/nope", status: 404, code: "NOT_FOUND" }],
@@ -198,6 +279,20 @@ const scenarios: Scenario[] = [
         path: () => "/api/auth/sign-out",
         body: "x",
         headers: { "content-type": "text/plain" },
+        status: 415,
+        code: "UNSUPPORTED_MEDIA_TYPE",
+      },
+    ],
+  },
+  {
+    name: "sign-out with no content-type",
+    as: "founder",
+    steps: [
+      {
+        method: "POST",
+        path: () => "/api/auth/sign-out",
+        body: "{}",
+        noContentType: true,
         status: 415,
         code: "UNSUPPORTED_MEDIA_TYPE",
       },
@@ -269,12 +364,15 @@ const scenarios: Scenario[] = [
 async function observe(res: Response) {
   const text = await res.text()
   let body: unknown = null
+  // `undefined`, not null, is what errorFromReply reads as "not JSON".
+  let json: unknown
   try {
     body = JSON.parse(text)
+    json = body
   } catch {
     body = null
   }
-  return { status: res.status, body, text }
+  return { status: res.status, body, json, text, headers: res.headers }
 }
 
 function errorCodeOf(body: unknown): string | null {
@@ -298,22 +396,26 @@ const keySet = (value: unknown) => [...new Set(keyPaths(value))].sort()
 interface Run {
   statuses: number[]
   codes: (string | null)[]
+  kinds: (HqErrorKind | null)[]
   keys: string[][]
   parsed: boolean[]
 }
 
 async function runSteps(steps: Step[], send: typeof fetch, proposalId: string): Promise<Run> {
-  const run: Run = { statuses: [], codes: [], keys: [], parsed: [] }
+  const run: Run = { statuses: [], codes: [], kinds: [], keys: [], parsed: [] }
   for (const step of steps) {
     const init: RequestInit = { method: step.method, headers: { ...step.headers } }
     if (step.method === "POST" && step.body !== null) {
       const headers = init.headers as Record<string, string>
-      headers["content-type"] ??= "application/json"
+      if (!step.noContentType) headers["content-type"] ??= "application/json"
       init.body = typeof step.body === "string" ? step.body : JSON.stringify(step.body ?? {})
     }
     const seen = await observe(await send(`${BASE}${step.path({ proposalId })}`, init))
     run.statuses.push(seen.status)
     run.codes.push(errorCodeOf(seen.body))
+    run.kinds.push(
+      seen.status >= 400 ? errorFromReply(seen.status, seen.headers, seen.json).kind : null,
+    )
     run.keys.push(keySet(seen.body))
     run.parsed.push(
       seen.status === 200 && step.schema ? step.schema.safeParse(seen.body).success : true,
@@ -384,6 +486,11 @@ describe("the fake of hq is as strict as hq", () => {
     expect(real.parsed.every(Boolean)).toBe(true)
     expect(faked.parsed.every(Boolean)).toBe(true)
     expect(faked.keys).toEqual(real.keys)
+    // The client tells a trusted-origin 403 from a founder 403 by message alone: compare kinds.
+    expect(faked.kinds).toEqual(real.kinds)
+    steps.forEach((step, i) => {
+      if (step.kind) expect(real.kinds[i]).toBe(step.kind)
+    })
   })
 
   it("a refused boot is 503 with a string error on every path, in the real lazy hq and the fake", async () => {

@@ -23,6 +23,7 @@ function block(selector: string): Record<string, string> {
 
 const dark = block(".dark")
 const theme = block("@theme inline")
+const plainTheme = block("@theme")
 
 describe("hq design tokens (.dark)", () => {
   it("pins the colour rows of I5", () => {
@@ -69,12 +70,14 @@ describe("hq design tokens (.dark)", () => {
   })
 
   it("pins radii, touch size and font stacks", () => {
-    expect(dark["--radius-shell"]).toBe("14px")
-    expect(dark["--radius-card"]).toBe("12px")
-    expect(dark["--radius-control"]).toBe("10px")
-    expect(dark["--spacing-touch"]).toBe("44px")
-    expect(dark["--font-sans"]).toBe('"Inter Variable", system-ui, sans-serif')
-    expect(dark["--font-mono"]).toBe('"JetBrains Mono Variable", ui-monospace, Menlo, monospace')
+    expect(plainTheme["--radius-shell"]).toBe("14px")
+    expect(plainTheme["--radius-card"]).toBe("12px")
+    expect(plainTheme["--radius-control"]).toBe("10px")
+    expect(plainTheme["--spacing-touch"]).toBe("44px")
+    expect(plainTheme["--font-sans"]).toBe('"Inter Variable", system-ui, sans-serif')
+    expect(plainTheme["--font-mono"]).toBe(
+      '"JetBrains Mono Variable", ui-monospace, Menlo, monospace',
+    )
   })
 
   it("sets color-scheme dark on html.dark", () => {
@@ -101,7 +104,7 @@ describe("index.html", () => {
   it("is dark and static", () => {
     expect(html).toMatch(/<html lang="en" class="dark">/)
     expect(html).toMatch(/<title>HQ<\/title>/)
-    expect(html).toMatch(/<script type="module" src="[^"]+"><\/script>/)
+    expect(html.match(/<script type="module" src="[^"]+"><\/script>/g)).toHaveLength(1)
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/)
   })
 })

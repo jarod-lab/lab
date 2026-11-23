@@ -14,7 +14,7 @@ function sources(dir: string): string[] {
     if (entry.isDirectory()) {
       return entry.name === "node_modules" || entry.name === "dist" ? [] : sources(path)
     }
-    return /\.tsx?$/.test(entry.name) ? [path] : []
+    return /\.(tsx?|css|html)$/.test(entry.name) ? [path] : []
   })
 }
 
@@ -50,10 +50,11 @@ describe("web sources", () => {
   it("no colour literal outside tokens.css", () => {
     for (const { file, text } of shipped()) {
       if (/\.test\.tsx?$/.test(file)) continue // tests are not shipped and pin the hex values
-      if (file === join("styles", "tokens.css")) continue
+      if (file === join("src", "styles", "tokens.css")) continue
       expect(text, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
       expect(text, file).not.toMatch(/\brgba?\(/)
       expect(text, file).not.toMatch(/\bhsla?\(/)
+      expect(text, file).not.toMatch(/\b(?:oklch|oklab|lab|lch|hwb|color|color-mix)\(/)
     }
   })
 

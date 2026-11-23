@@ -40,7 +40,11 @@
   --sidebar-accent-foreground: #e8eaed;
   --sidebar-border: #232a33;
   --sidebar-ring: #7ab2ff;
+}
 
+/* Plain @theme (not inline): Tailwind builds utilities from these names and they replace lab-ui's
+   font stacks, so body and font-mono use the bundled fonts. */
+@theme {
   --radius-shell: 14px;
   --radius-card: 12px;
   --radius-control: 10px;

@@ -12,6 +12,11 @@ export default defineConfig({
   base: "/app/",
   plugins: [tailwindcss(), react()],
   envDir: false,
-  build: { target: "es2022", sourcemap: false },
+  // Fonts are never inlined: font-src 'self' (build-vercel.mjs CSP) refuses a data: URL.
+  build: {
+    target: "es2022",
+    sourcemap: false,
+    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),
+  },
   resolve: { dedupe: ["react", "react-dom"] },
 })

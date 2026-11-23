@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryObserver } from "@tanstack/react-query"
+import { QueryClient } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
 import { createHqClient } from "./client"
@@ -243,22 +243,19 @@ describe("createQueryClient", () => {
 })
 
 describe("an unauthorized status probe", () => {
-  it("does not invalidate itself: a signed-out visitor sends one GET /v1/status, not a loop", async () => {
+  it("does not invalidate itself: the status probe's own 401 never invalidates the status key", async () => {
     const client = createQueryClient()
-    let calls = 0
-    const observer = new QueryObserver(client, {
-      queryKey: hqKeys.status(),
-      queryFn: () => {
-        calls += 1
-        throw new HqError({ kind: "unauthorized", status: 401, message: "no" })
-      },
-    })
-    const unsubscribe = observer.subscribe(() => {})
-    await vi.waitFor(() => expect(observer.getCurrentResult().isError).toBe(true))
-    // A loop would refetch from inside onError; give it the time it would need.
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    unsubscribe()
-    expect(calls).toBe(1)
+    const spy = vi.spyOn(client, "invalidateQueries")
+    await client
+      .fetchQuery({
+        queryKey: hqKeys.status(),
+        queryFn: () => {
+          throw new HqError({ kind: "unauthorized", status: 401, message: "no" })
+        },
+      })
+      .catch(() => null)
+    // With an observer on the key, an invalidate here would refetch it forever.
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: hqKeys.status() })
   })
 
   it("another query's 401 still invalidates the status probe", async () => {

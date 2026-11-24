@@ -2,6 +2,13 @@
 // The zod schemas of operations/work-schemas.ts must `satisfy` them.
 import type { AttemptResult, SignalSource, VerifierKind } from "./machine"
 
+// Vocabularies shared with the database schema (db/schema.ts imports them, never the reverse).
+export const PULL_REQUEST_STATES = ["open", "merged", "closed"] as const
+export type PullRequestState = (typeof PULL_REQUEST_STATES)[number]
+
+export const REVIEWER_VERDICTS = ["approve", "request_changes", "reject"] as const
+export type ReviewerVerdict = (typeof REVIEWER_VERDICTS)[number]
+
 export interface RecordSignalInput {
   source: SignalSource
   externalId: string // <= 200
@@ -28,7 +35,7 @@ export interface RecordPullRequestInput {
   base?: string
   headSha?: string
   isDraft?: boolean
-  state?: "open" | "merged" | "closed"
+  state?: PullRequestState
   additions?: number
   deletions?: number
   files?: number
@@ -63,5 +70,5 @@ export interface FinishAttemptInput {
   files?: string[]
   branch?: string
   sessionId?: string
-  reviewer?: { verdict: "approve" | "request_changes" | "reject"; summary: string }
+  reviewer?: { verdict: ReviewerVerdict; summary: string }
 }

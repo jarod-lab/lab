@@ -1,9 +1,11 @@
 import { createRoute, Outlet, useRouterState } from "@tanstack/react-router"
 
+import { AppGate } from "../components/app-gate"
 import { AppFrame } from "../components/app-frame"
 import { RunnerCard } from "../components/runner-card"
 import { Sidebar } from "../components/sidebar"
 import { EmptyState } from "../components/states"
+import { Account } from "../containers/account"
 import { NAV_ITEMS } from "../lib/nav"
 import { rootRoute } from "./root"
 
@@ -19,10 +21,9 @@ function AppLayout() {
           items={NAV_ITEMS}
           activeKey={active?.key ?? null}
           badges={{}}
-          // The live status container replaces this placeholder (Task 7); the account menu arrives
-          // with the gate (Task 5).
+          // The live status container replaces this placeholder (Task 7).
           runner={<RunnerCard status={undefined} state="loading" />}
-          account={null}
+          account={<Account />}
         />
       }
     >
@@ -31,11 +32,15 @@ function AppLayout() {
   )
 }
 
-/** The pathless layout every screen sits in. Task 5 wraps it in the gate. */
+/** The pathless layout every screen sits in, behind the gate. */
 export const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
-  component: AppLayout,
+  component: () => (
+    <AppGate>
+      <AppLayout />
+    </AppGate>
+  ),
 })
 
 /** Anything under /app that is no screen: a not-found state inside the frame. */

@@ -41,7 +41,7 @@ describe("the app router", () => {
 
   it("the sign-in route sits outside the frame and keeps ?next", async () => {
     const app = await renderApp({ path: "/app/sign-in?next=%2Fapprovals" })
-    expect(await app.findByText("Coming next")).toBeTruthy()
+    expect(await app.findByLabelText("Email")).toBeTruthy()
     expect(app.queryByRole("navigation", { name: "Primary" })).toBeNull()
     expect(app.router.state.location.search).toEqual({ next: "/approvals" })
   })

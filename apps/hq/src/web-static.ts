@@ -21,7 +21,7 @@ const IMMUTABLE = "public, max-age=31536000, immutable"
 const NO_STORE = "no-store"
 const ASSET_PREFIX = "/app/assets/"
 // The same pattern as the config's shell route.
-const SHELL = /^\/app(?:\/(?!assets\/).*)?$/
+export const SHELL_PATTERN = /^\/app(?:\/(?!assets\/).*)?$/
 const ASSET_NAME = /^[\w.-]+$/
 
 const TYPES: Record<string, string> = {
@@ -80,7 +80,7 @@ export function createWebApp(options: { dir: string }): Hono | null {
         "cache-control": IMMUTABLE,
       })
     }
-    if (SHELL.test(path)) {
+    if (SHELL_PATTERN.test(path)) {
       return c.body(index, 200, {
         "content-type": TYPES[".html"] as string,
         "cache-control": NO_STORE,
@@ -90,4 +90,22 @@ export function createWebApp(options: { dir: string }): Hono | null {
   })
   app.all("*", (c) => c.body("Not found", 404, { "cache-control": NO_STORE }))
   return app
+}
+
+type Fetch = (request: Request, env?: object) => Response | Promise<Response>
+
+/**
+ * The listener's one fetch: `/app` and `/app/*` go to the web app, everything else to hq. The
+ * second argument is the Node adapter's bindings (`{ incoming, outgoing }`: hq reads the caller's
+ * address from them); both sides get it, or the one that drops it loses it. Without a web app it is
+ * hq's own fetch.
+ */
+export function routeToWeb(web: { fetch: Fetch } | null, app: { fetch: Fetch }): Fetch {
+  if (!web) return (request, env) => app.fetch(request, env)
+  return (request, env) => {
+    const { pathname } = new URL(request.url)
+    return pathname === "/app" || pathname.startsWith("/app/")
+      ? web.fetch(request, env)
+      : app.fetch(request, env)
+  }
 }

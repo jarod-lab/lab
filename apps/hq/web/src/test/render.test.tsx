@@ -13,7 +13,12 @@ describe("renderApp", () => {
     expect(app.hq).toBe(hq)
     const reply = await hq.fetch("/v1/status")
     expect(await reply.json()).toEqual({ ok: true, version: "0.0.0" })
-    expect(hq.sent.map((s) => s.path)).toEqual(["/v1/status"])
+    // The gate's probe, the sidebar's session lookup and the call above.
+    expect(hq.sent.map((s) => s.path).sort()).toEqual([
+      "/api/auth/get-session",
+      "/v1/status",
+      "/v1/status",
+    ])
   })
 
   it("defaults to /app/digest with a signed-in founder", async () => {

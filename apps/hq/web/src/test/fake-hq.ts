@@ -96,6 +96,11 @@ function parseJson(text: string): unknown {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** The URL string of whatever was passed to fetch. */
+export function urlOf(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+}
+
 export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
   const state: FakeHqState = {
     caller: "founder",
@@ -284,8 +289,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
   }
 
   const fakeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-    const url = new URL(href, TRUSTED_ORIGIN)
+    const url = new URL(urlOf(input), TRUSTED_ORIGIN)
     const method = (init?.method ?? "GET").toUpperCase()
     const headers = new Headers(init?.headers)
     const bodyText = typeof init?.body === "string" ? init.body : ""

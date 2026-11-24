@@ -4,7 +4,14 @@ import { render } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { HqError, type HqErrorKind } from "../api/errors"
-import { describeError, EmptyState, ErrorBlock, LoadingBlock, NotConnected } from "./states"
+import {
+  describeError,
+  EmptyState,
+  ErrorBlock,
+  errorMessage,
+  LoadingBlock,
+  NotConnected,
+} from "./states"
 
 const KINDS: HqErrorKind[] = [
   "unauthorized",
@@ -55,6 +62,60 @@ describe("describeError", () => {
 
   it("conflict says already decided", () => {
     expect(describeError(error("conflict")).title).toMatch(/already decided/i)
+  })
+})
+
+describe("describeError for the sign-in form", () => {
+  it("maps every HqErrorKind to a title, and a body except where the title says it all", () => {
+    for (const kind of KINDS) {
+      const { title, body } = describeError(error(kind, 7), "sign-in")
+      expect(title, kind).not.toBe("")
+      expect(`${title} ${body}`, kind).not.toContain("raw server text")
+      if (kind !== "unauthorized") expect(body, kind).not.toBe("")
+    }
+  })
+
+  it("a 401 is a wrong email or password, not an ended session", () => {
+    expect(describeError(error("unauthorized"), "sign-in")).toEqual({
+      title: "Wrong email or password",
+      body: "",
+    })
+    expect(describeError(error("unauthorized")).title).toBe("Sign in required")
+  })
+
+  it("the kinds that read the same on sign-in as elsewhere are the same", () => {
+    for (const kind of [
+      "rate-limited",
+      "unreachable",
+      "server",
+      "untrusted-origin",
+      "refused",
+    ] as const) {
+      expect(describeError(error(kind, 7), "sign-in"), kind).toEqual(describeError(error(kind, 7)))
+    }
+  })
+
+  it("a 403 on sign-in is a refused sign-in, not 'founders only'", () => {
+    const { title, body } = describeError(error("forbidden"), "sign-in")
+    expect(title).not.toMatch(/founders only/i)
+    expect(`${title} ${body}`).toMatch(/verif/i)
+  })
+
+  it("errorMessage joins title and body into one line of sentences", () => {
+    expect(errorMessage(error("unauthorized"), "sign-in")).toBe("Wrong email or password.")
+    expect(errorMessage(error("rate-limited", 42), "sign-in")).toBe(
+      "Too many attempts. Try again in 42 seconds.",
+    )
+    expect(errorMessage(error("conflict"))).toBe(
+      "Already decided. That was already decided. Reload to see how it ended.",
+    )
+  })
+
+  it("errorMessage words anything that is not an HqError as a server problem", () => {
+    const { title, body } = describeError(error("server"))
+    for (const thrown of [new Error("odd"), "odd", undefined]) {
+      expect(errorMessage(thrown, "sign-in")).toBe(`${title}. ${body}`)
+    }
   })
 })
 

@@ -78,18 +78,27 @@ export function digestFixture(overrides: Partial<Digest> = {}): Digest {
   }
 }
 
+/**
+ * What a fresh hq replies to `get_policy`, value for value (the contract test compares them):
+ * the constants hq enforces, a $50 Slack default, one founder and the three person-only `hq_`
+ * actions of `PERSON_ONLY_ACTIONS`.
+ */
 export function policyFixture(overrides: Partial<Policy> = {}): Policy {
   return {
     spend: {
       dailyCapUsd: 10,
-      maxGrantRequestUsd: 20,
-      maxGrantRequestsPerDay: 3,
-      staleHoldMinutes: 30,
+      maxGrantRequestUsd: 25,
+      maxGrantRequestsPerDay: 10,
+      staleHoldMinutes: 15,
       slackDailyGrantCapUsd: 50,
       grantedTodayUsd: 0,
     },
     approvals: {
-      personOnly: [{ resource: "hq_proposal", actions: ["decide"] }],
+      personOnly: [
+        { resource: "hq_entry", actions: ["update"] },
+        { resource: "hq_proposal", actions: ["decide"] },
+        { resource: "hq_spend", actions: ["grant"] },
+      ],
     },
     founders: 1,
     ...overrides,

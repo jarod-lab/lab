@@ -24,7 +24,7 @@ import {
   type FakeHqState,
   fakeViolations,
 } from "../web/src/test/fake-hq"
-import { factoryStatusFixture, proposalFixture } from "../web/src/test/fixtures"
+import { factoryStatusFixture, policyFixture, proposalFixture } from "../web/src/test/fixtures"
 import { createHqHarness } from "./app.test.helpers"
 import { proposals, runs, spend } from "./db/schema"
 import { createLazyHq } from "./lazy-hq"
@@ -652,6 +652,17 @@ describe("get_policy: the fake answers as real hq does", () => {
     expect(fake.parsed.every(Boolean)).toBe(true)
     expect(fake.keys).toEqual(real.keys)
     expect(fake.kinds).toEqual(real.kinds)
+  })
+
+  it("the fake's policy VALUES equal what real hq replies, not only the keys", async () => {
+    const realReply = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/policy`)
+    const fakeReply = await createFakeHq().fetch(`${BASE}/v1/policy`)
+    expect([realReply.status, fakeReply.status]).toEqual([200, 200])
+    const real = policySchema.parse(await realReply.json())
+    const fake = policySchema.parse(await fakeReply.json())
+    expect(fake).toEqual(real)
+    // The fixture is the single source the screens' tests read: it equals the real reply too.
+    expect(policyFixture()).toEqual(real)
   })
 
   it("the client reads getPolicy the same way, and it is read-only on the wire", async () => {

@@ -80,6 +80,7 @@ export async function seedAttempt(
     result?: AttemptResult | null
     leaseExpiresAt?: Date | null
     files?: string[]
+    branch?: string | null
     now?: Date
   },
 ) {
@@ -97,6 +98,7 @@ export async function seedAttempt(
       result: o.result === undefined ? (status === "finished" ? "failed" : null) : o.result,
       leaseExpiresAt: o.leaseExpiresAt ?? null,
       files: o.files ?? [],
+      branch: o.branch ?? null,
       createdAt: now,
     })
     .returning()
@@ -113,6 +115,8 @@ export async function seedPullRequest(
     openedAt?: Date
     mergedAt?: Date | null
     repo?: string
+    branch?: string
+    attemptId?: string | null
   } = {},
 ) {
   const number = o.number ?? 7
@@ -124,7 +128,8 @@ export async function seedPullRequest(
       itemId,
       number,
       url: `https://github.com/${o.repo ?? "acme/web"}/pull/${number}`,
-      branch: `factory/fix-${number}`,
+      branch: o.branch ?? `factory/fix-${number}`,
+      attemptId: o.attemptId ?? null,
       base: "main",
       headSha: "a".repeat(40),
       isDraft: false,

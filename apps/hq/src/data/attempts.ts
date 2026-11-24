@@ -6,9 +6,9 @@
 // state itself only ever moves through `transitionItem`.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, lte, sql } from "drizzle-orm"
 
-import { attempts, pullRequests, workItems } from "../db/schema"
+import { attempts, workItems } from "../db/schema"
 import { ATTEMPT_LEASE_MINUTES, NOTE_MAX_CHARS } from "../work/constants"
 import {
   ATTEMPT_KINDS,
@@ -19,10 +19,12 @@ import {
   type WorkState,
 } from "../work/machine"
 import { REVIEWER_VERDICTS, type FinishAttemptInput } from "../work/types"
+import { ensureMergeApproval } from "./merge-approvals"
 import { appendEvent } from "./work-events"
 import {
   type Actor,
   checkText,
+  currentPullRequest,
   loadFacts,
   lockItem,
   transitionItem,
@@ -439,27 +441,18 @@ export async function heartbeatAttempt(
 
 /**
  * The head sha a reviewer verdict was given on: the plan's rule is the recorded pull request's head
- * sha, and the branch only decides WHICH one. Pull requests carry no cycle, so when the attempt
- * has a branch the newest pull request on that branch is the one (an older cycle's pull request has
- * another branch, so a different branch yields null, not that pull request's sha). With no branch
- * (a dropped heartbeat) it is the item's newest pull request, as `loadFacts` reads it: a null here
- * would let `ensureMergeApproval` bind an approval to any head. No pull request at all is null.
+ * sha, and the branch only decides WHICH one. Both reads are of the item's CURRENT cycle's pull
+ * requests (`currentPullRequest`, so an older cycle's pull request on a reused branch is never the
+ * answer): with a branch it is the newest on that branch, and with no branch (a dropped heartbeat)
+ * the item's newest, as `loadFacts` reads it: a null here would let `ensureMergeApproval` bind an
+ * approval to any head. No pull request at all is null.
  */
 async function headShaOfBranch(
   tx: Tx,
-  itemId: string,
+  item: { id: string; cycle: number },
   branch: string | null,
 ): Promise<string | null> {
-  const [pr] = await tx
-    .select({ headSha: pullRequests.headSha })
-    .from(pullRequests)
-    .where(
-      branch === null
-        ? eq(pullRequests.itemId, itemId)
-        : and(eq(pullRequests.itemId, itemId), eq(pullRequests.branch, branch)),
-    )
-    .orderBy(desc(pullRequests.openedAt), desc(pullRequests.number))
-    .limit(1)
+  const pr = await currentPullRequest(tx, item, branch ?? undefined)
   return pr?.headSha ?? null
 }
 
@@ -528,7 +521,7 @@ export async function finishAttempt(
       if (!fits)
         throw bad(`A ${reviewer.verdict} verdict cannot end an attempt as ${result}`, "reviewer")
     }
-    const reviewedHeadSha = await headShaOfBranch(tx, item.id, branch ?? cur.branch)
+    const reviewedHeadSha = await headShaOfBranch(tx, item, branch ?? cur.branch)
     const startedAt = cur.startedAt ?? cur.createdAt
     const [row] = await tx
       .update(attempts)
@@ -557,6 +550,9 @@ export async function finishAttempt(
       detail: { attemptId: row.id, number: row.number, kind: row.kind, result },
       cycle: item.cycle,
     })
+    // An approved fix may be the last fact a merge approval waits for (the pull request can already
+    // be open). Its event is one millisecond after the finish, so (at, id) keeps the story's order.
+    await ensureMergeApproval(tx, item.id, afterMove(now))
     return row
   })
 }

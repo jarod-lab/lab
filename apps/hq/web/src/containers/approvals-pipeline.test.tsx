@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 
 import type { WorkBoard } from "../api/schemas"
 import { createFakeHq, type FakeHq, urlOf } from "../test/fake-hq"
+import { workCountsOf } from "../test/fake-work"
 import {
   factoryStatusFixture,
   needsYouFixture,
@@ -12,6 +13,7 @@ import {
   WORK_HEAD_SHA,
   WORK_IDS,
   workBoardFixture,
+  workItemsFixture,
 } from "../test/fixtures"
 import { renderApp } from "../test/render"
 
@@ -198,7 +200,7 @@ describe("Approvals: the pipeline section", () => {
       workBoard: boardOfFour(),
       factoryStatus: factoryStatusFixture({
         pendingProposals: 3,
-        work: { inFlight: 5, needsYou: 4, pendingMergeApprovals: 1, openQuestions: 1 },
+        work: workCountsOf(boardOfFour(), workItemsFixture()),
       }),
     })
     const app = await renderApp({ path: "/app/approvals", hq })
@@ -207,13 +209,14 @@ describe("Approvals: the pipeline section", () => {
 
   it("the badge counts a pipeline need even when no proposal is pending", async () => {
     const hq = createFakeHq({
+      // The default board has three needs; hq's counts for it, as the fake derives them.
       factoryStatus: factoryStatusFixture({
         pendingProposals: 0,
-        work: { inFlight: 1, needsYou: 2, pendingMergeApprovals: 1, openQuestions: 1 },
+        work: workCountsOf(workBoardFixture(), workItemsFixture()),
       }),
     })
     const app = await renderApp({ path: "/app/digest", hq })
-    await waitFor(() => expect(navApprovals(app).textContent).toBe("Approvals2"))
+    await waitFor(() => expect(navApprovals(app).textContent).toBe("Approvals3"))
   })
 
   it("a null work counts as 0: the badge is the proposals alone", async () => {
@@ -243,8 +246,8 @@ describe("Approvals: the pipeline section", () => {
   it("the badge reads 99+ above 99", async () => {
     const hq = createFakeHq({
       factoryStatus: factoryStatusFixture({
-        pendingProposals: 60,
-        work: { inFlight: 50, needsYou: 40, pendingMergeApprovals: 20, openQuestions: 20 },
+        pendingProposals: 100,
+        work: workCountsOf(workBoardFixture(), workItemsFixture()),
       }),
     })
     const app = await renderApp({ path: "/app/digest", hq })
@@ -443,6 +446,10 @@ describe("Approvals: the pipeline section", () => {
       expect(app.container.querySelector("a[href*='evil']")).toBeNull()
       expect(region.textContent).toContain('<img src=x onerror="alert(1)">')
       expect(region.textContent).toContain("[pay now](https://evil.example/pay)")
+      const mergeCard = [...region.querySelectorAll("article")].find((a) =>
+        a.textContent?.includes("merge approval"),
+      ) as HTMLElement
+      expect(within(mergeCard).getByRole("button", { name: "Approve merge" })).toBeTruthy()
       const asking = [...region.querySelectorAll("article")].find((a) =>
         a.textContent?.includes("(default)"),
       ) as HTMLElement

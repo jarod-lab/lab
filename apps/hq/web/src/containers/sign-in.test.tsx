@@ -129,7 +129,7 @@ describe("the sign-in form", () => {
     const good = await renderApp({ path: "/app/sign-in?next=%2Frunner", hq })
     await fill(good)
     await good.user.click(good.getByRole("button", { name: "Sign in" }))
-    await good.findByRole("heading", { name: "Runner & policy" })
+    await good.findByRole("heading", { level: 1, name: "Runner and policy" })
     expect(good.router.history.location.pathname).toBe("/app/runner")
     good.unmount()
 

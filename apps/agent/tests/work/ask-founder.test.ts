@@ -286,6 +286,11 @@ describe("the tool and the orchestrator's instructions", () => {
     expect(body.split("{")[1]?.trimStart().startsWith('"use step"')).toBe(true)
   })
 
+  test("its description promises the model nothing about the attempt limit", () => {
+    const description = (askFounderTool as unknown as { description: string }).description
+    expect(description).not.toMatch(/attempt limit|does not count|budget|refund/i)
+  })
+
   test("it is an ordinary tool, not a workflow tool, and needs no approval of its own", () => {
     const source = readFileSync(join(root, "agent/tools/ask_founder.ts"), "utf8")
     expect(source).toContain("defineTool(")

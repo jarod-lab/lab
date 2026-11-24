@@ -27,6 +27,7 @@ import {
   detailOf,
   eventsOf,
   newItem,
+  SHA,
   setupFix,
   toPlan,
   useRealHq,
@@ -62,6 +63,7 @@ const IMPLEMENTATION = {
 const REVIEW = {
   blocking_findings: [],
   criteria_results: [{ criterion: "Checkout totals include tax", evidence: "diff", pass: true }],
+  head_sha: SHA,
   suggestions: [],
   summary: "Looks right.",
   verdict: "approve",
@@ -149,7 +151,14 @@ describe("the output a wrapper returns", () => {
       for (const station of ["analyst", "implementer", "reviewer"] as const) {
         const { ctx, sent, signal } = context({ auth, callId: `c-${station}` })
         const output = await run(station, ctx)
-        expect(output).toBe(OUTPUTS[station])
+        if (station === "reviewer") {
+          // The reviewer's head sha goes to the record, not to the orchestrator.
+          const { head_sha: _sha, ...asBefore } = REVIEW
+          expect(output).toEqual(asBefore)
+          expect(output).not.toHaveProperty("head_sha")
+        } else {
+          expect(output).toBe(OUTPUTS[station])
+        }
         // The station is asked exactly as before: its message, its output schema, the call's signal.
         expect(sent).toHaveLength(1)
         expect(sent[0]).toMatchObject({ agent: station, message: `run ${station}` })
@@ -232,8 +241,8 @@ describe("what the wrappers record", () => {
     ])
     const reviewed = detail.attemptList.at(-1)
     expect(reviewed?.reviewer).toMatchObject({ verdict: "approve", summary: "Looks right." })
-    // The reviewer's output carries no head sha and the wrapper invents none.
-    expect(reviewed?.reviewer?.headSha).toBeUndefined()
+    // The commit the reviewer read is what the verdict is stored with.
+    expect(reviewed?.reviewer?.headSha).toBe(SHA)
   })
 
   test("a reviewer request_changes finishes the fix rejected with the blocking findings", async () => {
@@ -296,6 +305,102 @@ describe("what the wrappers record", () => {
     const fixes = (await detailOf(hq, itemId)).attemptList.filter((a) => a.kind === "fix")
     expect(fixes).toHaveLength(1)
     expect(fixes[0]?.status).toBe("running")
+  })
+})
+
+describe("the head sha the reviewer read", () => {
+  const READ = "b".repeat(40)
+  const OTHER = "c".repeat(40)
+
+  async function reviewed(review: Record<string, unknown>) {
+    const { itemId, n } = await newItem(hq)
+    await toPlan(hq, itemId)
+    const auth = issueAuth(n)
+    const sessionId = `wrun_sha_${n}`
+    // One branch per item: hq finds a pull request's item by its branch.
+    const branch = `agent/fix-tax-${n}`
+    await run(
+      "implementer",
+      context({
+        auth,
+        sessionId,
+        callId: "i1",
+        replies: {
+          implementer: () => ({ status: "completed", data: { ...IMPLEMENTATION, branch } }),
+        },
+      }).ctx,
+    )
+    const returned = await run(
+      "reviewer",
+      context({
+        auth,
+        sessionId,
+        callId: "r1",
+        replies: { reviewer: () => ({ status: "completed", data: review }) },
+      }).ctx,
+    )
+    return { itemId, n, branch, returned, detail: await detailOf(hq, itemId) }
+  }
+
+  const pullRequest = (n: number, headSha: string, branch: string) =>
+    hq.client.recordPullRequest({
+      branch,
+      number: n,
+      url: `https://github.com/acme/widgets/pull/${n}`,
+      base: "main",
+      headSha,
+      isDraft: false,
+      state: "open",
+    })
+
+  test("a valid sha reaches the finished attempt as reviewer.headSha and the returned output has no head_sha", async () => {
+    const { returned, detail } = await reviewed({ ...REVIEW, head_sha: READ })
+    const fix = detail.attemptList.find((a) => a.kind === "fix")
+    expect(fix).toMatchObject({
+      result: "approved",
+      reviewer: { verdict: "approve", headSha: READ },
+    })
+    expect(returned).not.toHaveProperty("head_sha")
+    const { head_sha: _sha, ...asBefore } = REVIEW
+    expect(returned).toEqual(asBefore)
+  })
+
+  test.each([
+    ["null", null],
+    ["not hex", "not-a-sha"],
+    ["empty", ""],
+    ["a number", 12345],
+    ["too short", "abc123"],
+    ["too long", "a".repeat(65)],
+  ])("a head_sha that is %s is dropped and the verdict is never lost", async (_label, value) => {
+    const { returned, detail } = await reviewed({ ...REVIEW, head_sha: value })
+    const fix = detail.attemptList.find((a) => a.kind === "fix")
+    expect(fix).toMatchObject({ status: "finished", result: "approved" })
+    expect(fix?.reviewer).toMatchObject({ verdict: "approve", summary: "Looks right." })
+    expect(fix?.reviewer?.headSha).toBeUndefined()
+    expect(returned).not.toHaveProperty("head_sha")
+  })
+
+  test("a reviewer output with no head_sha at all is returned as the same object and keeps its verdict", async () => {
+    const { head_sha: _sha, ...without } = REVIEW
+    const { returned, detail } = await reviewed(without)
+    expect(returned).toBe(without)
+    expect(detail.attemptList.find((a) => a.kind === "fix")).toMatchObject({ result: "approved" })
+  })
+
+  test("a pull request opened at another head than the one the reviewer read gets no merge approval", async () => {
+    const { itemId, n, branch } = await reviewed({ ...REVIEW, head_sha: READ })
+    await pullRequest(8000 + n, OTHER, branch)
+    expect((await detailOf(hq, itemId)).mergeApproval).toBeNull()
+  })
+
+  test("a pull request opened at the head the reviewer read gets a pending merge approval for it", async () => {
+    const { itemId, n, branch } = await reviewed({ ...REVIEW, head_sha: READ })
+    await pullRequest(9000 + n, READ, branch)
+    expect((await detailOf(hq, itemId)).mergeApproval).toMatchObject({
+      status: "pending",
+      headSha: READ,
+    })
   })
 })
 
@@ -423,15 +528,33 @@ describe("the attempt limit", () => {
     expect((await eventsOf(hq, itemId)).length).toBe(events)
   })
 
+  test("a limit FatalError is rethrown as it is, whatever wording surrounds the constant elsewhere", async () => {
+    const limit = new FatalError(attempts.ATTEMPT_LIMIT_MESSAGE)
+    vi.spyOn(attempts, "beginStation").mockRejectedValueOnce(limit)
+    const { ctx, sent } = context({ auth: null })
+    await expect(run("implementer", ctx)).rejects.toBe(limit)
+    expect(sent).toEqual([])
+    expect(failStation).not.toHaveBeenCalled()
+  })
+
+  test("any other beginStation failure leaves the station running unrecorded, and it is never given to failStation", async () => {
+    const wrapped = new FatalError('Step "begin" failed after 3 retries: platform kill')
+    vi.spyOn(attempts, "beginStation").mockRejectedValueOnce(wrapped)
+    const { ctx, sent } = context({ auth: null })
+    await expect(run("implementer", ctx)).resolves.toBe(IMPLEMENTATION)
+    expect(sent).toHaveLength(1)
+    expect(failStation).not.toHaveBeenCalled()
+  })
+
   test("the analyst and the reviewer are not stopped by the limit", async () => {
     const { n } = await exhausted()
     const auth = issueAuth(n)
     await expect(run("analyst", context({ auth, sessionId: "wrun_limit3" }).ctx)).resolves.toBe(
       ANALYSIS,
     )
-    await expect(run("reviewer", context({ auth, sessionId: "wrun_limit3" }).ctx)).resolves.toBe(
-      REVIEW,
-    )
+    await expect(
+      run("reviewer", context({ auth, sessionId: "wrun_limit3" }).ctx),
+    ).resolves.toMatchObject({ verdict: "approve" })
   })
 })
 
@@ -442,12 +565,14 @@ describe("no hq call in a wrapper body", () => {
 
   /** The names a workflow body may take from `lib/work/attempts.js`: the pure ones and the steps. */
   const ALLOWED_NAMES = new Set([
+    "ATTEMPT_LIMIT_MESSAGE",
     "beginStation",
     "endStation",
     "failStation",
     "stationKey",
     "subjectOf",
     "summarizeStation",
+    "takeHeadSha",
   ])
   const ALLOWED_MODULES = new Set([
     "eve/tools",
@@ -476,7 +601,7 @@ describe("no hq call in a wrapper body", () => {
     }))
 
   test.each(WRAPPERS)(
-    "%s imports only what a workflow body may: no hq client, recorder, logger, env or constants",
+    "%s imports only what a workflow body may: no recorder, logger, env or constants",
     (name) => {
       const source = sourceOf(name)
       for (const { names, specifier } of importsOf(source)) {
@@ -511,18 +636,48 @@ describe("no hq call in a wrapper body", () => {
   test.each(WRAPPERS)("%s calls beginStation outside the try that calls failStation", (name) => {
     const source = sourceOf(name)
     const begin = source.indexOf("await beginStation(")
-    const open = source.indexOf("try {")
+    const station = source.indexOf("let output: unknown")
     const fail = source.indexOf("await failStation(")
     expect(begin).toBeGreaterThan(-1)
-    expect(open).toBeGreaterThan(begin)
-    expect(fail).toBeGreaterThan(open)
-    // Exactly one try, and it opens after the begin step has settled.
-    expect(source.match(/\btry\s*\{/g) ?? []).toHaveLength(1)
+    expect(station).toBeGreaterThan(begin)
+    expect(fail).toBeGreaterThan(station)
+    // What follows beginStation up to the station's own try never records a failure, and the limit
+    // error is told by its exact constant, rethrown as it is.
+    const around = source.slice(begin, station)
+    expect(around).not.toContain("failStation")
+    expect(around).toContain("error.message === ATTEMPT_LIMIT_MESSAGE")
+    expect(around).toMatch(/throw error/)
+    // Two tries: the begin step's own, and the station's.
+    expect(source.match(/\btry\s*\{/g) ?? []).toHaveLength(2)
   })
 
-  test("the reviewer wrapper passes no head sha: neither station's output carries one", () => {
-    // The station cannot know the sha it read (REVIEWER_OUTPUT_SCHEMA has no such field), so the
-    // wrapper must not make one up or pass a branch name in its place.
-    expect(sourceOf("run_reviewer")).not.toMatch(/headSha/)
+  test("the wrapper bodies call no hq method directly (the module imports no HqClient into the tool files)", () => {
+    for (const name of WRAPPERS) {
+      const source = sourceOf(name)
+      expect(source, name).not.toMatch(/HqClient|lib\/hq\/|hqFromEnv|hookHq|createHqClient/)
+      const body = source.slice(source.indexOf("async execute("), source.indexOf("inputSchema"))
+      expect(body, name).not.toMatch(
+        /\.listWorkItems|\.startAttempt|\.finishAttempt|\.heartbeatAttempt|\.setContract|\.askQuestion|\.getWorkItem|\.recordPullRequest/,
+      )
+    }
+  })
+
+  test("the reviewer is told to report the commit it read, from git, and never a guess", () => {
+    const instructions = readFileSync(
+      join(root, "agent/subagents/reviewer/instructions.md"),
+      "utf8",
+    )
+    expect(instructions).toContain("git rev-parse HEAD")
+    expect(instructions).toContain("`head_sha`")
+    expect(instructions).toMatch(/null and never a guess/)
+  })
+
+  test("only the reviewer wrapper handles a head sha, and it strips it before returning", () => {
+    expect(sourceOf("run_analyst")).not.toMatch(/headSha|head_sha|takeHeadSha/)
+    expect(sourceOf("run_implementer")).not.toMatch(/headSha|head_sha|takeHeadSha/)
+    const reviewer = sourceOf("run_reviewer")
+    expect(reviewer).toContain("takeHeadSha(output)")
+    expect(reviewer).toContain('summarizeStation("reviewer", reviewed, { headSha })')
+    expect(reviewer).toContain("return reviewed")
   })
 })

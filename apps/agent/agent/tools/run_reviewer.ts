@@ -5,11 +5,13 @@ import { founderApproval } from "../lib/github/founder-response.js"
 import { stationOutput } from "../lib/stations/result.js"
 import { REVIEWER_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
 import {
+  ATTEMPT_LIMIT_MESSAGE,
   beginStation,
   endStation,
   failStation,
   subjectOf,
   summarizeStation,
+  takeHeadSha,
 } from "../lib/work/attempts.js"
 
 /**
@@ -40,14 +42,24 @@ export default defineWorkflowTool({
   async execute({ message }, ctx) {
     "use workflow"
     // Recording is three steps and pure functions of `lib/work/attempts.ts`; the body calls nothing else.
-    // beginStation sits OUTSIDE the try: its attempt-limit FatalError must reach the orchestrator
-    // as it is, never be recorded as this station failing.
-    const record = await beginStation({
-      callId: ctx.callId,
-      sessionId: ctx.session.id,
-      station: "reviewer",
-      subject: subjectOf(ctx.session.auth.current),
-    })
+    // beginStation sits OUTSIDE the try that records a failure: its attempt-limit FatalError must
+    // reach the orchestrator as it is, never be recorded as this station failing. That error is
+    // told by its exact message (a constant); anything else beginStation throws means "not
+    // recorded", and the station runs.
+    let record: Awaited<ReturnType<typeof beginStation>>
+    try {
+      record = await beginStation({
+        callId: ctx.callId,
+        sessionId: ctx.session.id,
+        station: "reviewer",
+        subject: subjectOf(ctx.session.auth.current),
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === ATTEMPT_LIMIT_MESSAGE) {
+        throw error
+      }
+      record = null
+    }
     let output: unknown
     try {
       const response = await ctx.agent("reviewer").send(message, {
@@ -59,8 +71,10 @@ export default defineWorkflowTool({
       await failStation(record, error instanceof Error ? error.message : String(error))
       throw error
     }
-    await endStation(record, summarizeStation("reviewer", output))
-    return output
+    // The commit the reviewer read goes to the record; the orchestrator gets the output as before.
+    const { output: reviewed, headSha } = takeHeadSha(output)
+    await endStation(record, summarizeStation("reviewer", reviewed, { headSha }))
+    return reviewed
   },
   inputSchema: z.object({
     message: z

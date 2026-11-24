@@ -66,8 +66,7 @@ export default defineTool({
     "something only a person can decide, such as a choice between approaches, missing access, or " +
     "an ambiguous requirement. Give the question and two to five options, and say which one you " +
     "recommend with defaultOptionId (it is only a suggestion on a button; nothing is decided " +
-    "until a founder answers). It ends the attempt that is running, which does not count against " +
-    "the item's attempt limit. After it returns, say in your reply what you asked and stop: do " +
+    "until a founder answers). After it returns, say in your reply what you asked and stop: do " +
     "not guess an answer and do not carry on. The result says whether the question was recorded; " +
     "when it was not, put the question in your reply instead.",
   async execute(input, ctx) {

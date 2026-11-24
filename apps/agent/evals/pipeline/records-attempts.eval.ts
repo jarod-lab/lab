@@ -2,13 +2,15 @@ import { defineEval } from "eve/evals"
 import { satisfies } from "eve/evals/expect"
 import { ticketIdFor } from "../../agent/lib/intake/ticket.js"
 import { ATTEMPT_LIMIT_MESSAGE } from "../../agent/lib/work/attempts.js"
+import { READ_SHA } from "../../agent/lib/offline/responder.js"
 import { freshDay, hq, OFFLINE_TAG, probeEvents } from "../offline.js"
 
 /**
  * The three station wrappers on the real runtime: the real eve workflow bundle (the steps compile
- * and run as steps, the bodies replay at every durable await), the real hq app behind its HTTP
+ * and run as steps), the real hq app behind its HTTP
  * surface, and scripted models (no model call). Each scenario is its own intake ticket, so its own
- * session; the session finds its work item through the attempt a dispatcher would have claimed
+ * session; no replay is forced (the real wrappers have no sleep, and a replay is invisible by design);
+ * the session finds its work item through the attempt a dispatcher would have claimed
  * (`externalRef` = the ticket id), exactly as a ticket run does in production.
  *
  * - `ok`: analyst, implementer and reviewer in order leave one investigate attempt and one fix
@@ -164,6 +166,31 @@ export default defineEval({
         "the fix carries the branch, the files, the session's key and the reviewer's verdict",
       ),
     )
+    t.check(
+      fix?.reviewer?.headSha,
+      satisfies(
+        (sha: string | undefined) => sha === READ_SHA,
+        "the commit the reviewer read is stored with its verdict (reviewed_head_sha)",
+      ),
+    )
+    // A pull request that shows up at another head than the one the reviewer read is not what it
+    // approved: hq asks nobody to merge it.
+    await client.recordPullRequest({
+      branch: fix?.branch ?? "",
+      number: stamp % 1_000_000,
+      url: `https://github.com/${REPO}/pull/${stamp % 1_000_000}`,
+      base: "main",
+      headSha: "c".repeat(40),
+      isDraft: false,
+      state: "open",
+    })
+    t.check(
+      (await client.getWorkItem({ itemId: ok.itemId })).mergeApproval,
+      satisfies(
+        (approval: unknown) => approval === null,
+        "a pull request at a different head than the reviewed one gets no merge approval",
+      ),
+    )
     const okSteps = await steps()
     t.check(
       okSteps,
@@ -178,7 +205,7 @@ export default defineEval({
             "beginStation:reviewer",
             "endStation:reviewer",
           ]),
-        "each step ran exactly once per call, although the bodies replay at every durable await",
+        "each step ran exactly once per call (replay reuses a recorded step result: the SDK's contract, not observed here)",
       ),
     )
 

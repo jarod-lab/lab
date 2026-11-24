@@ -27,6 +27,9 @@ const slugOf = (text: string): string =>
 const SCENARIO = /\[records-attempts:(ok|fail|limit|ask)\]/
 const STATION = /\[station:(analyst|implementer|reviewer)(:prose)?\]/
 
+/** The commit the scripted reviewer says it read (`git rev-parse HEAD`); the eval checks it is kept. */
+export const READ_SHA = "b".repeat(40)
+
 /** What each station answers with: the shape its output schema asks for, filled with fixed text. */
 const STATION_ANSWERS = {
   analyst: {
@@ -55,6 +58,7 @@ const STATION_ANSWERS = {
     criteria_results: [
       { criterion: "Checkout totals include tax", evidence: "the diff", pass: true },
     ],
+    head_sha: READ_SHA,
     suggestions: [],
     summary: "Looks right.",
     verdict: "approve",

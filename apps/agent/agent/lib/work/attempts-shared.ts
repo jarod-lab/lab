@@ -223,6 +223,24 @@ export function summarizeStation(
 }
 
 /**
+ * Splits the reviewer's `head_sha` from the rest of its output: the reviewer reports the commit it
+ * read (`git rev-parse HEAD` of the branch it fetched) in a schema field the orchestrator never
+ * had, so the wrapper takes it out before returning the output and gives it to
+ * {@link summarizeStation}, which uses it only when it is a commit id.
+ *
+ * @returns The output without `head_sha` (the very same object when it had none) and the sha the
+ * reviewer gave, when it gave a string.
+ */
+export function takeHeadSha(output: unknown): { output: unknown; headSha: string | undefined } {
+  const out = record(output)
+  if (!("head_sha" in out)) {
+    return { output, headSha: undefined }
+  }
+  const { head_sha: given, ...rest } = out
+  return { output: rest, headSha: typeof given === "string" ? given : undefined }
+}
+
+/**
  * The contract the analyst's acceptance criteria become: each criterion for the reviewer to check,
  * then one item that no new signal like this comes back, and one that the pull request's checks
  * pass when the item has such checks. Capped at what hq takes; the extras are kept when the

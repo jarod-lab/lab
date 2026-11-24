@@ -109,8 +109,8 @@ describe("ItemPage header", () => {
       "Attempts",
       "Questions from agents",
       "Attempt 2 transcript",
-      "Evidence",
       "PR #108",
+      "Evidence",
       "Verification window",
       "History",
     ])
@@ -204,7 +204,9 @@ describe("ItemPage decisions", () => {
     const stop = done.view.getByRole("button", { name: "Stop item" }) as HTMLButtonElement
     expect(stop.disabled).toBe(true)
     expect(
-      done.view.getByText(/Stopping applies only to an item that is still in flight/),
+      done.view.getByText(
+        "A founder can stop an item in triage, plan, attempt, review, deploy or verify; not from this state.",
+      ),
     ).toBeTruthy()
     expect(stop.getAttribute("aria-describedby")).toBeTruthy()
     done.view.unmount()
@@ -270,29 +272,156 @@ describe("ItemPage starting an attempt", () => {
     expect(view.container.textContent).not.toContain("agent:build")
   })
 
-  it("claim mode asks for an investigation or a fix with optional instructions, one call each", async () => {
+  it("claim mode asks for an investigation from triage with optional instructions, one call; a fix is not offered there", async () => {
     const item = triageItemFixture({
       actions: { ...triageItemFixture().actions, canRequestAttempt: true },
     })
     const { view, actions, user } = await show(item, { dispatch: "claim" })
     expect(view.container.textContent).not.toContain("agent:build")
-    await user.click(view.getByRole("button", { name: "Request an investigation" }))
-    expect(actions.onRequestAttempt).toHaveBeenCalledWith("investigate", undefined)
     await user.type(
       view.getByLabelText("Instructions for the agent (optional)"),
       "  start in cart.ts ",
     )
-    await user.click(view.getByRole("button", { name: "Request a fix attempt" }))
-    expect(actions.onRequestAttempt).toHaveBeenLastCalledWith("fix", "start in cart.ts")
-    expect(actions.onRequestAttempt).toHaveBeenCalledTimes(2)
+    await user.click(view.getByRole("button", { name: "Request an investigation" }))
+    expect(actions.onRequestAttempt).toHaveBeenCalledWith("investigate", "start in cart.ts")
+    expect(actions.onRequestAttempt).toHaveBeenCalledTimes(1)
+    // hq refuses a fix from triage ("Investigate first"): the button says so and sends nothing.
+    const fix = view.getByRole("button", { name: "Request a fix attempt" }) as HTMLButtonElement
+    expect(fix.disabled).toBe(true)
+    expect(view.container.textContent).toContain(
+      "Investigate first: a fix starts from plan, attempt or review.",
+    )
   })
 
-  it("claim mode with canRequestAttempt false disables the request and says why", async () => {
+  it("claim mode offers both kinds in plan, only a fix in attempt and review, and never a fix without budget", async () => {
+    const enabled = async (
+      state: WorkItemDetail["state"],
+      attempts?: WorkItemDetail["attempts"],
+    ) => {
+      const base = triageItemFixture()
+      const item = triageItemFixture({
+        state,
+        actions: { ...base.actions, canRequestAttempt: true },
+        ...(attempts ? { attempts } : {}),
+      })
+      const { view } = await show(item, { dispatch: "claim" })
+      const flag = (name: string) =>
+        !(view.getByRole("button", { name }) as HTMLButtonElement).disabled
+      const result = {
+        investigate: flag("Request an investigation"),
+        fix: flag("Request a fix attempt"),
+        text: view.container.textContent ?? "",
+      }
+      view.unmount()
+      return result
+    }
+    expect(await enabled("plan")).toMatchObject({ investigate: true, fix: true })
+    const attempt = await enabled("attempt", { used: 1, limit: 3, running: false })
+    expect(attempt).toMatchObject({ investigate: false, fix: true })
+    expect(attempt.text).toContain("An investigation starts from triage or plan, not from attempt.")
+    expect(await enabled("review", { used: 1, limit: 3, running: false })).toMatchObject({
+      investigate: false,
+      fix: true,
+    })
+    // Plan with the fix budget spent: an investigation may still start, a fix may not.
+    const spent = await enabled("plan", { used: 3, limit: 3, running: false })
+    expect(spent).toMatchObject({ investigate: true, fix: false })
+    expect(spent.text).toContain("This item has used its fix attempts for this cycle.")
+  })
+
+  it("claim mode with canRequestAttempt false disables both and says why", async () => {
     const { view } = await show(triageItemFixture(), { dispatch: "claim" })
     for (const name of ["Request an investigation", "Request a fix attempt"]) {
       expect((view.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true)
     }
     expect(view.getByText(/hq does not allow a request right now/)).toBeTruthy()
+  })
+
+  it("in plan, where both kinds are allowed, hq's own canRequestAttempt false still disables both", async () => {
+    const { view } = await show(triageItemFixture({ state: "plan" }), { dispatch: "claim" })
+    for (const name of ["Request an investigation", "Request a fix attempt"]) {
+      expect((view.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(view.getByText(/hq does not allow a request right now/)).toBeTruthy()
+  })
+
+  describe("the label instruction shows only where hq's start rules allow a start", () => {
+    const LABEL = "agent:build"
+    const state = (value: WorkItemDetail["state"], overrides: Partial<WorkItemDetail> = {}) =>
+      triageItemFixture({ state: value, ...overrides })
+    const region = (view: RenderResult) => view.getByRole("region", { name: "Start an attempt" })
+
+    it("an item that used its fix attempts says the limit is reached and that Retry with notes allows one more", async () => {
+      const { view } = await show(exhaustedItemFixture(), { issueUrl: ISSUE })
+      const start = region(view)
+      expect(start.textContent).toContain("The attempt limit for this item is reached.")
+      expect(start.textContent).toContain("Retry with notes allows one more fix attempt")
+      expect(start.textContent).not.toContain(LABEL)
+      expect(within(start).queryByRole("link")).toBeNull()
+    })
+
+    it("at the limit without a retry the line still says so and offers no label", async () => {
+      const base = exhaustedItemFixture()
+      const { view } = await show(
+        exhaustedItemFixture({ actions: { ...base.actions, canRetry: false } }),
+        { issueUrl: ISSUE },
+      )
+      expect(region(view).textContent).toContain("The attempt limit for this item is reached.")
+      expect(region(view).textContent).not.toContain("Retry with notes")
+      expect(region(view).textContent).not.toContain(LABEL)
+    })
+
+    it("a running attempt says so and offers no label", async () => {
+      const item = state("attempt", { attempts: { used: 1, limit: 3, running: true } })
+      const { view } = await show(item, { issueUrl: ISSUE })
+      expect(region(view).textContent).toContain("An attempt is already running.")
+      expect(region(view).textContent).not.toContain(LABEL)
+      expect(within(region(view)).queryByRole("link")).toBeNull()
+    })
+
+    it("an attempt that was requested or went stale is still active for hq", async () => {
+      const queued = state("plan", {
+        attemptList: [attempt(1, { kind: "investigate", status: "requested", result: null })],
+      })
+      const { view } = await show(queued, { issueUrl: ISSUE })
+      expect(region(view).textContent).toContain("An attempt is already running.")
+      expect(region(view).textContent).not.toContain(LABEL)
+    })
+
+    it.each(["signal", "deploy", "verify", "reopened"] as const)(
+      "an item in %s says no attempt starts from there and offers no label",
+      async (value) => {
+        const { view } = await show(state(value), { issueUrl: ISSUE })
+        const start = region(view)
+        expect(start.textContent).toContain(`No attempt starts while the item is in ${value}`)
+        expect(start.textContent).toContain("only from triage, plan, attempt or review")
+        expect(start.textContent).not.toContain(LABEL)
+        expect(within(start).queryByRole("link")).toBeNull()
+      },
+    )
+
+    it("names Reopen item or Revert merge as the way back only where hq allows one", async () => {
+      const way = await show(verifyingItemFixture(), { issueUrl: ISSUE })
+      expect(region(way.view).textContent).toContain("Reopen item or Revert merge is the way back.")
+      way.view.unmount()
+      const none = await show(state("deploy"), { issueUrl: ISSUE })
+      expect(region(none.view).textContent).not.toContain("the way back")
+    })
+
+    it.each([
+      ["triage", undefined],
+      ["plan", { used: 3, limit: 3, running: false }],
+      ["attempt", { used: 1, limit: 3, running: false }],
+      ["review", { used: 2, limit: null, running: false }],
+    ] as const)(
+      "%s with nothing running and budget left shows the label instruction",
+      async (value, attempts) => {
+        const item = state(value, attempts ? { attempts } : {})
+        const { view } = await show(item, { issueUrl: ISSUE })
+        expect(region(view).textContent).toContain(LABEL)
+        expect(within(region(view)).getByRole("link", { name: /issue/i })).toBeTruthy()
+      },
+    )
   })
 
   it("when the dispatch mode could not be read it says so and offers nothing", async () => {

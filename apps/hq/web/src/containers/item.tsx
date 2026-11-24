@@ -40,7 +40,8 @@ function NotFound({ itemRef }: { itemRef: string }) {
 export function Item({ itemRef }: { itemRef: string }) {
   const { client, queryClient } = useHq()
   const { pending, errors, notice, write } = useOneWrite({ queryClient })
-  const [lastKey, setLastKey] = useState<string | null>(null)
+  // The key of the last write that actually took the lock: only its refusal is the page's to show.
+  const [lastRan, setLastRan] = useState<string | null>(null)
 
   const item = useQuery({
     queryKey: hqKeys.workItem(itemRef),
@@ -65,18 +66,27 @@ export function Item({ itemRef }: { itemRef: string }) {
     }
     return <LoadingBlock label="the work item" />
   }
-  if (board.isPending) return <LoadingBlock label="the work item" />
 
   const itemId = data.id
   const label = data.displayId
   const run = (key: string, send: () => Promise<string>) => {
-    setLastKey(key)
-    void write(key, send)
+    void write(key, send).then((ran) => {
+      if (ran) setLastRan(key)
+    })
   }
-  // "Another change is in flight" is true only while it is: a second click on the same button
-  // (before the lock opens again) must not leave it on the page afterwards.
-  const lastError = lastKey === null ? null : (errors[lastKey] ?? null)
-  const error = lastError === BUSY_MESSAGE && pending === null ? null : lastError
+  // While a write is on its way the page says only that a second click was turned away; after it,
+  // the refusal of the key that actually ran. "Another change is in flight" is true only while it
+  // is: a second click on the same button (before the lock opens again) leaves it in `errors`.
+  const turnedAway = Object.values(errors).includes(BUSY_MESSAGE)
+  const ranError = lastRan === null ? null : (errors[lastRan] ?? null)
+  const error =
+    pending !== null
+      ? turnedAway
+        ? BUSY_MESSAGE
+        : null
+      : ranError === BUSY_MESSAGE
+        ? null
+        : ranError
 
   const actions: ItemActions = {
     pending,
@@ -90,7 +100,9 @@ export function Item({ itemRef }: { itemRef: string }) {
     onReopen: (note) =>
       run("reopen", async () => {
         const reply = await client.reopenWorkItem({ itemId, ...(note ? { note } : {}) })
-        return `${label} reopened: it is now ${reply.state}. No attempt was started.`
+        return reply.state === "triage"
+          ? `${label} reopened: back in triage. No attempt was started.`
+          : `${label} reopened; hq retriages it. No attempt was started.`
       }),
     onRevert: (note) =>
       run("revert", async () => {
@@ -134,7 +146,7 @@ export function Item({ itemRef }: { itemRef: string }) {
       item={data}
       transcript={NOT_RECORDED}
       actions={actions}
-      dispatch={board.data?.dispatch ?? null}
+      dispatch={board.isPending ? "loading" : (board.data?.dispatch ?? null)}
       issueUrl={link?.kind === "issue" ? link.href : null}
       approvedBy={approvedBy}
     />

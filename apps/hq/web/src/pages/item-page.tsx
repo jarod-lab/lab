@@ -15,6 +15,7 @@ import { Section } from "../components/section"
 import { StageStrip } from "../components/stage-strip"
 import { Transcript, type TranscriptState } from "../components/transcript"
 import { VerificationChart } from "../components/verification-chart"
+import { NOTE_MAX_CHARS } from "../../../src/work/constants"
 import { signalLink } from "../lib/signal-link"
 
 /** What the page can ask for. Each is one write; the container sends it once and never retries. */
@@ -39,16 +40,14 @@ export interface ItemPageProps {
   item: WorkItemDetail
   transcript: TranscriptState
   actions: ItemActions
-  /** How attempts start; null when the board that says so could not be read. */
-  dispatch: "label" | "claim" | null
+  /** How attempts start; `loading` while the board that says so is on its way, null when it could not be read. */
+  dispatch: "label" | "claim" | "loading" | null
   /** The issue page of the item's signal, built from a url hq checked; null when there is none. */
   issueUrl: string | null
   /** The approving founder's name when the container knows it (hq stores an id, never shown). */
   approvedBy?: string | null
 }
 
-/** hq stores 2 000 characters of a note (NOTE_MAX_CHARS); a longer one is refused. */
-const NOTE_MAX_CHARS = 2000
 const REPORTED_NEVER = "time not reported"
 
 const SOURCE_LABEL: Record<WorkItemDetail["source"], string> = {
@@ -231,7 +230,8 @@ function Decisions({
       </div>
       {canStop ? null : (
         <p id={stopHint} className="m-0 text-[11px] text-faint">
-          Stopping applies only to an item that is still in flight.
+          A founder can stop an item in triage, plan, attempt, review, deploy or verify; not from
+          this state.
         </p>
       )}
       {canReopen ? null : (
@@ -297,6 +297,62 @@ function RetryControl({ item, actions }: { item: WorkItemDetail; actions: ItemAc
   )
 }
 
+const REQUESTABLE_STATES: readonly WorkItemDetail["state"][] = [
+  "triage",
+  "plan",
+  "attempt",
+  "review",
+]
+
+/**
+ * hq's start rules, from the facts the page already has (data/attempts.ts `stateMove`,
+ * `assertNoActive`, `assertBudget`; hq's own `canRequestAttempt` is the same three rules, kind
+ * blind): an attempt starts only from triage (an investigation), plan (either), attempt or review
+ * (a fix); never while another is requested or running; a fix never without budget. `blocked` is
+ * the one line to say when nothing can start; `investigate` and `fix` are per kind, with the reason
+ * a kind is refused when the item as a whole is not.
+ */
+function startRules(item: WorkItemDetail): {
+  blocked: string | null
+  investigate: string | null
+  fix: string | null
+} {
+  const { state } = item
+  const { used, limit } = item.attempts
+  const budget = limit === null || used < limit
+  const active =
+    item.attempts.running ||
+    item.attemptList.some((a) => a.status === "requested" || a.status === "running")
+  let blocked: string | null = null
+  if (!REQUESTABLE_STATES.includes(state)) {
+    const back = item.actions.canReopen || item.actions.canRevert
+    blocked = `No attempt starts while the item is in ${state}: hq starts one only from triage, plan, attempt or review.${
+      back ? " Reopen item or Revert merge is the way back." : ""
+    }`
+  } else if (active) {
+    blocked = "An attempt is already running. Wait for it to finish, or for its lease to expire."
+  } else if ((state === "attempt" || state === "review") && !budget) {
+    blocked = `The attempt limit for this item is reached.${
+      item.actions.canRetry
+        ? " Retry with notes allows one more fix attempt before another can start."
+        : " No fix attempt can start this cycle."
+    }`
+  }
+  return {
+    blocked,
+    investigate:
+      state === "triage" || state === "plan"
+        ? null
+        : `An investigation starts from triage or plan, not from ${state}.`,
+    fix:
+      state === "triage"
+        ? "Investigate first: a fix starts from plan, attempt or review."
+        : budget
+          ? null
+          : "This item has used its fix attempts for this cycle.",
+  }
+}
+
 function StartAttempt({
   item,
   actions,
@@ -311,10 +367,14 @@ function StartAttempt({
   const id = useId()
   const [instructions, setInstructions] = useState("")
   const locked = actions.pending !== null
-  const allowed = item.actions.canRequestAttempt
   // A finished or stopped item starts nothing.
   if (item.state === "done" || item.state === "stopped") return null
+  const rules = startRules(item)
   const text = instructions.trim() === "" ? undefined : instructions.trim()
+  // hq's own verdict is a second lock: a request goes out only where it too says yes.
+  const hqAllows = item.actions.canRequestAttempt
+  const canInvestigate = hqAllows && rules.blocked === null && rules.investigate === null
+  const canFix = hqAllows && rules.blocked === null && rules.fix === null
   return (
     <section aria-labelledby={id} className="flex min-w-0 flex-col gap-2">
       <h3 id={id} className="m-0 text-[13px] font-semibold">
@@ -324,8 +384,12 @@ function StartAttempt({
         <p className={MUTED}>
           How attempts start could not be read, so nothing is offered here. Reload to try again.
         </p>
+      ) : dispatch === "loading" ? (
+        <p className={MUTED}>Checking how attempts start.</p>
       ) : dispatch === "label" ? (
-        issueUrl ? (
+        rules.blocked !== null ? (
+          <p className="m-0 text-xs leading-normal text-soft">{rules.blocked}</p>
+        ) : issueUrl ? (
           <>
             <p className="m-0 text-xs leading-normal text-soft">
               Add the <code className="font-mono">agent:build</code> label to the issue to start the
@@ -360,7 +424,7 @@ function StartAttempt({
             <Button
               type="button"
               className="min-h-touch max-w-full px-4"
-              disabled={locked || !allowed}
+              disabled={locked || !canInvestigate}
               onClick={() => actions.onRequestAttempt("investigate", text)}
             >
               Request an investigation
@@ -369,19 +433,25 @@ function StartAttempt({
               type="button"
               variant="outline"
               className="min-h-touch max-w-full border-input px-4"
-              disabled={locked || !allowed}
+              disabled={locked || !canFix}
               onClick={() => actions.onRequestAttempt("fix", text)}
             >
               Request a fix attempt
             </Button>
           </div>
-          {allowed ? (
-            <p className={MUTED}>It starts when the agent claims it. Nothing runs before that.</p>
-          ) : (
+          {rules.blocked !== null ? (
+            <p className={MUTED}>{rules.blocked}</p>
+          ) : !hqAllows ? (
             <p className={MUTED}>
               hq does not allow a request right now: an attempt may already be active, the item may
               be in a state that starts none, or its fix attempts may be used up.
             </p>
+          ) : (
+            <>
+              {rules.investigate ? <p className={MUTED}>{rules.investigate}</p> : null}
+              {rules.fix ? <p className={MUTED}>{rules.fix}</p> : null}
+              <p className={MUTED}>It starts when the agent claims it. Nothing runs before that.</p>
+            </>
           )}
         </div>
       )}
@@ -651,7 +721,6 @@ export function ItemPage({
         </div>
 
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-5">
-          <EvidenceSection item={item} />
           {item.pullRequest ? (
             <PullRequestPanel
               pr={item.pullRequest}
@@ -668,6 +737,7 @@ export function ItemPage({
               <p className={MUTED}>No pull request yet.</p>
             </Section>
           )}
+          <EvidenceSection item={item} />
           {item.window ? <WindowSection window={item.window} /> : null}
           <History item={item} />
         </div>

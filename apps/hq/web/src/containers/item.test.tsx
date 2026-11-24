@@ -239,6 +239,37 @@ describe("the Item detail screen", () => {
       await waitFor(() => expect(posts(hq)).toHaveLength(1))
     })
 
+    it("when two different controls are clicked in one tick, hq's refusal of the write that was sent is what the page shows", async () => {
+      const hq = createFakeHq()
+      const base = workItemFixture()
+      setItem(hq, { ...base, questions: [questionFixture()] })
+      const hold = holdPosts(hq)
+      const app = await renderApp({ path: "/app/work/FAC-6", hq })
+      const main = await page(app)
+      await app.user.click(
+        within(region(main, "PR #106")).getByRole("button", { name: "Approve merge" }),
+      )
+      const confirm = within(region(main, "PR #106")).getByRole("button", { name: "Confirm" })
+      const answer = within(region(main, "Questions from agents")).getByRole("button", {
+        name: /Half up/,
+      })
+      hq.state.nextError = {
+        status: 409,
+        body: { error: { code: "CONFLICT", message: "This question was already answered." } },
+      }
+      // The answer takes the lock; the approval is turned away and must not own the message.
+      await act(async () => {
+        answer.click()
+        confirm.click()
+      })
+      expect(hold.reached()).toBe(1)
+      hold.release()
+      await waitFor(() =>
+        expect(app.getByRole("alert").textContent).toBe("This question was already answered."),
+      )
+      expect(posts(hq)).toHaveLength(1)
+    })
+
     it("two quick clicks on the confirmation of a stop send one POST", async () => {
       const hq = createFakeHq()
       const hold = holdPosts(hq)
@@ -384,6 +415,45 @@ describe("the Item detail screen", () => {
         credentials: "same-origin",
       },
     ])
+    expect((await app.findByRole("status", { name: "Last action" })).textContent).toBe(
+      "FAC-10 reopened; hq retriages it. No attempt was started.",
+    )
+  })
+
+  it("reopening a stopped item says it is back in triage", async () => {
+    const hq = createFakeHq()
+    setItem(hq, doneItemFixture({ state: "stopped" }))
+    const app = await renderApp({ path: "/app/work/FAC-10", hq })
+    const main = await page(app)
+    await app.user.click(main.getByRole("button", { name: "Reopen item" }))
+    await app.user.click(
+      within(main.getByRole("group", { name: "Reopen item" })).getByRole("button", {
+        name: "Reopen",
+      }),
+    )
+    expect((await app.findByRole("status", { name: "Last action" })).textContent).toBe(
+      "FAC-10 reopened: back in triage. No attempt was started.",
+    )
+  })
+
+  it("shows the item while the board that says how attempts start is still on its way", async () => {
+    const hq = createFakeHq()
+    const real = hq.fetch
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    hq.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      if (url.startsWith("/v1/work/board")) await gate
+      return real(input, init)
+    }) as typeof fetch
+    const app = await renderApp({ path: "/app/work/FAC-1", hq })
+    const main = await page(app, "Checkout shows a blank page")
+    expect(await main.findByText(/Checking how attempts start/)).toBeTruthy()
+    expect(app.container.textContent).not.toContain("agent:build")
+    release()
+    expect(await main.findByText(/label to the issue to start the agent/)).toBeTruthy()
   })
 
   it("an item that used its attempts offers Retry with notes and sends the note once", async () => {
@@ -535,6 +605,35 @@ describe("the Item detail screen", () => {
       expect(await app.findByText("Work item not found")).toBeTruthy()
       expect(app.container.querySelector("img")).toBeNull()
       expect(app.container.textContent).toContain("<img src=x onerror=alert(1)>")
+    })
+
+    it("a 401 on the item read is not 'not found': it shows the sign-in error, with Retry", async () => {
+      const hq = createFakeHq()
+      const real = hq.fetch
+      hq.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+        if (url.startsWith("/v1/work-items/")) {
+          return new Response(
+            JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Send an API key" } }),
+            { status: 401, headers: { "content-type": "application/json" } },
+          )
+        }
+        return real(input, init)
+      }) as typeof fetch
+      const app = await renderApp({ path: "/app/work/FAC-6", hq })
+      expect(await app.findByText("Sign in required")).toBeTruthy()
+      expect(app.queryByText("Work item not found")).toBeNull()
+      expect(app.getByRole("button", { name: "Retry" })).toBeTruthy()
+      expect(posts(hq)).toEqual([])
+    })
+
+    it("a session that ended (the gate's probe answers 401) lands on sign-in, not on 'not found'", async () => {
+      const hq = createFakeHq({ caller: "signed-out" })
+      const app = await renderApp({ path: "/app/work/FAC-6", hq })
+      expect(await app.findByLabelText("Email")).toBeTruthy()
+      expect(app.queryByText("Work item not found")).toBeNull()
+      expect(app.router.state.location.pathname).toBe("/sign-in")
     })
 
     it("hq's refusal and a non-founder come from the gate, not from the page", async () => {

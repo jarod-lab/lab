@@ -1,6 +1,7 @@
 import { defineRegistry } from "@lab/api"
 import { z } from "zod"
 
+import { digestOperations } from "./digest"
 import { entryOperations } from "./entries"
 import { policyOperations } from "./policy"
 import { proposalOperations } from "./proposals"
@@ -36,6 +37,7 @@ const hq_status = defineOperation({
 export function createHqOperations(deps: HqDeps) {
   return defineRegistry([
     hq_status,
+    ...digestOperations(deps),
     ...entryOperations(deps),
     ...policyOperations(deps),
     ...proposalOperations(deps),

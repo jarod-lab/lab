@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 import type { Digest, FactoryStatus, Policy, Proposal, SessionUser } from "../api/schemas"
 import { digestFixture, factoryStatusFixture, policyFixture } from "./fixtures"
 
@@ -215,6 +217,22 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     return json(200, { status: "approved", entryId: proposal.entryId, version })
   }
 
+  /** get_digest's input: an ISO `since` that is not after the digest's own `until`. */
+  function digestReply(search: URLSearchParams): Response {
+    const since = search.get("since")
+    if (since !== null) {
+      // The validator hq's get_digest input uses, so the fake can never be looser than hq.
+      if (!z.string().datetime({ offset: true }).safeParse(since).success) {
+        return appError(400, "BAD_REQUEST", "Invalid input")
+      }
+      const time = Date.parse(since)
+      if (time > Date.parse(state.digest.until)) {
+        return appError(400, "BAD_REQUEST", "since is in the future")
+      }
+    }
+    return json(200, state.digest)
+  }
+
   function v1(
     path: string,
     method: string,
@@ -227,7 +245,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       "/v1/status": () => json(200, { ok: true, version: "0.0.0" }),
       "/v1/proposals": () => listProposals(search),
       "/v1/factory/status": () => json(200, state.factoryStatus),
-      "/v1/digest": () => json(200, state.digest),
+      "/v1/digest": () => digestReply(search),
       "/v1/policy": () => json(200, state.policy),
     }
     const read = method === "GET" ? reads[path] : undefined

@@ -2,7 +2,17 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { SessionAuthContext } from "eve/context"
 import { FatalError } from "eve/workflow"
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type MockInstance,
+} from "vitest"
 import { log } from "#lib/log.js"
 import * as attempts from "#lib/work/attempts.js"
 import runAnalyst from "#tools/run_analyst.js"
@@ -114,12 +124,12 @@ afterAll(async () => {
 })
 
 let requests: string[]
-let failStation: ReturnType<typeof vi.spyOn<typeof attempts, "failStation">>
+let failStation: MockInstance
 
 beforeEach(() => {
   resetRecorderStats()
   vi.spyOn(log, "warn").mockImplementation(() => undefined)
-  failStation = vi.spyOn(attempts, "failStation")
+  failStation = vi.spyOn(attempts, "failStation") as unknown as MockInstance
   requests = useRealHq(hq).requests
 })
 

@@ -32,6 +32,14 @@ describe("mergesPullRequest", () => {
     "echo 12 | gh pr -R a/b merge",
     "cd r; gh --repo=a/b pr merge 1",
     "cd r && gh pr \\\nmerge 1",
+    // gh and merge on either side of a quoted pipe, a pipe inside $( ), or a variable.
+    "gh api --jq '.sha | length' -X PUT repos/{owner}/{repo}/pulls/12/merge",
+    "GH_TOKEN=x gh api --jq '.sha | length' -X PUT repos/a/b/pulls/12/merge",
+    "GH_TOKEN=x gh api graphql --jq '.data | .x' -f query='mutation{mergePullRequest(input:{})}'",
+    "gh api -X PUT repos/a/b/pulls/$(gh pr list --json number -q '.[0].number' | head -1)/merge",
+    "G=gh; $G pr merge 1",
+    "GH=$(command -v gh); $GH pr merge 1",
+    'f() { gh pr "$@"; }; f merge 1',
   ])("matches a merge: %s", (command) => {
     expect(mergesPullRequest(bash(command))).toBe(true)
   })
@@ -53,6 +61,7 @@ describe("mergesPullRequest", () => {
     "cd r; gh pr list --state merged",
     "gh pr view 12 --json mergeable; git merge origin/main",
     "gh pr view {number} --json mergeStateStatus",
+    "gh pr view 12 --json mergeable | jq .mergeable; git --no-pager merge origin/main",
     "git merge origin/main",
     "ls",
   ])("does not match a harmless command: %s", (command) => {

@@ -270,24 +270,23 @@ const argvMerges = (argv: readonly string[]): boolean => {
   return writes && argv.some((arg) => MERGE_PATH_PATTERN.test(arg))
 }
 
-const SEGMENT_END = /[;&|\n]/
-const GH_WORD = /\bgh\b/
-const MERGE_WORD = /\bmerge\b/
+const MERGE_FALLBACK_PATTERN = new RegExp(
+  `\\bgh\\b[^\\n]*(?:(?<!\\bgit(?:\\s+-\\S+)*\\s+)\\bmerge\\b|\\b(?:${MERGE_MUTATIONS.join("|")})\\b)`,
+)
 
 /**
  * The fallback for a command the shell lexer does not parse (a pipe, a variable, `sh -c`, braces,
- * quoted words, an environment prefix): `gh` together with the whole word `merge` or a merge
- * mutation in one segment. It is never narrower than the old `gh ... merge` substring check, and
- * it still skips `mergeable`, `mergedAt` and `merged`. A false yes only fails a merge-only eval.
+ * quoted words, an environment prefix). After line continuations are joined, one line that names
+ * `gh` and, later on the same line, either the whole word `merge` (not directly after `git` and
+ * its flags) or a merge mutation. It reads quotes and `$( )` as plain text, so a `|` or `;` between
+ * `gh` and `merge` does not hide a merge, which is how the old `/\bgh\b[^\n]*\bmerge/` check
+ * behaved. It skips only `merge` followed by a word character (`mergeable`, `mergedAt`, `merged`)
+ * and `git merge`. It still says yes to a few harmless commands (`gh pr checks 12 | grep merge`,
+ * `gh ...; git -C r merge`): a false yes only fails a merge-only eval. A merge spread over several
+ * lines (a heredoc) is caught only when the line with `gh` also carries the word.
  */
 const segmentsMerge = (command: string): boolean =>
-  command
-    .replace(/\\\r?\n/g, " ")
-    .split(SEGMENT_END)
-    .some(
-      (segment) =>
-        GH_WORD.test(segment) && (MERGE_WORD.test(segment) || MERGE_MUTATION_PATTERN.test(segment)),
-    )
+  MERGE_FALLBACK_PATTERN.test(command.replace(/\\\r?\n/g, " "))
 
 /**
  * Whether a `bash` tool input merges a pull request with `gh`: `gh pr merge`

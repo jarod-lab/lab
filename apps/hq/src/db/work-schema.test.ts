@@ -5,6 +5,8 @@ import { join } from "node:path"
 import { getTableName, sql } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
+import { createTestDb } from "@lab/db/testing"
+
 import { createHqTestDb } from "../testing"
 import { HQ_MIGRATIONS_FOLDER } from "./migrations"
 import * as schema from "./schema"
@@ -100,7 +102,8 @@ const sha256 = (path: string) =>
  * `--> statement-breakpoint` first (a chunk is one query and may hold several statements). Only the
  * blank and comment lines at the top of a chunk (before the statement starts) are dropped: a `--`
  * line further down may sit inside a string literal or a `$$` body, where Postgres reads it as
- * text, so it stays in the statement and is reported by `onlyAddsViolations`.
+ * text, so it stays in the statement and is reported by `onlyAddsViolations`. Whitespace here is
+ * Postgres's own (space and tab; a carriage return is refused outright).
  */
 function statementsOf(text: string): string[] {
   return text
@@ -110,7 +113,7 @@ function statementsOf(text: string): string[] {
       let first = 0
       while (
         first < lines.length &&
-        (lines[first]?.trim() === "" || lines[first]?.trimStart().startsWith("--"))
+        (/^[ \t]*$/.test(lines[first] ?? "") || /^[ \t]*--/.test(lines[first] ?? ""))
       ) {
         first++
       }
@@ -134,13 +137,16 @@ const BODY_FORBIDDEN = /\b(?:ALTER|DROP|TRUNCATE|DELETE|UPDATE|INSERT|CREATE)\b/
 /** Why a migration file is not purely additive; empty when it is. */
 function onlyAddsViolations(text: string): string[] {
   const found: string[] = []
+  // Postgres ends a `--` comment at a carriage return as well as at a newline; a file that has one
+  // reads differently to this check than to the database.
+  if (text.includes("\r")) found.push("carriage return in the file")
   for (const statement of statementsOf(text)) {
     if (!ALLOWED_STATEMENTS.some((form) => form.test(statement))) {
       found.push(`not an allowed statement: ${statement.slice(0, 80)}`)
     }
     if (/--|\/\*/.test(statement))
       found.push(`comment inside a statement: ${statement.slice(0, 80)}`)
-    if (/\bINHERITS\b/i.test(statement)) found.push(`INHERITS: ${statement.slice(0, 80)}`)
+    if (/\bINHERITS?\b/i.test(statement)) found.push(`INHERITS: ${statement.slice(0, 80)}`)
     const body = /\$\$((?:(?!\$\$)[\s\S])*)\$\$/.exec(statement)?.[1]
     if (body && BODY_FORBIDDEN.test(body)) found.push(`function body writes: ${body.slice(0, 80)}`)
   }
@@ -150,6 +156,215 @@ function onlyAddsViolations(text: string): string[] {
     if (word.test(code)) found.push(`contains ${word}`)
   }
   return found
+}
+
+// ---------------------------------------------------------------------------------------------
+// The catalog oracle. The text checks above re-implement a corner of Postgres's lexer, so they can
+// only ever be as complete as that copy. This asks Postgres itself: apply the earlier migrations to
+// a fresh database, record what exists (the catalog of schemas hq and public) and every row, apply
+// the two work migrations exactly as drizzle's migrator sends them (each `--> statement-breakpoint`
+// chunk, unmodified, here by the simple-query `exec` that also accepts several statements in one
+// chunk), and compare. Nothing that existed may differ; what is new must be the nine tables with
+// their constraints and indexes, one function and one trigger.
+// ---------------------------------------------------------------------------------------------
+
+interface CatalogRow {
+  /** `schema.table` the item belongs to, or empty when it belongs to none. */
+  t: string
+  d: string
+}
+type Catalog = Record<string, CatalogRow[]>
+type PgClient = Awaited<ReturnType<typeof createTestDb>>["db"]["$client"]
+
+const IN_SCHEMAS = "('hq', 'public')"
+const CATALOG_QUERIES: Record<string, string> = {
+  columns: `SELECT table_schema || '.' || table_name AS t,
+      column_name || ' #' || ordinal_position || ' ' || udt_name || ' null=' || is_nullable
+        || ' default=' || coalesce(column_default, '') || ' identity=' || coalesce(identity_generation, '')
+        || ' generated=' || coalesce(generation_expression, '') AS d
+    FROM information_schema.columns WHERE table_schema IN ${IN_SCHEMAS}`,
+  constraints: `SELECT n.nspname || '.' || r.relname AS t,
+      c.conname || ' ' || pg_get_constraintdef(c.oid) || ' validated=' || c.convalidated AS d
+    FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace
+    WHERE n.nspname IN ${IN_SCHEMAS}`,
+  indexes: `SELECT schemaname || '.' || tablename AS t, indexname || ' ' || indexdef AS d
+    FROM pg_indexes WHERE schemaname IN ${IN_SCHEMAS}`,
+  triggers: `SELECT n.nspname || '.' || r.relname AS t,
+      tg.tgname || ' ' || pg_get_triggerdef(tg.oid) || ' enabled=' || tg.tgenabled::text AS d
+    FROM pg_trigger tg JOIN pg_class r ON r.oid = tg.tgrelid JOIN pg_namespace n ON n.oid = r.relnamespace
+    WHERE NOT tg.tgisinternal AND n.nspname IN ${IN_SCHEMAS}`,
+  functions: `SELECT '' AS t, n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid)
+      || ') secdef=' || p.prosecdef || ' ' || p.prosrc AS d
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname IN ${IN_SCHEMAS}`,
+  inherits: `SELECT '' AS t, i.inhrelid::regclass::text || ' inherits ' || i.inhparent::regclass::text AS d
+    FROM pg_inherits i`,
+  classes: `SELECT n.nspname || '.' || c.relname AS t,
+      c.relkind::text || ' owner=' || pg_get_userbyid(c.relowner) || ' acl=' || coalesce(c.relacl::text, '')
+        || ' rls=' || c.relrowsecurity || ' options=' || coalesce(c.reloptions::text, '') AS d
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ${IN_SCHEMAS}`,
+  policies: `SELECT schemaname || '.' || tablename AS t,
+      policyname || ' ' || coalesce(qual, '') || ' ' || coalesce(with_check, '') AS d
+    FROM pg_policies WHERE schemaname IN ${IN_SCHEMAS}`,
+  rules: `SELECT schemaname || '.' || tablename AS t, rulename || ' ' || definition AS d
+    FROM pg_rules WHERE schemaname IN ${IN_SCHEMAS}`,
+  types: `SELECT '' AS t, n.nspname || '.' || ty.typname || ' ' || ty.typtype::text AS d
+    FROM pg_type ty JOIN pg_namespace n ON n.oid = ty.typnamespace
+    WHERE n.nspname IN ${IN_SCHEMAS} AND ty.typtype IN ('e', 'd', 'r', 'm')`,
+}
+
+async function takeCatalog(client: PgClient): Promise<Catalog> {
+  const out: Catalog = {}
+  for (const [name, query] of Object.entries(CATALOG_QUERIES)) {
+    out[name] = (await client.query<CatalogRow>(query)).rows
+  }
+  return out
+}
+
+/** One row in each table of schema hq, so a migration that rewrites or empties one shows. */
+const SEED = `
+  INSERT INTO hq.entries (id, kind, slug, created_at) VALUES ('e1', 'fact', 'f', now());
+  INSERT INTO hq.entry_versions (id, entry_id, version, title, body, author_type, author_id, created_at)
+    VALUES ('v1', 'e1', 1, 't', '{"text":"x"}'::jsonb, 'person', 'u', now());
+  INSERT INTO hq.proposals (id, kind, slug, title, body, reason, status, proposed_by_type, proposed_by_id, created_at)
+    VALUES ('p1', 'fact', 'f', 't', '{"text":"x"}'::jsonb, 'r', 'pending', 'agent', 'k', now());
+  INSERT INTO hq.founders (user_id, slack_user_id, created_at) VALUES ('u1', 'S1', now());
+  INSERT INTO hq.slack_actions (key, outcome, slack_user_id, user_id, created_at) VALUES ('k1', 'grant', 'S1', 'u1', now());
+  INSERT INTO hq.runs (id, task, trigger, runner, started_at) VALUES ('r1', 't', 'x', 'eve', now());
+  INSERT INTO hq.spend (id, day, source, amount_usd, model, estimated, created_at) VALUES ('s1', '2030-01-01', 'eve', 1, 'm', false, now());
+  INSERT INTO hq.spend_grant_requests (id, amount_usd, reason, status, requested_by, created_at) VALUES ('g1', 1, 'r', 'pending', 'k', now());
+  INSERT INTO hq.spend_grants (id, day, amount_usd, granted_by, reason, created_at) VALUES ('sg1', '2030-01-01', 1, 'u1', 'r', now());
+  INSERT INTO hq.spend_holds (id, day, estimate_usd, created_at) VALUES ('h1', '2030-01-01', 1, now());
+`
+
+/** Every row of every table in schema hq, as JSON, in a stable order. */
+async function takeRows(client: PgClient): Promise<Record<string, string[]>> {
+  const tables = (
+    await client.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'hq' ORDER BY 1`,
+    )
+  ).rows.map((r) => r.table_name)
+  const out: Record<string, string[]> = {}
+  for (const table of tables) {
+    const rows = await client.query<{ j: string }>(
+      `SELECT to_jsonb(x)::text AS j FROM hq."${table}" x ORDER BY 1`,
+    )
+    out[table] = rows.rows.map((r) => r.j)
+  }
+  return out
+}
+
+/** Each chunk as drizzle's migrator sends it: the file split on the breakpoint, nothing stripped. */
+const chunksOf = (text: string): string[] => text.split("--> statement-breakpoint")
+
+/**
+ * Applies the journal's first BASELINE_ENTRIES migrations, seeds, then `work` (the two migration
+ * texts), and returns every way the result differs from "only added the work pipeline". Empty when
+ * it is exactly that. A migration the database cannot apply at all is a violation too.
+ */
+async function catalogViolations(work: {
+  pipeline: string
+  appendOnly: string
+}): Promise<string[]> {
+  const test = await createTestDb() // starter's migrations: the auth tables in `public`
+  const client = test.db.$client
+  const found: string[] = []
+  try {
+    const earlier = readJournal().entries.slice(0, BASELINE_ENTRIES)
+    for (const e of earlier) {
+      const text = readFileSync(join(HQ_MIGRATIONS_FOLDER, `${e.tag}.sql`), "utf8")
+      for (const chunk of chunksOf(text)) await client.exec(chunk)
+    }
+    await client.exec(SEED)
+    const rowsBefore = await takeRows(client)
+    for (const [table, rows] of Object.entries(rowsBefore)) {
+      if (rows.length === 0) throw new Error(`the seed left hq.${table} empty: extend SEED`)
+    }
+    const before = await takeCatalog(client)
+
+    try {
+      for (const text of [work.pipeline, work.appendOnly]) {
+        for (const chunk of chunksOf(text)) await client.exec(chunk)
+      }
+    } catch (error) {
+      return [`a work migration cannot be applied: ${String((error as Error).message)}`]
+    }
+    const after = await takeCatalog(client)
+    const rowsAfter = await takeRows(client)
+
+    const key = (r: CatalogRow) => `${r.t}\u0000${r.d}`
+    const NEW = new Set(WORK_TABLES.map((t) => `hq.${t}`))
+    const added: Catalog = {}
+    for (const category of Object.keys(CATALOG_QUERIES)) {
+      const had = new Set((before[category] ?? []).map(key))
+      const has = new Set((after[category] ?? []).map(key))
+      for (const r of before[category] ?? []) {
+        if (!has.has(key(r))) found.push(`${category}: changed or removed: ${r.t} ${r.d}`)
+      }
+      added[category] = (after[category] ?? []).filter((r) => !had.has(key(r)))
+    }
+    // Rows: nothing existing changed, and the new tables start empty.
+    for (const [table, rows] of Object.entries(rowsBefore)) {
+      if (JSON.stringify(rowsAfter[table]) !== JSON.stringify(rows))
+        found.push(`rows: hq.${table} changed`)
+    }
+    const newTablesWithRows = Object.keys(rowsAfter).filter(
+      (t) => !(t in rowsBefore) && (rowsAfter[t]?.length ?? 0) > 0,
+    )
+    if (newTablesWithRows.length > 0)
+      found.push(`rows: new tables hold rows: ${newTablesWithRows.join(", ")}`)
+
+    // What is new belongs to the nine tables, and only to them.
+    for (const category of ["columns", "constraints", "indexes"]) {
+      for (const r of added[category] ?? []) {
+        if (!NEW.has(r.t)) found.push(`${category}: added to an existing table: ${r.t} ${r.d}`)
+      }
+    }
+    const classTables = (added.classes ?? []).filter((r) => r.d.startsWith("r ")).map((r) => r.t)
+    if (new Set(classTables).size !== NEW.size || !classTables.every((t) => NEW.has(t))) {
+      found.push(`classes: the new tables are not exactly the nine: ${classTables.join(", ")}`)
+    }
+    const newIndexNames = new Set(
+      (added.indexes ?? []).map((r) => `${r.t.split(".")[0]}.${r.d.split(" ")[0]}`),
+    )
+    for (const r of added.classes ?? []) {
+      const kind = r.d[0]
+      const ok =
+        kind === "r" ||
+        (kind === "i" && newIndexNames.has(r.t)) ||
+        (kind === "S" && r.t === "hq.work_items_number_seq") ||
+        (kind === "i" && /^hq\.\w+_pkey$/.test(r.t))
+      if (!ok) found.push(`classes: unexpected new object: ${r.t} ${r.d}`)
+    }
+    for (const r of added.triggers ?? []) {
+      if (r.t !== "hq.work_item_events" || !r.d.startsWith("work_item_events_append_only ")) {
+        found.push(`triggers: unexpected: ${r.t} ${r.d}`)
+      }
+    }
+    if ((added.triggers ?? []).length !== 1) {
+      found.push(`triggers: expected one new trigger, found ${(added.triggers ?? []).length}`)
+    }
+    for (const r of added.functions ?? []) {
+      if (!r.d.startsWith("hq.work_item_events_append_only() "))
+        found.push(`functions: unexpected: ${r.d}`)
+    }
+    if ((added.functions ?? []).length !== 1) {
+      found.push(`functions: expected one new function, found ${(added.functions ?? []).length}`)
+    }
+    for (const category of ["inherits", "policies", "rules", "types"]) {
+      for (const r of added[category] ?? []) found.push(`${category}: unexpected: ${r.t} ${r.d}`)
+    }
+    return found
+  } finally {
+    await test.close()
+  }
+}
+
+const realWork = () => {
+  const [a, b] = readJournal().entries.slice(-2)
+  return {
+    pipeline: readFileSync(join(HQ_MIGRATIONS_FOLDER, `${a?.tag}.sql`), "utf8"),
+    appendOnly: readFileSync(join(HQ_MIGRATIONS_FOLDER, `${b?.tag}.sql`), "utf8"),
+  }
 }
 
 describe("the work pipeline migrations (files)", () => {
@@ -254,6 +469,16 @@ $$ LANGUAGE plpgsql;
 ${real.slice(real.indexOf("CREATE TRIGGER"))}`
     for (const text of sneak(literalHidesAlter)) expect(onlyAddsViolations(text)).not.toEqual([])
     expect(onlyAddsViolations(bodyHidesAlter)).not.toEqual([])
+    // A carriage return ends a `--` comment for Postgres, not for a check that reads lines by \n.
+    expect(
+      onlyAddsViolations(`-- note\rALTER TABLE hq.entries ADD COLUMN x text;\n${real}`),
+    ).not.toEqual([])
+    // INHERIT as an ALTER TABLE subcommand, on an allowed ADD CONSTRAINT form.
+    for (const text of sneak(
+      'ALTER TABLE "hq"."work_items" ADD CONSTRAINT "x" CHECK (true), INHERIT "hq"."entries";',
+    )) {
+      expect(onlyAddsViolations(text)).not.toEqual([])
+    }
     // A table that inherits from an existing one changes what every read of that table returns.
     for (const text of sneak(
       'CREATE TABLE "hq"."signals" ("id" text) INHERITS ("hq"."entries");',
@@ -275,6 +500,59 @@ ${real.slice(real.indexOf("CREATE TRIGGER"))}`
       ),
     ).not.toEqual([])
   })
+
+  it("the catalog: the two migrations change nothing that existed and add only the work pipeline", async () => {
+    expect(await catalogViolations(realWork())).toEqual([])
+  }, 60_000)
+
+  it("the catalog test refuses what only Postgres's own reading reveals", async () => {
+    const work = realWork()
+    const header = work.appendOnly
+    const mutants: Record<string, { pipeline: string; appendOnly: string; expect: RegExp }> = {
+      // A carriage return ends a `--` comment in Postgres: the ALTER below is a statement.
+      "a carriage return in a header comment": {
+        ...work,
+        appendOnly: `-- note\rALTER TABLE hq.entries ADD COLUMN x text;\n${header}`,
+        expect: /columns: added to an existing table: hq\.entries/,
+      },
+      // INHERIT as an ALTER TABLE subcommand makes every read of hq.entries include a new table.
+      "an INHERIT subcommand": {
+        ...work,
+        appendOnly: `${header}\n--> statement-breakpoint\nCREATE TABLE "hq"."work_kids" ("id" text NOT NULL, "kind" text NOT NULL, "slug" text NOT NULL, "created_at" timestamp with time zone NOT NULL);\n--> statement-breakpoint\nALTER TABLE "hq"."work_kids" ADD CONSTRAINT "k" CHECK (true), INHERIT "hq"."entries";`,
+        expect: /inherits: unexpected/,
+      },
+      "a string literal holding a `--` line": {
+        ...work,
+        appendOnly: `${header}\n--> statement-breakpoint\nCREATE INDEX "x" ON "hq"."signals" USING btree ("item_id") WHERE "hq"."signals"."source" <> '\n-- '; ALTER TABLE hq.entries ADD COLUMN x text; SELECT '\n';`,
+        expect: /columns: added to an existing table: hq\.entries/,
+      },
+      "a `-- $$` line inside the function body": {
+        ...work,
+        appendOnly: header.replace(
+          "END;\n$$ LANGUAGE plpgsql;",
+          // A function replacer: a string's own `$$` would be read as a replacement pattern.
+          () =>
+            "END;\n-- $$ LANGUAGE plpgsql; ALTER TABLE hq.entries ADD COLUMN x text; DO $$ BEGIN NULL;\nEND;\n$$ LANGUAGE plpgsql;",
+        ),
+        expect: /columns: added to an existing table: hq\.entries/,
+      },
+      "an UPDATE of an existing table's rows": {
+        ...work,
+        appendOnly: `${header}\n--> statement-breakpoint\nUPDATE hq.spend SET model = 'x';`,
+        expect: /rows: hq\.spend changed/,
+      },
+      "a CREATE OR REPLACE of the 0001 function": {
+        ...work,
+        appendOnly: `${header}\n--> statement-breakpoint\nCREATE OR REPLACE FUNCTION "hq"."entry_versions_append_only"() RETURNS trigger AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;`,
+        expect: /functions: changed or removed/,
+      },
+    }
+    for (const [name, mutant] of Object.entries(mutants)) {
+      const violations = await catalogViolations(mutant)
+      expect(violations, name).not.toEqual([])
+      expect(violations.join("\n"), name).toMatch(mutant.expect)
+    }
+  }, 120_000)
 
   it("the identity clause is in the SQL: number is GENERATED ALWAYS AS IDENTITY", () => {
     const first = readFileSync(join(HQ_MIGRATIONS_FOLDER, `${entries.at(-2)?.tag}.sql`), "utf8")

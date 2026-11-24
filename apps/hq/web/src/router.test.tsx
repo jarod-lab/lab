@@ -24,7 +24,12 @@ describe("the app router", () => {
       ["/app/runner", "Runner & policy"],
     ] as const) {
       const app = await renderApp({ path, hq: createFakeHq() })
-      expect(await app.findByText("Coming next")).toBeTruthy()
+      // A screen without its own task yet shows a placeholder; Approvals is built.
+      expect(
+        await (path === "/app/approvals"
+          ? app.findByRole("region", { name: /Needs you/ })
+          : app.findByText("Coming next")),
+      ).toBeTruthy()
       const current = app
         .getByRole("navigation", { name: "Primary" })
         .querySelector("[aria-current]")

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@lab/ui/a11y"
-import { act } from "@testing-library/react"
+import { act, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createQueryClient } from "../api/query-client"
@@ -8,6 +8,14 @@ import { hqKeys } from "../api/query-keys"
 import { createFakeHq, FakeHqError, fakeViolations, urlOf } from "../test/fake-hq"
 import { factoryStatusFixture, proposalFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
+
+type App = Awaited<ReturnType<typeof renderApp>>
+// The Digest screen has its own links to Approvals: the sidebar's is the one inside the nav.
+function navApprovals(app: App): HTMLElement {
+  return within(app.getByRole("navigation", { name: "Primary" })).getByRole("link", {
+    name: /Approvals/,
+  })
+}
 
 const statusCalls = (hq: ReturnType<typeof createFakeHq>) =>
   hq.sent.filter((s) => s.path === "/v1/factory/status")
@@ -21,8 +29,11 @@ describe("ShellStatus: the live sidebar", () => {
   it("the sidebar badge shows the pending count from get_factory_status and drops to none at 0", async () => {
     const hq = createFakeHq({ factoryStatus: factoryStatusFixture({ pendingProposals: 3 }) })
     const app = await renderApp({ path: "/app/digest", hq })
-    const link = await app.findByRole("link", { name: /Approvals/ })
-    expect(await app.findByText("3")).toBeTruthy()
+    await app.findByRole("navigation", { name: "Primary" })
+    const link = navApprovals(app)
+    expect(
+      await within(await app.findByRole("navigation", { name: "Primary" })).findByText("3"),
+    ).toBeTruthy()
     expect(link.textContent).toContain("3")
     // The live sidebar with its ready runner card (axe leaves the document empty: markup first).
     await app.findByRole("progressbar", { name: "Eve spend cap left" })
@@ -31,7 +42,7 @@ describe("ShellStatus: the live sidebar", () => {
     hq.state.factoryStatus = factoryStatusFixture({ pendingProposals: 0 })
     await act(() => app.queryClient.invalidateQueries({ queryKey: hqKeys.factoryStatus() }))
     await vi.waitFor(() => {
-      expect(app.getByRole("link", { name: /Approvals/ }).textContent).toBe("Approvals")
+      expect(navApprovals(app).textContent).toBe("Approvals")
     })
     await expectNoA11yViolations(liveSidebar)
   })
@@ -42,17 +53,17 @@ describe("ShellStatus: the live sidebar", () => {
       factoryStatus: factoryStatusFixture({ pendingProposals: 1 }),
     })
     const app = await renderApp({ path: "/app/digest", hq })
-    await app.findByText("1")
+    await within(await app.findByRole("navigation", { name: "Primary" })).findByText("1")
     // The decision goes through the app's own client, as the Approvals screen will send it.
     await app.router.options.context.client.decideProposal({
       proposalId: "proposal-1",
       decision: "approve",
     })
     // Not refreshed until something invalidates it.
-    expect(app.getByRole("link", { name: /Approvals/ }).textContent).toContain("1")
+    expect(navApprovals(app).textContent).toContain("1")
     await act(() => app.queryClient.invalidateQueries({ queryKey: hqKeys.factoryStatus() }))
     await vi.waitFor(() => {
-      expect(app.getByRole("link", { name: /Approvals/ }).textContent).toBe("Approvals")
+      expect(navApprovals(app).textContent).toBe("Approvals")
     })
   })
 
@@ -74,7 +85,7 @@ describe("ShellStatus: the live sidebar", () => {
     expect(await app.findByText("Runner status unavailable")).toBeTruthy()
     const failedSidebar = app.container.innerHTML
     expect(app.getByRole("navigation", { name: "Primary" })).toBeTruthy()
-    await app.user.click(app.getByRole("link", { name: /Approvals/ }))
+    await app.user.click(navApprovals(app))
     expect(await app.findByRole("heading", { name: "Approvals" })).toBeTruthy()
     expect(app.router.history.location.pathname).toBe("/app/approvals")
     await expectNoA11yViolations(failedSidebar)

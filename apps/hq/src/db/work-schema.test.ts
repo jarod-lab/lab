@@ -97,19 +97,25 @@ const sha256 = (path: string) =>
 
 /**
  * The statements of a migration file, as drizzle runs them: the file is split on
- * `--> statement-breakpoint` first (a chunk is one query and may hold several statements), then
- * comment lines and empty chunks are dropped.
+ * `--> statement-breakpoint` first (a chunk is one query and may hold several statements). Only the
+ * blank and comment lines at the top of a chunk (before the statement starts) are dropped: a `--`
+ * line further down may sit inside a string literal or a `$$` body, where Postgres reads it as
+ * text, so it stays in the statement and is reported by `onlyAddsViolations`.
  */
 function statementsOf(text: string): string[] {
   return text
     .split("--> statement-breakpoint")
-    .map((chunk) =>
-      chunk
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("--"))
-        .join("\n")
-        .trim(),
-    )
+    .map((chunk) => {
+      const lines = chunk.split("\n")
+      let first = 0
+      while (
+        first < lines.length &&
+        (lines[first]?.trim() === "" || lines[first]?.trimStart().startsWith("--"))
+      ) {
+        first++
+      }
+      return lines.slice(first).join("\n").trim()
+    })
     .filter((chunk) => chunk.length > 0)
 }
 
@@ -132,6 +138,9 @@ function onlyAddsViolations(text: string): string[] {
     if (!ALLOWED_STATEMENTS.some((form) => form.test(statement))) {
       found.push(`not an allowed statement: ${statement.slice(0, 80)}`)
     }
+    if (/--|\/\*/.test(statement))
+      found.push(`comment inside a statement: ${statement.slice(0, 80)}`)
+    if (/\bINHERITS\b/i.test(statement)) found.push(`INHERITS: ${statement.slice(0, 80)}`)
     const body = /\$\$((?:(?!\$\$)[\s\S])*)\$\$/.exec(statement)?.[1]
     if (body && BODY_FORBIDDEN.test(body)) found.push(`function body writes: ${body.slice(0, 80)}`)
   }
@@ -226,6 +235,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;`
     for (const text of sneak(replaced)) expect(onlyAddsViolations(text)).not.toEqual([])
+    // A `--` line inside a string literal or a dollar-quoted body is text to Postgres, not a
+    // comment: (a) ends the literal and runs an ALTER; (b) ends the function body early at the
+    // `$$` in its "comment" and runs an ALTER, then reopens a DO block to swallow the rest.
+    const literalHidesAlter = `CREATE INDEX "x" ON "hq"."signals" USING btree ("item_id") WHERE "hq"."signals"."source" <> '
+-- '; ALTER TABLE hq.entries ADD COLUMN x text; SELECT '
+';`
+    const bodyHidesAlter = `-- The history rule, at the database.
+CREATE FUNCTION "hq"."work_item_events_append_only"() RETURNS trigger AS $$
+BEGIN
+	RAISE EXCEPTION 'hq.work_item_events is append-only: an event is never updated or deleted'
+		USING ERRCODE = 'restrict_violation';
+END;
+-- $$ LANGUAGE plpgsql; ALTER TABLE hq.entries ADD COLUMN x text; DO $$ BEGIN NULL;
+END;
+$$ LANGUAGE plpgsql;
+--> statement-breakpoint
+${real.slice(real.indexOf("CREATE TRIGGER"))}`
+    for (const text of sneak(literalHidesAlter)) expect(onlyAddsViolations(text)).not.toEqual([])
+    expect(onlyAddsViolations(bodyHidesAlter)).not.toEqual([])
+    // A table that inherits from an existing one changes what every read of that table returns.
+    for (const text of sneak(
+      'CREATE TABLE "hq"."signals" ("id" text) INHERITS ("hq"."entries");',
+    )) {
+      expect(onlyAddsViolations(text)).not.toEqual([])
+    }
+    expect(
+      onlyAddsViolations('CREATE TABLE "hq"."work_items" ("id" text) INHERITS ("hq"."entries");'),
+    ).not.toEqual([])
     // A statement hidden after a semicolon inside an allowed chunk, or in the function body.
     expect(
       onlyAddsViolations(

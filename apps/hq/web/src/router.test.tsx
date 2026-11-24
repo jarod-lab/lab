@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { createFakeHq } from "./test/fake-hq"
@@ -18,18 +19,20 @@ describe("the app router", () => {
   })
 
   it("renders each screen route inside the frame with the active nav item marked", async () => {
-    for (const [path, label] of [
+    const screens = [
       ["/app/digest", "Digest"],
       ["/app/approvals", "Approvals"],
       ["/app/runner", "Runner & policy"],
-    ] as const) {
+    ] as const
+    for (const [path, label] of screens) {
       const app = await renderApp({ path, hq: createFakeHq() })
-      // A screen without its own task yet shows a placeholder; Approvals and Runner are built.
-      const built: Record<string, () => Promise<unknown>> = {
+      // Every screen is built: assert its own content, not a placeholder.
+      const built: Record<(typeof screens)[number][0], () => Promise<unknown>> = {
+        "/app/digest": () => app.findByRole("status", { name: "Digest summary" }),
         "/app/approvals": () => app.findByRole("region", { name: /Needs you/ }),
         "/app/runner": () => app.findByRole("heading", { level: 1, name: "Runner and policy" }),
       }
-      expect(await (built[path]?.() ?? app.findByText("Coming next"))).toBeTruthy()
+      expect(await built[path]()).toBeTruthy()
       const current = app
         .getByRole("navigation", { name: "Primary" })
         .querySelector("[aria-current]")
@@ -40,7 +43,8 @@ describe("the app router", () => {
 
   it("navigates between screens from the sidebar", async () => {
     const app = await renderApp({ path: "/app/digest" })
-    await app.user.click(await app.findByRole("link", { name: /Approvals/ }))
+    const nav = within(await app.findByRole("navigation", { name: "Primary" }))
+    await app.user.click(nav.getByRole("link", { name: /Approvals/ }))
     expect(app.router.history.location.pathname).toBe("/app/approvals")
   })
 

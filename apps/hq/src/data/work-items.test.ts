@@ -412,7 +412,36 @@ describe("work items (in-process Postgres)", () => {
         status: "open",
         createdAt: NOW,
       })
-      expect(await at(0)).toMatchObject({ pendingMergeApproval: true, openQuestion: true })
+      // The approval asks for a decision only while the item is in review AND its pull request is
+      // the current one and still open (W5: otherwise the card would be dead); the question
+      // counts in any state.
+      expect(await at(0)).toMatchObject({ pendingMergeApproval: false, openQuestion: true })
+      const inReview = { ...item, state: "review" as const }
+      // review, but the current pull request (#8) is merged: nothing to approve
+      expect(await test.db.transaction((tx) => loadFacts(tx, inReview, NOW))).toMatchObject({
+        pendingMergeApproval: false,
+        openQuestion: true,
+      })
+      // a newer open pull request with its own pending approval: now the card is live
+      const open = await seedPullRequest(test.db, item.id, {
+        number: 9,
+        state: "open",
+        openedAt: minutesAfter(NOW, -60),
+        branch: "factory/fix-9",
+      })
+      await test.db.insert(mergeApprovals).values({
+        id: crypto.randomUUID(),
+        itemId: item.id,
+        pullRequestId: open.id,
+        headSha: open.headSha,
+        status: "pending",
+        requestedAt: NOW,
+      })
+      expect(await test.db.transaction((tx) => loadFacts(tx, inReview, NOW))).toMatchObject({
+        pullRequest: "open",
+        pendingMergeApproval: true,
+        openQuestion: true,
+      })
     })
   })
 

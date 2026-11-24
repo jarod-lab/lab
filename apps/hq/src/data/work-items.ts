@@ -241,11 +241,17 @@ export async function loadFacts(
     .select({ endsAt: verificationWindows.endsAt, status: verificationWindows.status })
     .from(verificationWindows)
     .where(and(eq(verificationWindows.itemId, item.id), eq(verificationWindows.cycle, item.cycle)))
-  const [pending] = await tx
-    .select({ id: mergeApprovals.id })
-    .from(mergeApprovals)
-    .where(and(eq(mergeApprovals.itemId, item.id), eq(mergeApprovals.status, "pending")))
-    .limit(1)
+  // A pending approval is a card that asks for a decision, so it counts only while the decision
+  // can be taken: the item is in `review` and the approval is bound to its CURRENT pull request,
+  // which is open (`approveMerge` refuses anything else). Otherwise the card would be dead.
+  const [pending] =
+    item.state === "review" && pr?.state === "open"
+      ? await tx
+          .select({ id: mergeApprovals.id })
+          .from(mergeApprovals)
+          .where(and(eq(mergeApprovals.pullRequestId, pr.id), eq(mergeApprovals.status, "pending")))
+          .limit(1)
+      : []
   const [open] = await tx
     .select({ id: agentQuestions.id })
     .from(agentQuestions)
@@ -307,6 +313,8 @@ export async function transitionItem(
     actor: Actor
     reason: TransitionReason
     note?: string
+    /** Extra facts for the event (a stop lists the questions it withdrew). */
+    detail?: Record<string, unknown>
     now: Date
   },
 ): Promise<WorkItemRow> {
@@ -344,6 +352,7 @@ export async function transitionItem(
     actor,
     reason,
     note: input.note ?? null,
+    detail: input.detail ?? null,
     cycle,
   })
   return toWorkItemRow(row)
@@ -439,7 +448,8 @@ export async function createItemFromSignal(
     to: "triage",
     actor: { type: "system", id: "hq" },
     reason: "ingested",
-    now,
+    // One millisecond after the signal_attached event, so (at, id) tells the story in order.
+    now: new Date(now.getTime() + 1),
   })
   return { item, signalId }
 }

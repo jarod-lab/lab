@@ -20,12 +20,12 @@ describe("renderApp", () => {
     // Approvals screen's own list reads are not counted here).
     await app.findByText("eve · last run 4h ago")
     const own = (path: string) => path !== "/v1/proposals"
-    expect(hq.sent.map((s) => s.path).filter(own).sort()).toEqual([
-      "/api/auth/get-session",
-      "/v1/factory/status",
-      "/v1/status",
-      "/v1/status",
-    ])
+    expect(
+      hq.sent
+        .map((s) => s.path)
+        .filter(own)
+        .sort(),
+    ).toEqual(["/api/auth/get-session", "/v1/factory/status", "/v1/status", "/v1/status"])
   })
 
   it("defaults to /app/digest with a signed-in founder", async () => {

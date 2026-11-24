@@ -4,10 +4,9 @@ import { QueryClient } from "@tanstack/react-query"
 import { act, fireEvent, waitFor, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
-import { hqKeys } from "../api/query-keys"
 import type { Proposal } from "../api/schemas"
 import { createFakeHq, type FakeHq } from "../test/fake-hq"
-import { factoryStatusFixture, proposalFixture } from "../test/fixtures"
+import { proposalFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
 
 const ALREADY = "Already decided. Refresh to see the result."

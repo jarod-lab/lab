@@ -837,16 +837,57 @@ describe("founder decisions (in-process Postgres)", () => {
   })
 
   describe("every founder function names the founder in the events it writes", () => {
-    it("writes the pinned events, the founder ones carry actor_type founder and the founder id", async () => {
+    const founderEvents = async (itemId: string) =>
+      (await eventsOf(itemId))
+        .filter((e) => e.actorType === "founder")
+        .map((e) => [e.kind, e.actorId])
+
+    it("approve, stop and reopen: one founder event each, in order", async () => {
       const { item } = await reviewed({ attemptLimit: 3 })
       await approve(item.id, { founderId: "f-approve" })
       await stop(item.id, { founderId: "f-stop" })
       await reopen(item.id, { founderId: "f-reopen" })
-      const rows = (await eventsOf(item.id)).filter((e) => e.actorType === "founder")
-      expect(rows.map((e) => [e.kind, e.actorId])).toEqual([
+      expect(await founderEvents(item.id)).toEqual([
         ["merge_approved", "f-approve"],
         ["transition", "f-stop"],
         ["transition", "f-reopen"],
+      ])
+    })
+
+    it("answer and retry: one founder event each", async () => {
+      const item = await seedItem(db(), { state: "attempt", attemptLimit: 3 })
+      for (const number of [1, 2, 3]) {
+        await seedAttempt(db(), item.id, { number, kind: "fix", result: "failed" })
+      }
+      const q = await askQuestion(db(), {
+        itemId: item.id,
+        prompt: "Which?",
+        options: [
+          { id: "a", label: "A" },
+          { id: "b", label: "B" },
+        ],
+        actor: AGENT,
+        now: NOW,
+      })
+      await answerQuestion(db(), {
+        questionId: q.id,
+        optionId: "a",
+        founderId: "f-answer",
+        now: minutesAfter(NOW, 1),
+      })
+      await retry(item.id, { founderId: "f-retry" })
+      expect(await founderEvents(item.id)).toEqual([
+        ["question_answered", "f-answer"],
+        ["retry_granted", "f-retry"],
+      ])
+    })
+
+    it("revert writes two founder events (the move and the revert_requested record): a departure from the plan's one", async () => {
+      const item = await mergedItem("deploy")
+      await revert(item.id, { founderId: "f-revert" })
+      expect(await founderEvents(item.id)).toEqual([
+        ["transition", "f-revert"],
+        ["revert_requested", "f-revert"],
       ])
     })
   })

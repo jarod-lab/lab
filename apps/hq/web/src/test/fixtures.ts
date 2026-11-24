@@ -40,6 +40,7 @@ export function factoryStatusFixture(overrides: Partial<FactoryStatus> = {}): Fa
       grantedUsd: 0,
       remainingUsd: 6.2,
     },
+    work: { inFlight: 0, needsYou: 0, pendingMergeApprovals: 0, openQuestions: 0 },
     ...overrides,
   }
 }

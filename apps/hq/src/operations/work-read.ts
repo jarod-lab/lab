@@ -9,6 +9,7 @@ import { listAttempts } from "../data/attempts"
 import { itemDetail, workBoard, workItemSummaries } from "../data/work-board"
 import {
   type Actor,
+  type ActorVia,
   LIST_MAX_LIMIT,
   listWorkItems,
   QUERY_MAX_CHARS,
@@ -27,8 +28,8 @@ import {
   workState,
 } from "./work-schemas"
 
-/** hq's deps plus the dispatch mode the reads show (the founder operations' task passes it). */
-export type WorkDeps = HqDeps & { dispatchMode?: "label" | "claim" }
+/** hq's deps: `dispatchMode` is part of them, and the reads show it. */
+export type WorkDeps = HqDeps
 
 /**
  * Every untrusted-text sentence the descriptions of the work operations end on, so no description
@@ -46,9 +47,21 @@ export const UNTRUSTED =
  */
 export function agentActor(caller: Caller): Actor {
   const id = caller.actor.type === "user" ? caller.actor.userId : caller.actor.keyId
-  const via = caller.via === "api-key" ? "key" : caller.via
+  const via = VIA_LABELS.get(caller.via)
+  if (!via) {
+    throw new AppError("INTERNAL", "A request arrived with a credential kind hq does not know", {
+      context: { via: caller.via },
+    })
+  }
   return { type: "agent", id, via }
 }
+
+/** The three credential kinds `resolvePrincipal` produces, and the label each gets in an event. */
+const VIA_LABELS = new Map<string, ActorVia>([
+  ["api-key", "key"],
+  ["session", "session"],
+  ["oauth", "oauth"],
+])
 
 /** The item a reference names: the schema already refused a malformed one (BAD_REQUEST). */
 export const resolveItemRef = (deps: HqDeps, ref: string): Promise<WorkItemRow> =>

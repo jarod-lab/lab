@@ -74,6 +74,17 @@ export const factoryStatusSchema = z.object({
     grantedUsd: z.number(),
     remainingUsd: z.number(),
   }),
+  // The pipeline's counts (W8); null before hq's work tables exist. Optional until W15 makes the
+  // client and the fakes carry it everywhere.
+  work: z
+    .object({
+      inFlight: z.number().int(),
+      needsYou: z.number().int(),
+      pendingMergeApprovals: z.number().int(),
+      openQuestions: z.number().int(),
+    })
+    .nullable()
+    .optional(),
 })
 export type FactoryStatus = z.infer<typeof factoryStatusSchema>
 

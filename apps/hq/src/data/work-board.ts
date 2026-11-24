@@ -427,6 +427,9 @@ function eventSummary(e: {
       return "A signal was attached."
     case "attempt_requested":
       return `${n} requested.`
+    case "attempt_request_refused":
+      // Fixed words only: the refusal's reason is the event's own note, shown as text beside it.
+      return "No attempt was requested after the answer."
     case "attempt_started":
       return `${n} started.`
     case "attempt_finished":

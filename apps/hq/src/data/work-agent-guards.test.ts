@@ -18,6 +18,7 @@ import {
   seedAttempt,
   seedItem,
 } from "./work.test.helpers"
+import { appendEvent } from "./work-events"
 import { attemptViewOf, itemDetail, workBoard, workItemSummaries } from "./work-board"
 import { currentPullRequest, lockItem, resolveItem } from "./work-items"
 
@@ -369,15 +370,19 @@ describe("the guards of the agent-facing operations (in-process Postgres)", () =
 
     it("a detail that already says via is not overridden by a caller's text (via is the actor's)", async () => {
       const item = await seedItem(db(), { state: "triage" })
-      await startAttempt(db(), {
-        itemId: item.id,
-        kind: "investigate",
-        externalRef: "r1",
-        actor: { type: "agent", id: "k1", via: "key" },
-        now: NOW,
-      })
-      const written = await events(item.id)
-      expect(written.every((e) => (e.detail as { via?: string }).via === "key")).toBe(true)
+      // No operation passes a detail of its own today; build one that names a forged via.
+      await db().transaction((tx) =>
+        appendEvent(tx, {
+          itemId: item.id,
+          at: NOW,
+          kind: "signal_attached",
+          actor: { type: "agent", id: "k1", via: "key" },
+          detail: { via: "forged", signalId: "s1" },
+          cycle: item.cycle,
+        }),
+      )
+      const [written] = await events(item.id)
+      expect(written?.detail).toEqual({ via: "key", signalId: "s1" })
     })
   })
 

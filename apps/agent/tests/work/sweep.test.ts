@@ -16,6 +16,7 @@ import {
   resetSweepStats,
   runScheduledSweep,
   runWorkSweep,
+  SWEEP_HQ_TIMEOUT_MS,
   sweepErrorRepeats,
   sweepHq,
 } from "#lib/work/sweep.js"
@@ -73,6 +74,26 @@ function clientAnswering(reply: unknown, status = 200) {
   return { client, requests }
 }
 
+/**
+ * The REAL client over a wire that answers with `body` exactly as written. `clientAnswering` JSON-encodes
+ * every reply, so a string it is given still arrives as valid JSON; this one sends bytes that are not.
+ */
+function clientAnsweringRaw(body: string, status: number, contentType?: string) {
+  const requests: string[] = []
+  const client = createHqClient({
+    baseUrl: HQ_BASE_URL,
+    apiKey: "k",
+    fetch: async (url) => {
+      requests.push(typeof url === "string" ? url : url instanceof URL ? url.href : url.url)
+      return new Response(body, {
+        status,
+        headers: contentType === undefined ? undefined : { "content-type": contentType },
+      })
+    },
+  })
+  return { client, requests }
+}
+
 /** The details of every `warn` call whose message is `name`. */
 const logged = (name: string) =>
   warn.mock.calls.filter(([message]) => message === name).map(([, ...details]) => details)
@@ -107,6 +128,26 @@ describe("runWorkSweep", () => {
       expect(requests).toHaveLength(1)
     }
     expect(logged("work_sweep_unavailable")).toHaveLength(5)
+  })
+
+  test("a reply that is not JSON at all (an HTML error page, plain text, nothing) is the same answer, one request each, and its text is never logged", async () => {
+    for (const [status, body, type] of [
+      [502, "<html><body>Bad Gateway SECRET-PAGE ghp_abcdef</body></html>", "text/html"],
+      [500, "upstream connect error SECRET-TEXT", "text/plain"],
+      [200, "{not json SECRET-BROKEN", "application/json"],
+      [200, "", "application/json"],
+      [504, "", undefined],
+    ] as const) {
+      const { client, requests } = clientAnsweringRaw(body, status, type)
+      expect(await runWorkSweep({ hq: client })).toEqual({ sweep: null, dispatched: 0 })
+      expect(requests).toEqual([`${HQ_BASE_URL}${SWEEP_PATH}`])
+    }
+    expect(logged("work_sweep_unavailable")).toHaveLength(5)
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/SECRET-|ghp_|<html>|upstream/)
+    // The text of a reply that is valid JSON but the wrong shape is not logged either.
+    const { client } = clientAnswering({ advanced: "SECRET-SHAPE" })
+    await runWorkSweep({ hq: client })
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("SECRET-SHAPE")
   })
 
   test("an outage is logged by status and code only, never by the reply's text", async () => {
@@ -231,6 +272,20 @@ describe("sweepHq and runScheduledSweep fail closed", () => {
     expect(fetched).not.toHaveBeenCalled()
   })
 
+  test("the sweep's client gives hq 25 seconds, pinned without waiting for them", async () => {
+    expect(SWEEP_HQ_TIMEOUT_MS).toBe(25_000)
+    vi.stubEnv("HQ_BASE_URL", "http://hq.test")
+    vi.stubEnv("HQ_AGENT_API_KEY", "k")
+    const timeout = vi.spyOn(AbortSignal, "timeout")
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(EMPTY), { status: 200 })),
+    )
+    await runScheduledSweep()
+    expect(timeout).toHaveBeenCalledTimes(1)
+    expect(timeout).toHaveBeenCalledWith(25_000)
+  })
+
   test("with the environment set it builds a client for that hq and sweeps once", async () => {
     vi.stubEnv("HQ_BASE_URL", "http://hq.test")
     vi.stubEnv("HQ_AGENT_API_KEY", "not-the-fixtures-key")
@@ -262,11 +317,20 @@ describe("the schedule file", () => {
     const run = (schedule as { run?: (args: unknown) => void }).run
     expect(typeof run).toBe("function")
 
-    // Env unset (the default in tests): the run hands one promise to waitUntil and it resolves.
+    // Env unset: the run hands one promise to waitUntil and it resolves. The two variables are
+    // removed here, not assumed absent, so a developer's shell cannot make this test sweep for real.
+    vi.stubEnv("HQ_BASE_URL", undefined)
+    vi.stubEnv("HQ_AGENT_API_KEY", undefined)
+    expect(process.env.HQ_BASE_URL).toBeUndefined()
+    expect(process.env.HQ_AGENT_API_KEY).toBeUndefined()
+    const fetched = vi.fn()
+    vi.stubGlobal("fetch", fetched)
     const tasks: Promise<unknown>[] = []
     expect(() => run?.({ waitUntil: (task: Promise<unknown>) => tasks.push(task) })).not.toThrow()
     expect(tasks).toHaveLength(1)
     await expect(Promise.all(tasks)).resolves.toBeDefined()
+    expect(fetched).not.toHaveBeenCalled()
+    expect(logged("work_sweep_skipped")).toHaveLength(1)
 
     // A waitUntil that itself throws still does not throw out of the schedule.
     expect(() =>

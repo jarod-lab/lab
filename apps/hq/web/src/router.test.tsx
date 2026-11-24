@@ -27,8 +27,7 @@ describe("the app router", () => {
       // A screen without its own task yet shows a placeholder; Approvals and Runner are built.
       const built: Record<string, () => Promise<unknown>> = {
         "/app/approvals": () => app.findByRole("region", { name: /Needs you/ }),
-        "/app/runner": () =>
-          app.findByRole("heading", { level: 1, name: "Runner and policy" }),
+        "/app/runner": () => app.findByRole("heading", { level: 1, name: "Runner and policy" }),
       }
       expect(await (built[path]?.() ?? app.findByText("Coming next"))).toBeTruthy()
       const current = app

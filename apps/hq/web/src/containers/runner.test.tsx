@@ -1,19 +1,23 @@
 // @vitest-environment jsdom
+import { within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { createFakeHq, type FakeHq } from "../test/fake-hq"
-import { policyFixture } from "../test/fixtures"
+import { factoryStatusFixture, policyFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
 
 /** A fake whose `/v1/policy` answers when the test says so, or fails once, and records the rest. */
-function controlled(hq: FakeHq, mode: { hold?: Promise<void>; failOnce?: boolean }): FakeHq {
+function controlled(
+  hq: FakeHq,
+  mode: { hold?: Promise<void>; failOnce?: boolean; path?: string },
+): FakeHq {
   let failed = false
   const fetchThrough: typeof fetch = async (input, init) => {
     const url = new URL(
       typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
       "http://localhost:3100",
     )
-    if (url.pathname === "/v1/policy") {
+    if (url.pathname === (mode.path ?? "/v1/policy")) {
       if (mode.hold) await mode.hold
       if (mode.failOnce && !failed) {
         failed = true
@@ -76,6 +80,42 @@ describe("the Runner and policy screen", () => {
     await app.user.click(app.getByRole("button", { name: "Retry" }))
     expect(await app.findByRole("heading", { name: "Approval rules today" })).toBeTruthy()
     expect(app.queryByRole("alert")).toBeNull()
+  })
+
+  it("a failed get_factory_status shows the error with Retry, and Retry asks again", async () => {
+    const hq = controlled(createFakeHq(), { failOnce: true, path: "/v1/factory/status" })
+    const app = await renderApp({ path: "/app/runner", hq })
+    const alert = await app.findByRole("alert", {}, { timeout: 5000 })
+    expect(alert.textContent).toContain("Founders only")
+    expect(app.queryByRole("heading", { name: "Approval rules today" })).toBeNull()
+    await app.user.click(app.getByRole("button", { name: "Retry" }))
+    expect(await app.findByRole("heading", { name: "Approval rules today" })).toBeTruthy()
+  })
+
+  it("a fresh hq with no runs says none yet and not recorded, and a full cap", async () => {
+    const base = factoryStatusFixture()
+    const hq = createFakeHq({
+      factoryStatus: {
+        ...base,
+        pendingProposals: 0,
+        runners: base.runners.map((r) => ({ ...r, lastStartedAt: null, lastOutcome: null })),
+        allowance: { ...base.allowance, spentUsd: 0, remainingUsd: 10 },
+      },
+    })
+    const app = await renderApp({ path: "/app/runner", hq })
+    await app.findByRole("heading", { name: "Approval rules today" })
+    const items = within(app.getByRole("region", { name: "Local runner" })).getAllByRole("listitem")
+    expect(items).toHaveLength(3)
+    for (const item of items) {
+      expect(item.textContent).toContain("none yet")
+      expect(item.textContent).toContain("not recorded")
+    }
+    expect(
+      app
+        .getByRole("progressbar", { name: "Eve spend cap, not your Claude plan" })
+        .getAttribute("value"),
+    ).toBe("100")
+    expect(app.getByText("no runs yet")).toBeTruthy()
   })
 
   it("asks for the factory status and the policy once each, and sends nothing but GETs", async () => {

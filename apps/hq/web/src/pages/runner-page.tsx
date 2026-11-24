@@ -248,7 +248,11 @@ function Autonomy() {
         <p className="m-0 text-[13px] text-soft">
           Today agents can only propose; a founder decides every proposal.
         </p>
-        <NotConfigured phase="Phase 5" what="the autonomy level of each signal class" />
+        <NotConfigured
+          id="runner-autonomy-note"
+          phase="Phase 5"
+          what="the autonomy level of each signal class"
+        />
         <ul className="m-0 flex list-none flex-col p-0">
           {SIGNAL_CLASSES.map((name) => (
             <li
@@ -256,7 +260,10 @@ function Autonomy() {
               className="flex flex-col gap-2 border-t border-border py-2.5 text-[13px] sm:flex-row sm:items-center sm:gap-3"
             >
               <span className="min-w-0 font-medium text-foreground sm:flex-[0_0_46%]">{name}</span>
-              <fieldset className="m-0 flex min-w-0 flex-1 gap-1 border-0 p-0">
+              <fieldset
+                aria-describedby="runner-autonomy-note"
+                className="m-0 flex min-w-0 flex-1 gap-1 border-0 p-0"
+              >
                 <legend className="sr-only">Level for {name}</legend>
                 {LEVELS.map(({ level, label }) => (
                   <Button

@@ -230,6 +230,15 @@ describe("Autonomy by signal class", () => {
     )
   })
 
+  it("links every level group to the Not configured note by aria-describedby", () => {
+    const autonomy = region(page(), "Autonomy by signal class")
+    const note = autonomy.getByRole("note")
+    expect(note.id).not.toBe("")
+    for (const group of autonomy.getAllByRole("group")) {
+      expect(group.getAttribute("aria-describedby")).toBe(note.id)
+    }
+  })
+
   it("keeps the mock's per-row notes out: they state rules hq does not enforce", () => {
     const text = region(page(), "Autonomy by signal class").getByRole("list").textContent ?? ""
     expect(text).not.toMatch(/50 or more|quarantined|10 or more|still being tuned|accept/i)

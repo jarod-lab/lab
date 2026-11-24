@@ -28,18 +28,34 @@ function save(value: string): void {
   }
 }
 
+function remove(): void {
+  try {
+    window.localStorage.removeItem(READ_MARKER_KEY)
+  } catch {
+    // Nothing to forget, or storage is blocked.
+  }
+}
+
 /**
  * The digest's "read up to here" time, remembered in this browser only. It is used only as the
  * `since` of the next get_digest call. `markRead(at)` takes hq's own clock (the digest's `until`)
  * so a skewed browser clock can never ask for a window in hq's future; with no argument it marks
- * the browser's now.
+ * the browser's now. `clear()` forgets the marker (the default window again).
  */
-export function useReadMarker(): { readAt: string | null; markRead(at?: string): void } {
+export function useReadMarker(): {
+  readAt: string | null
+  markRead(at?: string): void
+  clear(): void
+} {
   const [readAt, setReadAt] = useState<string | null>(load)
   const markRead = useCallback((at?: string) => {
     const value = at !== undefined && isIsoTime(at) ? at : new Date().toISOString()
     save(value)
     setReadAt(value)
   }, [])
-  return { readAt, markRead }
+  const clear = useCallback(() => {
+    remove()
+    setReadAt(null)
+  }, [])
+  return { readAt, markRead, clear }
 }

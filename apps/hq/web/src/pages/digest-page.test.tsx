@@ -273,6 +273,41 @@ describe("DigestPage", () => {
     expect(marked.disabled).toBe(true)
   })
 
+  it("every link and button is at least 44 px (class min-h-touch)", async () => {
+    const view = await show(
+      digestFixture({
+        summary: { tone: "quiet", runsFinished: 0, runsFailed: 0, pendingProposals: 2 },
+        decisions: pending(2),
+      }),
+    )
+    const controls = Array.from(view.container.querySelectorAll("a, button"))
+    // Mark as read, two Decide links, See all.
+    expect(controls).toHaveLength(4)
+    for (const control of controls) {
+      expect(control.className, control.textContent ?? "").toContain("min-h-touch")
+    }
+  })
+
+  it("renders a proposal's title and reason as text, never as markup", async () => {
+    const hostile = {
+      proposalId: "proposal-x",
+      entryKind: "fact" as const,
+      title: '<img src=x onerror="alert(1)"> [click](https://evil.example)',
+      reason: "<script>alert(1)</script> **not bold** [link](https://evil.example)",
+      createdAt: "2026-11-17T09:00:00.000Z",
+    }
+    const view = await show(
+      digestFixture({
+        summary: { tone: "quiet", runsFinished: 0, runsFailed: 0, pendingProposals: 1 },
+        decisions: [hostile],
+      }),
+    )
+    expect(view.container.querySelector("img, script")).toBeNull()
+    expect(view.container.querySelector("a[href^='https://evil']")).toBeNull()
+    expect(view.getByText(hostile.title)).toBeTruthy()
+    expect(view.getByText(`Why: ${hostile.reason}`)).toBeTruthy()
+  })
+
   it("has no inline style", async () => {
     const view = await show(
       digestFixture({ decisions: pending(2), summary: digestFixture().summary }),

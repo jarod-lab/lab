@@ -90,6 +90,27 @@ describe("the Digest screen", () => {
     expect(digestCalls(hq)[0]?.search).toBe("?since=2026-11-17T06%3A00%3A00.000Z")
   })
 
+  it("a stored marker that hq refuses (400) is cleared and the default window is fetched", async () => {
+    // After the fixture's `until` (2026-11-17T12:00Z): the fake answers 400 as hq does.
+    window.localStorage.setItem("hq.digest.readAt", "2026-11-18T00:00:00.000Z")
+    const hq = createFakeHq()
+    const app = await renderApp({ path: "/app/digest", hq })
+    expect(await app.findByRole("status", { name: "Digest summary" })).toBeTruthy()
+    expect(app.queryByRole("alert")).toBeNull()
+    expect(window.localStorage.getItem("hq.digest.readAt")).toBeNull()
+    const searches = digestCalls(hq).map((s) => s.search)
+    expect(searches).toEqual(["?since=2026-11-18T00%3A00%3A00.000Z", ""])
+    expect(app.getByRole("button", { name: "Mark as read" })).toBeTruthy()
+  })
+
+  it("a 400 with no stored marker is shown as an error and clears nothing", async () => {
+    const base = createFakeHq()
+    const hq = failingDigest(base, 400)
+    const app = await renderApp({ path: "/app/digest", hq })
+    expect(await app.findByRole("alert")).toBeTruthy()
+    expect(digestCalls(base)).toHaveLength(0)
+  })
+
   it("with localStorage throwing, the page renders and Mark as read does not crash", async () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked")

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { hqKeys } from "../api/query-keys"
 import { ErrorBlock, LoadingBlock } from "../components/states"
@@ -11,7 +11,7 @@ import { DigestPage } from "../pages/digest-page"
 /** The Digest screen: get_digest from the read marker on, and the cap from get_factory_status. */
 export function Digest() {
   const { client } = useHq()
-  const { readAt, markRead } = useReadMarker()
+  const { readAt, markRead, clear } = useReadMarker()
   // Only for this visit: coming back later, the marker still bounds the window but the button is live.
   const [marked, setMarked] = useState(false)
   const since = readAt ?? undefined
@@ -24,6 +24,14 @@ export function Digest() {
     queryKey: hqKeys.factoryStatus(),
     queryFn: () => client.getFactoryStatus(),
   })
+
+  // hq refused the stored time (a since after its now, or a hand-edited value): forget it and ask
+  // for the default window, so the screen can never stay stuck on a marker nothing can clear.
+  const refusedMarker =
+    since !== undefined && digest.error instanceof HqError && digest.error.kind === "bad-request"
+  useEffect(() => {
+    if (refusedMarker) clear()
+  }, [refusedMarker, clear])
 
   if (digest.data === undefined) {
     return digest.isError ? (

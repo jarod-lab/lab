@@ -52,4 +52,19 @@ describe("useReadMarker", () => {
     act(() => result.current.markRead("2026-11-17T12:00:00.000Z"))
     expect(result.current.readAt).toBe("2026-11-17T12:00:00.000Z")
   })
+
+  it("clear forgets the marker in state and storage, even with storage throwing", () => {
+    const { result } = renderHook(() => useReadMarker())
+    act(() => result.current.markRead("2026-11-17T12:00:00.000Z"))
+    act(() => result.current.clear())
+    expect(result.current.readAt).toBeNull()
+    expect(window.localStorage.getItem(READ_MARKER_KEY)).toBeNull()
+
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked")
+    })
+    act(() => result.current.markRead("2026-11-17T12:00:00.000Z"))
+    act(() => result.current.clear())
+    expect(result.current.readAt).toBeNull()
+  })
 })

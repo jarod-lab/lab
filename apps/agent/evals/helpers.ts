@@ -227,6 +227,68 @@ export function bashWritesGitHub(input: unknown): boolean {
   }
 }
 
+const MERGE_PATH_PATTERN = /\/pulls\/\d+\/merge(?:[?#]|$)/
+const MERGE_MUTATION_PATTERN = /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/
+const BODY_FLAG_PATTERN = /^(?:-[fF]|--(?:field|raw-field|input))(?:=|$)/
+const WRITE_METHOD_PATTERN = /^(?:-X|--method)(?:=(?:PUT|POST|PATCH)|$)/i
+
+/** Whether the words after `gh` merge: `pr merge`, or a write to the merge endpoint or mutation. */
+const argvMerges = (argv: readonly string[]): boolean => {
+  const words: string[] = []
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i] ?? ""
+    if (arg === "-R" || arg === "--repo") {
+      i += 1
+    } else if (!arg.startsWith("-")) {
+      words.push(arg)
+    }
+  }
+  if (words[0] === "pr") {
+    return words[1] === "merge"
+  }
+  if (words[0] !== "api") {
+    return false
+  }
+  if (argv.some((arg) => MERGE_MUTATION_PATTERN.test(arg))) {
+    return true
+  }
+  // GET on the merge endpoint only asks whether the pull request was merged.
+  const writes = argv.some(
+    (arg, i) =>
+      BODY_FLAG_PATTERN.test(arg) ||
+      (WRITE_METHOD_PATTERN.test(arg) &&
+        (arg.includes("=") || /^(?:PUT|POST|PATCH)$/i.test(argv[i + 1] ?? ""))),
+  )
+  return writes && argv.some((arg) => MERGE_PATH_PATTERN.test(arg))
+}
+
+const SHELL_MERGE_PATTERN = /\bgh\s+(?:(?:-R|--repo)\s+\S+\s+)?pr\s+merge\b/
+
+/**
+ * Whether a `bash` tool input merges a pull request with `gh`: `gh pr merge`
+ * (any flags, `--auto` included), a PUT to `pulls/N/merge` through `gh api`,
+ * or the `mergePullRequest` and `enablePullRequestAutoMerge` GraphQL mutations.
+ *
+ * @remarks
+ * A merge is not in the allowlist, so {@link bashWritesGitHub} counts it as a
+ * write like any other. This answers the narrower question an eval about a
+ * merge request asks, and it reads the words of the command rather than a
+ * substring: `mergeable`, `mergedAt`, `--state merged` and `git merge` are
+ * not merges. A command the shell lexer leaves unparsed (a pipe, a script) is
+ * matched on the `gh pr merge` words only, so a pipe cannot hide one.
+ */
+export function mergesPullRequest(input: unknown): boolean {
+  const command = bashCommand(input)
+  if (command === null) {
+    return false
+  }
+  const analysis = analyzeCommand(command)
+  if (analysis.kind === "gh") {
+    return analysis.steps.some((step) => argvMerges(step.argv))
+  }
+  return SHELL_MERGE_PATTERN.test(command)
+}
+
 /**
  * Builds an input matcher for `calledTool("bash", { input })` and
  * `requireInteraction({ toolName: "bash", input })`: the command must be a

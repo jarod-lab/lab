@@ -236,7 +236,12 @@ describe("NeedsYouCard: busy, errors, text and layout", () => {
     for (const text of view.container.querySelectorAll("h3, p")) {
       expect(text.className).toContain("wrap-anywhere")
     }
-    for (const button of view.container.querySelectorAll("button")) {
+    // The buttons whose text comes from outside (the option labels) wrap; Show all has fixed text.
+    const options = [...view.container.querySelectorAll("button")].filter(
+      (b) => !/^Show (all|less)$/.test(b.textContent ?? ""),
+    )
+    expect(options).toHaveLength(2)
+    for (const button of options) {
       expect(button.className).toContain("wrap-anywhere")
       expect(button.className).toContain("whitespace-normal")
       expect(button.className).toContain("h-auto")
@@ -258,5 +263,110 @@ describe("NeedsYouCard: busy, errors, text and layout", () => {
       await expectNoA11yViolations(view.container.innerHTML)
       view.unmount()
     }
+  })
+})
+
+describe("NeedsYouCard: text a founder decides on is never cut without a way to read it", () => {
+  const asking = (prompt: string, details: (string | undefined)[] = [undefined, undefined]) => {
+    const need = needsYouFixture("agent_question")
+    return {
+      ...need,
+      question: {
+        ...(need.question as NonNullable<NeedsYou["question"]>),
+        prompt,
+        options: [
+          {
+            id: "up",
+            label: "Half up",
+            ...(details[0] === undefined ? {} : { detail: details[0] }),
+          },
+          {
+            id: "even",
+            label: "Half to even",
+            ...(details[1] === undefined ? {} : { detail: details[1] }),
+          },
+        ],
+      },
+    }
+  }
+  const clamped = (view: RenderResult) => view.container.querySelectorAll("[class*='line-clamp']")
+  const lastLine = "THE LINE THAT MATTERS"
+
+  it("a short prompt and short details are never cut and have no toggle", async () => {
+    const view = await show(asking("Which one?", ["Because.", "Or not."]))
+    expect(clamped(view)).toHaveLength(0)
+    expect(view.queryByRole("button", { name: "Show all" })).toBeNull()
+    expect(view.queryByRole("link", { name: "Open item to read it all" })).toBeNull()
+  })
+
+  it("a short prompt of 20 lines is cut with Show all and the read-all link, and Show all reveals the last line", async () => {
+    const prompt = `${Array.from({ length: 19 }, (_, i) => `line ${i + 1} text`).join("\n")}\n${lastLine}`
+    expect(prompt.length).toBeLessThan(600)
+    const view = await show(asking(prompt))
+    const user = userEvent.setup()
+    expect(clamped(view).length).toBeGreaterThan(0)
+    const toggle = view.getByRole("button", { name: "Show all" })
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(view.getByRole("link", { name: "Open item to read it all" })).toBeTruthy()
+    await user.click(toggle)
+    expect(clamped(view)).toHaveLength(0)
+    expect(view.getByText(/THE LINE THAT MATTERS/)).toBeTruthy()
+    const shown = view.getByRole("button", { name: "Show less" })
+    expect(shown.getAttribute("aria-expanded")).toBe("true")
+    await user.click(shown)
+    expect(clamped(view).length).toBeGreaterThan(0)
+  })
+
+  it("a 500 character option detail is cut with Show all and then shown whole", async () => {
+    const detail = `${"d".repeat(499)}!`
+    const view = await show(asking("Which one?", [detail, "Short."]))
+    expect(clamped(view).length).toBeGreaterThan(0)
+    await userEvent.setup().click(view.getByRole("button", { name: "Show all" }))
+    expect(clamped(view)).toHaveLength(0)
+    expect(view.getByText(detail).textContent).toHaveLength(500)
+  })
+
+  it("a detail of three short lines is cut with the toggle too", async () => {
+    const view = await show(asking("Which one?", ["one\ntwo\nthree", undefined]))
+    expect(view.getByRole("button", { name: "Show all" })).toBeTruthy()
+  })
+
+  it("a 600 or more character prompt is cut with Show all and then shown whole", async () => {
+    const prompt = `${"p".repeat(699)}!`
+    const view = await show(asking(prompt))
+    expect(clamped(view).length).toBeGreaterThan(0)
+    expect(view.getByRole("link", { name: "Open item to read it all" })).toBeTruthy()
+    await userEvent.setup().click(view.getByRole("button", { name: "Show all" }))
+    expect(clamped(view)).toHaveLength(0)
+    expect(view.getByText(prompt).textContent).toHaveLength(700)
+  })
+
+  it("a long title or reason on any card gets Show all and then reads whole", async () => {
+    for (const kind of ["merge_approval", "attempt_budget", "stuck_attempt"] as const) {
+      const need = needsYouFixture(kind)
+      const title = `${"t".repeat(300)}END`
+      const view = await show({ ...need, title, reason: `${"r".repeat(400)}END` })
+      expect(clamped(view).length, kind).toBeGreaterThan(0)
+      await userEvent.setup().click(view.getByRole("button", { name: "Show all" }))
+      expect(clamped(view), kind).toHaveLength(0)
+      expect(view.container.textContent, kind).toContain(`${"t".repeat(300)}END`)
+      view.unmount()
+    }
+  })
+
+  it("Show all and Open item stay at least 44 px and the expanded card has no a11y violation", async () => {
+    const view = await show(asking("x".repeat(700), ["y".repeat(500), undefined]))
+    const user = userEvent.setup()
+    for (const control of view.container.querySelectorAll("a, button")) {
+      expect(control.className).toContain("min-h-touch")
+    }
+    await user.click(view.getByRole("button", { name: "Show all" }))
+    await expectNoA11yViolations(view.container.innerHTML)
+  })
+
+  it("expanding never sends anything", async () => {
+    const view = await show(asking("x".repeat(700)))
+    await userEvent.setup().click(view.getByRole("button", { name: "Show all" }))
+    expect(view.a.onAnswer).not.toHaveBeenCalled()
   })
 })

@@ -130,8 +130,9 @@ describe("the Work board", () => {
     ])
     // The other two cards are still there, and the founder is told what was and was not done.
     expect(within(await needsYou(app)).getAllByRole("article")).toHaveLength(2)
-    expect((await app.findByRole("status", { name: "Last action" })).textContent).toContain("FAC-6")
-    expect(app.getByRole("status", { name: "Last action" }).textContent).toMatch(/on GitHub/)
+    expect((await app.findByRole("status", { name: "Last action" })).textContent).toBe(
+      "Merge approved for FAC-6 at aaaaaaa. Nothing was merged: merge it on GitHub.",
+    )
   })
 
   it("two quick clicks on Confirm send one request and the card's buttons are disabled meanwhile", async () => {
@@ -227,6 +228,75 @@ describe("the Work board", () => {
       hold.release()
       await waitFor(() => expect(app.queryByLabelText("Title")).toBeNull())
     })
+  })
+
+  it("a card stays disabled until the board has been read again after a successful write", async () => {
+    const hq = createFakeHq()
+    const real = hq.fetch
+    let posted = false
+    let boardReached = 0
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    hq.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      const method = (init?.method ?? "GET").toUpperCase()
+      // Hold the board read that follows the write: hq has answered, the screen has not caught up.
+      if (posted && method === "GET" && url.startsWith("/v1/work/board")) {
+        boardReached += 1
+        await gate
+      }
+      const reply = await real(input, init)
+      if (method === "POST") posted = true
+      return reply
+    }) as typeof fetch
+    const app = await renderApp({ path: "/app/work", hq })
+    const merge = await card(app, MERGE_TITLE)
+    await app.user.click(within(merge).getByRole("button", { name: "Approve merge" }))
+    await app.user.click(within(merge).getByRole("button", { name: "Confirm" }))
+    await waitFor(() => expect(boardReached).toBe(1))
+    // The write succeeded and its card is still on screen: nothing on the board can be clicked,
+    // so no second approval can be sent for a head that is already approved.
+    const region = await needsYou(app)
+    expect(within(region).getAllByRole("article")).toHaveLength(3)
+    for (const button of region.querySelectorAll("button")) {
+      expect((button as HTMLButtonElement).disabled, button.textContent ?? "").toBe(true)
+    }
+    expect(merge.getAttribute("aria-busy")).toBe("true")
+    expect(app.queryByRole("status", { name: "Last action" })).toBeNull()
+    expect(posts(hq)).toHaveLength(1)
+    release()
+    await leaves(app, MERGE_TITLE)
+    expect((await app.findByRole("status", { name: "Last action" })).textContent).toContain(
+      "Merge approved",
+    )
+    for (const button of (await needsYou(app)).querySelectorAll("button")) {
+      expect((button as HTMLButtonElement).disabled).toBe(false)
+    }
+  })
+
+  it("Create item says another change is in flight, and waits, while a write is pending", async () => {
+    const hq = createFakeHq()
+    const hold = holdPosts(hq)
+    const app = await renderApp({ path: "/app/work", hq })
+    await app.user.click(await app.findByRole("button", { name: "New item" }))
+    await app.user.type(app.getByLabelText("Title"), "Waits its turn")
+    expect(app.queryByText(/Another change is in flight/)).toBeNull()
+    const merge = await card(app, MERGE_TITLE)
+    await app.user.click(within(merge).getByRole("button", { name: "Approve merge" }))
+    await app.user.click(within(merge).getByRole("button", { name: "Confirm" }))
+    const create = app.getByRole("button", { name: "Create item" }) as HTMLButtonElement
+    expect(create.disabled).toBe(true)
+    expect(app.getByText(/Another change is in flight/)).toBeTruthy()
+    // A submit that gets through anyway (Enter in the field) sends nothing either.
+    fireEvent.submit(app.getByRole("form", { name: "New work item" }))
+    expect(hold.reached()).toBe(1)
+    hold.release()
+    await leaves(app, MERGE_TITLE)
+    await waitFor(() => expect(create.disabled).toBe(false))
+    expect(app.queryByText(/Another change is in flight/)).toBeNull()
+    expect(posts(hq)).toHaveLength(1)
   })
 
   it("a 409 shows 'The pull request changed since you looked. Review it again.' and refetches the board", async () => {
@@ -453,7 +523,9 @@ describe("the Work board", () => {
     const asking = [...region.querySelectorAll("article")].find((a) =>
       a.textContent?.includes("(default)"),
     ) as HTMLElement
-    const options = within(asking).getAllByRole("button")
+    const options = within(asking)
+      .getAllByRole("button")
+      .filter((b) => !/^Show (all|less)$/.test(b.textContent ?? ""))
     expect(options).toHaveLength(2)
     for (const button of options) {
       expect(button.className).toContain("whitespace-normal")

@@ -6,6 +6,7 @@ import { type FormEvent, useId, useState } from "react"
 
 import type { HqError } from "../api/errors"
 import type { NeedsYou, WorkBoard, WorkItemSummary } from "../api/schemas"
+import { BUSY_MESSAGE } from "../lib/use-one-write"
 import { KpiCard } from "../components/kpi-card"
 import { NeedsYouCard, type NeedsYouActions, needKey } from "../components/needs-you-card"
 import { PageHeader } from "../components/page-header"
@@ -49,12 +50,15 @@ function reposFor(board: WorkBoard, need: NeedsYou): readonly string[] {
 function NewItemForm({
   defaultRepo,
   creating,
+  blocked,
   error,
   onCreate,
   onCancel,
 }: {
   defaultRepo: string
   creating: boolean
+  /** Another write is on its way: this one waits (the board sends one at a time). */
+  blocked: boolean
   error: string | null
   onCreate: WorkPageProps["onCreate"]
   onCancel(): void
@@ -67,7 +71,7 @@ function NewItemForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (creating) return
+    if (creating || blocked) return
     const cleanTitle = title.trim()
     const cleanRepo = repo.trim()
     if (cleanTitle === "") return setProblem("Give the item a title.")
@@ -123,8 +127,13 @@ function NewItemForm({
           {problem ?? error}
         </p>
       ) : null}
+      {blocked ? (
+        <output className="block text-xs text-muted-foreground wrap-anywhere">
+          {BUSY_MESSAGE}
+        </output>
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" className="min-h-touch px-4" disabled={creating}>
+        <Button type="submit" className="min-h-touch px-4" disabled={creating || blocked}>
           Create item
         </Button>
         <Button
@@ -242,6 +251,7 @@ export function WorkPage({
         <NewItemForm
           defaultRepo={board.repos[0] ?? ""}
           creating={creating}
+          blocked={actions.pending !== null && !creating}
           error={createError}
           onCreate={onCreate}
           onCancel={() => setOpenedAt(null)}

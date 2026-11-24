@@ -2,7 +2,7 @@ import { Button } from "@lab/ui/components/ui/button"
 import { Label } from "@lab/ui/components/ui/label"
 import { Textarea } from "@lab/ui/components/ui/textarea"
 import { Link } from "@tanstack/react-router"
-import { useId, useState } from "react"
+import { type ReactNode, useId, useState } from "react"
 
 import type { NeedsYou } from "../api/schemas"
 import { pullRequestLink } from "../lib/pull-request-link"
@@ -33,8 +33,35 @@ const KIND_LABEL: Record<NeedsYou["kind"], string> = {
 
 /** hq stores 2 000 characters of a note (NOTE_MAX_CHARS); a longer one is refused. */
 const NOTE_MAX_CHARS = 2000
-/** A prompt this long is cut on the card; the item page has all of it. */
-const LONG_PROMPT_CHARS = 600
+// What a collapsed card shows. Every text field is untrusted and can be as long as it likes, but a
+// founder answers or approves from this card, so text is cut only on a card that offers "Show all"
+// (as ProposalCard does), and a card offers it whenever any field is beyond what its cut would
+// show at a phone's width (the limits sit below the clamp's lines at about 45 characters a line).
+const LONG_TITLE_CHARS = 100
+const LONG_REASON_CHARS = 160
+const LONG_PROMPT_CHARS = 300
+const LONG_PROMPT_LINES = 6
+const LONG_DETAIL_CHARS = 120
+const LONG_DETAIL_LINES = 2
+
+const lineCount = (text: string) => text.split("\n").length
+
+/** Whether any text on the card could be cut when it is collapsed. */
+export function isLong(need: NeedsYou): boolean {
+  const question = need.question
+  return (
+    need.title.length > LONG_TITLE_CHARS ||
+    need.reason.length > LONG_REASON_CHARS ||
+    (question !== undefined &&
+      (question.prompt.length > LONG_PROMPT_CHARS ||
+        lineCount(question.prompt) > LONG_PROMPT_LINES ||
+        question.options.some(
+          (o) =>
+            o.detail !== undefined &&
+            (o.detail.length > LONG_DETAIL_CHARS || lineCount(o.detail) > LONG_DETAIL_LINES),
+        )))
+  )
+}
 
 const LINK_BASE =
   "inline-flex min-h-touch max-w-full items-center justify-center rounded-lg border-2 px-4 text-sm font-bold"
@@ -123,10 +150,17 @@ function QuestionBody({
   need,
   actions,
   titleId,
+  long,
+  clamp,
+  toggle,
 }: {
   need: NeedsYou
   actions: NeedsYouActions
   titleId: string
+  long: boolean
+  /** The clamp class for a field, or "" while the card is expanded or short. */
+  clamp: (lines: string) => string
+  toggle: ReactNode
 }) {
   const question = need.question
   if (!question) return <ItemLink need={need} label="Open item" primary describedBy={titleId} />
@@ -138,11 +172,14 @@ function QuestionBody({
     : question.options
   return (
     <>
-      <p className="m-0 line-clamp-8 text-xs leading-relaxed whitespace-pre-wrap text-soft wrap-anywhere">
+      <p
+        className={`m-0 text-xs leading-relaxed whitespace-pre-wrap text-soft wrap-anywhere ${clamp("line-clamp-8")}`}
+      >
         {question.prompt}
       </p>
-      {question.prompt.length > LONG_PROMPT_CHARS ? (
-        <div>
+      {long ? (
+        <div className="flex flex-wrap gap-2">
+          {toggle}
           <ItemLink
             need={need}
             label="Open item to read it all"
@@ -166,7 +203,9 @@ function QuestionBody({
                 {isDefault ? `${option.label} (default)` : option.label}
               </Button>
               {option.detail ? (
-                <p className="m-0 line-clamp-4 px-1 text-[11px] text-faint wrap-anywhere">
+                <p
+                  className={`m-0 px-1 text-[11px] whitespace-pre-wrap text-faint wrap-anywhere ${clamp("line-clamp-4")}`}
+                >
                   {option.detail}
                 </p>
               ) : null}
@@ -259,6 +298,22 @@ export function NeedsYouCard({
   const titleId = `${id}-title`
   const key = needKey(need)
   const error = actions.errors[key]
+  const [expanded, setExpanded] = useState(false)
+  const long = isLong(need)
+  // One decision for every clamp: text is cut only on a card that offers "Show all".
+  const clamp = (lines: string) => (long && !expanded ? lines : "")
+  const toggle = long ? (
+    <Button
+      type="button"
+      variant="ghost"
+      className="min-h-touch self-start px-3"
+      aria-expanded={expanded}
+      aria-controls={titleId}
+      onClick={() => setExpanded((value) => !value)}
+    >
+      {expanded ? "Show less" : "Show all"}
+    </Button>
+  ) : null
   return (
     <article
       aria-labelledby={titleId}
@@ -271,19 +326,29 @@ export function NeedsYouCard({
         </span>
         <h3
           id={titleId}
-          className="m-0 line-clamp-3 text-sm leading-snug font-medium text-foreground wrap-anywhere"
+          className={`m-0 text-sm leading-snug font-medium text-foreground wrap-anywhere ${clamp("line-clamp-3")}`}
         >
           {need.title}
         </h3>
-        <p className="m-0 line-clamp-4 text-xs leading-snug text-muted-foreground wrap-anywhere">
+        <p
+          className={`m-0 text-xs leading-snug text-muted-foreground wrap-anywhere ${clamp("line-clamp-4")}`}
+        >
           {need.reason}
         </p>
       </div>
+      {long && need.kind !== "agent_question" ? toggle : null}
       {need.kind === "merge_approval" ? (
         <MergeBody need={need} actions={actions} repos={repos} titleId={titleId} />
       ) : null}
       {need.kind === "agent_question" ? (
-        <QuestionBody need={need} actions={actions} titleId={titleId} />
+        <QuestionBody
+          need={need}
+          actions={actions}
+          titleId={titleId}
+          long={long}
+          clamp={clamp}
+          toggle={toggle}
+        />
       ) : null}
       {need.kind === "attempt_budget" ? (
         <RetryBody need={need} actions={actions} titleId={titleId} />

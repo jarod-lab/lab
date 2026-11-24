@@ -1,5 +1,5 @@
 import { agentEnv } from "@lab/env/agent"
-import { FACTORY_REPO } from "../constants.js"
+import { FACTORY_REPO, MAX_ATTEMPTS_PER_ITEM } from "../constants.js"
 import {
   createHqClient,
   type AttemptView,
@@ -8,9 +8,13 @@ import {
   type WorkItemDetail,
 } from "../hq/client.js"
 import {
+  ASK_CAPS,
   ATTEMPT_CAPS,
+  type AskCall,
+  type AskResult,
   contractFor,
   kindOf,
+  runningAttemptOf,
   type StationCall,
   type StationRecord,
   type StationSummary,
@@ -41,7 +45,10 @@ export function stepHq(): HqClient | null {
 }
 
 /** The item a session is working on, or null: nothing to record. Reads through `recordSafely`. */
-export async function findItem(hq: HqClient, call: StationCall): Promise<string | null> {
+export async function findItem(
+  hq: HqClient,
+  call: Pick<StationCall, "subject">,
+): Promise<string | null> {
   const { subject } = call
   if (subject === null) {
     return null
@@ -82,6 +89,8 @@ async function readAttempt(
  * One write that never throws. A CONFLICT is re-read: when `isEcho` says the stored attempt already
  * holds what this call wanted, it counts as done and nothing is logged; anything else is logged
  * as `work_record_dropped` and counted.
+ *
+ * @returns Whether hq holds what the call wanted (written now or already stored).
  */
 async function write(
   hq: HqClient,
@@ -89,21 +98,33 @@ async function write(
   label: string,
   run: () => Promise<unknown>,
   isEcho: (attempt: AttemptView) => boolean,
-): Promise<void> {
-  await recordSafely(label, async () => {
+): Promise<boolean> {
+  const done = await recordSafely(label, async () => {
     try {
       await run()
     } catch (error) {
       if (error instanceof HqError && error.status === 409) {
         const stored = await readAttempt(hq, recordOf).catch(() => null)
         if (stored?.attempt && isEcho(stored.attempt)) {
-          return
+          return true
         }
       }
       throw error
     }
+    return true
   })
+  return done === true
 }
+
+/**
+ * The call a step makes with the limit it was given, or the agent's own: a workflow body may not
+ * import `constants.ts` (it reads the environment at load), so the wrappers send no limit and the
+ * step applies `MAX_ATTEMPTS_PER_ITEM` here.
+ */
+export const withLimit = (call: StationCall): StationCall => ({
+  ...call,
+  attemptLimit: call.attemptLimit ?? MAX_ATTEMPTS_PER_ITEM,
+})
 
 const sameFiles = (a: string[], b: string[]): boolean =>
   a.length === b.length && a.every((file, i) => file === b[i])
@@ -219,7 +240,11 @@ export async function recordFail(
   if (stored?.attempt && stored.attempt.kind !== kindOf(station)) {
     return
   }
-  const note = `The ${station} station failed: ${storable(String(message), ATTEMPT_CAPS.failure)}`
+  // `stationOutput`'s own errors already start "The <station> station ..."; say it once.
+  const said = String(message).startsWith(`The ${station} station `)
+  const note = said
+    ? storable(String(message), ATTEMPT_CAPS.failure)
+    : `The ${station} station failed: ${storable(String(message), ATTEMPT_CAPS.failure)}`
   await write(
     hq,
     recordOf,
@@ -227,4 +252,63 @@ export async function recordFail(
     () => hq.finishAttempt({ attemptId, result: "failed", note }),
     (a) => a.result === "failed",
   )
+}
+
+const sameOptions = (
+  a: { id: string; label: string; detail?: string }[],
+  b: { id: string; label: string; detail?: string }[],
+): boolean =>
+  a.length === b.length &&
+  a.every((o, i) => o.id === b[i]?.id && o.label === b[i]?.label && o.detail === b[i]?.detail)
+
+/**
+ * What `askFounder` does with an open hq client: see {@link askFounder} in `attempts.ts`. Never
+ * throws; every hq call goes through `recordSafely`.
+ */
+export async function recordAsk(hq: HqClient, call: AskCall): Promise<AskResult> {
+  const itemId = await findItem(hq, call)
+  if (itemId === null) {
+    return { recorded: false }
+  }
+  const detail = await recordSafely("get_work_item", () => hq.getWorkItem({ itemId }))
+  const running = detail === null ? null : runningAttemptOf(detail, call)
+  const prompt = storable(call.prompt, ASK_CAPS.prompt)
+  const options = call.options.map((o) => ({
+    id: storable(o.id, ASK_CAPS.optionId),
+    label: storable(o.label, ASK_CAPS.optionLabel),
+    ...(o.detail === undefined ? {} : { detail: storable(o.detail, ASK_CAPS.optionDetail) }),
+  }))
+  // The same question, still open, is the same question: a repeat adds no second card.
+  const open = detail?.questions.find(
+    (q) => q.status === "open" && q.prompt === prompt && sameOptions(q.options, options),
+  )
+  let questionId = open?.id ?? null
+  if (questionId === null) {
+    const asked = await recordSafely("ask_question", () =>
+      hq.askQuestion({
+        itemId,
+        prompt,
+        options,
+        ...(call.defaultOptionId === undefined
+          ? {}
+          : { defaultOptionId: storable(call.defaultOptionId, ASK_CAPS.optionId) }),
+        ...(running === null ? {} : { attemptId: running.id }),
+      }),
+    )
+    if (asked === null) {
+      return { recorded: false }
+    }
+    questionId = asked.id
+  }
+  let attemptEnded = false
+  if (running !== null) {
+    attemptEnded = await write(
+      hq,
+      { itemId, attemptId: running.id, kind: running.kind, key: running.externalRef ?? "" },
+      "finish_attempt",
+      () => hq.finishAttempt({ attemptId: running.id, result: "needs_answer" }),
+      (a) => a.result === "needs_answer",
+    )
+  }
+  return { recorded: true, questionId, attemptEnded }
 }

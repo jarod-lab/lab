@@ -51,6 +51,20 @@ export interface StationRecord {
   key: string
 }
 
+/** What `ask_founder` sends its step: the session it runs in and the question, as the model wrote it. */
+export interface AskCall {
+  sessionId: string
+  subject: AttemptSubject | null
+  prompt: string
+  options: { id: string; label: string; detail?: string }[]
+  defaultOptionId?: string
+}
+
+/** Whether the question is with the founders, and whether it ended the attempt that was asking. */
+export type AskResult =
+  | { recorded: true; questionId: string; attemptEnded: boolean }
+  | { recorded: false }
+
 /** The few serialisable fields a step needs of a station's output, already cut and scrubbed. */
 export type StationSummary =
   | { station: "analyst"; acceptanceCriteria: string[] }
@@ -82,6 +96,15 @@ export const ATTEMPT_CAPS = {
   contractText: 300,
   /** The station's error message inside a `failed` note. */
   failure: 500,
+} as const
+
+/** What hq takes of a question (`apps/hq/src/data/questions.ts`): it refuses the whole write over a cap. */
+export const ASK_CAPS = {
+  prompt: 2000,
+  options: 5,
+  optionId: 100,
+  optionLabel: 200,
+  optionDetail: 500,
 } as const
 
 /** The error the orchestrator sees when an item has used its fix attempts. Never retried. */
@@ -197,6 +220,24 @@ export function summarizeStation(
     summary: summary.trim() === "" ? findings : summary,
     ...(headSha === undefined ? {} : { headSha }),
   }
+}
+
+/**
+ * Splits the reviewer's `head_sha` from the rest of its output: the reviewer reports the commit it
+ * read (`git rev-parse HEAD` of the branch it fetched) in a schema field the orchestrator never
+ * had, so the wrapper takes it out before returning the output and gives it to
+ * {@link summarizeStation}, which uses it only when it is a commit id.
+ *
+ * @returns The output without `head_sha` (the very same object when it had none) and the sha the
+ * reviewer gave, when it gave a string.
+ */
+export function takeHeadSha(output: unknown): { output: unknown; headSha: string | undefined } {
+  const out = record(output)
+  if (!("head_sha" in out)) {
+    return { output, headSha: undefined }
+  }
+  const { head_sha: given, ...rest } = out
+  return { output: rest, headSha: typeof given === "string" ? given : undefined }
 }
 
 /**
@@ -341,11 +382,28 @@ export async function adoptOrStartAttempt(
 }
 
 /** Whether an attempt belongs to this call's session (the colon included) or to its ticket. */
-function belongsToCall(a: AttemptView, call: StationCall): boolean {
+export function belongsToCall(
+  a: AttemptView,
+  call: Pick<StationCall, "sessionId" | "subject">,
+): boolean {
   const ticketRef = call.subject?.kind === "ticket" ? call.subject.ticketId : null
   return (
     a.externalRef !== null &&
     (a.externalRef.startsWith(`${call.sessionId}:`) || a.externalRef === ticketRef)
+  )
+}
+
+/**
+ * The attempt of this session (or this ticket) that is running now: the one a question ends. The
+ * newest, when two run. Another session's running attempt is never returned.
+ */
+export function runningAttemptOf(
+  detail: WorkItemDetail,
+  call: Pick<StationCall, "sessionId" | "subject">,
+): AttemptView | null {
+  return (
+    detail.attemptList.filter((a) => a.status === "running" && belongsToCall(a, call)).at(-1) ??
+    null
   )
 }
 

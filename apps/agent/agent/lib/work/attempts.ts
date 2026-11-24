@@ -2,6 +2,8 @@ import { FatalError } from "eve/workflow"
 import {
   adoptOrStartAttempt,
   ATTEMPT_LIMIT_MESSAGE,
+  type AskCall,
+  type AskResult,
   kindOf,
   limitReached,
   type StationCall,
@@ -9,13 +11,17 @@ import {
   type StationSummary,
   stationKey,
 } from "./attempts-shared.js"
-import { findItem, recordEnd, recordFail, stepHq } from "./attempts-record.js"
+import { findItem, recordAsk, recordEnd, recordFail, stepHq, withLimit } from "./attempts-record.js"
+import { traceToProbe } from "../offline/probe.js"
 import { recordDropped, recordSafely } from "./recorder.js"
 
 export {
+  ASK_CAPS,
   ATTEMPT_CAPS,
   ATTEMPT_LIMIT_MESSAGE,
   type AdoptResult,
+  type AskCall,
+  type AskResult,
   type AttemptSubject,
   adoptOrStartAttempt,
   contractFor,
@@ -26,6 +32,7 @@ export {
   stationKey,
   subjectOf,
   summarizeStation,
+  takeHeadSha,
 } from "./attempts-shared.js"
 
 /**
@@ -76,9 +83,16 @@ export {
  * outside `recordSafely` (which never rethrows) and never decided from an error message; eve does
  * not retry it and the orchestrator sees it as a tool error.
  */
-export async function beginStation(call: StationCall): Promise<StationRecord | null> {
+export async function beginStation(given: StationCall): Promise<StationRecord | null> {
   "use step"
   try {
+    await traceToProbe("attempt-step", {
+      step: "beginStation",
+      station: given.station,
+      callId: given.callId,
+    })
+    // The wrappers send no limit (a body imports no constants): the step applies the agent's own.
+    const call = withLimit(given)
     const hq = call.subject === null ? null : stepHq()
     if (hq === null) {
       return null
@@ -143,6 +157,7 @@ export async function endStation(
 ): Promise<void> {
   "use step"
   try {
+    await traceToProbe("attempt-step", { step: "endStation", station: summary.station })
     const hq = recordOf === null ? null : stepHq()
     if (recordOf === null || hq === null) {
       return
@@ -164,6 +179,7 @@ export async function endStation(
 export async function failStation(recordOf: StationRecord | null, message: string): Promise<void> {
   "use step"
   try {
+    await traceToProbe("attempt-step", { step: "failStation", key: recordOf?.key ?? null })
     const hq = recordOf === null ? null : stepHq()
     if (recordOf === null || hq === null) {
       return
@@ -171,5 +187,31 @@ export async function failStation(recordOf: StationRecord | null, message: strin
     await recordFail(hq, recordOf, message)
   } catch {
     recordDropped("fail_station", "unavailable")
+  }
+}
+
+/**
+ * Puts a question to a founder and ends the attempt that was running with `needs_answer`: what
+ * `ask_founder` calls. A step; never throws.
+ *
+ * @remarks
+ * Resolves its item through the same subject the stations use ({@link subjectOf}), so a summary-only
+ * run, an unstamped session and a mention have none and write nothing. The attempt it ends is the
+ * one that belongs to this session or ticket and is running; another session's is left alone.
+ * Asking the same question again while it is still open adds no second one. The question's text is
+ * the model's and is untrusted: hq stores it capped and a screen renders it as text.
+ */
+export async function askFounder(call: AskCall): Promise<AskResult> {
+  "use step"
+  try {
+    await traceToProbe("attempt-step", { step: "askFounder" })
+    const hq = call.subject === null ? null : stepHq()
+    if (hq === null) {
+      return { recorded: false }
+    }
+    return await recordAsk(hq, call)
+  } catch {
+    recordDropped("ask_founder", "unavailable")
+    return { recorded: false }
   }
 }

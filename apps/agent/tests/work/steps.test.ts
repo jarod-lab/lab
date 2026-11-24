@@ -367,10 +367,10 @@ describe("no hq call in a workflow body", () => {
     )
   })
 
-  test("only a step reaches hq: the client is built in one place and only the three steps call it", () => {
+  test("only a step reaches hq: the client is built in one place and only the four steps call it", () => {
     expect(recordSource.match(/createHqClient\(/g) ?? []).toHaveLength(1)
     expect(attemptsSource).not.toMatch(/createHqClient/)
     expect(sharedSource).not.toMatch(/createHqClient/)
-    expect([...attemptsSource.matchAll(/: stepHq\(\)/g)]).toHaveLength(3)
+    expect([...attemptsSource.matchAll(/: stepHq\(\)/g)]).toHaveLength(4)
   })
 })

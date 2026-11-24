@@ -33,6 +33,7 @@ import {
 } from "../web/src/api/schemas"
 import {
   createFakeHq,
+  digestStrict,
   type FakeHq,
   type FakeHqState,
   fakeViolations,
@@ -828,6 +829,16 @@ describe("the fake answers get_digest as hq does", () => {
     expect(faked.parsed.every(Boolean)).toBe(true)
     expect(faked.keys).toEqual(real.keys)
     expect(faked.kinds).toEqual(real.kinds)
+  })
+
+  it("the fake's whole-digest schema parses the real digest with a run, spend and a pending proposal", async () => {
+    const res = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/digest`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { events: unknown[]; decisions: unknown[]; spend: unknown }
+    // the Phase 3 part is populated, so every nested key of it is checked, not only the empty lists
+    expect(body.events.length).toBeGreaterThan(0)
+    expect(body.decisions.length).toBeGreaterThan(0)
+    expect(digestStrict.safeParse(body).success).toBe(true)
   })
 })
 
@@ -2283,6 +2294,18 @@ describe("get_digest's pipeline: the fake and hq agree", () => {
     expect(real.pipeline).toEqual(emptyDigestPipeline())
     const fake = (await (await createFakeHq().fetch(`${BASE}/v1/digest`)).json()) as typeof real
     expect(Object.keys(fake).sort()).toEqual(Object.keys(real).sort())
+  })
+
+  it("the fake's whole-digest schema parses a real hq reply, the Phase 3 part too, and a reply with no pipeline key parses through the client's schema", async () => {
+    const real = await read("/v1/digest")
+    expect(digestStrict.safeParse(real).success).toBe(true)
+    // an older hq sends no pipeline key: the client still reads the rest
+    const { pipeline: _omitted, ...older } = real
+    expect("pipeline" in older).toBe(false)
+    expect(digestSchema.safeParse(older).success).toBe(true)
+    expect(digestSchema.parse(older).pipeline).toBeUndefined()
+    // ...and the strict fake would not answer with one (hq always sends the key)
+    expect(digestStrict.safeParse(older).success).toBe(false)
   })
 
   it("the seed's pipeline equals digestPipelineFixture on everything a seed fixes (times and uuids aside)", async () => {

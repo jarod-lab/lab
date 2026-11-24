@@ -2,7 +2,7 @@
 import { expectNoA11yViolations } from "@lab/ui/a11y"
 import { describe, expect, it, vi } from "vitest"
 
-import type { Digest } from "../api/schemas"
+import { type Digest, digestSchema } from "../api/schemas"
 import {
   digestFixture,
   digestPipelineFixture,
@@ -347,17 +347,25 @@ describe("DigestPage with the pipeline", () => {
       ...over,
     })
 
-  it("a null pipeline renders the Digest exactly as Phase 3 did, and so does a reply with no pipeline key", async () => {
-    const phase3 = await show(digestFixture({ pipeline: undefined }))
-    const html = phase3.container.innerHTML
-    expect(phase3.queryByText("Stuck attempts")).toBeNull()
-    expect(phase3.queryByText(/Merged by the factory/)).toBeNull()
-    expect(phase3.getByRole("status", { name: "Digest summary" }).textContent).toBe(
+  it("a null pipeline renders the Digest exactly as Phase 3 did", async () => {
+    const view = await show(digestFixture({ pipeline: null }))
+    expect(view.queryByText("Stuck attempts")).toBeNull()
+    expect(view.queryByText(/Merged by the factory/)).toBeNull()
+    expect(view.getByRole("status", { name: "Digest summary" }).textContent).toBe(
       "Quiet since Nov 16, 00:00 UTC. 1 run finished, 0 failed, 1 needs a decision.",
     )
-    phase3.unmount()
+  })
+
+  it("a reply with no pipeline key (an older hq) renders the same as a null pipeline", async () => {
     const nulled = await show(digestFixture({ pipeline: null }))
-    expect(nulled.container.innerHTML).toBe(html)
+    const html = nulled.container.innerHTML
+    nulled.unmount()
+    const { pipeline: _gone, ...older } = digestFixture()
+    // through the client's own schema, as the client reads a reply
+    const parsed = digestSchema.parse(older)
+    expect(parsed.pipeline).toBeUndefined()
+    const view = await show(parsed)
+    expect(view.container.innerHTML).toBe(html)
   })
 
   it("an empty pipeline adds one row, Stuck attempts 0, and nothing else", async () => {
@@ -384,7 +392,7 @@ describe("DigestPage with the pipeline", () => {
       ),
     )
     expect(view.getByRole("status", { name: "Digest summary" }).textContent).toBe(
-      "Quiet since Nov 16, 00:00 UTC. 2 runs finished, 0 failed, 4 resolved, 1 reopened, 5 need a decision.",
+      "Quiet since Nov 16, 00:00 UTC. 2 runs finished, 0 failed, 4 verified, 1 reopened, 5 need a decision.",
     )
     expect(view.getByRole("region", { name: /Needs a decision/ }).textContent).toContain("5")
   })
@@ -557,6 +565,8 @@ describe("DigestPage with the pipeline", () => {
             displayId: "FAC-7",
             title: "Sign-in link opens the wrong page",
             pullRequestUrl: "https://github.com/acme/web/pull/107",
+            repo: "acme/web",
+            number: 107,
             state: "verifying",
           },
           {
@@ -564,6 +574,8 @@ describe("DigestPage with the pipeline", () => {
             displayId: "FAC-10",
             title: "Avatar upload",
             pullRequestUrl: "https://github.com/acme/web/pull/110",
+            repo: "acme/web",
+            number: 110,
             state: "verified",
           },
         ],
@@ -591,6 +603,8 @@ describe("DigestPage with the pipeline", () => {
             displayId: "FAC-7",
             title: "Hostile",
             pullRequestUrl: "javascript:alert(1)",
+            repo: "acme/web",
+            number: 107,
             state: "merged",
           },
           {
@@ -598,6 +612,8 @@ describe("DigestPage with the pipeline", () => {
             displayId: "FAC-8",
             title: "Elsewhere",
             pullRequestUrl: "https://evil.example/acme/web/pull/1",
+            repo: "acme/web",
+            number: 1,
             state: "merged",
           },
         ],
@@ -606,6 +622,43 @@ describe("DigestPage with the pipeline", () => {
     const section = view.getByRole("region", { name: "What changed in production" })
     expect(section.querySelector("a")).toBeNull()
     expect(section.textContent).toContain("Hostile")
+  })
+
+  it("the pull request link is the one W16's pullRequestLink builds: another repo, number or case of host is no link", async () => {
+    // The full table of hostile urls is lib/pull-request-link.test.ts; these are the rows the
+    // Digest's own fields (repo and number beside the url) can disagree on.
+    const row = (displayId: string, pullRequestUrl: string, number: number, repo = "acme/web") => ({
+      at: "2026-11-17T10:00:00.000Z",
+      displayId,
+      title: displayId,
+      pullRequestUrl,
+      repo,
+      number,
+      state: "merged" as const,
+    })
+    const view = await show(
+      withPipeline({
+        merged: [
+          row("FAC-1", "https://github.com/acme/web/pull/5", 5),
+          row("FAC-2", "https://github.com/ACME/Web/pull/6", 6),
+          // the url names another number, another repo, a query, userinfo or http
+          row("FAC-3", "https://github.com/acme/web/pull/7", 8),
+          row("FAC-4", "https://github.com/other/web/pull/9", 9),
+          row("FAC-5", "https://github.com/acme/web/pull/10?x=1", 10),
+          row("FAC-6", "https://user@github.com/acme/web/pull/11", 11),
+          row("FAC-7", "http://github.com/acme/web/pull/12", 12),
+          row("FAC-8", "https://github.com/acme/web/pull/13/", 13),
+        ],
+      }),
+    )
+    const hrefs = Array.from(
+      view.getByRole("region", { name: "What changed in production" }).querySelectorAll("a"),
+    ).map((a) => a.getAttribute("href"))
+    // the built url, never the given string: the second row is lower-cased by the repo it matched
+    expect(hrefs).toEqual([
+      "https://github.com/acme/web/pull/5",
+      "https://github.com/acme/web/pull/6",
+    ])
   })
 
   it("Factory health shows Stuck attempts", async () => {
@@ -632,6 +685,8 @@ describe("DigestPage with the pipeline", () => {
               displayId: "FAC-7",
               title: hostile,
               pullRequestUrl: "https://github.com/acme/web/pull/107",
+              repo: "acme/web",
+              number: 107,
               state: "merged",
             },
           ],

@@ -118,7 +118,7 @@ const factoryStatusStrict = z.strictObject({
 // get_digest's reply, as hq builds it: exactly these keys. `pipeline` is hq's own schema (strict at
 // every level) and the key is always there, an object or null before the work tables exist; an
 // older hq's reply with no `pipeline` key is one the fake may not answer with.
-const digestStrict = z.strictObject({
+export const digestStrict = z.strictObject({
   since: iso,
   until: iso,
   hours: z.number().int(),

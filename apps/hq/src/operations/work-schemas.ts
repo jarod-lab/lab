@@ -436,6 +436,8 @@ const digestMergedShape = {
   displayId: z.string(),
   title: z.string(),
   pullRequestUrl: z.string(),
+  repo: z.string().describe("The item's repo (owner/name, lower case)"),
+  number: z.number().int().min(1).describe("The pull request's number"),
   state: z.enum(DIGEST_MERGED_STATES),
 }
 const digestEventShape = {
@@ -449,12 +451,15 @@ const digestCounts = {
   opened: count("Items that entered triage in the window"),
   resolved: count("Items whose verification window passed (they moved to done) in the window"),
   reopened: count("Items reopened in the window, one count per item"),
-  stuckAttempts: count("Running attempts whose lease has passed, as of the window's end"),
+  stuckAttempts: count(
+    "Running attempts of items in flight whose lease has passed, as of the window's end (as the board counts)",
+  ),
   needsYouTotal: count("Every item that waits for a founder now"),
 }
 const digestLists = {
   needsYou: "What waits for a founder now, oldest first, at most 5",
-  merged: "Pull requests merged in the window, newest first, at most 10",
+  merged:
+    "Pull requests merged in the window, newest first, at most 10; state is reopened only when a reopen event follows the merge, else the item's end state (verifying, verified) or merged",
   events: "Newest first, at most 30",
 }
 

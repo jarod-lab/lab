@@ -37,6 +37,8 @@ interface Pipeline {
     displayId: string
     title: string
     pullRequestUrl: string
+    repo: string
+    number: number
     state: string
   }[]
   events: { at: string; displayId: string; text: string; result: string }[]
@@ -193,6 +195,36 @@ describe("get_digest pipeline (PGlite)", () => {
     expect((await pipeline()).stuckAttempts).toBe(2)
   })
 
+  it("a stopped or finished item's running attempt past its lease is not counted, as the board leaves it out", async () => {
+    const stopped = await seedItem(hq.db, { state: "stopped" })
+    await seedAttempt(hq.db, stopped.id, {
+      number: 1,
+      status: "running",
+      result: null,
+      leaseExpiresAt: at(-HOUR),
+    })
+    const done = await seedItem(hq.db, { state: "done" })
+    await seedAttempt(hq.db, done.id, {
+      number: 1,
+      status: "running",
+      result: null,
+      leaseExpiresAt: at(-HOUR),
+    })
+    const result = await digest()
+    expect(result.body.pipeline?.stuckAttempts).toBe(0)
+    expect(result.body.pipeline?.needsYouTotal).toBe(0)
+    expect(result.body.summary.tone).toBe("quiet")
+    // the same attempt on an item in flight is counted
+    const live = await seedItem(hq.db, { state: "attempt" })
+    await seedAttempt(hq.db, live.id, {
+      number: 1,
+      status: "running",
+      result: null,
+      leaseExpiresAt: at(-HOUR),
+    })
+    expect((await pipeline()).stuckAttempts).toBe(1)
+  })
+
   it("needsYou lists at most 5 oldest first while needsYouTotal counts all", async () => {
     const titles: string[] = []
     for (let i = 0; i < 7; i++) {
@@ -272,8 +304,6 @@ describe("get_digest pipeline (PGlite)", () => {
     const deploying = await make("Deploying", "deploy", 11, at(-10 * 60_000))
     const verifying = await make("Verifying", "verify", 12, at(-2 * HOUR))
     const verified = await make("Verified", "done", 13, at(-5 * HOUR))
-    const reopened = await make("Reopened", "reopened", 14, at(-6 * HOUR))
-    const retriaged = await make("Back in triage", "triage", 15, at(-7 * HOUR))
     await make("Merged before the window", "done", 16, new Date("2026-11-10T00:00:00Z"))
     await make("Still open", "review", 17, null)
     await make("Merged at until", "deploy", 18, NOW)
@@ -283,12 +313,64 @@ describe("get_digest pipeline (PGlite)", () => {
       [deploying.displayId, "Deploying", "merged"],
       [verifying.displayId, "Verifying", "verifying"],
       [verified.displayId, "Verified", "verified"],
-      [reopened.displayId, "Reopened", "reopened"],
-      // an item merged once and now back in triage has been reopened: it is not "merged"
-      [retriaged.displayId, "Back in triage", "reopened"],
     ])
     expect(p.merged[0]?.at).toBe(at(-10 * 60_000).toISOString())
     expect(p.merged[0]?.pullRequestUrl).toBe("https://github.com/acme/web/pull/11")
+    // what a link check needs: the item's repo and the pull request's number
+    expect([p.merged[0]?.repo, p.merged[0]?.number]).toEqual(["acme/web", 11])
+  })
+
+  it("a merged pull request reads 'reopened' only when a reopen event exists at or after its merge", async () => {
+    const make = async (title: string, state: WorkState, number: number, mergedAt: Date) => {
+      const item = await seedItem(hq.db, { title, state })
+      await seedPullRequest(hq.db, item.id, { number, state: "merged", mergedAt })
+      return item
+    }
+    const reopened = await make("Reopened", "reopened", 14, at(-6 * HOUR))
+    await addEvent(reopened.id, at(-5 * HOUR), "reopened", "recurrence", "verify")
+    const retriaged = await make("Back in triage", "triage", 15, at(-7 * HOUR))
+    await addEvent(retriaged.id, at(-6 * HOUR), "reopened", "recurrence", "done")
+    await addEvent(retriaged.id, at(-5 * HOUR), "triage", "retriaged", "reopened")
+    // the instant of the merge counts as "at or after"
+    const sameInstant = await make("Reopened at the merge", "reopened", 16, at(-4 * HOUR))
+    await addEvent(sameInstant.id, at(-4 * HOUR), "reopened", "founder_reopen", "done")
+    // a reopen BEFORE the merge is another cycle's story: it says nothing about this merge
+    const earlier = await make("Reopened earlier", "verify", 17, at(-3 * HOUR))
+    await addEvent(earlier.id, at(-8 * HOUR), "reopened", "recurrence", "done")
+
+    const states = Object.fromEntries((await pipeline()).merged.map((m) => [m.title, m.state]))
+    expect(states).toEqual({
+      Reopened: "reopened",
+      "Back in triage": "reopened",
+      "Reopened at the merge": "reopened",
+      "Reopened earlier": "verifying",
+    })
+  })
+
+  it("a merged pull request on an item still in attempt, review or triage with no reopen event reads 'merged'", async () => {
+    // Another pull request of the cycle can be the current one, so merging this one moves nothing:
+    // the item stays where it was and nothing was reopened.
+    const items: Record<string, WorkState> = {
+      "In attempt": "attempt",
+      "In review": "review",
+      "In triage": "triage",
+      "In plan": "plan",
+      "In signal": "signal",
+      "Stopped after the merge": "stopped",
+      "Forced reopened, no event": "reopened",
+    }
+    let number = 30
+    for (const [title, state] of Object.entries(items)) {
+      const item = await seedItem(hq.db, { title, state })
+      await seedPullRequest(hq.db, item.id, {
+        number: number++,
+        state: "merged",
+        mergedAt: at(-HOUR),
+      })
+    }
+    const merged = (await pipeline()).merged
+    expect(merged).toHaveLength(Object.keys(items).length)
+    for (const m of merged) expect(m.state, m.title).toBe("merged")
   })
 
   it("merged lists at most 10", async () => {
@@ -357,8 +439,7 @@ describe("get_digest pipeline (PGlite)", () => {
     expect(p.reopened).toBe(1)
   })
 
-  it("tone is attention with one stuck attempt, and quiet without", async () => {
-    expect((await digest()).body.summary.tone).toBe("quiet")
+  it("tone is attention with one stuck attempt", async () => {
     const item = await seedItem(hq.db, { state: "attempt" })
     await seedAttempt(hq.db, item.id, {
       number: 1,
@@ -372,6 +453,10 @@ describe("get_digest pipeline (PGlite)", () => {
     // no failed run and no stuck run: the attempt alone moved the tone
     expect(stuck.body.summary.runsFailed).toBe(0)
     expect((stuck.body.health as { stuckRuns: number }).stuckRuns).toBe(0)
+  })
+
+  it("tone stays quiet with no stuck attempt, no failed run and no stuck run", async () => {
+    expect((await digest()).body.summary.tone).toBe("quiet")
   })
 
   it("an empty pipeline is an object of zeros and empty lists, not null", async () => {

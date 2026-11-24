@@ -3,6 +3,7 @@ import { Fragment } from "react"
 import { Button } from "@lab/ui/components/ui/button"
 
 import type { Digest, FactoryStatus } from "../api/schemas"
+import { pullRequestLink } from "../lib/pull-request-link"
 import { PageHeader } from "../components/page-header"
 import { Section } from "../components/section"
 import { EmptyState, NotConnected } from "../components/states"
@@ -46,11 +47,6 @@ const PIPELINE_RESULT: Record<PipelineEvent["result"], { label: string; classNam
   stopped: { label: "stopped", className: "text-solar" },
 }
 
-/** The pull request number of a url that is a GitHub pull request page, else null: only then a link. */
-function pullRequestNumber(url: string): string | null {
-  return /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/([1-9]\d*)$/.exec(url)?.[1] ?? null
-}
-
 const RESULT_CLASS: Record<Digest["events"][number]["result"], string> = {
   started: "text-faint",
   succeeded: "text-success",
@@ -72,7 +68,9 @@ function Banner({ digest }: { digest: Digest }) {
     ...(pipeline && pipeline.stuckAttempts > 0
       ? [`${count(pipeline.stuckAttempts, "attempt", "attempts")} stuck`]
       : []),
-    ...(pipeline && pipeline.resolved > 0 ? [`${pipeline.resolved} resolved`] : []),
+    // "verified", not "resolved": the Work board's "Resolved today" counts merges, this counts items
+    // whose verification window passed.
+    ...(pipeline && pipeline.resolved > 0 ? [`${pipeline.resolved} verified`] : []),
     ...(pipeline && pipeline.reopened > 0 ? [`${pipeline.reopened} reopened`] : []),
     `${needs} ${needs === 1 ? "needs" : "need"} a decision`,
   ]
@@ -169,7 +167,8 @@ function MergedList({ merged }: { merged: Pipeline["merged"] }) {
       </h3>
       <ul className="m-0 flex list-none flex-col p-0">
         {merged.map((m) => {
-          const number = pullRequestNumber(m.pullRequestUrl)
+          // W16's one rule: a link only for the item's own repo and number, and the url it BUILT.
+          const link = pullRequestLink(m.pullRequestUrl, m.number, [m.repo])
           return (
             <li
               key={`${m.displayId}:${m.at}:${m.pullRequestUrl}`}
@@ -181,14 +180,14 @@ function MergedList({ merged }: { merged: Pipeline["merged"] }) {
               </span>
               <span className="flex flex-wrap items-center gap-x-4 text-xs text-muted-foreground">
                 <span>{m.state}</span>
-                {number ? (
+                {link ? (
                   <a
-                    href={m.pullRequestUrl}
+                    href={link}
                     target="_blank"
                     rel="noreferrer noopener"
                     className="inline-flex min-h-touch items-center text-primary"
                   >
-                    Pull request {number}
+                    Pull request {m.number}
                   </a>
                 ) : null}
               </span>

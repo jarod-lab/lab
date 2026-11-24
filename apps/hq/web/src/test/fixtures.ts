@@ -792,6 +792,8 @@ export function digestPipelineFixture(overrides: Partial<DigestPipeline> = {}): 
     displayId,
     title,
     pullRequestUrl: `https://github.com/${WORK_REPO}/pull/${pr}`,
+    repo: WORK_REPO,
+    number: pr,
     state,
   })
   const titles: [string, string][] = [

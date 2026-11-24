@@ -11,10 +11,10 @@
 // An hq deployed before the work migrations has no work tables: `workTablesExist` answers that in
 // one query first, and the pipeline is `null`.
 import type { Database } from "@lab/db"
-import { and, desc, eq, gte, lt, lte, sql } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm"
 
 import { attempts, pullRequests, workItemEvents, workItems } from "../db/schema"
-import { type Attention, displayId, type WorkState } from "../work/machine"
+import { type Attention, displayId, type WorkState, WORK_STAGES } from "../work/machine"
 import { workTablesExist } from "./work-available"
 import { pullRequestUrl, workBoard } from "./work-board"
 
@@ -44,29 +44,26 @@ export interface DigestPipelineRow {
     displayId: string
     title: string
     pullRequestUrl: string
+    /** The item's repo and the pull request's number: what a link check needs. */
+    repo: string
+    number: number
     state: DigestMergedState
   }[]
   events: { at: Date; displayId: string; text: string; result: DigestEventResult }[]
 }
 
 /**
- * The item's state, said for a pull request it merged: the pull request is merged whatever
- * happened next, so only a state that adds a fact changes the word. An item that came back (it is
- * `reopened`, or moved on to triage and later after a merge) reads `reopened`; one a founder stopped
- * after the merge stays `merged`, because nothing else is known about it.
+ * What the digest says of a merged pull request. `reopened` needs a row: a reopen transition of
+ * the item at or after the merge (`reopenedSince`). The item's state alone is no proof (another
+ * pull request of the cycle can be the current one, so merging this one moves nothing). Without
+ * that row, an end state says what it knows (`verify`, `done`), and any other state says only that
+ * the pull request merged. A founder's stop after the merge stays `merged`: nothing else is known.
  */
-function mergedState(state: WorkState): DigestMergedState {
-  switch (state) {
-    case "deploy":
-    case "stopped":
-      return "merged"
-    case "verify":
-      return "verifying"
-    case "done":
-      return "verified"
-    default:
-      return "reopened"
-  }
+function mergedState(state: WorkState, reopenedSince: boolean): DigestMergedState {
+  if (reopenedSince) return "reopened"
+  if (state === "verify") return "verifying"
+  if (state === "done") return "verified"
+  return "merged"
 }
 
 /** Which of an item's moves the digest tells, by the state it moved to (and why, for deploy). */
@@ -106,12 +103,21 @@ export async function readDigestPipeline(
     .from(workItemEvents)
     .where(inWindow)
 
-  // The sweep abandons exactly these (`listStaleAttempts`): a running attempt whose lease has run
-  // out. A requested or finished attempt has no lease to lose.
+  // A running attempt whose lease has run out (the sweep's `listStaleAttempts` rule) on an item in
+  // flight. A requested or finished attempt has no lease to lose.
   const [stuck] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(attempts)
-    .where(and(eq(attempts.status, "running"), lte(attempts.leaseExpiresAt, until)))
+    .innerJoin(workItems, eq(workItems.id, attempts.itemId))
+    // Items in flight only, as the board counts: a stop leaves its running attempt to the lease, and
+    // the attempt is on no card and asks nothing of a founder (the sweep still abandons it).
+    .where(
+      and(
+        eq(attempts.status, "running"),
+        lte(attempts.leaseExpiresAt, until),
+        inArray(workItems.state, [...WORK_STAGES]),
+      ),
+    )
 
   const board = await workBoard(db, until)
 
@@ -124,6 +130,12 @@ export async function readDigestPipeline(
       repo: workItems.repo,
       title: workItems.title,
       state: workItems.state,
+      reopenedSince: sql<boolean>`exists (
+        select 1 from ${workItemEvents}
+        where ${workItemEvents.itemId} = ${pullRequests.itemId}
+          and ${workItemEvents.kind} = 'transition'
+          and ${workItemEvents.toState} = 'reopened'
+          and ${workItemEvents.at} >= ${pullRequests.mergedAt})`,
     })
     .from(pullRequests)
     .innerJoin(workItems, eq(workItems.id, pullRequests.itemId))
@@ -173,7 +185,9 @@ export async function readDigestPipeline(
               displayId: displayId(r.itemNumber),
               title: r.title,
               pullRequestUrl: pullRequestUrl(r.repo, r.number, r.url),
-              state: mergedState(r.state),
+              repo: r.repo,
+              number: r.number,
+              state: mergedState(r.state, r.reopenedSince),
             },
           ],
     ),

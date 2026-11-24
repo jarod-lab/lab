@@ -391,6 +391,73 @@ describe("Approvals: the pipeline section", () => {
       expect(posts(hq)).toHaveLength(1)
     })
 
+    /** The pull request's head moves on (hq: a push voids the pending approval and makes a new one). */
+    const moveHead = (hq: FakeHq, headSha: string) => {
+      const item = hq.state.workItems[WORK_IDS.review]
+      if (!item?.pullRequest || !item.mergeApproval)
+        throw new Error("the review item has no pull request")
+      item.pullRequest.headSha = headSha
+      item.mergeApproval.headSha = headSha
+      hq.state.workBoard.needsYou = hq.state.workBoard.needsYou.map((n) =>
+        n.itemId === WORK_IDS.review && n.merge
+          ? {
+              ...n,
+              merge: { ...n.merge, headSha },
+              reason: n.reason.replace(/at \w{7}\./, `at ${headSha.slice(0, 7)}.`),
+            }
+          : n,
+      )
+    }
+
+    it("a new head restarts the confirmation, and Confirm on a stale card sends the head that was shown and gets hq's own 409", async () => {
+      const B = "b".repeat(40)
+      const C = "c".repeat(40)
+      const hq = createFakeHq({ workBoard: boardOfFour() })
+      const app = await renderApp({ path: "/app/approvals", hq })
+      const merge = await card(app, MERGE_TITLE)
+      expect(merge.textContent).toContain("head aaaaaaa")
+
+      // (a) The head moves while the confirmation is open: a board read brings the new head, the
+      // confirmation closes (it is a new question), the new sha shows, and nothing was posted.
+      await app.user.click(within(merge).getByRole("button", { name: "Approve merge" }))
+      expect(within(merge).getByRole("group", { name: "Approve merge" }).textContent).toContain(
+        "aaaaaaa",
+      )
+      moveHead(hq, B)
+      await act(() => app.queryClient.invalidateQueries({ queryKey: ["work"] }))
+      await waitFor(() => expect(merge.textContent).toContain("head bbbbbbb"))
+      expect(within(merge).queryByRole("group", { name: "Approve merge" })).toBeNull()
+      expect(within(merge).queryByRole("button", { name: "Confirm" })).toBeNull()
+      expect(within(merge).getByRole("button", { name: "Approve merge" })).toBeTruthy()
+      expect(posts(hq)).toEqual([])
+
+      // (b) A confirmation opened at B, then the head moves to C before the card learns of it:
+      // Confirm sends B (the sha that was shown), hq's own check refuses it (no nextError), and
+      // after the card re-renders with C its confirmation is closed and hq's words are still there.
+      await app.user.click(within(merge).getByRole("button", { name: "Approve merge" }))
+      expect(within(merge).getByRole("group", { name: "Approve merge" }).textContent).toContain(
+        "bbbbbbb",
+      )
+      moveHead(hq, C)
+      await app.user.click(within(merge).getByRole("button", { name: "Confirm" }))
+      await waitFor(() => expect(merge.textContent).toContain("head ccccccc"))
+      expect(posts(hq)).toEqual([
+        {
+          method: "POST",
+          path: `/v1/work-items/${WORK_IDS.review}/merge-approval`,
+          search: "",
+          body: { headSha: B },
+          credentials: "same-origin",
+        },
+      ])
+      expect((await within(merge).findByRole("alert")).textContent).toBe(
+        "The pull request changed since you looked. Review it again.",
+      )
+      expect(within(merge).queryByRole("group", { name: "Approve merge" })).toBeNull()
+      expect(within(merge).queryByRole("button", { name: "Confirm" })).toBeNull()
+      expect(within(merge).getByRole("button", { name: "Approve merge" })).toBeTruthy()
+    })
+
     it("a 403 and any other 409 show hq's own words, and nothing is retried", async () => {
       const hq = createFakeHq({ workBoard: boardOfFour() })
       const app = await renderApp({ path: "/app/approvals", hq })

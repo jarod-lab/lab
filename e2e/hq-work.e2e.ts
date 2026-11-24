@@ -79,7 +79,7 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
 
   // What hq says waits for a founder, read before the screen is: the test names cards by it.
   const board = await read<{
-    columns: { items: { id: string; repo: string }[] }[]
+    columns: { items: { id: string; repo: string; state: string }[] }[]
     stats: { inFlight: number }
     needsYou?: Need[]
   }>("/v1/work/board")
@@ -93,25 +93,40 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
         "explains (the race tests leave theirs behind); run `pnpm wt reset-db` and try again",
     )
   }
-  const mine = new Set<string>(
-    board.columns
-      .flatMap((column) => column.items)
-      .filter((item) => item.repo === repo)
-      .map((item) => item.id),
-  )
+  const own = board.columns.flatMap((column) => column.items).filter((item) => item.repo === repo)
+  const mine = new Set<string>(own.map((item) => item.id))
 
-  // The run's items are stopped at the end, so a database that runs this again stays small
-  // (a done item cannot be stopped; hq's refusal is ignored).
-  const stopMine = async () => {
-    for (const itemId of mine) {
-      await fetch(new URL(`/v1/work-items/${itemId}/stop`, baseUrl), {
-        method: "POST",
-        headers: { cookie, origin: baseUrl, "content-type": "application/json" },
-        body: "{}",
-      })
+  // The run's items are stopped at the end, so a database that runs this again stays small. Only
+  // the sweep moves a reopened item on (to triage, where it can be stopped), so one sweep runs
+  // first; a done or stopped item cannot be stopped. Every other reply must be a success, so a
+  // leak fails loudly.
+  const founderPost = (path: string) =>
+    fetch(new URL(path, baseUrl), {
+      method: "POST",
+      headers: { cookie, origin: baseUrl, "content-type": "application/json" },
+      body: "{}",
+    })
+  const stopMine = async (): Promise<string[]> => {
+    const problems: string[] = []
+    const states = new Map<string, string>()
+    for (const item of own) {
+      const detail = await read<{ state: string }>(`/v1/work-items/${item.id}`)
+      states.set(item.id, detail.state)
     }
+    if ([...states.values()].includes("reopened")) {
+      const sweep = await founderPost("/v1/work/verification-sweep")
+      if (!sweep.ok) problems.push(`the sweep answered ${sweep.status}`)
+    }
+    for (const item of own) {
+      const before = states.get(item.id)
+      if (before === "done" || before === "stopped") continue
+      const response = await founderPost(`/v1/work-items/${item.id}/stop`)
+      if (!response.ok) problems.push(`stopping ${item.id} (${before}) answered ${response.status}`)
+    }
+    return problems
   }
 
+  let passed = false
   try {
     const needs = (board.needsYou ?? []).filter((n) => mine.has(n.itemId))
     const merge = needs.find((n) => n.kind === "merge_approval")
@@ -192,7 +207,11 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
     await expect(screen.getByRole("heading", "Work")).toBeVisible()
     await expect(cardOf(screen.getByRole("region", /^Needs you/), merge)).toBeHidden()
     await expect(cardOf(screen.getByRole("region", "In review"), merge)).toBeVisible()
+    passed = true
   } finally {
-    await stopMine()
+    const problems = await stopMine()
+    // A failed journey keeps its own error; a passing one must not leak.
+    if (passed && problems.length > 0)
+      throw new Error(`the e2e left work behind: ${problems.join("; ")}`)
   }
 })

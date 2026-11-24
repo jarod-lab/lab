@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 
 import type { Proposal } from "../api/schemas"
 import { createFakeHq, type FakeHq } from "../test/fake-hq"
+import { failOnce } from "../test/fail-once"
 import { proposalFixture, workBoardFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
 
@@ -425,13 +426,11 @@ describe("the Approvals screen", () => {
 
   it("a failed list shows the ErrorBlock with Retry, which asks again and sends no POST", async () => {
     const hq = createFakeHq({ proposals: seeded(1) })
+    // The Digest reads no proposals: the first pending list is the one Approvals asks for.
+    failOnce(hq, "/v1/proposals?status=pending")
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const app = await renderApp({ path: "/app/digest", hq, queryClient })
     await app.findByRole("navigation", { name: "Primary" })
-    hq.state.nextError = {
-      status: 500,
-      body: { error: { code: "INTERNAL", message: "Internal error" } },
-    }
     await app.router.navigate({ to: "/approvals" })
     const alert = await app.findByRole("alert")
     expect(alert.textContent).toContain("hq had a problem")

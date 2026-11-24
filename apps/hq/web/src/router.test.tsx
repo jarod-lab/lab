@@ -21,6 +21,7 @@ describe("the app router", () => {
   it("renders each screen route inside the frame with the active nav item marked", async () => {
     const screens = [
       ["/app/digest", "Digest"],
+      ["/app/work", "Work"],
       ["/app/approvals", "Approvals"],
       ["/app/runner", "Runner & policy"],
     ] as const
@@ -29,6 +30,8 @@ describe("the app router", () => {
       // Every screen is built: assert its own content, not a placeholder.
       const built: Record<(typeof screens)[number][0], () => Promise<unknown>> = {
         "/app/digest": () => app.findByRole("status", { name: "Digest summary" }),
+        // The Work screens arrive in Tasks 16 and 17b: until then the route is a placeholder.
+        "/app/work": () => app.findByText("Coming next"),
         "/app/approvals": () => app.findByRole("region", { name: /Needs you/ }),
         "/app/runner": () => app.findByRole("heading", { level: 1, name: "Runner and policy" }),
       }

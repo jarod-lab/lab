@@ -77,6 +77,15 @@ const factoryStatusStrict = z.strictObject({
     grantedUsd: z.number(),
     remainingUsd: z.number().min(0),
   }),
+  // hq always sends the key: counts, or null before its work tables exist.
+  work: z
+    .strictObject({
+      inFlight: z.number().int().min(0),
+      needsYou: z.number().int().min(0),
+      pendingMergeApprovals: z.number().int().min(0),
+      openQuestions: z.number().int().min(0),
+    })
+    .nullable(),
 })
 
 /**

@@ -21,6 +21,7 @@ export const WORK_EVENT_KINDS = [
   "transition",
   "signal_attached",
   "attempt_requested",
+  "attempt_request_refused",
   "attempt_started",
   "attempt_finished",
   "attempt_abandoned",

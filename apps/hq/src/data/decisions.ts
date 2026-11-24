@@ -71,16 +71,17 @@ const ticker = (now: Date) => {
 
 /**
  * End the item's running verification window of its CURRENT cycle (`stopped` when a founder ended
- * it, `failed` when a signal came back), stamp `checked_at` with `now` and write one
- * `window_closed` event at `eventAt()` (default `now`). Does nothing, and says so, when there is no
- * running window: an item still in `deploy`, or one whose window already closed. The caller holds
- * the item's lock. Returns whether a window was closed.
+ * it, `failed` when a signal or a contract check came back, `passed` when the sweep verified it),
+ * stamp `checked_at` with `now` and write one `window_closed` event at `eventAt()` (default `now`).
+ * Does nothing, and says so, when there is no running window: an item still in `deploy`, or one
+ * whose window already closed. The caller holds the item's lock. Returns whether a window was
+ * closed.
  */
 export async function closeRunningWindow(
   tx: Tx,
   input: {
     item: Pick<WorkItemRow, "id" | "cycle">
-    status: "failed" | "stopped"
+    status: "failed" | "stopped" | "passed"
     note?: string
     actor: Actor
     now: Date

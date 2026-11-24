@@ -18,6 +18,9 @@ import {
 } from "../db/schema"
 import { DEPLOY_GRACE_MINUTES, PAYLOAD_MAX_BYTES } from "../work/constants"
 import {
+  type AttemptKind,
+  type AttemptResult,
+  type AttemptStatus,
   type AttentionFacts,
   assertTransition,
   displayId,
@@ -206,6 +209,32 @@ export async function currentPullRequest(
   return pr
 }
 
+/** The columns of an attempt that decide whether it is a fix that counts. */
+export interface FixFacts {
+  number: number
+  kind: AttemptKind
+  status: AttemptStatus
+  result: AttemptResult | null
+}
+
+/**
+ * A fix counts as used while it runs and once it finished, unless it ended asking a question; a
+ * `requested` fix has not started. Null-safe: a running fix has no result and still counts.
+ */
+export const countsAsUsedFix = (a: Pick<FixFacts, "kind" | "status" | "result">): boolean =>
+  a.kind === "fix" && a.status !== "requested" && a.result !== "needs_answer"
+
+/**
+ * The newest FINISHED fix among an item's attempts of one cycle (highest `number`), skipping fixes
+ * that do not count (`countsAsUsedFix`). This is the one definition of "the newest fix": the
+ * attention rules (`newestFixResult`) and the reviewer verifier of the verification window read it.
+ */
+export function newestFinishedFix<T extends FixFacts>(rows: readonly T[]): T | undefined {
+  return rows
+    .filter((a) => countsAsUsedFix(a) && a.status === "finished")
+    .sort((a, b) => b.number - a.number)[0]
+}
+
 /**
  * The facts the machine's guards and the attention rules read, in one place. `contractItems`,
  * `attemptsUsed` and `newestFixResult` are the item's CURRENT cycle's; `activeAttempt` reads ALL of
@@ -258,12 +287,8 @@ export async function loadFacts(
     .where(and(eq(agentQuestions.itemId, item.id), eq(agentQuestions.status, "open")))
     .limit(1)
 
-  // A fix counts as used while it runs and once it finished, unless it ended asking a question.
-  const fixes = cycleAttempts.filter((a) => a.kind === "fix")
-  const used = fixes.filter((a) => a.status !== "requested" && a.result !== "needs_answer")
-  const newestFinished = used
-    .filter((a) => a.status === "finished")
-    .sort((a, b) => b.number - a.number)[0]
+  const used = cycleAttempts.filter(countsAsUsedFix)
+  const newestFinished = newestFinishedFix(cycleAttempts)
   const stale =
     active?.status === "running" && active.leaseExpiresAt !== null && active.leaseExpiresAt <= now
   const graceMs = DEPLOY_GRACE_MINUTES * 60_000

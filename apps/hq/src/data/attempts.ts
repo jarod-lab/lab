@@ -19,6 +19,7 @@ import {
   type WorkState,
 } from "../work/machine"
 import { REVIEWER_VERDICTS, type FinishAttemptInput } from "../work/types"
+import { ensureMergeApproval } from "./merge-approvals"
 import { appendEvent } from "./work-events"
 import {
   type Actor,
@@ -557,6 +558,9 @@ export async function finishAttempt(
       detail: { attemptId: row.id, number: row.number, kind: row.kind, result },
       cycle: item.cycle,
     })
+    // An approved fix may be the last fact a merge approval waits for (the pull request can already
+    // be open). Its event is one millisecond after the finish, so (at, id) keeps the story's order.
+    await ensureMergeApproval(tx, item.id, afterMove(now))
     return row
   })
 }

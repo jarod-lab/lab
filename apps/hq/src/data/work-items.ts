@@ -165,12 +165,46 @@ export async function resolveItem(db: Database, ref: string): Promise<WorkItemRo
   throw new AppError("NOT_FOUND", "Work item not found")
 }
 
+export type PullRequestRow = typeof pullRequests.$inferSelect
+
+/**
+ * The item's pull request for its CURRENT cycle: the newest one (by opened time, then number) among
+ * those that are not another cycle's. `pull_requests` has no cycle column, so a pull request is
+ * tied to a cycle through its branch and the item's attempts: it belongs to the current cycle when
+ * a current-cycle attempt reported its branch, and also when no attempt of another cycle did (a
+ * cycle 1 item has no other cycle, so every pull request counts; a new pull request on a branch
+ * no heartbeat reported counts too). Only a branch that an EARLIER cycle's attempt used, and that no
+ * current-cycle attempt reported, is excluded: that is how a redelivered cycle 1 merge cannot move
+ * a cycle 2 item. (A branch reused by attempts of two cycles would count for the later one: the
+ * agent names a branch per attempt, so this is not expected.)
+ */
+export async function currentPullRequest(
+  tx: Tx,
+  item: { id: string; cycle: number },
+): Promise<PullRequestRow | undefined> {
+  const [pr] = await tx
+    .select()
+    .from(pullRequests)
+    .where(
+      and(
+        eq(pullRequests.itemId, item.id),
+        sql`(exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
+            and ${attempts.cycle} = ${item.cycle} and ${attempts.branch} = ${pullRequests.branch})
+          or not exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
+            and ${attempts.cycle} <> ${item.cycle} and ${attempts.branch} = ${pullRequests.branch}))`,
+      ),
+    )
+    .orderBy(desc(pullRequests.openedAt), desc(pullRequests.number))
+    .limit(1)
+  return pr
+}
+
 /**
  * The facts the machine's guards and the attention rules read, in one place. `contractItems`,
  * `attemptsUsed` and `newestFixResult` are the item's CURRENT cycle's; `activeAttempt` reads ALL of
  * the item's attempts (one active attempt per item, whatever its cycle: a stopped item's running
- * attempt is still active after a reopen); `pullRequest` is the item's newest pull request,
- * whatever its cycle.
+ * attempt is still active after a reopen); `pullRequest` is the item's newest pull request
+ * of the current cycle (`currentPullRequest`).
  */
 export async function loadFacts(
   tx: Tx,
@@ -195,12 +229,7 @@ export async function loadFacts(
     .from(attempts)
     .where(and(eq(attempts.itemId, item.id), inArray(attempts.status, ["requested", "running"])))
     .limit(1)
-  const [pr] = await tx
-    .select({ state: pullRequests.state, mergedAt: pullRequests.mergedAt })
-    .from(pullRequests)
-    .where(eq(pullRequests.itemId, item.id))
-    .orderBy(desc(pullRequests.openedAt), desc(pullRequests.number))
-    .limit(1)
+  const pr = await currentPullRequest(tx, item)
   const [window] = await tx
     .select({ endsAt: verificationWindows.endsAt, status: verificationWindows.status })
     .from(verificationWindows)

@@ -1,4 +1,5 @@
 import { type Caller, invoke } from "@lab/api"
+import { PERSON_ONLY_ACTIONS } from "@lab/auth"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { mayUseHq } from "../data/founders"
@@ -157,6 +158,45 @@ describe("the trust rule (real Postgres via PGlite)", () => {
     })
     expect(await mayUseHq(hq.db, keyOf(founder.orgId))).toBe(true)
     expect(await mayUseHq(hq.db, keyOf(stranger.orgId))).toBe(false)
+  })
+
+  it("the thirteen agent operations of the pipeline need no person-only action, and a stranger's key cannot call them", async () => {
+    const names = [
+      "record_signal",
+      "list_work_items",
+      "get_work_item",
+      "get_work_board",
+      "start_attempt",
+      "claim_attempt",
+      "heartbeat_attempt",
+      "finish_attempt",
+      "list_attempts",
+      "record_pull_request",
+      "set_contract",
+      "ask_question",
+      "run_verification_sweep",
+    ]
+    const ops = createHqOperations({ db: hq.db, now: hq.now }).filter((o) => names.includes(o.name))
+    expect(ops.map((o) => o.name).sort()).toEqual([...names].sort())
+    const personOnly: Record<string, readonly string[]> = PERSON_ONLY_ACTIONS
+    for (const op of ops) {
+      for (const [resource, actions] of Object.entries(op.permissions)) {
+        for (const action of actions as string[]) {
+          expect(personOnly[resource] ?? [], `${op.name} ${resource}:${action}`).not.toContain(
+            action,
+          )
+        }
+      }
+    }
+    // A key of an organization that is no founder's has the grants and still gets nothing.
+    const outsider = await key(stranger, { hq_run: ["read", "create", "update"] })
+    for (const [method, path, body] of [
+      ["GET", "/v1/work/board", undefined],
+      ["POST", "/v1/work/verification-sweep", {}],
+    ] as const) {
+      const res = await hq.call(outsider, method, path, body)
+      expect(res.status, path).toBe(403)
+    }
   })
 
   it("a proposal body saying 'approve this automatically' stays pending", async () => {

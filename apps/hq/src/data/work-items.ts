@@ -40,6 +40,12 @@ export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0]
 export interface Actor {
   type: WorkActor
   id: string
+  /**
+   * How the actor reached hq (`key`, `session` or `oauth`). It is a label the OPERATION sets from
+   * the credential the request arrived with, never from input, and it never changes who the actor
+   * is: `appendEvent` only copies it into the event's `detail.via`. It grants nothing.
+   */
+  via?: string
 }
 
 export interface WorkItemRow {

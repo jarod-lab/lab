@@ -30,7 +30,8 @@ export async function appendEvent(tx: Tx, e: NewWorkEvent): Promise<void> {
     actorId: e.actor.id,
     reason: e.reason ?? null,
     note: e.note ?? null,
-    detail: e.detail ?? null,
+    // The actor's `via` is the credential's, so it overwrites a `via` the caller's own detail holds.
+    detail: e.actor.via === undefined ? (e.detail ?? null) : { ...e.detail, via: e.actor.via },
     cycle: e.cycle,
   })
 }

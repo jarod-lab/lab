@@ -118,7 +118,7 @@ export async function setContract(
       itemId: item.id,
       at: now,
       kind: "contract_set",
-      actor: { type: actor.type, id: actorId },
+      actor: { type: actor.type, id: actorId, via: actor.via },
       detail: { count: rows.length, replaced: replaced.length },
       cycle: item.cycle,
     })

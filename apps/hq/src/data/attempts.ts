@@ -9,7 +9,17 @@ import { AppError } from "@lab/errors"
 import { and, asc, eq, inArray, lte, sql } from "drizzle-orm"
 
 import { attempts, workItems } from "../db/schema"
-import { ATTEMPT_LEASE_MINUTES, NOTE_MAX_CHARS } from "../work/constants"
+import {
+  ATTEMPT_LEASE_MINUTES,
+  ATTEMPT_LIMIT_MAX,
+  BRANCH_MAX_CHARS,
+  EXTERNAL_REF_MAX_CHARS,
+  FILE_MAX_CHARS,
+  FILES_MAX,
+  NOTE_MAX_CHARS,
+  RUN_ID_MAX_CHARS,
+  SESSION_ID_MAX_CHARS,
+} from "../work/constants"
 import {
   ATTEMPT_KINDS,
   type AttemptKind,
@@ -18,7 +28,7 @@ import {
   type TransitionReason,
   type WorkState,
 } from "../work/machine"
-import { REVIEWER_VERDICTS, type FinishAttemptInput } from "../work/types"
+import { type FinishAttemptInput, HEAD_SHA_PATTERN, REVIEWER_VERDICTS } from "../work/types"
 import { ensureMergeApproval } from "./merge-approvals"
 import { appendEvent } from "./work-events"
 import {
@@ -34,13 +44,16 @@ import {
 
 export type AttemptRow = typeof attempts.$inferSelect
 
-export const EXTERNAL_REF_MAX_CHARS = 200
-export const RUN_ID_MAX_CHARS = 200
-export const BRANCH_MAX_CHARS = 200
-export const SESSION_ID_MAX_CHARS = 200
-export const FILES_MAX = 200
-export const FILE_MAX_CHARS = 500
-export const ATTEMPT_LIMIT_MAX = 10
+// The caps live in work/constants.ts (the operations' schemas share them); re-exported here.
+export {
+  ATTEMPT_LIMIT_MAX,
+  BRANCH_MAX_CHARS,
+  EXTERNAL_REF_MAX_CHARS,
+  FILE_MAX_CHARS,
+  FILES_MAX,
+  RUN_ID_MAX_CHARS,
+  SESSION_ID_MAX_CHARS,
+}
 /** What a start or request may carry where an operation sends none. */
 export const REQUEST_ORIGINS = ["founder_request", "policy_dispatch"] as const
 export type RequestOrigin = (typeof REQUEST_ORIGINS)[number]
@@ -410,7 +423,7 @@ export async function heartbeatAttempt(
     .where(eq(attempts.id, input.attemptId))
   if (!seen) throw new AppError("NOT_FOUND", "Attempt not found")
   return db.transaction(async (tx) => {
-    await lockItem(tx, seen.itemId)
+    const item = await lockItem(tx, seen.itemId)
     const [cur] = await tx.select().from(attempts).where(eq(attempts.id, input.attemptId))
     if (!cur) throw new AppError("NOT_FOUND", "Attempt not found")
     if (cur.status !== "running") {
@@ -418,6 +431,15 @@ export async function heartbeatAttempt(
         "CONFLICT",
         `The attempt is ${cur.status === "requested" ? "not started" : "finished"}.`,
       )
+    }
+    // A founder stopped the item (or it is done): its running attempt must run out its lease, not
+    // be kept alive by heartbeats. `reopened` is not refused: the sweep retriages it and an attempt
+    // that is still working may still report.
+    if (item.state === "stopped" || item.state === "done") {
+      throw new AppError("CONFLICT", `The work item is ${item.state}: stop working on it.`, {
+        context: { state: item.state },
+        hint: "Finish the attempt, or let its lease run out.",
+      })
     }
     if (cur.leaseExpiresAt !== null && cur.leaseExpiresAt <= now) {
       throw new AppError("CONFLICT", "The attempt's lease has expired", {
@@ -473,7 +495,9 @@ export async function finishAttempt(
   const files = checkFiles(input.files)
   const branch = checkId("branch", input.branch, BRANCH_MAX_CHARS)
   const sessionId = checkId("sessionId", input.sessionId, SESSION_ID_MAX_CHARS)
-  let reviewer: { verdict: (typeof REVIEWER_VERDICTS)[number]; summary: string } | undefined
+  let reviewer:
+    | { verdict: (typeof REVIEWER_VERDICTS)[number]; summary: string; headSha?: string }
+    | undefined
   if (input.reviewer !== undefined) {
     if (!(REVIEWER_VERDICTS as readonly unknown[]).includes(input.reviewer.verdict)) {
       throw bad("reviewer.verdict must be approve, request_changes or reject", "reviewer")
@@ -484,6 +508,11 @@ export async function finishAttempt(
         max: NOTE_MAX_CHARS,
         allowEmpty: true,
       }),
+    }
+    if (input.reviewer.headSha !== undefined) {
+      const sha = checkText("reviewer.headSha", input.reviewer.headSha, { max: 64 })
+      if (!HEAD_SHA_PATTERN.test(sha)) throw bad("reviewer.headSha must be a commit id", "reviewer")
+      reviewer.headSha = sha.toLowerCase()
     }
   }
   const { now, result } = input
@@ -521,7 +550,10 @@ export async function finishAttempt(
       if (!fits)
         throw bad(`A ${reviewer.verdict} verdict cannot end an attempt as ${result}`, "reviewer")
     }
-    const reviewedHeadSha = await headShaOfBranch(tx, item, branch ?? cur.branch)
+    // The sha the reviewer says it read wins: a retry whose finish arrives before its push is
+    // recorded would otherwise bind to the older head. Without one, the recorded pull request's.
+    const reviewedHeadSha =
+      reviewer?.headSha ?? (await headShaOfBranch(tx, item, branch ?? cur.branch))
     const startedAt = cur.startedAt ?? cur.createdAt
     const [row] = await tx
       .update(attempts)
@@ -564,45 +596,65 @@ export async function finishAttempt(
  * with the attempt gone the attention rules say what is left to do.
  */
 export async function expireStaleAttempts(db: Database, now: Date): Promise<string[]> {
-  const stale = await db
+  const expired: string[] = []
+  for (const s of await listStaleAttempts(db, now)) {
+    if (await expireAttempt(db, s.id, s.itemId, now)) expired.push(s.id)
+  }
+  return expired
+}
+
+/** The running attempts whose lease has passed, oldest lease first. */
+export async function listStaleAttempts(
+  db: Database,
+  now: Date,
+): Promise<{ id: string; itemId: string }[]> {
+  return db
     .select({ id: attempts.id, itemId: attempts.itemId })
     .from(attempts)
     .where(and(eq(attempts.status, "running"), lte(attempts.leaseExpiresAt, now)))
     .orderBy(asc(attempts.leaseExpiresAt), asc(attempts.id))
-  const expired: string[] = []
-  for (const s of stale) {
-    const done = await db.transaction(async (tx) => {
-      const item = await lockItem(tx, s.itemId)
-      const [row] = await tx
-        .update(attempts)
-        .set({
-          status: "finished",
-          result: "abandoned",
-          finishedAt: now,
-          durationMs: sql`greatest(0, (extract(epoch from (${now.toISOString()}::timestamptz - coalesce(${attempts.startedAt}, ${attempts.createdAt}))) * 1000)::bigint)::int`,
-        })
-        .where(
-          and(
-            eq(attempts.id, s.id),
-            eq(attempts.status, "running"),
-            lte(attempts.leaseExpiresAt, now),
-          ),
-        )
-        .returning()
-      if (!row) return false
-      await appendEvent(tx, {
-        itemId: item.id,
-        at: now,
-        kind: "attempt_abandoned",
-        actor: { type: "system", id: "hq" },
-        detail: { attemptId: row.id, number: row.number, kind: row.kind },
-        cycle: item.cycle,
+}
+
+/**
+ * Abandon one stale attempt in its own transaction, under its item's lock, with the lease check
+ * repeated there, so a heartbeat that won the race keeps its attempt. False when it was not stale
+ * any more. The sweep calls this once per attempt so one that throws skips only itself.
+ */
+export async function expireAttempt(
+  db: Database,
+  attemptId: string,
+  itemId: string,
+  now: Date,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const item = await lockItem(tx, itemId)
+    const [row] = await tx
+      .update(attempts)
+      .set({
+        status: "finished",
+        result: "abandoned",
+        finishedAt: now,
+        durationMs: sql`greatest(0, (extract(epoch from (${now.toISOString()}::timestamptz - coalesce(${attempts.startedAt}, ${attempts.createdAt}))) * 1000)::bigint)::int`,
       })
-      return true
+      .where(
+        and(
+          eq(attempts.id, attemptId),
+          eq(attempts.status, "running"),
+          lte(attempts.leaseExpiresAt, now),
+        ),
+      )
+      .returning()
+    if (!row) return false
+    await appendEvent(tx, {
+      itemId: item.id,
+      at: now,
+      kind: "attempt_abandoned",
+      actor: { type: "system", id: "hq" },
+      detail: { attemptId: row.id, number: row.number, kind: row.kind },
+      cycle: item.cycle,
     })
-    if (done) expired.push(s.id)
-  }
-  return expired
+    return true
+  })
 }
 
 // ---------------------------------------------------------------------------------------------

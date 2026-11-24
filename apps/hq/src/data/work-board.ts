@@ -37,6 +37,7 @@ import {
   spend,
   verificationWindows,
   WINDOW_STATUSES,
+  type WorkEventKind,
   workItemEvents,
   workItems,
 } from "../db/schema"
@@ -212,7 +213,7 @@ export interface PullRequestViewData {
 export interface EventViewData {
   id: string
   at: Date
-  kind: string
+  kind: WorkEventKind
   fromState: WorkState | null
   toState: WorkState | null
   actorType: WorkActor
@@ -464,6 +465,32 @@ function eventSummary(e: {
 // ---------------------------------------------------------------------------------------------
 
 type ContractRow = typeof contractItems.$inferSelect
+type AttemptRow = typeof attempts.$inferSelect
+type QuestionRow = typeof agentQuestions.$inferSelect
+
+/** One contract item as the operations and the detail show it. */
+export const toContractItemView = (c: ContractRow): ContractItemViewData => ({
+  id: c.id,
+  text: c.text,
+  verifier: { kind: c.verifierKind, label: verifierLabel(c.verifierKind) },
+  status: c.status,
+  evidence: c.evidence,
+  checkedAt: c.checkedAt,
+})
+
+/** One question as the operations and the detail show it. */
+export const toQuestionView = (q: QuestionRow): QuestionViewData => ({
+  id: q.id,
+  attemptId: q.attemptId,
+  prompt: q.prompt,
+  options: q.options,
+  defaultOptionId: q.defaultOptionId,
+  status: q.status,
+  answeredOptionId: q.answeredOptionId,
+  answeredBy: q.answeredBy,
+  answeredAt: q.answeredAt,
+  createdAt: q.createdAt,
+})
 type WindowRow = typeof verificationWindows.$inferSelect
 
 async function contractRows(
@@ -920,6 +947,93 @@ function stagesFor(state: WorkState, stoppedAt: WorkState | null): WorkItemDetai
   }))
 }
 
+/**
+ * The views of attempt rows of one item: cost from the run's spend, why an abandoned one ended
+ * (read from its event). One source for the item detail and for the operations that return an
+ * attempt.
+ */
+async function attemptViews(
+  tx: Tx,
+  itemId: string,
+  rows: AttemptRow[],
+): Promise<AttemptViewData[]> {
+  const runIds = [...new Set(rows.flatMap((a) => (a.runId ? [a.runId] : [])))]
+  const costs = runIds.length
+    ? await tx
+        .select({
+          runId: spend.runId,
+          total: sql<string>`sum(${spend.amountUsd})::text`,
+          estimated: sql<boolean>`bool_or(${spend.estimated})`,
+        })
+        .from(spend)
+        .where(and(isNotNull(spend.runId), inArray(spend.runId, runIds)))
+        .groupBy(spend.runId)
+    : []
+  const costOf = new Map(costs.map((c) => [c.runId, c]))
+  const abandoned = rows.length
+    ? await tx
+        .select({ detail: workItemEvents.detail })
+        .from(workItemEvents)
+        .where(
+          and(
+            eq(workItemEvents.itemId, itemId),
+            eq(workItemEvents.kind, "attempt_abandoned"),
+            inArray(
+              sql<string>`${workItemEvents.detail}->>'attemptId'`,
+              rows.map((a) => a.id),
+            ),
+          ),
+        )
+        .orderBy(asc(workItemEvents.at), asc(workItemEvents.id))
+        .limit(ABANDONED_EVENTS_MAX)
+    : []
+  const endReasons = new Map<string, AttemptViewData["endReason"]>()
+  for (const e of abandoned) {
+    const attemptId = e.detail?.attemptId
+    if (typeof attemptId !== "string") continue
+    const reason = e.detail?.reason
+    endReasons.set(
+      attemptId,
+      reason === "merged" || reason === "stopped" ? reason : "lease_expired",
+    )
+  }
+  return rows.map((a) => {
+    const cost = a.runId ? costOf.get(a.runId) : undefined
+    const endReason = a.result === "abandoned" ? (endReasons.get(a.id) ?? null) : null
+    return {
+      id: a.id,
+      number: a.number,
+      cycle: a.cycle,
+      kind: a.kind,
+      status: a.status,
+      result: a.result,
+      requestedBy: a.requestedBy,
+      instructions: a.instructions,
+      startedAt: a.startedAt,
+      finishedAt: a.finishedAt,
+      durationMs: a.durationMs,
+      files: a.files,
+      // hq's own "merged" or "stopped" note on a request it ended is not the agent's: the event says why.
+      note: endReason === "merged" || endReason === "stopped" ? null : a.note,
+      branch: a.branch,
+      reviewer: a.reviewerVerdict
+        ? {
+            verdict: a.reviewerVerdict,
+            summary: a.reviewerSummary ?? "",
+            ...(a.reviewedHeadSha ? { headSha: a.reviewedHeadSha } : {}),
+          }
+        : null,
+      runId: a.runId,
+      sessionId: a.sessionId,
+      externalRef: a.externalRef,
+      leaseExpiresAt: a.leaseExpiresAt,
+      costUsd: cost ? unitsToUsd(parseUnits(cost.total)) : null,
+      costEstimated: cost?.estimated ?? false,
+      endReason,
+    }
+  })
+}
+
 const founderEdge = (from: WorkState, to: WorkState, reason: TransitionReason): boolean =>
   findTransition(from, to, "founder")?.reasons.includes(reason) ?? false
 
@@ -987,14 +1101,7 @@ export async function itemDetail(
     }
 
     const contractList = await contractRows(tx, item)
-    const contract: ContractItemViewData[] = contractList.map((c) => ({
-      id: c.id,
-      text: c.text,
-      verifier: { kind: c.verifierKind, label: verifierLabel(c.verifierKind) },
-      status: c.status,
-      evidence: c.evidence,
-      checkedAt: c.checkedAt,
-    }))
+    const contract = contractList.map(toContractItemView)
 
     const newestAttempts = await tx
       .select()
@@ -1003,81 +1110,7 @@ export async function itemDetail(
       .orderBy(desc(attempts.number))
       .limit(ATTEMPTS_SHOWN + 1)
     const attemptRows = newestAttempts.slice(0, ATTEMPTS_SHOWN).reverse()
-    const runIds = [...new Set(attemptRows.flatMap((a) => (a.runId ? [a.runId] : [])))]
-    const costs = runIds.length
-      ? await tx
-          .select({
-            runId: spend.runId,
-            total: sql<string>`sum(${spend.amountUsd})::text`,
-            estimated: sql<boolean>`bool_or(${spend.estimated})`,
-          })
-          .from(spend)
-          .where(and(isNotNull(spend.runId), inArray(spend.runId, runIds)))
-          .groupBy(spend.runId)
-      : []
-    const costOf = new Map(costs.map((c) => [c.runId, c]))
-    const abandoned = attemptRows.length
-      ? await tx
-          .select({ detail: workItemEvents.detail })
-          .from(workItemEvents)
-          .where(
-            and(
-              eq(workItemEvents.itemId, item.id),
-              eq(workItemEvents.kind, "attempt_abandoned"),
-              inArray(
-                sql<string>`${workItemEvents.detail}->>'attemptId'`,
-                attemptRows.map((a) => a.id),
-              ),
-            ),
-          )
-          .orderBy(asc(workItemEvents.at), asc(workItemEvents.id))
-          .limit(ABANDONED_EVENTS_MAX)
-      : []
-    const endReasons = new Map<string, AttemptViewData["endReason"]>()
-    for (const e of abandoned) {
-      const attemptId = e.detail?.attemptId
-      if (typeof attemptId !== "string") continue
-      const reason = e.detail?.reason
-      endReasons.set(
-        attemptId,
-        reason === "merged" || reason === "stopped" ? reason : "lease_expired",
-      )
-    }
-    const attemptList: AttemptViewData[] = attemptRows.map((a) => {
-      const cost = a.runId ? costOf.get(a.runId) : undefined
-      const endReason = a.result === "abandoned" ? (endReasons.get(a.id) ?? null) : null
-      return {
-        id: a.id,
-        number: a.number,
-        cycle: a.cycle,
-        kind: a.kind,
-        status: a.status,
-        result: a.result,
-        requestedBy: a.requestedBy,
-        instructions: a.instructions,
-        startedAt: a.startedAt,
-        finishedAt: a.finishedAt,
-        durationMs: a.durationMs,
-        files: a.files,
-        // hq's own "merged" or "stopped" note on a request it ended is not the agent's: the event says why.
-        note: endReason === "merged" || endReason === "stopped" ? null : a.note,
-        branch: a.branch,
-        reviewer: a.reviewerVerdict
-          ? {
-              verdict: a.reviewerVerdict,
-              summary: a.reviewerSummary ?? "",
-              ...(a.reviewedHeadSha ? { headSha: a.reviewedHeadSha } : {}),
-            }
-          : null,
-        runId: a.runId,
-        sessionId: a.sessionId,
-        externalRef: a.externalRef,
-        leaseExpiresAt: a.leaseExpiresAt,
-        costUsd: cost ? unitsToUsd(parseUnits(cost.total)) : null,
-        costEstimated: cost?.estimated ?? false,
-        endReason,
-      }
-    })
+    const attemptList = await attemptViews(tx, item.id, attemptRows)
 
     const newestQuestions = await tx
       .select()
@@ -1086,18 +1119,7 @@ export async function itemDetail(
       .orderBy(desc(agentQuestions.createdAt), desc(agentQuestions.id))
       .limit(QUESTIONS_SHOWN + 1)
     const questionRows = newestQuestions.slice(0, QUESTIONS_SHOWN).reverse()
-    const questions: QuestionViewData[] = questionRows.map((q) => ({
-      id: q.id,
-      attemptId: q.attemptId,
-      prompt: q.prompt,
-      options: q.options,
-      defaultOptionId: q.defaultOptionId,
-      status: q.status,
-      answeredOptionId: q.answeredOptionId,
-      answeredBy: q.answeredBy,
-      answeredAt: q.answeredAt,
-      createdAt: q.createdAt,
-    }))
+    const questions = questionRows.map(toQuestionView)
 
     const pullRequest: PullRequestViewData | null = pr
       ? {
@@ -1276,6 +1298,29 @@ export async function itemDetail(
       },
       actions,
     }
+  }, READ_ONLY)
+}
+
+/** One attempt row as an `AttemptView`: cost from the run's spend, `endReason` from its event. */
+export async function attemptViewOf(db: Database, row: AttemptRow): Promise<AttemptViewData> {
+  const [view] = await db.transaction((tx) => attemptViews(tx, row.itemId, [row]), READ_ONLY)
+  if (!view) throw new AppError("INTERNAL", "The attempt has no view")
+  return view
+}
+
+/**
+ * The summaries (card, attention, attempt counts, pull request) of these items, in their order,
+ * from one snapshot: the same `readItem` the board uses, so a list and the board never disagree.
+ */
+export async function workItemSummaries(
+  db: Database,
+  items: readonly WorkItemRow[],
+  now: Date,
+): Promise<WorkItemSummaryData[]> {
+  return db.transaction(async (tx) => {
+    const out: WorkItemSummaryData[] = []
+    for (const item of items) out.push((await readItem(tx, item, now)).summary)
+    return out
   }, READ_ONLY)
 }
 

@@ -26,10 +26,15 @@ import {
   WORK_STATES,
 } from "../work/machine"
 import {
+  CONTRACT_ITEM_STATUSES,
+  MERGE_APPROVAL_STATUSES,
   PULL_REQUEST_STATES,
   type PullRequestCheck,
   type QuestionOptionInput,
+  QUESTION_STATUSES,
   REVIEWER_VERDICTS,
+  WINDOW_STATUSES,
+  WORK_EVENT_KINDS,
 } from "../work/types"
 
 /**
@@ -288,37 +293,17 @@ export const spendHolds = hq.table(
 export const WORK_AUTHOR_TYPES = [...AUTHOR_TYPES, "system"] as const
 export type WorkAuthorType = (typeof WORK_AUTHOR_TYPES)[number]
 
-export const CONTRACT_ITEM_STATUSES = ["pending", "passing", "failing"] as const
+export {
+  CONTRACT_ITEM_STATUSES,
+  MERGE_APPROVAL_STATUSES,
+  QUESTION_STATUSES,
+  WINDOW_STATUSES,
+  WORK_EVENT_KINDS,
+}
 export type ContractItemStatus = (typeof CONTRACT_ITEM_STATUSES)[number]
-
-export const QUESTION_STATUSES = ["open", "answered", "withdrawn"] as const
 export type QuestionStatus = (typeof QUESTION_STATUSES)[number]
-
-export const MERGE_APPROVAL_STATUSES = ["pending", "approved", "void"] as const
 export type MergeApprovalStatus = (typeof MERGE_APPROVAL_STATUSES)[number]
-
-export const WINDOW_STATUSES = ["running", "passed", "failed", "stopped"] as const
 export type WindowStatus = (typeof WINDOW_STATUSES)[number]
-
-export const WORK_EVENT_KINDS = [
-  "transition",
-  "signal_attached",
-  "attempt_requested",
-  "attempt_started",
-  "attempt_finished",
-  "attempt_abandoned",
-  "pull_request",
-  "merge_approval_requested",
-  "merge_approved",
-  "merge_approval_void",
-  "question_asked",
-  "question_answered",
-  "retry_granted",
-  "revert_requested",
-  "contract_set",
-  "window_started",
-  "window_closed",
-] as const
 export type WorkEventKind = (typeof WORK_EVENT_KINDS)[number]
 
 /**

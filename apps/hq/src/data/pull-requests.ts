@@ -10,6 +10,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 
 import { attempts, pullRequests, workItems } from "../db/schema"
 import {
+  HEAD_SHA_PATTERN,
   PULL_REQUEST_STATES,
   type PullRequestCheck,
   type RecordPullRequestInput,
@@ -35,8 +36,6 @@ export const CHECK_NAME_MAX_CHARS = 200
 export const CHECKS_MAX = 100
 export const MERGED_BY_MAX_CHARS = 100
 const INT_MAX = 2_147_483_647
-/** A commit id as git prints it: 7 to 64 hex digits (SHA-1 is 40, SHA-256 is 64). */
-const HEAD_SHA = /^[0-9a-f]{7,64}$/i
 /** The shape every pull request url has, whatever the item: https, github.com, owner/name/pull/n. */
 const GITHUB_PULL_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/i
 
@@ -190,7 +189,7 @@ export async function recordPullRequest(
     input.base === undefined ? undefined : checkText("base", input.base, { max: BASE_MAX_CHARS })
   if (input.headSha !== undefined) {
     checkText("headSha", input.headSha, { max: 64 })
-    if (!HEAD_SHA.test(input.headSha)) throw bad("headSha must be a commit id", "headSha")
+    if (!HEAD_SHA_PATTERN.test(input.headSha)) throw bad("headSha must be a commit id", "headSha")
   }
   const headSha = input.headSha?.toLowerCase()
   if (input.isDraft !== undefined && typeof input.isDraft !== "boolean") {
@@ -320,7 +319,11 @@ export async function recordPullRequest(
           number,
           url: canonicalUrl,
           branch,
-          openedAt: now,
+          // `openedAt` orders the item's pull requests (`currentPullRequest`: the newest is the
+          // current one). A row first seen already merged was opened no later than its merge, and
+          // `mergedAt` is the agent's word: an old one must not make a stale merge the item's
+          // newest pull request, so it sorts where the merge happened, not where it was reported.
+          openedAt: state === "merged" && mergedAt ? mergedAt : now,
           ...values,
         })
         .returning()

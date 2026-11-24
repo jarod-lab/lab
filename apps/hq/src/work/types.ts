@@ -9,6 +9,34 @@ export type PullRequestState = (typeof PULL_REQUEST_STATES)[number]
 export const REVIEWER_VERDICTS = ["approve", "request_changes", "reject"] as const
 export type ReviewerVerdict = (typeof REVIEWER_VERDICTS)[number]
 
+/** A commit id as git prints it: 7 to 64 hex digits (SHA-1 is 40, SHA-256 is 64). */
+export const HEAD_SHA_PATTERN = /^[0-9a-f]{7,64}$/i
+
+// Vocabularies of the work tables (db/schema.ts imports them and re-exports them).
+export const CONTRACT_ITEM_STATUSES = ["pending", "passing", "failing"] as const
+export const QUESTION_STATUSES = ["open", "answered", "withdrawn"] as const
+export const MERGE_APPROVAL_STATUSES = ["pending", "approved", "void"] as const
+export const WINDOW_STATUSES = ["running", "passed", "failed", "stopped"] as const
+export const WORK_EVENT_KINDS = [
+  "transition",
+  "signal_attached",
+  "attempt_requested",
+  "attempt_started",
+  "attempt_finished",
+  "attempt_abandoned",
+  "pull_request",
+  "merge_approval_requested",
+  "merge_approved",
+  "merge_approval_void",
+  "question_asked",
+  "question_answered",
+  "retry_granted",
+  "revert_requested",
+  "contract_set",
+  "window_started",
+  "window_closed",
+] as const
+
 export interface RecordSignalInput {
   source: SignalSource
   externalId: string // <= 200
@@ -70,5 +98,6 @@ export interface FinishAttemptInput {
   files?: string[]
   branch?: string
   sessionId?: string
-  reviewer?: { verdict: ReviewerVerdict; summary: string }
+  /** `headSha`: the head the reviewer read (7 to 64 hex digits); it wins over the branch lookup. */
+  reviewer?: { verdict: ReviewerVerdict; summary: string; headSha?: string }
 }

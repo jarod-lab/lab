@@ -235,5 +235,7 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
       { cause: journeyError.error },
     )
   }
-  if (cleanup.length > 0) throw new Error(cleanup.join("; "))
+  if (cleanup.length > 0) {
+    throw new Error(cleanup.join("; "), cleanupError ? { cause: cleanupError.error } : undefined)
+  }
 })

@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest"
 const ROOT = join(import.meta.dirname, "../../../..")
 const BUILD_OUTPUT = ".vercel/output"
 
-const readTurbo = (): { tasks: Record<string, { outputs?: string[] }> } => {
+const readTurbo = (): { tasks: Record<string, { env?: string[]; outputs?: string[] }> } => {
   const text = readFileSync(join(ROOT, "turbo.jsonc"), "utf8")
   return JSON.parse(text.replace(/^\s*\/\/.*$/gm, ""))
 }
@@ -20,6 +20,11 @@ describe("the agent build's turbo outputs", () => {
   it("declare the directory eve build writes, so a cache hit restores it", () => {
     const outputs = readTurbo().tasks["@lab/agent#build"]?.outputs ?? []
     expect(outputs).toContain(`${BUILD_OUTPUT}/**`)
+  })
+
+  it("hash VERCEL, so a Vercel build never restores a build made without it", () => {
+    // Without VERCEL eve writes .output only; a cache entry from such a build has no .vercel/output.
+    expect(readTurbo().tasks["@lab/agent#build"]?.env ?? []).toContain("VERCEL")
   })
 
   it("name the directory eve itself writes", () => {

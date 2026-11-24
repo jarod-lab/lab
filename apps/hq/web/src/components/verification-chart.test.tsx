@@ -53,6 +53,13 @@ describe("VerificationChart", () => {
     )
   })
 
+  it("puts the figcaption first in the figure (HTML allows it only first or last)", () => {
+    const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
+    const figure = view.getByRole("figure")
+    expect(figure.firstElementChild?.tagName).toBe("FIGCAPTION")
+    expect(figure.querySelectorAll("figcaption")).toHaveLength(1)
+  })
+
   it("colours bars before the merge text-destructive and after it text-success, and the bucket at the merge is after", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
     const rects = [...view.getByRole("figure").querySelectorAll("rect")]
@@ -124,10 +131,26 @@ describe("VerificationChart", () => {
     expect(view.getByRole("figure").querySelector("line")).toBeNull()
   })
 
-  it("a range that starts exactly at the merge says 'merged' on its left edge", () => {
+  it("for a range cut to start after the merge the screen-reader text says so and never reports 0 before the merge", () => {
+    // 25 starts half an hour after the merge: 1 signal in the range, nothing measured before it.
+    const view = render(<VerificationChart buckets={FAC141.slice(25)} mergedAt={MERGED} />)
+    const caption = view.getByRole("figure").querySelector("figcaption") as HTMLElement
+    expect(caption.textContent).toBe(
+      "Signals per 30 minutes: 1 in this range, which starts after the merge. Each bar is one half hour.",
+    )
+    expect(caption.textContent).not.toMatch(/before the merge/)
+    expect(caption.textContent).not.toMatch(/red/)
+    expect(view.getByRole("figure", { name: /which starts after the merge/ })).toBeTruthy()
+  })
+
+  it("a range that starts exactly at the merge says 'merged' on its left edge and reports nothing before it", () => {
     const view = render(<VerificationChart buckets={FAC141.slice(24)} mergedAt={MERGED} />)
     expect(view.getByText("merged")).toBeTruthy()
     expect(view.queryByText("start of range")).toBeNull()
+    const caption = view.getByRole("figure").querySelector("figcaption") as HTMLElement
+    expect(caption.textContent).toBe(
+      "Signals per 30 minutes: 5 since the merge. Each bar is one half hour.",
+    )
   })
 
   it("without a merge, shows every bar as before and names no merge", () => {

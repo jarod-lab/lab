@@ -1,11 +1,17 @@
-import { createRoute } from "@tanstack/react-router"
+import { createRoute, useParams } from "@tanstack/react-router"
 
-import { EmptyState } from "../components/states"
+import { Item } from "../containers/item"
 import { appRoute } from "./app"
 
-/** One work item (`/work/FAC-12` or `/work/<uuid>`): a placeholder until Task 17b builds it. */
+function WorkItemScreen() {
+  // `strict: false`: the route cannot name itself in its own initializer, and the one param is a string.
+  const { itemId = "" } = useParams({ strict: false })
+  return <Item key={itemId} itemRef={itemId} />
+}
+
+/** One work item (`/work/FAC-12` or `/work/<uuid>`). */
 export const workItemRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/work/$itemId",
-  component: () => <EmptyState title="Coming next" description="The item page is not built yet." />,
+  component: WorkItemScreen,
 })

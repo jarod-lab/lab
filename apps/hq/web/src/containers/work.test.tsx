@@ -826,8 +826,8 @@ describe("the Work board", () => {
     })
     const link = within(column).getByRole("link", { name: MERGE_TITLE })
     expect(link.getAttribute("href")).toBe("/app/work/FAC-6")
-    // The item page itself is Task 17b's placeholder.
+    // The link opens the item page (Task 17b).
     await app.user.click(link)
-    expect(await app.findByText("Coming next")).toBeTruthy()
+    expect(await app.findByRole("heading", { level: 1, name: MERGE_TITLE })).toBeTruthy()
   })
 })

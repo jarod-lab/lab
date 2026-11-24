@@ -51,24 +51,37 @@ export function VerificationChart({
   const before = buckets.filter(isBefore).reduce((sum, b) => sum + b.count, 0)
   const total = buckets.reduce((sum, b) => sum + b.count, 0)
   const max = Math.max(...buckets.map((b) => b.count))
-  const label = merged
-    ? `Signals per 30 minutes: ${before} before the merge, ${total - before} since`
-    : `Signals per 30 minutes: ${total} so far, no merge yet`
   const firstSince = buckets.findIndex((b) => !isBefore(b))
   const first = new Date(buckets[0]?.at ?? "").getTime()
+  // A range that starts at or after the merge measured nothing before it: the text must not
+  // report a zero for a stretch hq cut off (the items may have had many signals there).
+  const startsAtMerge = merged && first === merge
+  const startsAfterMerge = merged && first > merge
   // The left edge: 12 hours before the merge as hq sends it, the merge itself when the range
-  // starts there, else the start of a range hq cut (it never starts before it, nor after it).
+  // starts there, else the start of a range hq cut short, which may begin after the merge.
   const lead =
     merged && !Number.isNaN(first) && first < merge
       ? `${hoursBetween(first, merge)} h before the merge`
       : null
-  const leftEdge = lead ?? (merged && first === merge ? "merged" : "start of range")
+  const leftEdge = lead ?? (startsAtMerge ? "merged" : "start of range")
+  const label = !merged
+    ? `Signals per 30 minutes: ${total} so far, no merge yet`
+    : startsAtMerge
+      ? `Signals per 30 minutes: ${total} since the merge`
+      : startsAfterMerge
+        ? `Signals per 30 minutes: ${total} in this range, which starts after the merge`
+        : `Signals per 30 minutes: ${before} before the merge, ${total - before} since`
   const alt = `${label}. Each bar is one half hour${
-    merged ? ": red before the merge, green from the merge on." : "."
+    merged && !startsAtMerge && !startsAfterMerge
+      ? ": red before the merge, green from the merge on."
+      : "."
   }`
 
   return (
     <figure aria-labelledby={captionId} className="m-0 flex min-w-0 flex-col gap-1.5">
+      <figcaption id={captionId} className="sr-only">
+        {alt}
+      </figcaption>
       <svg
         aria-hidden="true"
         viewBox={`0 0 ${buckets.length * SLOT} ${HEIGHT}`}
@@ -104,9 +117,6 @@ export function VerificationChart({
           />
         ) : null}
       </svg>
-      <figcaption id={captionId} className="sr-only">
-        {alt}
-      </figcaption>
       <div className="flex justify-between gap-2 font-mono text-[10.5px] text-faint">
         <span>{leftEdge}</span>
         {merged && lead ? <span>merged</span> : null}

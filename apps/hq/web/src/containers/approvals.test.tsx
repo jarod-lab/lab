@@ -6,8 +6,18 @@ import { describe, expect, it } from "vitest"
 
 import type { Proposal } from "../api/schemas"
 import { createFakeHq, type FakeHq } from "../test/fake-hq"
-import { proposalFixture } from "../test/fixtures"
+import { proposalFixture, workBoardFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
+
+/**
+ * A pipeline with nothing waiting on a founder (Phase 4: Approvals also reads the work board, and
+ * its needs-you cards are `article`s too). The tests that count or find THE article of the
+ * proposals use it, so the pipeline's cards are not among the ones they count.
+ */
+const QUIET_PIPELINE = workBoardFixture({
+  needsYou: [],
+  stats: { ...workBoardFixture().stats, needsYou: 0, oldestWaitingMinutes: null },
+})
 
 const ALREADY = "Already decided. Refresh to see the result."
 
@@ -377,6 +387,7 @@ describe("the Approvals screen", () => {
           },
         }),
       ],
+      workBoard: QUIET_PIPELINE,
     })
     const app = await renderApp({ path: "/app/approvals", hq })
     const article = await app.findByRole("article")
@@ -392,6 +403,7 @@ describe("the Approvals screen", () => {
   it("a 40,000-character body stays inside its card and Approve stays visible", async () => {
     const hq = createFakeHq({
       proposals: [proposalFixture({ body: { text: "word ".repeat(8000) } })],
+      workBoard: QUIET_PIPELINE,
     })
     const app = await renderApp({ path: "/app/approvals", hq })
     const article = await app.findByRole("article")
@@ -403,6 +415,7 @@ describe("the Approvals screen", () => {
   it("loading shows a LoadingBlock, then 'Nothing needs you' when no proposal is pending", async () => {
     const hq = createFakeHq({
       proposals: [proposalFixture({ status: "approved", decidedAt: "2026-11-17T10:00:00.000Z" })],
+      workBoard: QUIET_PIPELINE,
     })
     const app = await renderApp({ path: "/app/approvals", hq })
     expect(app.getAllByText(/^Loading /).length).toBeGreaterThan(0)
@@ -428,7 +441,7 @@ describe("the Approvals screen", () => {
   })
 
   it("nextCursor shows Load more and fetches the next page with the cursor", async () => {
-    const hq = createFakeHq({ proposals: seeded(30) })
+    const hq = createFakeHq({ proposals: seeded(30), workBoard: QUIET_PIPELINE })
     const app = await renderApp({ path: "/app/approvals", hq })
     await card(app, "Proposal 1")
     expect(app.getAllByRole("article")).toHaveLength(25)
@@ -473,7 +486,7 @@ describe("the Approvals screen", () => {
   })
 
   it("never calls decide on load, focus, visibility or retry", async () => {
-    const hq = createFakeHq({ proposals: seeded(3) })
+    const hq = createFakeHq({ proposals: seeded(3), workBoard: QUIET_PIPELINE })
     const app = await renderApp({ path: "/app/approvals", hq })
     await card(app, "Proposal 1")
     fireEvent.focus(window)

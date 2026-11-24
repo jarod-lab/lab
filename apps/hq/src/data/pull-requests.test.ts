@@ -150,6 +150,7 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       const { item } = await fixing()
       for (const url of [
         urlOf(7, "other/repo"),
+        "https://github.com/other/repo/pull/1",
         "http://github.com/acme/web/pull/7",
         "javascript:alert(1)//github.com/acme/web/pull/7",
         `${urlOf(7)}/`,
@@ -501,6 +502,92 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       expect((await factsOf(item.id)).pullRequest).toBe("open")
     })
 
+    it("an upper-case head sha is stored lower-case, and the same sha in lower case is not a head change", async () => {
+      const { item, attempt } = await fixing()
+      await record({ itemId: item.id, headSha: SHA_A.toUpperCase() })
+      expect((await pullRequestOf(item.id)).headSha).toBe(SHA_A)
+      await finishFix(attempt.id)
+      await record({ headSha: SHA_A }, minutesAfter(NOW, 12))
+      expect((await approvalsOf(item.id)).map((a) => [a.status, a.headSha])).toEqual([
+        ["pending", SHA_A],
+      ])
+      expect(await eventKinds(item.id)).not.toContain("merge_approval_void")
+    })
+
+    it("a merged pull request cannot change its head (CONFLICT)", async () => {
+      const { item } = await fixing()
+      await record({ itemId: item.id })
+      await record({ state: "merged" }, minutesAfter(NOW, 5))
+      await expectAppError(
+        record({ state: "merged", headSha: SHA_B }, minutesAfter(NOW, 6)),
+        "CONFLICT",
+      )
+      await record({ state: "merged", headSha: SHA_A }, minutesAfter(NOW, 7)) // the same head is a redelivery
+      expect((await pullRequestOf(item.id)).headSha).toBe(SHA_A)
+    })
+
+    it("mergedBy alone with state open is BAD_REQUEST, and mergedBy is set once like mergedAt", async () => {
+      const { item } = await fixing()
+      await expectAppError(record({ itemId: item.id, mergedBy: "octocat" }), "BAD_REQUEST")
+      await expectAppError(
+        recordPullRequest(db(), {
+          actor: AGENT,
+          itemId: item.id,
+          branch: BRANCH,
+          number: 7,
+          url: urlOf(7),
+          mergedBy: "octocat",
+          now: NOW,
+        }),
+        "BAD_REQUEST",
+      )
+      await record({ itemId: item.id })
+      await record({ state: "merged", mergedBy: "octocat" }, minutesAfter(NOW, 5))
+      await record({ state: "merged", mergedBy: "someone-else" }, minutesAfter(NOW, 6))
+      expect((await pullRequestOf(item.id)).mergedBy).toBe("octocat")
+    })
+
+    it("a redelivered merge of an already merged pull request moves nothing", async () => {
+      const item = await seedItem(db(), { state: "attempt" })
+      await seedAttempt(db(), item.id, {
+        number: 1,
+        status: "running",
+        result: null,
+        branch: BRANCH,
+        leaseExpiresAt: minutesAfter(NOW, 600),
+      })
+      await seedPullRequest(db(), item.id, { number: 7, state: "merged", mergedAt: NOW })
+      const result = await record({ state: "merged" }, minutesAfter(NOW, 5))
+      expect(result).toEqual({ matched: true, itemId: item.id, state: "attempt" })
+    })
+
+    it("two items with colliding branch slugs: closing #7 reaches the item that holds #7, voids its approval and inserts no row on the other", async () => {
+      const one = await fixing()
+      await record({ itemId: one.item.id })
+      await finishFix(one.attempt.id)
+      expect((await approvalsOf(one.item.id)).map((a) => a.status)).toEqual(["pending"])
+      // another item's attempt picked the same branch name, later
+      const two = await seedItem(db(), { state: "attempt" })
+      await seedAttempt(db(), two.id, {
+        number: 1,
+        status: "running",
+        result: null,
+        branch: BRANCH,
+        leaseExpiresAt: minutesAfter(NOW, 600),
+        now: minutesAfter(NOW, 20),
+      })
+      const closed = await record({ state: "closed" }, minutesAfter(NOW, 21))
+      expect(closed).toMatchObject({ matched: true, itemId: one.item.id, state: "stopped" })
+      expect((await approvalsOf(one.item.id)).map((a) => a.status)).toEqual(["void"])
+      expect(
+        await db().select().from(pullRequests).where(eq(pullRequests.itemId, two.id)),
+      ).toHaveLength(0)
+      expect(await stateOf(two.id)).toBe("attempt")
+      // a pull request number nobody has recorded still goes to the newest attempt on its branch
+      const fresh = await record({ number: 8, url: urlOf(8) }, minutesAfter(NOW, 22))
+      expect(fresh).toMatchObject({ matched: true, itemId: two.id, state: "review" })
+    })
+
     it("a pull request recorded for a stopped item is stored and moves nothing", async () => {
       const item = await seedItem(db(), { state: "stopped" })
       await seedAttempt(db(), item.id, { number: 1, branch: BRANCH })
@@ -579,6 +666,54 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       const merged = await record(
         { branch: "factory/fix-9", number: 9, url: urlOf(9), state: "merged" },
         minutesAfter(NOW, 130),
+      )
+      expect(merged.state).toBe("deploy")
+    })
+
+    /** Cycle 1 merged #7 on BRANCH (attempt 1); the item was reopened and cycle 2's fix reuses BRANCH. */
+    async function reusedBranch() {
+      const item = await seedItem(db(), { state: "attempt", cycle: 2 })
+      const first = await seedAttempt(db(), item.id, {
+        number: 1,
+        cycle: 1,
+        branch: BRANCH,
+        result: "approved",
+      })
+      await seedPullRequest(db(), item.id, {
+        number: 7,
+        state: "merged",
+        branch: BRANCH,
+        attemptId: first.id,
+        mergedAt: minutesAfter(NOW, 10),
+      })
+      await seedAttempt(db(), item.id, {
+        number: 2,
+        cycle: 2,
+        status: "running",
+        result: null,
+        branch: BRANCH,
+        leaseExpiresAt: minutesAfter(NOW, 600),
+        now: minutesAfter(NOW, 100),
+      })
+      return item
+    }
+
+    it("a branch reused by the next cycle does not make the old merged pull request its own", async () => {
+      const item = await reusedBranch()
+      expect((await factsOf(item.id, minutesAfter(NOW, 120))).pullRequest).toBe("none")
+      const redelivered = await record({ state: "merged" }, minutesAfter(NOW, 120))
+      expect(redelivered).toEqual({ matched: true, itemId: item.id, state: "attempt" })
+      expect(await stateOf(item.id)).toBe("attempt")
+      // the cycle 2 pull request on the same branch moves it as usual, and ties to cycle 2
+      const opened = await record(
+        { number: 9, url: urlOf(9), headSha: SHA_C },
+        minutesAfter(NOW, 130),
+      )
+      expect(opened.state).toBe("review")
+      expect((await factsOf(item.id, minutesAfter(NOW, 131))).pullRequest).toBe("open")
+      const merged = await record(
+        { number: 9, url: urlOf(9), state: "merged" },
+        minutesAfter(NOW, 140),
       )
       expect(merged.state).toBe("deploy")
     })
@@ -796,6 +931,47 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
         ["void", SHA_A],
         ["pending", SHA_B],
       ])
+    })
+
+    it("a verdict with no reviewed sha is not bound to a pull request on another branch: a push to the first branch, or a close and reopen of its pull request, makes no approval", async () => {
+      const retryOnOtherBranch = async () => {
+        const { item, attempt } = await fixing() // fix 1 on BRANCH opens #7 at head A
+        await record({ itemId: item.id })
+        await finishFix(attempt.id, { result: "rejected" })
+        const second = await startAttempt(db(), {
+          itemId: item.id,
+          kind: "fix",
+          actor: AGENT,
+          now: minutesAfter(NOW, 20),
+        })
+        await heartbeatAttempt(db(), {
+          attemptId: second.id,
+          branch: "factory/fix-8",
+          now: minutesAfter(NOW, 21),
+        })
+        // fix 2 is approved before any pull request on its branch is recorded: no sha to bind
+        await finishFix(second.id, { now: minutesAfter(NOW, 30) })
+        expect(await stateOf(item.id)).toBe("attempt")
+        const [stored] = await db().select().from(attempts).where(eq(attempts.id, second.id))
+        expect(stored?.reviewedHeadSha).toBeNull()
+        return { item, second }
+      }
+      // a collaborator pushes head B to the first branch
+      const pushed = await retryOnOtherBranch()
+      await record({ headSha: SHA_B }, minutesAfter(NOW, 40))
+      expect(await stateOf(pushed.item.id)).toBe("review")
+      expect(await approvalsOf(pushed.item.id)).toHaveLength(0)
+      const [after] = await db().select().from(attempts).where(eq(attempts.id, pushed.second.id))
+      expect(after?.reviewedHeadSha).toBeNull()
+
+      // #7 is closed while the retry runs, then reopened at the head fix 1's reviewer read
+      await resetWork(db())
+      const reopened = await retryOnOtherBranch()
+      await record({ state: "closed" }, minutesAfter(NOW, 40))
+      expect(await stateOf(reopened.item.id)).toBe("attempt")
+      await record({ state: "open" }, minutesAfter(NOW, 41))
+      expect(await stateOf(reopened.item.id)).toBe("review")
+      expect(await approvalsOf(reopened.item.id)).toHaveLength(0)
     })
 
     it("only the current cycle's newest fix counts: an approved fix of cycle 1 makes no approval for a cycle 2 pull request", async () => {

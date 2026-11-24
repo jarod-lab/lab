@@ -6,9 +6,9 @@
 // locked first and every state move goes through `transitionItem`.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 
-import { attempts, pullRequests } from "../db/schema"
+import { attempts, pullRequests, workItems } from "../db/schema"
 import {
   PULL_REQUEST_STATES,
   type PullRequestCheck,
@@ -79,31 +79,36 @@ function upsertChecks(
   return [...merged.values()]
 }
 
-/** The item a call is about: `itemId`, else the item of the newest attempt that reported the branch,
- * else the item that already holds a pull request of this number on this branch. */
+/**
+ * The item a call is about: `itemId`; else the item that already holds this pull request (its repo
+ * and number, newest first), because a recorded pull request belongs to the item it was recorded
+ * on whatever branch another item's attempt has since reported (two items can pick one branch
+ * slug); else, for a number not yet recorded, the item of the newest attempt that reported the
+ * branch.
+ */
 async function findItem(
   db: Database,
   itemRef: string | undefined,
   branch: string,
   number: number,
+  repo: string,
 ): Promise<WorkItemRow | null> {
   if (itemRef !== undefined) return resolveItem(db, checkText("itemId", itemRef, { max: 200 }))
+  const [recorded] = await db
+    .select({ itemId: pullRequests.itemId })
+    .from(pullRequests)
+    .innerJoin(workItems, eq(workItems.id, pullRequests.itemId))
+    .where(and(eq(workItems.repo, repo), eq(pullRequests.number, number)))
+    .orderBy(desc(pullRequests.openedAt), desc(pullRequests.id))
+    .limit(1)
+  if (recorded) return resolveItem(db, recorded.itemId)
   const [byAttempt] = await db
     .select({ itemId: attempts.itemId })
     .from(attempts)
     .where(eq(attempts.branch, branch))
     .orderBy(desc(attempts.createdAt), desc(attempts.number), desc(attempts.id))
     .limit(1)
-  const [byPull] = byAttempt
-    ? []
-    : await db
-        .select({ itemId: pullRequests.itemId })
-        .from(pullRequests)
-        .where(and(eq(pullRequests.branch, branch), eq(pullRequests.number, number)))
-        .orderBy(desc(pullRequests.openedAt), desc(pullRequests.id))
-        .limit(1)
-  const itemId = byAttempt?.itemId ?? byPull?.itemId
-  return itemId ? resolveItem(db, itemId) : null
+  return byAttempt ? resolveItem(db, byAttempt.itemId) : null
 }
 
 /**
@@ -114,12 +119,15 @@ async function findItem(
  *   BAD_REQUEST; the stored url is that canonical form.
  * - No item for the branch is `matched: false`, not an error.
  * - A new row needs `base`, `headSha`, `isDraft` and `state`; an existing row keeps what is not sent.
- * - `mergedAt` is accepted only with `state: "merged"`, clamped to `now`, defaults to `now` and is
- *   set once. `merged` is final: another state, or another head, is CONFLICT.
- * - `open` takes `attempt` to `review` when it is new information (a new row, a state change or a
- *   new head sha): the agent re-sends the whole set on every check or label event, and that must not
- *   pull an item whose retry is running back to review. `merged` takes `review` to `deploy`, and
- *   from `attempt` takes both hops; `closed` takes `review` to `stopped`.
+ * - `mergedAt` and `mergedBy` are accepted only with `state: "merged"`, are set once (`mergedAt`
+ *   is clamped to `now` and defaults to it). `merged` is final: another state, or another head, is CONFLICT.
+ * - A move is driven by news (a new row, a state change or, for `open`, a new head sha): the agent
+ *   re-sends the whole set on every check or label event, and that must not pull an item whose retry
+ *   is running back to review, nor move it again on a redelivered merge. `open` takes `attempt` to
+ *   `review`; `merged` takes `review` to `deploy`, and from `attempt` takes both hops; `closed`
+ *   takes `review` to `stopped`.
+ * - The item is the one that already holds the pull request (repo and number), else the item of the
+ *   newest attempt that reported the branch (`findItem`).
  * - Only the item's pull request for its current cycle moves it (`currentPullRequest`): a
  *   redelivered merge of an earlier cycle's pull request, or an older pull request of this cycle,
  *   is recorded and moves nothing.
@@ -172,7 +180,8 @@ export async function recordPullRequest(
     if (Number.isNaN(mergedAtInput.getTime())) throw bad("mergedAt is not a date", "mergedAt")
   }
 
-  const found = await findItem(db, input.itemId, branch, number)
+  const repo = /^https:\/\/github\.com\/([^/]+\/[^/]+)\//i.exec(url)?.[1]?.toLowerCase() ?? ""
+  const found = await findItem(db, input.itemId, branch, number, repo)
   if (!found) return { matched: false, itemId: null, state: null }
 
   return db.transaction(async (tx) => {
@@ -238,7 +247,7 @@ export async function recordPullRequest(
       files: files ?? existing?.files ?? null,
       checks: checks ? upsertChecks(existing?.checks ?? [], checks) : (existing?.checks ?? []),
       mergedAt,
-      mergedBy: mergedBy ?? existing?.mergedBy ?? null,
+      mergedBy: existing?.mergedBy ?? mergedBy ?? null,
       closedAt,
       updatedAt: now,
     }
@@ -254,7 +263,14 @@ export async function recordPullRequest(
         .select({ id: attempts.id })
         .from(attempts)
         .where(and(eq(attempts.itemId, item.id), eq(attempts.branch, branch)))
-        .orderBy(desc(attempts.createdAt), desc(attempts.number), desc(attempts.id))
+        // The current cycle's attempt first: a reused branch must tie the pull request to this
+        // cycle (`currentPullRequest` reads the cycle through this attempt).
+        .orderBy(
+          desc(sql`(${attempts.cycle} = ${item.cycle})`),
+          desc(attempts.createdAt),
+          desc(attempts.number),
+          desc(attempts.id),
+        )
         .limit(1)
       ;[row] = await tx
         .insert(pullRequests)
@@ -319,11 +335,13 @@ export async function recordPullRequest(
     // The moves: only the item's pull request of its current cycle drives it.
     const current = await currentPullRequest(tx, item)
     if (current?.id === pull.id) {
+      // A move is driven by news: a merge or a close is new only when the row's state changed, so
+      // a redelivered merge (or any later event on a merged pull request) moves nothing.
+      const newMerge = input.state === "merged" && stateChanged
+      const newClose = input.state === "closed" && stateChanged
       const opened =
         item.state === "attempt" &&
-        (state === "merged"
-          ? input.state === "merged"
-          : state === "open" && (stateChanged || headChanged))
+        (newMerge || (state === "open" && (stateChanged || headChanged)))
       if (opened) {
         item = await transitionItem(tx, {
           item,
@@ -335,7 +353,7 @@ export async function recordPullRequest(
       }
       // The second hop of a merge from `attempt` is one millisecond after the first (`next`), so
       // its event orders after it; its `state_changed_at` is that instant too.
-      if (input.state === "merged" && item.state === "review") {
+      if (newMerge && item.state === "review") {
         item = await transitionItem(tx, {
           item,
           to: "deploy",
@@ -344,7 +362,7 @@ export async function recordPullRequest(
           now: next(),
         })
       }
-      if (input.state === "closed" && item.state === "review") {
+      if (newClose && item.state === "review") {
         item = await transitionItem(tx, {
           item,
           to: "stopped",

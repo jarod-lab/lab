@@ -115,6 +115,8 @@ export async function seedPullRequest(
     openedAt?: Date
     mergedAt?: Date | null
     repo?: string
+    branch?: string
+    attemptId?: string | null
   } = {},
 ) {
   const number = o.number ?? 7
@@ -126,7 +128,8 @@ export async function seedPullRequest(
       itemId,
       number,
       url: `https://github.com/${o.repo ?? "acme/web"}/pull/${number}`,
-      branch: `factory/fix-${number}`,
+      branch: o.branch ?? `factory/fix-${number}`,
+      attemptId: o.attemptId ?? null,
       base: "main",
       headSha: "a".repeat(40),
       isDraft: false,

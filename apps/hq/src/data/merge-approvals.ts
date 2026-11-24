@@ -73,7 +73,8 @@ export async function voidMergeApprovals(
 /**
  * Ask for a merge approval iff everything it needs is true: the item is in `review`, its current
  * cycle's pull request is open, the newest fix attempt of the cycle finished `approved`, that
- * verdict was given on this head (its `reviewed_head_sha` is null or equals the pull request's head)
+ * verdict was given on this pull request's branch and head (its `branch` is null or the pull
+ * request's, and its `reviewed_head_sha` is null or equals the pull request's head)
  * and no pending or approved row exists for this head. It makes one `pending` row bound to the
  * head and one `merge_approval_requested` event at `now`. Both `finishAttempt` and
  * `recordPullRequest` call it inside the item's lock, so either order of the two facts gives the
@@ -100,6 +101,10 @@ export async function ensureMergeApproval(tx: Tx, itemId: string, now: Date): Pr
     .orderBy(desc(attempts.number))
     .limit(1)
   if (!fix || fix.status !== "finished" || fix.result !== "approved") return
+  // The reviewer read the branch the fix reported. A pull request on another branch (a push to the
+  // first fix's branch, a close and reopen of an older pull request) is not what it read, so
+  // nothing is asked for: fail closed.
+  if (fix.branch !== null && fix.branch !== pr.branch) return
   if (fix.reviewedHeadSha !== null && fix.reviewedHeadSha !== pr.headSha) return
   const [held] = await tx
     .select({ id: mergeApprovals.id })

@@ -168,19 +168,20 @@ export async function resolveItem(db: Database, ref: string): Promise<WorkItemRo
 export type PullRequestRow = typeof pullRequests.$inferSelect
 
 /**
- * The item's pull request for its CURRENT cycle: the newest one (by opened time, then number) among
- * those that are not another cycle's. `pull_requests` has no cycle column, so a pull request is
- * tied to a cycle through its branch and the item's attempts: it belongs to the current cycle when
- * a current-cycle attempt reported its branch, and also when no attempt of another cycle did (a
- * cycle 1 item has no other cycle, so every pull request counts; a new pull request on a branch
- * no heartbeat reported counts too). Only a branch that an EARLIER cycle's attempt used, and that no
- * current-cycle attempt reported, is excluded: that is how a redelivered cycle 1 merge cannot move
- * a cycle 2 item. (A branch reused by attempts of two cycles would count for the later one: the
- * agent names a branch per attempt, so this is not expected.)
+ * The item's pull request for its CURRENT cycle: the newest one (by opened time, then number)
+ * among those that belong to it. `pull_requests` has no cycle column, so a pull request is tied to
+ * a cycle through the attempt it remembers (`attempt_id`, stored when the row is first recorded: the
+ * attempt that reported its branch, the current cycle's before an older one's): it belongs to the
+ * current cycle when that attempt does. That holds when a branch is reused across cycles, which a
+ * retry or a reopened item's agent can do. Only a row with no attempt falls back to the branch
+ * rule: it counts when a current-cycle attempt reported its branch, or no attempt of another cycle
+ * did (a cycle 1 item has no other cycle, so every such row counts). `branch` narrows the choice to
+ * one branch.
  */
 export async function currentPullRequest(
   tx: Tx,
   item: { id: string; cycle: number },
+  branch?: string,
 ): Promise<PullRequestRow | undefined> {
   const [pr] = await tx
     .select()
@@ -188,10 +189,16 @@ export async function currentPullRequest(
     .where(
       and(
         eq(pullRequests.itemId, item.id),
-        sql`(exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
-            and ${attempts.cycle} = ${item.cycle} and ${attempts.branch} = ${pullRequests.branch})
-          or not exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
-            and ${attempts.cycle} <> ${item.cycle} and ${attempts.branch} = ${pullRequests.branch}))`,
+        branch === undefined ? undefined : eq(pullRequests.branch, branch),
+        sql`(case when ${pullRequests.attemptId} is not null then
+            exists (select 1 from ${attempts} where ${attempts.id} = ${pullRequests.attemptId}
+              and ${attempts.cycle} = ${item.cycle})
+          else
+            (exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
+              and ${attempts.cycle} = ${item.cycle} and ${attempts.branch} = ${pullRequests.branch})
+            or not exists (select 1 from ${attempts} where ${attempts.itemId} = ${pullRequests.itemId}
+              and ${attempts.cycle} <> ${item.cycle} and ${attempts.branch} = ${pullRequests.branch}))
+          end)`,
       ),
     )
     .orderBy(desc(pullRequests.openedAt), desc(pullRequests.number))

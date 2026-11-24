@@ -96,9 +96,9 @@ type Fetch = (request: Request, env?: object) => Response | Promise<Response>
 
 /**
  * The listener's one fetch: `/app` and `/app/*` go to the web app, everything else to hq. The
- * second argument is the Node adapter's bindings (`{ incoming, outgoing }`: hq reads the caller's
- * address from them); both sides get it, or the one that drops it loses it. Without a web app it is
- * hq's own fetch.
+ * second argument is the Node adapter's bindings (`{ incoming, outgoing }`). Nothing in hq reads
+ * them today (auth takes the caller's address from a trusted header); both sides get them so a
+ * later `getConnInfo` sees the caller, as apps/api's does. Without a web app it is hq's own fetch.
  */
 export function routeToWeb(web: { fetch: Fetch } | null, app: { fetch: Fetch }): Fetch {
   if (!web) return (request, env) => app.fetch(request, env)

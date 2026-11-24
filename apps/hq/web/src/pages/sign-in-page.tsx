@@ -24,6 +24,7 @@ export function SignInPage({ onSubmit, pending, error }: SignInPageProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
       <form
+        method="post"
         onSubmit={submit}
         className="flex w-full max-w-sm flex-col gap-4 rounded-shell border border-border bg-panel p-6"
       >

@@ -18,6 +18,15 @@ describe("SignInPage", () => {
     expect(view.queryByRole("alert")).toBeNull()
   })
 
+  it("is a POST form with 44px inputs, so a failed handler could never put the password in the URL", () => {
+    const view = render(<SignInPage onSubmit={() => {}} pending={false} error={null} />)
+    expect(view.container.querySelector("form")?.getAttribute("method")).toBe("post")
+    for (const label of ["Email", "Password"]) {
+      expect(view.getByLabelText(label).className).toContain("h-11")
+    }
+    expect(view.getByRole("button", { name: "Sign in" }).className).toContain("min-h-touch")
+  })
+
   it("submits the typed values once", async () => {
     const onSubmit = vi.fn()
     const view = render(<SignInPage onSubmit={onSubmit} pending={false} error={null} />)

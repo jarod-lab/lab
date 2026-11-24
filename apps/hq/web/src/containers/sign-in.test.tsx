@@ -87,13 +87,10 @@ describe("the sign-in form", () => {
     expect(hq.sent.filter((s) => s.path === "/api/auth/sign-in/email")).toHaveLength(1)
   })
 
-  it("password is never written to the URL or the query cache", async () => {
-    const hq = createFakeHq({ caller: "signed-out" })
-    const app = await renderApp({ path: "/app/sign-in", hq })
-    await fill(app)
-    await app.user.click(app.getByRole("button", { name: "Sign in" }))
-    await app.findByRole("heading", { name: "Digest" })
-    const dump = JSON.stringify([
+  // Nothing clears the caches after a failed sign-in, so a password kept in a mutation's variables
+  // or a query key would still be there: this is the dump that can fail.
+  const dumpOf = (app: RenderAppResult) =>
+    JSON.stringify([
       app.router.history.location.href,
       app.queryClient
         .getQueryCache()
@@ -104,7 +101,26 @@ describe("the sign-in form", () => {
         .getAll()
         .map((m) => [m.options.mutationKey, m.state]),
     ])
-    expect(dump).not.toContain(FAKE_PASSWORD)
+
+  it("password is never written to the URL or the query cache after a failed sign-in", async () => {
+    const wrong = "a wrong password nobody uses"
+    const hq = createFakeHq({ caller: "signed-out" })
+    const app = await renderApp({ path: "/app/sign-in", hq })
+    await fill(app, wrong)
+    await app.user.click(app.getByRole("button", { name: "Sign in" }))
+    expect((await app.findByRole("alert")).textContent).toBe("Wrong email or password.")
+    expect(hq.sent.some((s) => s.path === "/api/auth/sign-in/email")).toBe(true)
+    expect(dumpOf(app)).not.toContain(wrong)
+    expect(app.router.history.location.search).not.toContain("password")
+  })
+
+  it("password is never written to the URL or the query cache after a signed-in sign-in", async () => {
+    const hq = createFakeHq({ caller: "signed-out" })
+    const app = await renderApp({ path: "/app/sign-in", hq })
+    await fill(app)
+    await app.user.click(app.getByRole("button", { name: "Sign in" }))
+    await app.findByRole("heading", { name: "Digest" })
+    expect(dumpOf(app)).not.toContain(FAKE_PASSWORD)
     expect(app.router.history.location.search).not.toContain("password")
   })
 

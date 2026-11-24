@@ -31,6 +31,31 @@ describe("safeNext", () => {
     }
   })
 
+  it("ignores a path with a . or .. segment, raw or percent-encoded, in the path part only", () => {
+    for (const next of [
+      "/../admin",
+      "/a/../b",
+      "/%2e%2e/x",
+      "/%2E%2E/x",
+      "/.%2e/x",
+      "/a/%2e%2e",
+      "/./a",
+      "/a/./b",
+      "/%2e/a",
+      "/..",
+      "/.",
+      "/a/..?x=1",
+      "/a/..#top",
+      "/a/%zz",
+    ]) {
+      expect(safeNext(next), next).toBe("/digest")
+    }
+    // A dot inside a name, or a dot segment only in the query or fragment, is not a dot segment.
+    expect(safeNext("/a.b/c..d")).toBe("/a.b/c..d")
+    expect(safeNext("/approvals?back=../x")).toBe("/approvals?back=../x")
+    expect(safeNext("/approvals#..")).toBe("/approvals#..")
+  })
+
   it("ignores a value that is not a string", () => {
     expect(safeNext(42 as unknown as string)).toBe("/digest")
     expect(safeNext(null as unknown as string)).toBe("/digest")

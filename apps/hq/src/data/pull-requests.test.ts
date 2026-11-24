@@ -641,6 +641,18 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       expect(tail[1]?.detail).toMatchObject({ headSha: SHA_A })
     })
 
+    it("drafts get an approval and the row exposes is_draft", async () => {
+      // Founder decision: an approval only records a decision (GitHub refuses to merge a draft), so
+      // a draft pull request is not excluded; the card reads isDraft from the pull request row.
+      const { item, attempt } = await fixing()
+      await record({ itemId: item.id, isDraft: true })
+      await finishFix(attempt.id)
+      const [approval] = await approvalsOf(item.id)
+      expect(approval).toMatchObject({ status: "pending", headSha: SHA_A })
+      const pull = await pullRequestOf(item.id)
+      expect(pull).toMatchObject({ id: approval?.pullRequestId, isDraft: true })
+    })
+
     it("a reviewer rejection creates no approval", async () => {
       const { item, attempt } = await fixing()
       await record({ itemId: item.id })

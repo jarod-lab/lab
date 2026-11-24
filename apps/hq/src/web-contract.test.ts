@@ -9,6 +9,7 @@ import { errorFromReply, type HqErrorKind } from "../web/src/api/errors"
 import {
   authErrorSchema,
   decisionSchema,
+  digestSchema,
   errorEnvelopeSchema,
   policySchema,
   proposalsPageSchema,
@@ -19,6 +20,7 @@ import {
 import { createFakeHq, type FakeHq, type FakeHqState } from "../web/src/test/fake-hq"
 import { proposalFixture } from "../web/src/test/fixtures"
 import { createHqHarness } from "./app.test.helpers"
+import { proposals, runs, spend } from "./db/schema"
 import { createLazyHq } from "./lazy-hq"
 
 const BASE = "http://localhost:3100"
@@ -671,5 +673,108 @@ describe("get_policy: the fake answers as real hq does", () => {
     const real = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/policy`, post)
     const fake = await createFakeHq().fetch(`${BASE}/v1/policy`, post)
     expect([real.status, fake.status]).toEqual([404, 404])
+||||||| parent of 3ef038c (feat(hq): get_digest, runs, spend and proposals over a window)
+
+// get_digest: the real operation over seeded rows and the fake over a fixture of the same shape,
+// compared on status, error code, body keys and the client's error kind.
+describe("the fake answers get_digest as hq does", () => {
+  let hq: Awaited<ReturnType<typeof createHqHarness>>
+  const cookies = {} as Record<Caller, string>
+  const get = (path: string, status: number, code: string | null, schema?: z.ZodType): Step => ({
+    method: "GET",
+    path: () => path,
+    schema,
+    status,
+    code,
+  })
+  const digestScenarios: Scenario[] = [
+    {
+      name: "founder get_digest",
+      as: "founder",
+      steps: [get("/v1/digest", 200, null, digestSchema)],
+    },
+    {
+      name: "founder get_digest with a since inside the window",
+      as: "founder",
+      steps: [get("/v1/digest?since=2026-11-17T06:00:00Z", 200, null, digestSchema)],
+    },
+    {
+      name: "get_digest with a since that is not a time is 400",
+      as: "founder",
+      steps: [get("/v1/digest?since=yesterday", 400, "BAD_REQUEST")],
+    },
+    {
+      name: "get_digest with a since in the future is 400",
+      as: "founder",
+      steps: [get("/v1/digest?since=2999-01-01T00:00:00Z", 400, "BAD_REQUEST")],
+    },
+    {
+      name: "signed-out get_digest",
+      as: "signed-out",
+      steps: [get("/v1/digest", 401, "UNAUTHORIZED")],
+    },
+    {
+      name: "non-founder get_digest",
+      as: "non-founder",
+      steps: [get("/v1/digest", 403, "FORBIDDEN")],
+    },
+  ]
+
+  beforeAll(async () => {
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"] })
+    cookies.founder = (await hq.signUp("founder@example.com")).cookie
+    cookies["non-founder"] = (await hq.signUp("someone@example.com")).cookie
+    cookies["signed-out"] = ""
+    // One finished run with spend and one pending proposal: every key digestFixture carries.
+    await hq.db.insert(runs).values({
+      id: "run-1",
+      task: "Triage the inbox",
+      trigger: "test",
+      runner: "eve",
+      startedAt: new Date("2026-11-17T08:00:00Z"),
+      endedAt: new Date("2026-11-17T08:30:00Z"),
+      outcome: "succeeded",
+    })
+    await hq.db.insert(spend).values({
+      id: "spend-1",
+      runId: "run-1",
+      day: "2026-11-17",
+      source: "eve",
+      amountUsd: "0.4000",
+      model: "haiku",
+      estimated: false,
+      createdAt: new Date("2026-11-17T08:10:00Z"),
+    })
+    await hq.db.insert(proposals).values({
+      id: "proposal-1",
+      kind: "fact",
+      slug: "pricing",
+      title: "Pricing",
+      body: { text: "Free, then $20 per seat." },
+      reason: "Stated in the founders call",
+      status: "pending",
+      proposedByType: "agent",
+      proposedById: "agent-1",
+      createdAt: new Date("2026-11-17T09:00:00Z"),
+    })
+  })
+  afterAll(async () => {
+    await hq.close()
+  })
+
+  it.each(digestScenarios)("$name", async ({ as, steps }) => {
+    const real = await runSteps(steps, harnessFetch(hq.app, cookies[as]), "")
+    const fake = createFakeHq({ caller: as })
+    const faked = await runSteps(steps, fake.fetch, "")
+    const expected = {
+      statuses: steps.map((s) => s.status),
+      codes: steps.map((s) => s.code),
+    }
+    expect({ statuses: real.statuses, codes: real.codes }).toEqual(expected)
+    expect({ statuses: faked.statuses, codes: faked.codes }).toEqual(expected)
+    expect(real.parsed.every(Boolean)).toBe(true)
+    expect(faked.parsed.every(Boolean)).toBe(true)
+    expect(faked.keys).toEqual(real.keys)
+    expect(faked.kinds).toEqual(real.kinds)
   })
 })

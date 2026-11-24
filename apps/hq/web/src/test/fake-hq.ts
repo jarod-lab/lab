@@ -215,6 +215,20 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     return json(200, { status: "approved", entryId: proposal.entryId, version })
   }
 
+  /** get_digest's input: an ISO `since` that is not after the digest's own `until`. */
+  function digestReply(search: URLSearchParams): Response {
+    const since = search.get("since")
+    if (since !== null) {
+      const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(since)
+      const time = Date.parse(since)
+      if (!iso || Number.isNaN(time)) return appError(400, "BAD_REQUEST", "Invalid input")
+      if (time > Date.parse(state.digest.until)) {
+        return appError(400, "BAD_REQUEST", "since is in the future")
+      }
+    }
+    return json(200, state.digest)
+  }
+
   function v1(
     path: string,
     method: string,
@@ -230,6 +244,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       "/v1/digest": () => json(200, state.digest),
       "/v1/policy": () => json(200, state.policy),
     }
+    reads["/v1/digest"] = () => digestReply(search)
     const read = method === "GET" ? reads[path] : undefined
     const isDecision = method === "POST" && decision !== null
     // An unknown path or method is a 404 before anything asks who is calling.

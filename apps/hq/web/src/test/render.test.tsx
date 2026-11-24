@@ -16,9 +16,11 @@ describe("renderApp", () => {
     expect(await app.router.options.context.client.status()).toEqual({ ok: true, version: "0.0.0" })
     expect(hq.sent.length).toBe(before + 1)
     expect(hq.sent.at(-1)?.path).toBe("/v1/status")
-    // The gate's probe, the sidebar's session lookup and runner card, and the call above.
+    // The gate's probe, the sidebar's session lookup and runner card, and the call above (the
+    // Approvals screen's own list reads are not counted here).
     await app.findByText("eve · last run 4h ago")
-    expect(hq.sent.map((s) => s.path).sort()).toEqual([
+    const own = (path: string) => path !== "/v1/proposals"
+    expect(hq.sent.map((s) => s.path).filter(own).sort()).toEqual([
       "/api/auth/get-session",
       "/v1/factory/status",
       "/v1/status",

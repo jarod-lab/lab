@@ -7,18 +7,26 @@ import type { z } from "zod"
 
 import { seedWork } from "../scripts/seed-work.mjs"
 import { createHqClient, type HqClient } from "../web/src/api/client"
-import { errorFromReply, type HqErrorKind } from "../web/src/api/errors"
+import { errorFromReply, type HqError, type HqErrorKind } from "../web/src/api/errors"
 import {
+  attemptViewSchema,
   authErrorSchema,
+  createdWorkItemSchema,
   decisionSchema,
   digestSchema,
   errorEnvelopeSchema,
   factoryStatusSchema,
+  mergeApprovalReplySchema,
   policySchema,
   proposalsPageSchema,
+  questionViewSchema,
   refusedBodySchema,
+  retryReplySchema,
+  revertReplySchema,
   sessionReplySchema,
+  stateReplySchema,
   statusSchema,
+  stoppedReplySchema,
   workBoardSchema,
   workItemDetailSchema,
   workItemsPageSchema,
@@ -1037,7 +1045,17 @@ const structural = (paths: string[]) => paths.filter((p) => !/\.detail\./.test(p
 
 type Mode = "label" | "claim"
 type Ids = Record<
-  "triage" | "asking" | "exhausted" | "review" | "verifying" | "done" | "question" | "sha",
+  | "triage"
+  | "asking"
+  | "exhausted"
+  | "review"
+  | "verifying"
+  | "done"
+  | "building"
+  | "planned"
+  | "question"
+  | "question2"
+  | "sha",
   string
 >
 
@@ -1057,12 +1075,29 @@ interface WorkCase {
   steps: WorkStep[]
   /** Items whose detail the case changes: compared after, with the board and the status. */
   touches?: (keyof Ids)[]
+  /** Change the real hq before the fake is made from it (the fake has no agent routes). */
+  setup?: (ctx: {
+    ids: Ids
+    /** An agent's question on an item, asked through hq's own `ask_question`; its id. */
+    ask: (itemId: string) => Promise<string>
+  }) => Promise<void>
 }
 
 const item =
   (key: keyof Ids, tail = "") =>
   (ids: Ids) =>
     `/v1/work-items/${ids[key]}${tail}`
+/** Claim mode answers `status`/`code`; label mode refuses request_attempt (400) or, say, answers 200. */
+const claimOnly = (
+  status: number,
+  code: string | null,
+  labelStatus = 400,
+  labelCode: string | null = "BAD_REQUEST",
+): Pick<WorkStep, "status" | "code"> => ({
+  status: (mode) => (mode === "label" ? labelStatus : status),
+  code: (mode) => (mode === "label" ? labelCode : code),
+})
+
 const ok: Pick<WorkStep, "status" | "code"> = { status: 200, code: null }
 const conflict: Pick<WorkStep, "status" | "code"> = { status: 409, code: "CONFLICT" }
 const badRequest: Pick<WorkStep, "status" | "code"> = { status: 400, code: "BAD_REQUEST" }
@@ -1472,6 +1507,73 @@ const workCases: WorkCase[] = [
     ],
   },
   {
+    name: "request_attempt refuses by hq's own start rules: the state, one active attempt, the fix budget",
+    as: "founder",
+    touches: ["triage", "done", "building", "exhausted", "planned"],
+    steps: [
+      // a fix cannot start from triage, nothing starts from done, a running attempt blocks the item
+      {
+        method: "POST",
+        path: item("triage", "/attempt-requests"),
+        body: { kind: "fix" },
+        ...claimOnly(409, "CONFLICT"),
+      },
+      {
+        method: "POST",
+        path: item("done", "/attempt-requests"),
+        body: { kind: "investigate" },
+        ...claimOnly(409, "CONFLICT"),
+      },
+      {
+        method: "POST",
+        path: item("building", "/attempt-requests"),
+        body: { kind: "fix" },
+        ...claimOnly(409, "CONFLICT"),
+      },
+      {
+        method: "POST",
+        path: item("building", "/attempt-requests"),
+        body: { kind: "investigate" },
+        ...claimOnly(409, "CONFLICT"),
+      },
+      // the exhausted item has no fix left (its state allows one), a planned item takes either kind
+      {
+        method: "POST",
+        path: item("exhausted", "/attempt-requests"),
+        body: { kind: "fix" },
+        ...claimOnly(409, "CONFLICT"),
+      },
+      {
+        method: "POST",
+        path: item("planned", "/attempt-requests"),
+        body: { kind: "investigate" },
+        ...claimOnly(200, null),
+      },
+    ],
+  },
+  {
+    name: "answer_question where an attempt is already running keeps the answer and replies with hq's refusal (claim dispatch)",
+    as: "founder",
+    touches: ["building"],
+    setup: async ({ ids, ask }) => {
+      ids.question2 = await ask(ids.building)
+    },
+    steps: [
+      {
+        method: "POST",
+        path: (ids) => `/v1/questions/${ids.question2}/answer`,
+        body: { optionId: "b", note: "the second one" },
+        ...claimOnly(409, "CONFLICT", 200, null),
+      },
+      {
+        method: "POST",
+        path: (ids) => `/v1/questions/${ids.question2}/answer`,
+        body: { optionId: "a" },
+        ...conflict,
+      },
+    ],
+  },
+  {
     name: "create_work_item: a manual item in triage, with and without a body",
     as: "founder",
     touches: [],
@@ -1550,6 +1652,9 @@ describe.each(["label", "claim"] as const)(
         review: review.id,
         verifying: byDisplay(seeded.ids.verifyingLate),
         done: byDisplay(seeded.ids.done),
+        building: byDisplay(seeded.ids.building),
+        planned: byDisplay(seeded.ids.planned),
+        question2: "",
         question:
           board.needsYou.find((n) => n.kind === "agent_question")?.question?.questionId ?? "",
         sha: review.pullRequest?.headSha ?? "",
@@ -1581,6 +1686,25 @@ describe.each(["label", "claim"] as const)(
     const substitute = (text: string) =>
       text.replaceAll("SHA", ids.sha).replaceAll("UPPER", ids.sha.toUpperCase())
 
+    /** The schema the client parses a 200 reply of this request with. */
+    const replySchemaFor = (method: string, path: string): z.ZodType | null => {
+      const url = path.split("?")[0] ?? path
+      if (method === "GET") {
+        if (url === "/v1/work/board") return workBoardSchema
+        if (url === "/v1/work-items") return workItemsPageSchema
+        return /^\/v1\/work-items\/[^/]+$/.test(url) ? workItemDetailSchema : null
+      }
+      if (url === "/v1/work-items") return createdWorkItemSchema
+      if (url.endsWith("/attempt-requests")) return attemptViewSchema
+      if (url.endsWith("/answer")) return questionViewSchema
+      if (url.endsWith("/merge-approval")) return mergeApprovalReplySchema
+      if (url.endsWith("/stop")) return stoppedReplySchema
+      if (url.endsWith("/reopen")) return stateReplySchema
+      if (url.endsWith("/retry")) return retryReplySchema
+      if (url.endsWith("/revert-request")) return revertReplySchema
+      return null
+    }
+
     async function run(steps: WorkStep[], send: typeof fetch) {
       const out: {
         status: number
@@ -1598,7 +1722,10 @@ describe.each(["label", "claim"] as const)(
             typeof step.body === "string" ? step.body : JSON.stringify(step.body),
           )
         }
-        const seen = await observe(await send(`${BASE}${step.path(ids)}`, init))
+        const path = step.path(ids)
+        const seen = await observe(await send(`${BASE}${path}`, init))
+        const schema = seen.status === 200 ? replySchemaFor(step.method, path) : null
+        if (seen.status === 200 && !schema) throw new Error(`no reply schema for ${path}`)
         out.push({
           status: seen.status,
           code: errorCodeOf(seen.body),
@@ -1606,7 +1733,7 @@ describe.each(["label", "claim"] as const)(
             seen.status >= 400 ? errorFromReply(seen.status, seen.headers, seen.json).kind : null,
           keys: structural(keySet(seen.body)),
           body: normalized(listsByNumber(seen.body)),
-          schemaOk: true,
+          schemaOk: schema ? schema.safeParse(seen.body).success : true,
         })
       }
       return out
@@ -1636,6 +1763,27 @@ describe.each(["label", "claim"] as const)(
 
     it.each(workCases)("$name", async (testCase) => {
       const { as, steps, touches = [] } = testCase
+      await testCase.setup?.({
+        ids,
+        ask: async (itemId) => {
+          const res = await harnessFetch(hq.app, cookies.founder)(
+            `${BASE}/v1/work-items/${itemId}/questions`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                prompt: "Which of the two?",
+                options: [
+                  { id: "a", label: "The first" },
+                  { id: "b", label: "The second" },
+                ],
+              }),
+            },
+          )
+          expect(res.status).toBe(200)
+          return ((await res.json()) as { id: string }).id
+        },
+      })
       const fake = await fakeFromReal(as)
       const send = harnessFetch(hq.app, cookies[as])
       const real = await run(steps, send)
@@ -1647,6 +1795,9 @@ describe.each(["label", "claim"] as const)(
       expect(faked.map((r) => [r.status, r.code])).toEqual(real.map((r) => [r.status, r.code]))
       expect(faked.map((r) => r.keys)).toEqual(real.map((r) => r.keys))
       expect(faked.map((r) => r.kind)).toEqual(real.map((r) => r.kind))
+      // every 200 reply parses with the schema the client reads it with, in both
+      expect(real.every((r) => r.schemaOk)).toBe(true)
+      expect(faked.every((r) => r.schemaOk)).toBe(true)
       // VALUES, not only keys: every reply, ids and times named
       expect(faked.map((r) => r.body)).toEqual(real.map((r) => r.body))
       steps.forEach((step, i) => {
@@ -1665,6 +1816,64 @@ describe.each(["label", "claim"] as const)(
       expect(left.status).toEqual(right.status)
       expect(left.items).toEqual(right.items)
       expect(fakeViolations).toEqual([])
+    })
+
+    it("the client reads both the same way: values, error kinds, statuses, codes and hq's own messages", async () => {
+      const fake = await fakeFromReal("founder")
+      const real = createHqClient({
+        baseUrl: BASE,
+        fetch: harnessFetch(hq.app, cookies.founder),
+      })
+      const faked = createHqClient({ baseUrl: BASE, fetch: fake.fetch })
+      const calls = (c: HqClient): (() => Promise<unknown>)[] => [
+        () => c.approveMerge({ itemId: ids.review, headSha: ids.sha, note: "ship it" }),
+        () => c.approveMerge({ itemId: ids.review, headSha: ids.sha }),
+        () => c.stopWorkItem({ itemId: ids.triage }),
+        () => c.reopenWorkItem({ itemId: ids.triage }),
+        () => c.retryWorkItem({ itemId: ids.exhausted, note: "once more" }),
+        () => c.requestRevert({ itemId: ids.done, note: "broke it" }),
+        () => c.answerQuestion({ questionId: ids.question, optionId: "up" }),
+        () => c.requestAttempt({ itemId: ids.planned, kind: "investigate" }),
+        () => c.createWorkItem({ title: "From the client", repo: "acme/web" }),
+        () => c.getWorkItem({ itemId: "FAC-999" }),
+        () => c.getWorkItem({ itemId: ids.review }),
+        () => c.getWorkBoard(),
+      ]
+      const outcomes = async (c: HqClient) => {
+        const out: unknown[] = []
+        for (const call of calls(c)) {
+          out.push(
+            await call().then(
+              // an item's events are ordered by hq's ticks of one millisecond: compared elsewhere
+              (value) => ({ value: normalized(value && { ...value, events: undefined }) }),
+              (error: HqError) => ({
+                kind: error.kind,
+                status: error.status,
+                code: error.code,
+                message: error.message,
+              }),
+            ),
+          )
+        }
+        return out
+      }
+      const fromReal = await outcomes(real)
+      const fromFake = await outcomes(faked)
+      expect(fromFake).toEqual(fromReal)
+      // the second approve is a conflict and an unknown item is not-found, in both
+      expect(fromReal[1]).toMatchObject({ kind: "conflict", code: "CONFLICT" })
+      expect(fromReal[9]).toMatchObject({ kind: "not-found" })
+      // label dispatch refuses a request with hq's own words, claim dispatch makes the attempt
+      expect(fromReal[7]).toEqual(
+        mode === "label"
+          ? {
+              kind: "bad-request",
+              status: 400,
+              code: "BAD_REQUEST",
+              message: "This factory starts attempts from the agent:build label",
+            }
+          : { value: expect.objectContaining({ status: "requested", kind: "investigate" }) },
+      )
     })
 
     it("the fake's events are a subset of the real ones: nothing is invented", async () => {

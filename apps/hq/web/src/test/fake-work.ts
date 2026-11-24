@@ -10,7 +10,7 @@ import {
   workItemDetail as workItemDetailSchema,
   workState,
 } from "../../../src/operations/work-schemas"
-import { parseWorkRef } from "../../../src/work/machine"
+import { deriveCardState, parseWorkRef } from "../../../src/work/machine"
 import type {
   AttemptView,
   NeedsYou,
@@ -328,18 +328,35 @@ export function workRoutes(env: Env) {
     }
   }
 
-  /** The card of an item nothing is waiting on: what hq's card reads for the states a decision leaves. */
+  /**
+   * The card of an item nothing waits on a founder for: a requested attempt, else hq's own
+   * `deriveCardState` (the pure function the board uses) over what the item shows.
+   */
   function idleCard(item: WorkItemDetail): WorkItemDetail["card"] {
     if (item.attemptList.some((a) => a.status === "requested")) {
-      return { label: "queued", tone: "dim", detail: "attempt requested · waits to be claimed" }
+      return {
+        label: "queued",
+        tone: "dim",
+        detail: "attempt requested \u00b7 waits to be claimed",
+      }
     }
-    if (item.state === "review") {
-      return { label: "waiting", tone: "dim", detail: "in review · waits for the merge" }
-    }
-    if (item.state === "attempt" || item.state === "plan") {
-      return { label: "queued", tone: "dim", detail: "waits for the next attempt" }
-    }
-    return { label: "queued", tone: "dim", detail: "waits for a founder to start" }
+    const running = item.attemptList.find((a) => a.status === "running")
+    const newestFix = item.attemptList
+      .filter((a) => a.kind === "fix" && a.cycle === item.cycle && a.status === "finished")
+      .sort((a, b) => b.number - a.number)[0]
+    return deriveCardState({
+      state: item.state,
+      pendingMergeApproval: false,
+      openQuestion: false,
+      attemptsUsed: item.attempts.used,
+      attemptLimit: item.attempts.limit,
+      activeAttempt: running ? "fresh" : "none",
+      newestFixResult: newestFix?.result ?? null,
+      attention: null,
+      activeKind: running?.kind ?? null,
+      windowEndsAt: item.window ? new Date(item.window.endsAt) : null,
+      now: new Date(state.workBoard.now),
+    })
   }
 
   const clearAttention = (item: WorkItemDetail) => {
@@ -460,6 +477,44 @@ export function workRoutes(env: Env) {
     return json(200, { itemId: id, displayId: item.displayId })
   }
 
+  /**
+   * hq's start rules for a requested attempt, in its order: the state a kind may start from, one
+   * active attempt, then the fix budget of the cycle. `null` when the request is allowed.
+   */
+  function refusal(
+    item: WorkItemDetail,
+    kind: AttemptView["kind"],
+  ): { message: string; hint?: string } | null {
+    const allowed =
+      item.state === "plan" ||
+      (item.state === "triage" && kind === "investigate") ||
+      ((item.state === "review" || item.state === "attempt") && kind === "fix")
+    if (!allowed) {
+      return {
+        message: `A ${kind} attempt cannot start while the work item is in ${item.state}.`,
+        ...(item.state === "triage" && kind === "fix"
+          ? { hint: "Investigate first: a fix starts from plan, attempt or review." }
+          : {}),
+      }
+    }
+    if (item.attemptList.some((a) => a.status === "requested" || a.status === "running")) {
+      return {
+        message: "An attempt is already running",
+        hint: "Wait for it to finish, or for its lease to expire.",
+      }
+    }
+    if (
+      kind === "fix" &&
+      item.attempts.limit !== null &&
+      item.attempts.used >= item.attempts.limit
+    ) {
+      return {
+        message: `This work item has used its ${item.attempts.limit} fix attempts for this cycle.`,
+      }
+    }
+    return null
+  }
+
   function requestAttempt(body: Record<string, unknown>, itemId: string): Response {
     const parsed = inputs.request.safeParse({ ...body, itemId })
     if (!parsed.success) return invalid(parsed.error)
@@ -476,24 +531,8 @@ export function workRoutes(env: Env) {
     const item = find(parsed.data.itemId)
     if (!item) return notFound("Work item")
     const before = structuredClone(item)
-    if (item.attemptList.some((a) => a.status === "requested" || a.status === "running")) {
-      return appError(
-        409,
-        "CONFLICT",
-        "An attempt is already running",
-        "Wait for it to finish, or for its lease to expire.",
-      )
-    }
-    if (!["triage", "plan", "attempt", "review"].includes(item.state)) {
-      return appError(409, "CONFLICT", `An attempt cannot be requested in ${item.state}.`)
-    }
-    if (
-      parsed.data.kind === "fix" &&
-      item.attempts.limit !== null &&
-      item.attempts.used >= item.attempts.limit
-    ) {
-      return appError(409, "CONFLICT", "This item has no fix attempts left.")
-    }
+    const refused = refusal(item, parsed.data.kind)
+    if (refused) return appError(409, "CONFLICT", refused.message, refused.hint)
     const view = requested(item, parsed.data.kind, parsed.data.instructions ?? null)
     if (parsed.data.instructions) {
       item.founderNotes = [
@@ -567,20 +606,36 @@ export function workRoutes(env: Env) {
     }
     event(item, "question_answered", "A founder answered a question.")
     clearAttention(item)
-    // Where hq dispatches, an answer also requests the attempt it asks for (never a default).
+    // Where hq dispatches, an answer also requests the attempt it asks for (never a default). If
+    // that request is refused the answer stays recorded, the history says why, and the reply is
+    // the refusal.
+    let refused: ReturnType<typeof refusal> = null
     if (state.workBoard.dispatch === "claim") {
-      const newest = [...item.attemptList].sort((a, b) => b.number - a.number)[0]
-      const text = `A founder answered: ${chosen.label}${parsed.data.note ? `\n\n${parsed.data.note}` : ""}`
-      const instructions = firstChars(text, 2000)
-      const view = requested(item, newest?.kind ?? "investigate", instructions)
-      item.founderNotes = [
-        ...item.founderNotes,
-        { at: nowIso(), kind: "request", text: instructions },
-      ]
-      event(item, "attempt_requested", `Attempt ${view.number} requested.`)
+      const newest = item.attemptList
+        .filter((a) => a.cycle === item.cycle)
+        .sort((a, b) => b.number - a.number)[0]
+      const kind = newest?.kind ?? "investigate"
+      refused = refusal(item, kind)
+      if (refused) {
+        event(item, "attempt_request_refused", "No attempt was requested after the answer.", {
+          reason: "CONFLICT",
+          note: refused.message,
+          at: new Date(Date.parse(nowIso()) + 1).toISOString(),
+        })
+      } else {
+        const text = `A founder answered: ${chosen.label}${parsed.data.note ? `\n\n${parsed.data.note}` : ""}`
+        const instructions = firstChars(text, 2000)
+        const view = requested(item, kind, instructions)
+        item.founderNotes = [
+          ...item.founderNotes,
+          { at: nowIso(), kind: "request", text: instructions },
+        ]
+        event(item, "attempt_requested", `Attempt ${view.number} requested.`)
+      }
       item.card = idleCard(item)
     }
     sync(before, item, ["agent_question"])
+    if (refused) return appError(409, "CONFLICT", refused.message, refused.hint)
     return json(200, answered)
   }
 

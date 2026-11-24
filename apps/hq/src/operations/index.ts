@@ -2,6 +2,7 @@ import { defineRegistry } from "@lab/api"
 import { z } from "zod"
 
 import { entryOperations } from "./entries"
+import { policyOperations } from "./policy"
 import { proposalOperations } from "./proposals"
 import { runOperations } from "./runs"
 import { defineOperation, type HqDeps } from "./shared"
@@ -36,6 +37,7 @@ export function createHqOperations(deps: HqDeps) {
   return defineRegistry([
     hq_status,
     ...entryOperations(deps),
+    ...policyOperations(deps),
     ...proposalOperations(deps),
     ...runOperations(deps),
     ...spendOperations(deps),

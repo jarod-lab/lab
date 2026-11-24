@@ -10,6 +10,7 @@ import {
   authErrorSchema,
   decisionSchema,
   errorEnvelopeSchema,
+  policySchema,
   proposalsPageSchema,
   refusedBodySchema,
   sessionReplySchema,
@@ -599,5 +600,76 @@ describe("the fake's sign-in rate limit (probed, not contract-tested)", () => {
     expect(limited.status).toBe(429)
     expect(limited.headers.get("x-retry-after")).toBe("60")
     expect(await limited.json()).toEqual({ message: "Too many requests. Please try again later." })
+  })
+})
+
+describe("get_policy: the fake answers as real hq does", () => {
+  let hq: Awaited<ReturnType<typeof createHqHarness>>
+  const cookies = {} as Record<Caller, string>
+  beforeAll(async () => {
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"] })
+    cookies.founder = (await hq.signUp("founder@example.com")).cookie
+    cookies["non-founder"] = (await hq.signUp("someone@example.com")).cookie
+    cookies["signed-out"] = ""
+  })
+  afterAll(async () => {
+    await hq.close()
+  })
+
+  const policyStep = (status: number, code: string | null): Step => ({
+    method: "GET",
+    path: () => "/v1/policy",
+    schema: status === 200 ? policySchema : undefined,
+    status,
+    code,
+  })
+  const policyCases: { as: Caller; status: number; code: string | null }[] = [
+    { as: "founder", status: 200, code: null },
+    { as: "non-founder", status: 403, code: "FORBIDDEN" },
+    { as: "signed-out", status: 401, code: "UNAUTHORIZED" },
+  ]
+
+  it.each(policyCases)("$as GET /v1/policy is $status", async ({ as, status, code }) => {
+    const real = await runSteps([policyStep(status, code)], harnessFetch(hq.app, cookies[as]), "")
+    const fake = await runSteps([policyStep(status, code)], createFakeHq({ caller: as }).fetch, "")
+    expect({ statuses: real.statuses, codes: real.codes }).toEqual({
+      statuses: [status],
+      codes: [code],
+    })
+    expect({ statuses: fake.statuses, codes: fake.codes }).toEqual({
+      statuses: [status],
+      codes: [code],
+    })
+    expect(real.parsed.every(Boolean)).toBe(true)
+    expect(fake.parsed.every(Boolean)).toBe(true)
+    expect(fake.keys).toEqual(real.keys)
+    expect(fake.kinds).toEqual(real.kinds)
+  })
+
+  it("the client reads getPolicy the same way, and it is read-only on the wire", async () => {
+    const kindOf = async (call: Promise<unknown>): Promise<HqErrorKind | "ok"> =>
+      call.then(
+        () => "ok" as const,
+        (error: { kind: HqErrorKind }) => error.kind,
+      )
+    const expected: Record<Caller, HqErrorKind | "ok"> = {
+      founder: "ok",
+      "non-founder": "forbidden",
+      "signed-out": "unauthorized",
+      refused: "refused",
+    }
+    for (const as of ["founder", "non-founder", "signed-out"] as const) {
+      const fake = createFakeHq({ caller: as })
+      const real = createHqClient({ baseUrl: BASE, fetch: harnessFetch(hq.app, cookies[as]) })
+      const faked = createHqClient({ baseUrl: BASE, fetch: fake.fetch })
+      expect(await kindOf(real.getPolicy()), as).toBe(expected[as])
+      expect(await kindOf(faked.getPolicy()), as).toBe(expected[as])
+      expect(fake.sent.every((s) => s.method === "GET")).toBe(true)
+    }
+    // Only GET is a route: a write to /v1/policy is a 404 in both.
+    const post = { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }
+    const real = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/policy`, post)
+    const fake = await createFakeHq().fetch(`${BASE}/v1/policy`, post)
+    expect([real.status, fake.status]).toEqual([404, 404])
   })
 })

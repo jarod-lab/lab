@@ -13,6 +13,8 @@ import { z } from "zod"
 
 import { createHqHarness, type TestPerson } from "../app.test.helpers"
 import { requestAttempt } from "../data/attempts"
+import { reopenItem } from "../data/decisions"
+import { answerQuestion } from "../data/questions"
 import { itemDetail, workBoard } from "../data/work-board"
 import { forceState, resetWork, seedAttempt, seedItem } from "../data/work.test.helpers"
 import { attempts, workItemEvents, workItems } from "../db/schema"
@@ -50,6 +52,23 @@ const WRITES = [
   "run_verification_sweep",
 ] as const
 const ALL = [...READS, ...WRITES]
+
+/** The one hq_run action each operation needs: a record that did not exist is `create`. */
+const ACTION_OF = {
+  list_work_items: "read",
+  get_work_item: "read",
+  get_work_board: "read",
+  list_attempts: "read",
+  record_signal: "create",
+  start_attempt: "create",
+  ask_question: "create",
+  claim_attempt: "update",
+  heartbeat_attempt: "update",
+  finish_attempt: "update",
+  record_pull_request: "update",
+  set_contract: "update",
+  run_verification_sweep: "update",
+} as const
 
 // What the tests read from a reply: what JSON.parse gives. The tests say what they expect of it.
 type Json = ReturnType<typeof JSON.parse>
@@ -162,12 +181,23 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
           .replace(/,(\s*[}\]])/g, "$1"),
       ) as unknown
       expect(parsed).toEqual(AGENT_SCOPE)
+      // the agent's own fixture, parsed the same way: the whole object, not a substring of it
       const fixture = readFileSync(
         join(__dirname, "..", "..", "..", "agent", "tests", "hq", "hq-fixture.ts"),
         "utf8",
       )
+      const fixtureBlock =
+        /export const AGENT_KEY_SCOPE = (\{[\s\S]*?\n\})/.exec(fixture)?.[1] ?? ""
+      expect(fixtureBlock).not.toBe("")
+      const fixtureScope = JSON.parse(
+        fixtureBlock
+          .replace(/\/\/.*$/gm, "")
+          .replace(/(\w+):/g, '"$1":')
+          .replace(/,(\s*[}\]])/g, "$1"),
+      ) as Record<string, string[]>
+      expect(Object.keys(fixtureScope).sort()).toEqual(Object.keys(AGENT_SCOPE).sort())
       for (const [resource, actions] of Object.entries(AGENT_SCOPE)) {
-        expect(fixture).toContain(`${resource}: ${JSON.stringify(actions).replace(/,/g, ", ")}`)
+        expect(fixtureScope[resource], resource).toEqual(actions)
       }
     })
 
@@ -1032,7 +1062,7 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
           reviewer: { verdict: "approve", summary: "ok", headSha: SHA_A },
         }),
       )
-      okBody(
+      const asked = okBody(
         await post(`/v1/work-items/${made.itemId}/questions`, {
           prompt: "Ship it?",
           options: [
@@ -1054,8 +1084,18 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
       expect(await stateOf(made.itemId)).toBe("verify")
       tick(7 * HOUR) // past the end: pastEnd is true while the contract still waits on the ci check
 
+      // a founder's answer with a note: the founderNotes list is compared too
+      await answerQuestion(hq.db, {
+        questionId: asked.id,
+        optionId: "y",
+        note: "Yes, after lunch.",
+        founderId: founder.userId,
+        now: clock,
+      })
+
       const reply = okBody(await get(`/v1/work-items/${made.itemId}`))
       const data = jsonify(await itemDetail(hq.db, made.itemId, clock))
+      expect(data.founderNotes).toHaveLength(1)
       same(reply, data)
       expect(reply).toEqual(data)
       // the fields the plan carries name, each present
@@ -1071,6 +1111,9 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
         ".attemptList[].endReason",
         ".attemptList[].reviewer.headSha",
         ".events[].summary",
+        ".founderNotes[].at",
+        ".founderNotes[].kind",
+        ".founderNotes[].text",
       ]) {
         expect(paths(reply).has(path), path).toBe(true)
       }
@@ -1101,8 +1144,18 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
           ],
         }),
       )
+      // an item a founder reopened today: stats.latestReopened is compared too
+      const gone = await seedItem(hq.db, { state: "done", title: "Gone" })
+      await reopenItem(hq.db, {
+        itemId: gone.id,
+        note: "Again.",
+        founderId: founder.userId,
+        now: clock,
+      })
       const board = okBody(await get("/v1/work/board"))
       same(board, jsonify(await workBoard(hq.db, clock)))
+      expect(board.stats.latestReopened).toMatchObject({ displayId: expect.any(String) })
+      expect(paths(board).has(".stats.latestReopened.reason")).toBe(true)
       expect(board).toEqual(jsonify(await workBoard(hq.db, clock)))
       expect(board.needsYou).toHaveLength(2)
       const sweep = okBody(await post("/v1/work/verification-sweep"))
@@ -1182,8 +1235,7 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
         expect(Object.keys(op.permissions), op.name).toEqual(["hq_run"])
         const actions = op.permissions.hq_run as string[]
         expect(actions, op.name).toHaveLength(1)
-        if ((READS as readonly string[]).includes(op.name)) expect(actions).toEqual(["read"])
-        else expect(["create", "update"]).toContain(actions[0])
+        expect(actions, op.name).toEqual([ACTION_OF[op.name as keyof typeof ACTION_OF]])
         // everything an operation needs is in the agent's scope
         for (const a of actions) expect(AGENT_SCOPE.hq_run).toContain(a)
       }
@@ -1216,6 +1268,40 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
           expect(values.includes("plan") || values.includes("verify"), op.name).toBe(false)
         }
       }
+    })
+
+    it("no write operation's input has a field named state, to or targetState (record_pull_request.state and its checks' state are the exceptions)", () => {
+      const fieldsOf = (schema: z.ZodType, path = ""): string[] => {
+        const def = (schema as unknown as { def: Json }).def
+        const type = def.type as string
+        if (type === "optional" || type === "nullable" || type === "default")
+          return fieldsOf(def.innerType as z.ZodType, path)
+        if (type === "array") return fieldsOf(def.element as z.ZodType, `${path}[]`)
+        if (type === "object") {
+          return Object.entries(def.shape as Record<string, z.ZodType>).flatMap(([k, v]) => [
+            `${path}.${k}`,
+            ...fieldsOf(v, `${path}.${k}`),
+          ])
+        }
+        return []
+      }
+      const refused = ["state", "to", "targetstate"]
+      let scanned = 0
+      for (const op of createHqOperations({ db: hq.db, now: () => clock })) {
+        if (!ALL.includes(op.name as never) || (READS as readonly string[]).includes(op.name))
+          continue
+        scanned++
+        const fields = fieldsOf(op.input as z.ZodType)
+        for (const field of fields) {
+          const name = field.split(".").pop()?.replace("[]", "").toLowerCase() ?? ""
+          // the pull request's own state (open, merged, closed) and one check's (passed, failed,
+          // pending): neither is a state of a work item, and the enum scan above covers values
+          if (op.name === "record_pull_request" && [".state", ".checks[].state"].includes(field))
+            continue
+          expect(refused, `${op.name}${field}`).not.toContain(name)
+        }
+      }
+      expect(scanned).toBe(WRITES.length)
     })
 
     it("no work operation file imports a founder-only data function", () => {
@@ -1281,7 +1367,7 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
         organizationId: founder.orgId,
         actor: { type: "apiKey", keyId: "walk-key" },
         grants: [AGENT_SCOPE],
-        via: "apikey",
+        via: "api-key",
       }
       const run = async (name: string, input: object) => {
         const op = ops.find((o) => o.name === name)
@@ -1496,6 +1582,12 @@ describe("the agent operations of the work pipeline (real Postgres via PGlite)",
             }
           }
           await checkNewEvents()
+          // the row says what the events say: no state changes without its event
+          for (const row of await itemRows()) {
+            expect(row.state, `${row.id} after step ${step} of order ${order}`).toBe(
+              known.get(row.id) ?? "signal",
+            )
+          }
         }
       }
       // the walk is not vacuous: it reached each of the end states, by each kind of evidence

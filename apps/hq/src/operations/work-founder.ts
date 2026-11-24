@@ -192,6 +192,9 @@ export function workFounderOperations(deps: HqDeps) {
           now: at,
         })
       } catch (error) {
+        // Only the door's own refusals (CONFLICT: the start rules and the limit; FORBIDDEN: a
+        // Phase 5 policy) leave the "no attempt requested" event. Any other error is rethrown as
+        // it is, and the answer stays recorded either way.
         if (
           error instanceof AppError &&
           (error.code === "CONFLICT" || error.code === "FORBIDDEN")

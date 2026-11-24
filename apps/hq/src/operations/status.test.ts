@@ -194,7 +194,7 @@ describe("get_factory_status (PGlite)", () => {
     })
   })
 
-  it("work counts in-flight items, items that need a founder, pending merge approvals and open questions", async () => {
+  it("get_factory_status.work counts in-flight, needsYou, pendingMergeApprovals and openQuestions and still has every Phase 3 field", async () => {
     await resetWork(hq.db)
     expect((await ok()).work).toEqual({
       inFlight: 0,
@@ -243,6 +243,23 @@ describe("get_factory_status (PGlite)", () => {
       pendingMergeApprovals: 1,
       openQuestions: 2,
     })
+    // every Phase 3 field is still there
+    expect(Object.keys(body).sort()).toEqual([
+      "allowance",
+      "now",
+      "pendingProposals",
+      "runners",
+      "work",
+    ])
+    expect(body.runners.map((r) => r.runner)).toEqual(["eve", "sandbox", "box"])
+    expect(Object.keys(body.allowance).sort()).toEqual([
+      "capUsd",
+      "day",
+      "grantedUsd",
+      "remainingUsd",
+      "reservedUsd",
+      "spentUsd",
+    ])
     // the badge's number is the board's own: one source
     const board = await hq.call(founder, "GET", "/v1/work/board")
     expect((board.body as unknown as { stats: { needsYou: number } }).stats.needsYou).toBe(
@@ -310,7 +327,7 @@ describe("get_factory_status (PGlite)", () => {
 
 // An hq deployed before step 05 has no work tables: the older screens must keep working.
 describe("get_factory_status without the work tables (PGlite)", () => {
-  it("answers 200 with work null and every Phase 3 field intact when the nine work tables are gone", async () => {
+  it("with the work tables dropped, get_factory_status answers 200 with work null and every Phase 3 field intact", async () => {
     const hq = await createHqHarness({ founderEmails: ["founder@example.com"], now: () => NOW })
     try {
       const founder = await hq.signUp("founder@example.com")

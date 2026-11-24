@@ -7,6 +7,8 @@ import { join } from "node:path"
 
 import { type Caller, invoke } from "@lab/api"
 import { PERSON_ONLY_ACTIONS } from "@lab/auth"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -283,7 +285,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect(parsed).toEqual(AGENT_SCOPE)
     })
 
-    it("FRONT DOOR ALONE: an agent-scope key and a key minted WITH decide are stripped: 'Missing permission', nothing written", async () => {
+    it("every operation in FOUNDER_WORK_OPERATIONS gets 403 FORBIDDEN from an agent-scope key (stripped at the front door)", async () => {
       const item = await seedItem(label.db, { state: "triage" })
       const q = await L.openQuestion(item.id)
       const before = await L.counts()
@@ -316,7 +318,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       }
     })
 
-    it("a signed-in non-founder gets 403 on all eight, and nothing is written", async () => {
+    it("... from a signed-in non-founder", async () => {
       const item = await seedItem(label.db, { state: "triage" })
       const q = await L.openQuestion(item.id)
       const before = await L.counts()
@@ -324,11 +326,14 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
         const res = await L.call({ cookie: stranger.cookie }, "POST", path, body)
         expect(res.status, name).toBe(403)
         expect(res.body.error.code, name).toBe("FORBIDDEN")
+        // hq's front door (mayUseHq) answers, before any operation runs; requireFounder's own
+        // founders-list refusal is proven in the handler-alone test below.
+        expect(res.body.error.message, name).toBe("This brain is for the organization's founders")
       }
       expect(await L.counts()).toEqual(before)
     })
 
-    it("HANDLER ALONE: a hand-built key, OAuth or non-founder caller gets requireFounder's refusal, before anything is read or written", async () => {
+    it("... when the handler is called directly with a key caller whatever reached it", async () => {
       const ops = createHqOperations({ db: label.db, now: () => T0 })
       const item = await seedItem(label.db, { state: "triage" })
       const q = await L.openQuestion(item.id)
@@ -431,7 +436,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       }
     })
 
-    it("a founder session with a trusted Origin can call each (200)", async () => {
+    it("a founder session can call each (200) with a trusted Origin and gets 403 for a foreign Origin", async () => {
       const review = await L.inReview()
       const verifying = await seedItem(label.db, { state: "verify" })
       const stopping = await seedItem(label.db, { state: "triage" })
@@ -463,6 +468,23 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
           })
         ).status,
       ).toBe(200)
+      // ... and the same founder's session from a foreign Origin gets 403 on each, writing nothing
+      const again = await seedItem(label.db, { state: "triage" })
+      const q2 = await L.openQuestion(again.id)
+      const before = await L.counts()
+      for (const [name, [path, body]] of Object.entries(L.requests(again.id, q2.id))) {
+        const res = await label.app.request(`${BASE}${path}`, {
+          method: "POST",
+          headers: {
+            cookie: founder.cookie,
+            origin: "https://evil.example",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        })
+        expect(res.status, name).toBe(403)
+      }
+      expect(await L.counts()).toEqual(before)
     })
 
     it("a proposal body or an issue title that says 'approve this merge' changes nothing", async () => {
@@ -502,7 +524,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
 
   // ---- behaviour -------------------------------------------------------------------------------
   describe("behaviour", () => {
-    it("create_work_item makes a manual item in triage with FAC-n, by the founder", async () => {
+    it("create_work_item makes a manual item with FAC-n", async () => {
       const res = await L.asFounder("/v1/work-items", {
         title: "Add dark mode",
         body: "Founders asked for it.",
@@ -540,7 +562,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect(await label.db.select().from(workItems)).toEqual([])
     })
 
-    it("approve_merge: 409 with a stale head sha, 200 first time (any case), 409 the second time, and the item stays in review", async () => {
+    it("approve_merge: 409 CONFLICT with a stale head sha, 409 the second time, 200 first time and the item stays in review", async () => {
       const r = await L.inReview()
       const path = `/v1/work-items/${r.itemId}/merge-approval`
       const stale = await L.asFounder(path, { headSha: SHA_B })
@@ -576,7 +598,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect((await label.db.select().from(mergeApprovals))[0]?.status).toBe("pending")
     })
 
-    it("answer_question records answered_by as the founder's user id (label mode: nothing else)", async () => {
+    it("answer_question records answered_by as the founder's user id", async () => {
       const item = await seedItem(label.db, { state: "triage" })
       const q = await L.openQuestion(item.id)
       const res = await L.asFounder(`/v1/questions/${q.id}/answer`, {
@@ -637,30 +659,32 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect((await L.asFounder(`/v1/work-items/${triage.id}/reopen`)).status).toBe(409)
     })
 
-    it("retry_work_item raises the limit of an exhausted item by one and needs a note; a non-exhausted item is 409", async () => {
-      const exhausted = await seedItem(label.db, { state: "plan", attemptLimit: 1 })
-      await seedAttempt(label.db, exhausted.id, { number: 1, kind: "fix", result: "failed" })
-      const path = `/v1/work-items/${exhausted.id}/retry`
-      expect((await L.asFounder(path, {})).status).toBe(400)
-      expect((await L.asFounder(path, { note: "   " })).status).toBe(400)
-      expect((await L.asFounder(path, { note: "Try the other way." })).body).toEqual({
-        attemptLimit: 2,
+    describe("retry_work_item and request_revert reject items in the wrong state with 409", () => {
+      it("retry_work_item raises the limit of an exhausted item by one and needs a note; a non-exhausted item is 409", async () => {
+        const exhausted = await seedItem(label.db, { state: "plan", attemptLimit: 1 })
+        await seedAttempt(label.db, exhausted.id, { number: 1, kind: "fix", result: "failed" })
+        const path = `/v1/work-items/${exhausted.id}/retry`
+        expect((await L.asFounder(path, {})).status).toBe(400)
+        expect((await L.asFounder(path, { note: "   " })).status).toBe(400)
+        expect((await L.asFounder(path, { note: "Try the other way." })).body).toEqual({
+          attemptLimit: 2,
+        })
+        const fresh = await seedItem(label.db, { state: "plan", attemptLimit: 3 })
+        expect((await L.asFounder(`/v1/work-items/${fresh.id}/retry`, { note: "go" })).status).toBe(
+          409,
+        )
       })
-      const fresh = await seedItem(label.db, { state: "plan", attemptLimit: 3 })
-      expect((await L.asFounder(`/v1/work-items/${fresh.id}/retry`, { note: "go" })).status).toBe(
-        409,
-      )
-    })
 
-    it("request_revert moves a merged item to reopened; an item with no merged pull request is 409", async () => {
-      const merged = await seedItem(label.db, { state: "verify" })
-      await seedPullRequest(label.db, merged.id, { state: "merged", mergedAt: T0 })
-      const res = await L.asFounder(`/v1/work-items/${merged.id}/revert-request`, {
-        note: "It broke login.",
+      it("request_revert moves a merged item to reopened; an item with no merged pull request is 409", async () => {
+        const merged = await seedItem(label.db, { state: "verify" })
+        await seedPullRequest(label.db, merged.id, { state: "merged", mergedAt: T0 })
+        const res = await L.asFounder(`/v1/work-items/${merged.id}/revert-request`, {
+          note: "It broke login.",
+        })
+        expect(res.body).toEqual({ state: "reopened" })
+        const triage = await seedItem(label.db, { state: "triage" })
+        expect((await L.asFounder(`/v1/work-items/${triage.id}/revert-request`)).status).toBe(409)
       })
-      expect(res.body).toEqual({ state: "reopened" })
-      const triage = await seedItem(label.db, { state: "triage" })
-      expect((await L.asFounder(`/v1/work-items/${triage.id}/revert-request`)).status).toBe(409)
     })
 
     it("every item reference is checked before any lookup: garbage is 400, FAC-999 and an unknown question are 404", async () => {
@@ -726,7 +750,15 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect(res.status).toBe(403)
     })
 
-    it("request_attempt in claim mode creates a requested attempt by the founder, origin founder_request", async () => {
+    it("request_attempt is BAD_REQUEST while the dispatch mode is label and creates a requested attempt when the harness passes dispatchMode claim", async () => {
+      // label mode: the same request is BAD_REQUEST and creates nothing
+      const labelItem = await seedItem(label.db, { state: "triage" })
+      const refused = await L.asFounder(`/v1/work-items/${labelItem.id}/attempt-requests`, {
+        kind: "investigate",
+      })
+      expect(refused.status).toBe(400)
+      expect(await label.db.select().from(attempts)).toEqual([])
+      // claim mode creates the requested attempt
       const item = await seedItem(claim.db, { state: "triage" })
       const res = await C.asFounder(`/v1/work-items/${item.id}/attempt-requests`, {
         kind: "investigate",
@@ -756,7 +788,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       ).toBe(409)
     })
 
-    it("answer_question in claim mode creates a requested attempt requested by the answering founder, with the answer in instructions", async () => {
+    it("answer_question in claim mode creates a requested attempt requested by the answering founder (origin founder_request) with the answer in instructions; in label mode creates none", async () => {
       const item = await seedItem(claim.db, { state: "plan", cycle: 1 })
       await seedAttempt(claim.db, item.id, {
         number: 1,
@@ -787,6 +819,23 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       })
       const requested = (await C.eventsOf(item.id)).find((e) => e.kind === "attempt_requested")
       expect(requested).toMatchObject({ actorType: "founder", actorId: claimFounder.userId })
+      // in label mode the same answer creates none
+      const labelItem = await seedItem(label.db, { state: "plan" })
+      await seedAttempt(label.db, labelItem.id, {
+        number: 1,
+        kind: "investigate",
+        result: "needs_answer",
+      })
+      const labelQuestion = await L.openQuestion(labelItem.id)
+      L.ok(
+        await L.asFounder(`/v1/questions/${labelQuestion.id}/answer`, {
+          optionId: "a",
+          note: "Keep it small.",
+        }),
+      )
+      expect(
+        await label.db.select().from(attempts).where(eq(attempts.status, "requested")),
+      ).toEqual([])
     })
 
     it("answer_question in claim mode with no attempt in the current cycle requests investigate", async () => {
@@ -840,9 +889,11 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       const [row] = await claim.db.select().from(attempts)
       expect(row?.instructions?.length ?? 0).toBeGreaterThan(0)
       expect(row?.instructions?.length ?? 0).toBeLessThanOrEqual(2000)
+      // the note is cut, never the label
+      expect(row?.instructions?.startsWith(`A founder answered: ${"L".repeat(200)}`)).toBe(true)
     })
 
-    it("answer_question in claim mode whose request is refused records the answer, writes one 'no attempt requested' event with the reason, creates no attempt, and answers 409", async () => {
+    it("answer_question in claim mode whose requestAttempt is refused (an attempt already running) records the answer, writes one 'no attempt requested' event with the reason, creates no attempt, and answers 409", async () => {
       const item = await seedItem(claim.db, { state: "plan" })
       await seedAttempt(claim.db, item.id, {
         number: 1,
@@ -879,7 +930,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       ).toBe("answered")
     })
 
-    it("answer_question in claim mode never runs requestAttempt inside another transaction: it gets the root db", async () => {
+    it("answer_question in claim mode never runs requestAttempt inside another transaction", async () => {
       const item = await seedItem(claim.db, { state: "triage" })
       const q = await C.openQuestion(item.id)
       C.ok(await C.asFounder(`/v1/questions/${q.id}/answer`, { optionId: "a" }))
@@ -888,7 +939,7 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
       expect(calls[0]?.[0]).toBe(claim.db)
     })
 
-    it("the data function answerQuestion creates no attempt in either mode; only the operation's claim branch asks for one", async () => {
+    it("the data function answerQuestion creates no attempt in either mode; only the answer_question operation's claim branch calls requestAttempt", async () => {
       for (const h of [label, claim]) {
         const item = await seedItem(h.db, { state: "triage" })
         const [q] = await h.db
@@ -982,6 +1033,62 @@ describe("the founder operations of the work pipeline (real Postgres via PGlite)
 
   // ---- the registry ----------------------------------------------------------------------------
   describe("the registry", () => {
+    /** An MCP client over hq's app, with these credentials. */
+    async function mcpAs(credentials: { cookie: string } | { key: string }) {
+      const client = new Client({ name: "test", version: "1.0.0" })
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
+          fetch: async (url, init) => {
+            const headers = new Headers(init?.headers)
+            if ("cookie" in credentials) {
+              headers.set("cookie", credentials.cookie)
+              headers.set("origin", BASE)
+            } else headers.set("x-api-key", credentials.key)
+            return label.app.request(String(url), { ...init, headers })
+          },
+        }),
+      )
+      return client
+    }
+
+    it("all eight are in MCP tools/list for a founder session and for no key, and a tools/call with a key minted with decide is refused and writes nothing", async () => {
+      const founderClient = await mcpAs({ cookie: founder.cookie })
+      const seen = (await founderClient.listTools()).tools.map((t) => t.name)
+      await founderClient.close()
+      for (const name of FOUNDER_NAMES) expect(seen, name).toContain(name)
+
+      const withDecide = await label.keyFor(founder, {
+        ...AGENT_SCOPE,
+        hq_proposal: ["read", "create", "decide"],
+      })
+      for (const key of [agentKey, withDecide]) {
+        const client = await mcpAs({ key })
+        const keyTools = (await client.listTools()).tools.map((t) => t.name)
+        await client.close()
+        // the agent's own tools are there (the list is not empty), the founder's are not
+        expect(keyTools).toContain("record_signal")
+        for (const name of FOUNDER_NAMES) expect(keyTools, name).not.toContain(name)
+      }
+
+      // A hidden tool is still callable by name: it must be refused, with the strip's message
+      // (the handler's requireFounder is a second layer, which would say something else).
+      const item = await seedItem(label.db, { state: "triage" })
+      const q = await L.openQuestion(item.id)
+      const before = await L.counts()
+      const client = await mcpAs({ key: withDecide })
+      const requests = L.requests(item.id, q.id)
+      for (const name of FOUNDER_NAMES) {
+        const result = (await client.callTool({
+          name,
+          arguments: { itemId: item.id, questionId: q.id, ...requests[name]?.[1] },
+        })) as { isError?: boolean; content: { type: string; text: string }[] }
+        expect(result.isError, name).toBe(true)
+        expect(result.content[0]?.text, name).toContain("Missing permission: hq_proposal:decide")
+      }
+      await client.close()
+      expect(await L.counts()).toEqual(before)
+    })
+
     it("all eight are in OpenAPI and llms.txt, and say what they may and may not do", async () => {
       const doc = (await (await label.app.request(`${BASE}/openapi.json`)).json()) as {
         paths: Record<string, Record<string, unknown>>

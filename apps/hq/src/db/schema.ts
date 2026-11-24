@@ -25,7 +25,12 @@ import {
   WORK_ACTORS,
   WORK_STATES,
 } from "../work/machine"
-import type { PullRequestCheck } from "../work/types"
+import {
+  PULL_REQUEST_STATES,
+  type PullRequestCheck,
+  type QuestionOptionInput,
+  REVIEWER_VERDICTS,
+} from "../work/types"
 
 /**
  * hq's own tables live in the `hq` Postgres schema, beside starter's auth tables in `public`
@@ -283,12 +288,6 @@ export const spendHolds = hq.table(
 export const WORK_AUTHOR_TYPES = [...AUTHOR_TYPES, "system"] as const
 export type WorkAuthorType = (typeof WORK_AUTHOR_TYPES)[number]
 
-export const PULL_REQUEST_STATES = ["open", "merged", "closed"] as const
-export type PullRequestState = (typeof PULL_REQUEST_STATES)[number]
-
-export const REVIEWER_VERDICTS = ["approve", "request_changes", "reject"] as const
-export type ReviewerVerdict = (typeof REVIEWER_VERDICTS)[number]
-
 export const CONTRACT_ITEM_STATUSES = ["pending", "passing", "failing"] as const
 export type ContractItemStatus = (typeof CONTRACT_ITEM_STATUSES)[number]
 
@@ -322,15 +321,10 @@ export const WORK_EVENT_KINDS = [
 ] as const
 export type WorkEventKind = (typeof WORK_EVENT_KINDS)[number]
 
-export interface QuestionOption {
-  id: string
-  label: string
-  detail?: string
-}
-
 /**
  * One piece of work. `number` is the display id's number (`FAC-<number>`): the database hands it
- * out (generated always as identity), so no caller can set or reuse one. `cycle` counts how many
+ * out (generated always as identity): an insert that sets it is refused (OVERRIDING SYSTEM VALUE
+ * aside), and the unique constraint on it stops a number being used twice. `cycle` counts how many
  * times the item has been reopened (starting at 1); `attempt_limit` is the item's own, null until
  * an attempt records one.
  */
@@ -377,6 +371,7 @@ export const signals = hq.table(
     itemId: text("item_id")
       .notNull()
       .references(() => workItems.id),
+    // person | agent | system: the data layer maps a founder actor to `person` (decision at W2).
     recordedByType: text("recorded_by_type", { enum: WORK_AUTHOR_TYPES }).notNull(),
     recordedById: text("recorded_by_id").notNull(),
   },
@@ -490,6 +485,7 @@ export const contractItems = hq.table(
     status: text("status", { enum: CONTRACT_ITEM_STATUSES }).notNull(),
     evidence: text("evidence"),
     checkedAt: at("checked_at"),
+    // person | agent | system: the data layer maps a founder actor to `person` (decision at W2).
     createdByType: text("created_by_type", { enum: WORK_AUTHOR_TYPES }).notNull(),
     createdById: text("created_by_id").notNull(),
   },
@@ -506,7 +502,7 @@ export const agentQuestions = hq.table(
       .references(() => workItems.id),
     attemptId: text("attempt_id"),
     prompt: text("prompt").notNull(),
-    options: jsonb("options").$type<QuestionOption[]>().notNull(),
+    options: jsonb("options").$type<QuestionOptionInput[]>().notNull(),
     defaultOptionId: text("default_option_id"),
     status: text("status", { enum: QUESTION_STATUSES }).notNull(),
     answeredOptionId: text("answered_option_id"),

@@ -33,6 +33,41 @@ const BASELINE_FILE_HASHES: Record<string, string> = {
   "meta/0005_snapshot.json": "0ce98dd730246aabe72d58d15f967d25f37203b6e4a30299cc3e404079461547",
 }
 
+// The journal entries before the two work migrations, exactly as at the base commit: `when` orders
+// the migrations for drizzle, so an edit to one would change which run.
+const BASELINE_JOURNAL = [
+  {
+    idx: 0,
+    version: "7",
+    when: 1794945126518,
+    tag: "0000_entries_and_proposals",
+    breakpoints: true,
+  },
+  {
+    idx: 1,
+    version: "7",
+    when: 1794945127251,
+    tag: "0001_entry_versions_append_only",
+    breakpoints: true,
+  },
+  { idx: 2, version: "7", when: 1794947840031, tag: "0002_runs_and_spend", breakpoints: true },
+  { idx: 3, version: "7", when: 1794961992489, tag: "0003_slack_approvals", breakpoints: true },
+  {
+    idx: 4,
+    version: "7",
+    when: 1794967936360,
+    tag: "0004_spend_grant_requests",
+    breakpoints: true,
+  },
+  {
+    idx: 5,
+    version: "7",
+    when: 1794970894262,
+    tag: "0005_grant_request_amount_max",
+    breakpoints: true,
+  },
+]
+
 const WORK_TABLES = [
   "work_items",
   "signals",
@@ -60,6 +95,54 @@ const sha256 = (path: string) =>
     .update(readFileSync(join(HQ_MIGRATIONS_FOLDER, path)))
     .digest("hex")
 
+/**
+ * The statements of a migration file, as drizzle runs them: the file is split on
+ * `--> statement-breakpoint` first (a chunk is one query and may hold several statements), then
+ * comment lines and empty chunks are dropped.
+ */
+function statementsOf(text: string): string[] {
+  return text
+    .split("--> statement-breakpoint")
+    .map((chunk) =>
+      chunk
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("--"))
+        .join("\n")
+        .trim(),
+    )
+    .filter((chunk) => chunk.length > 0)
+}
+
+const NEW_TABLE = `"hq"\\."(?:${WORK_TABLES.join("|")})"`
+/** The only forms the two migrations may contain; each must match a whole chunk, one statement. */
+const ALLOWED_STATEMENTS: readonly RegExp[] = [
+  new RegExp(`^CREATE TABLE ${NEW_TABLE} \\([^;]*\\);?$`),
+  new RegExp(`^ALTER TABLE ${NEW_TABLE} ADD CONSTRAINT "\\w+" [^;]*;?$`),
+  new RegExp(`^CREATE (?:UNIQUE )?INDEX "\\w+" ON ${NEW_TABLE} [^;]*;?$`),
+  // A plain CREATE (never OR REPLACE) of the one new function; the body is the text between $$.
+  /^CREATE FUNCTION "hq"\."work_item_events_append_only"\(\) RETURNS trigger AS \$\$(?:(?!\$\$)[\s\S])*\$\$ LANGUAGE plpgsql;?$/,
+  /^CREATE TRIGGER "\w+"\s+BEFORE UPDATE OR DELETE ON "hq"\."work_item_events"\s+FOR EACH ROW EXECUTE FUNCTION "hq"\."work_item_events_append_only"\(\);?$/,
+]
+const BODY_FORBIDDEN = /\b(?:ALTER|DROP|TRUNCATE|DELETE|UPDATE|INSERT|CREATE)\b/i
+
+/** Why a migration file is not purely additive; empty when it is. */
+function onlyAddsViolations(text: string): string[] {
+  const found: string[] = []
+  for (const statement of statementsOf(text)) {
+    if (!ALLOWED_STATEMENTS.some((form) => form.test(statement))) {
+      found.push(`not an allowed statement: ${statement.slice(0, 80)}`)
+    }
+    const body = /\$\$((?:(?!\$\$)[\s\S])*)\$\$/.exec(statement)?.[1]
+    if (body && BODY_FORBIDDEN.test(body)) found.push(`function body writes: ${body.slice(0, 80)}`)
+  }
+  // The second net: these never appear, in any form, outside a comment.
+  const code = statementsOf(text).join("\n")
+  for (const word of [/\bDROP\b/i, /\bDELETE\s+FROM\b/i, /\bTRUNCATE\b/i]) {
+    if (word.test(code)) found.push(`contains ${word}`)
+  }
+  return found
+}
+
 describe("the work pipeline migrations (files)", () => {
   const { entries } = readJournal()
 
@@ -86,44 +169,74 @@ describe("the work pipeline migrations (files)", () => {
     for (const [path, hash] of Object.entries(BASELINE_FILE_HASHES)) {
       expect(sha256(path), path).toBe(hash)
     }
-    // And the first BASELINE_ENTRIES journal entries are the ones that were there.
-    expect(entries.slice(0, BASELINE_ENTRIES).map((e) => e.tag)).toEqual([
-      "0000_entries_and_proposals",
-      "0001_entry_versions_append_only",
-      "0002_runs_and_spend",
-      "0003_slack_approvals",
-      "0004_spend_grant_requests",
-      "0005_grant_request_amount_max",
+    // And the first BASELINE_ENTRIES journal entries are the ones that were there, field by field.
+    expect(entries.slice(0, BASELINE_ENTRIES)).toEqual(BASELINE_JOURNAL)
+  })
+
+  it("the two migrations only add: their SQL files contain no DROP, no ALTER of an existing table and no DELETE", () => {
+    const [a, b] = entries.slice(-2)
+    const [pipeline, appendOnly] = [a, b].map((e) =>
+      readFileSync(join(HQ_MIGRATIONS_FOLDER, `${e?.tag}.sql`), "utf8"),
+    )
+    expect(onlyAddsViolations(pipeline ?? "")).toEqual([])
+    expect(onlyAddsViolations(appendOnly ?? "")).toEqual([])
+    // The first creates the nine tables and no other; the second only the function and its trigger.
+    const created = statementsOf(pipeline ?? "").flatMap((c) =>
+      [...c.matchAll(/^CREATE TABLE "hq"\."(\w+)"/g)].map((m) => m[1]),
+    )
+    expect(created).toHaveLength(WORK_TABLES.length)
+    expect(new Set(created)).toEqual(new Set(WORK_TABLES))
+    expect(statementsOf(appendOnly ?? "").map((c) => c.split(/\s/)[1])).toEqual([
+      "FUNCTION",
+      "TRIGGER",
     ])
   })
 
-  it("the two migrations only add: no DROP, no ALTER of an existing table and no DELETE", () => {
-    const [a, b] = entries.slice(-2)
-    const files = [a, b].map((e) =>
-      readFileSync(join(HQ_MIGRATIONS_FOLDER, `${e?.tag}.sql`), "utf8"),
-    )
-    const newTables = new Set(WORK_TABLES)
-    for (const text of files) {
-      // Comments say why; only statements count.
-      const code = text
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("--"))
-        .join("\n")
-      expect(code).not.toMatch(/\bDROP\b/i)
-      expect(code).not.toMatch(/\bDELETE\s+FROM\b/i)
-      expect(code).not.toMatch(/\bTRUNCATE\b/i)
-      for (const m of code.matchAll(/\bALTER\s+TABLE\s+"hq"\."(\w+)"\s+(\w+(?:\s+\w+)?)/gi)) {
-        // A new table may gain its own foreign keys; nothing else is altered, and no old table.
-        expect(newTables.has(m[1] as (typeof WORK_TABLES)[number]), `ALTER of ${m[1]}`).toBe(true)
-        expect(m[2]?.toUpperCase(), `ALTER of ${m[1]}`).toBe("ADD CONSTRAINT")
+  it("the only-add check refuses what would alter an existing table, however it is written", () => {
+    const real = readFileSync(
+      join(HQ_MIGRATIONS_FOLDER, `${entries.at(-1)?.tag}.sql`),
+      "utf8",
+    ).trimEnd()
+    expect(onlyAddsViolations(real)).toEqual([])
+    const sneak = (statement: string) => [
+      // Sharing the CREATE TRIGGER chunk (no breakpoint), then in a chunk of its own.
+      `${real}\n${statement}\n`,
+      `${real}\n--> statement-breakpoint\n${statement}\n`,
+    ]
+    for (const statement of [
+      "ALTER TABLE hq.entries ADD COLUMN x text;",
+      'ALTER TABLE "hq"."entries" ADD COLUMN "x" text;',
+      'ALTER TABLE ONLY "hq"."entries" ADD COLUMN "x" text;',
+      'ALTER TABLE "public"."user" ADD COLUMN "x" text;',
+      'ALTER TABLE "hq"."work_items" ADD COLUMN "x" text;',
+      'ALTER INDEX "hq"."signals_item_idx" RENAME TO "x";',
+      "UPDATE hq.spend SET model = 'x';",
+      'DELETE FROM "hq"."entries";',
+      'DROP TABLE "hq"."entries";',
+      'TRUNCATE "hq"."entries";',
+    ]) {
+      for (const text of sneak(statement)) {
+        expect(onlyAddsViolations(text), `${statement} in\n${text}`).not.toEqual([])
       }
     }
-    // The first creates the nine tables and no other; the second adds only the trigger.
-    const created = [...(files[0] ?? "").matchAll(/CREATE TABLE "hq"\."(\w+)"/g)].map((m) => m[1])
-    expect(created).toHaveLength(WORK_TABLES.length)
-    expect(new Set(created)).toEqual(new Set(WORK_TABLES))
-    expect(files[1]).not.toMatch(/CREATE TABLE/i)
-    expect(files[1]).toMatch(/CREATE TRIGGER/i)
+    // Replacing the 0001 function body silently re-points its trigger.
+    const replaced = `CREATE OR REPLACE FUNCTION "hq"."entry_versions_append_only"() RETURNS trigger AS $$
+BEGIN
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;`
+    for (const text of sneak(replaced)) expect(onlyAddsViolations(text)).not.toEqual([])
+    // A statement hidden after a semicolon inside an allowed chunk, or in the function body.
+    expect(
+      onlyAddsViolations(
+        `${real}\nCREATE INDEX "x" ON "hq"."signals" ("id"); UPDATE hq.spend SET model = 'x';`,
+      ),
+    ).not.toEqual([])
+    expect(
+      onlyAddsViolations(
+        real.replace("RAISE EXCEPTION", "UPDATE hq.spend SET model = 'x'; RAISE EXCEPTION"),
+      ),
+    ).not.toEqual([])
   })
 
   it("the identity clause is in the SQL: number is GENERATED ALWAYS AS IDENTITY", () => {
@@ -175,12 +288,15 @@ describe("the work pipeline tables (in-process Postgres)", () => {
       INSERT INTO hq.merge_approvals (id, item_id, pull_request_id, head_sha, status, requested_at)
       VALUES (${id}, ${itemId}, ${prId}, 'abc', ${status}, ${at})`)
 
-  it("the nine work tables exist in schema hq, and the schema exports them with the event kinds", async () => {
+  it("the nine work tables exist in schema hq", async () => {
     const rows = await run(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'hq'`,
     )
     const names = rows.rows.map((r) => (r as { table_name: string }).table_name)
     for (const table of WORK_TABLES) expect(names, table).toContain(table)
+  })
+
+  it("schema.ts exports the nine tables and the event kinds", () => {
     expect(
       [
         schema.workItems,
@@ -321,7 +437,7 @@ describe("the work pipeline tables (in-process Postgres)", () => {
     expect(dup.code).toBe("23505")
   })
 
-  it("attempts has a not null cycle column, no default (the data layer copies it from the item)", async () => {
+  it("attempts has a not null cycle column", async () => {
     await item("cycle-item")
     const refused = await refusal(sql`
       INSERT INTO hq.attempts (id, item_id, number, kind, status, created_at)

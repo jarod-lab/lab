@@ -4,7 +4,7 @@ import { serve } from "@hono/node-server"
 import { createLogger } from "@lab/logger"
 
 import { bootHq } from "./boot-hq"
-import { createWebApp } from "./web-static"
+import { createWebApp, routeToWeb } from "./web-static"
 
 const logger = createLogger({ name: "hq" })
 
@@ -15,12 +15,6 @@ const { app, config } = await bootHq({ portArg: process.argv[2] })
 // The built app (`pnpm build:web`) is served here too, so the e2e stacks and local runs have /app;
 // without a build the listener is hq alone. On Vercel the static files come from the Build Output.
 const web = createWebApp({ dir: fileURLToPath(new URL("../web/dist", import.meta.url)) })
-const fetch = web
-  ? (request: Request) => {
-      const { pathname } = new URL(request.url)
-      return pathname === "/app" || pathname.startsWith("/app/")
-        ? web.fetch(request)
-        : app.fetch(request)
-    }
-  : app.fetch
-serve({ fetch, port: config.port }, (addr) => logger.info({ port: addr.port }, "hq listening"))
+serve({ fetch: routeToWeb(web, app), port: config.port }, (addr) =>
+  logger.info({ port: addr.port }, "hq listening"),
+)

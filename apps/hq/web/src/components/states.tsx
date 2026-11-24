@@ -1,8 +1,26 @@
-import type { HqError } from "../api/errors"
+import { HqError } from "../api/errors"
 import { Button } from "@lab/ui/components/ui/button"
 
-/** The one table of error copy. Nothing else in the app words an HqError. */
-export function describeError(error: HqError): { title: string; body: string } {
+export type ErrorContext = "default" | "sign-in"
+
+/**
+ * The one table of error copy. Nothing else in the app words an HqError. `"sign-in"` words the few
+ * kinds that mean something else on the sign-in form: a 401 there is a wrong email or password (not
+ * an ended session) and a 403 is better-auth refusing the account (not "founders only").
+ */
+export function describeError(
+  error: HqError,
+  context: ErrorContext = "default",
+): { title: string; body: string } {
+  if (context === "sign-in") {
+    if (error.kind === "unauthorized") return { title: "Wrong email or password", body: "" }
+    if (error.kind === "forbidden") {
+      return {
+        title: "This account cannot sign in yet",
+        body: "Verify the email address first, then try again.",
+      }
+    }
+  }
   switch (error.kind) {
     case "unauthorized":
       return { title: "Sign in required", body: "Your session ended. Sign in again to continue." }
@@ -48,6 +66,19 @@ export function describeError(error: HqError): { title: string; body: string } {
         body: "hq answered with a server error. Retry in a moment.",
       }
   }
+}
+
+/**
+ * An error as one line of sentences (title, then body when there is one), for the places that show
+ * a single `role="alert"` line. Anything that is not an HqError reads as a server problem.
+ */
+export function errorMessage(error: unknown, context: ErrorContext = "default"): string {
+  const hqError =
+    error instanceof HqError
+      ? error
+      : new HqError({ kind: "server", status: 0, message: "unexpected" })
+  const { title, body } = describeError(hqError, context)
+  return body ? `${title}. ${body}` : `${title}.`
 }
 
 export function ErrorBlock({ error, onRetry }: { error: HqError; onRetry?: () => void }) {

@@ -1,23 +1,33 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { extname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { describe, expect, it } from "vitest"
 
 import { ADMIN_PARITY } from "./admin-parity"
 import { routeTree } from "./route-tree"
 
-const WEB_SRC = new URL(".", import.meta.url).pathname
-const ADMIN_ROUTES = new URL("../../src/admin/routes.tsx", import.meta.url).pathname
+const WEB_SRC = fileURLToPath(new URL(".", import.meta.url))
+const ADMIN_ROUTES = fileURLToPath(new URL("../../src/admin/routes.tsx", import.meta.url))
 
 /** Every `METHOD /admin/path` that createAdminApp registers, read from its source. */
 function registeredAdminRoutes(): string[] {
   const source = readFileSync(ADMIN_ROUTES, "utf8")
   const found: string[] = []
-  for (const [, method = "", path = ""] of source.matchAll(/admin\.(get|post)\("([^"]+)"/g)) {
+  const routeCall = /admin\.(get|post|put|patch|delete|all)\(\s*["'`]([^"'`]+)/g
+  for (const [, method = "", path = ""] of source.matchAll(routeCall)) {
     found.push(`${method.toUpperCase()} /admin${path}`)
   }
   return found
 }
+
+/** Every `admin.<method>(` call except `use`, in any form, so a route the regex above cannot read is still counted. */
+function adminCallCount(): number {
+  const source = readFileSync(ADMIN_ROUTES, "utf8")
+  return [...source.matchAll(/\badmin\.(\w+)\(/g)].filter(([, name]) => name !== "use").length
+}
+
+const ASSET_ROWS = ["GET /admin/admin.css", "GET /admin/login.js"]
 
 /** Every full path in the SPA route tree, read from route-tree.ts. */
 function treePaths(): Set<string> {
@@ -56,18 +66,17 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("ADMIN_PARITY", () => {
-  it("every route createAdminApp registers has a parity row, and no row names a route it does not register", () => {
+  it("every route createAdminApp registers has a parity row, and every covered row names a route in route-tree.ts", () => {
     const registered = registeredAdminRoutes().sort()
     const rows = ADMIN_PARITY.map((row) => row.adminPath).sort()
     expect(registered).toContain("GET /admin/login")
     expect(rows).toEqual(registered)
-  })
+    expect(adminCallCount()).toBe(ADMIN_PARITY.length)
 
-  it("every covered row names a route in route-tree.ts, except a static asset of the admin pages", () => {
     const tree = treePaths()
     for (const row of ADMIN_PARITY.filter((r) => r.status === "covered")) {
       if (row.spa === null) {
-        expect(row.adminPath, row.adminPath).toMatch(/\.(css|js)$/)
+        expect(ASSET_ROWS, row.adminPath).toContain(row.adminPath)
         continue
       }
       expect(row.spa, row.adminPath).toMatch(/^\/app(\/|$)/)
@@ -82,7 +91,15 @@ describe("ADMIN_PARITY", () => {
     }
   })
 
-  it("records the two known gaps and the covered proposal, login and asset rows", () => {
+  it("records the two asset rows and GET /admin/ as covered", () => {
+    const byPath = new Map(ADMIN_PARITY.map((row) => [row.adminPath, row]))
+    for (const asset of ASSET_ROWS) {
+      expect(byPath.get(asset), asset).toMatchObject({ status: "covered", spa: null })
+    }
+    expect(byPath.get("GET /admin/")).toMatchObject({ status: "covered", spa: "/app/approvals" })
+  })
+
+  it("records the two known gaps and the covered proposal and login rows", () => {
     const byPath = new Map(ADMIN_PARITY.map((row) => [row.adminPath, row]))
     expect(byPath.get("GET /admin/entries/:id")?.status).toBe("gap")
     expect(byPath.get("GET /admin/spend")?.status).toBe("gap")

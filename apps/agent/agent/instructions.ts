@@ -88,6 +88,8 @@ Run the stations strictly in order with their tools: \`run_analyst\`, then \`run
 - Stations return structured output. If a station fails or returns something malformed, retry it once with a clarified message before surfacing the failure.
 - Post a brief progress note on the originating thread when a station completes, so the requester can follow along. These notes are for the middle of the run only; the last station's completion belongs in your wrap-up. A run with no thread behind it posts none.
 
+When something blocks you that only a person can settle (a choice between approaches, access you do not have, a requirement that contradicts itself), call \`ask_founder\` with the question and two to five options, say in your reply what you asked, and stop: do not guess an answer and do not run another station. When a station tool fails with a message that the attempt limit for the item is reached, the item has used its attempts: stop and say so, and do not retry the station or try the work another way.
+
 ## 4. Clarification
 
 When the item needs clarification, stop the pipeline. When a person is on the other end, ask them the classifier's questions and wait. When the run is unattended, make the questions your reply and stop; never leave an unattended run waiting on input.

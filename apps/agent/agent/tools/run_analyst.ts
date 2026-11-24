@@ -4,6 +4,13 @@ import { stationPolicy } from "../lib/github/approval.js"
 import { founderApproval } from "../lib/github/founder-response.js"
 import { stationOutput } from "../lib/stations/result.js"
 import { ANALYST_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
+import {
+  beginStation,
+  endStation,
+  failStation,
+  subjectOf,
+  summarizeStation,
+} from "../lib/work/attempts.js"
 
 /**
  * Blocking wrapper the orchestrator calls to run the `analyst` station.
@@ -15,6 +22,11 @@ import { ANALYST_OUTPUT_SCHEMA } from "../lib/stations/schemas.js"
  * instead of an empty result. Named `run_analyst`, not `analyst`:
  * the compiler rejects a tool and a local subagent with the same public
  * name.
+ *
+ * The body also records the run as an attempt of the session's work item: `beginStation` before the
+ * station, then `endStation` with what it produced or `failStation` with why it threw, which is
+ * rethrown unchanged. They are steps (`lib/work/attempts.ts`) and the body calls nothing else;
+ * the station's output is returned exactly as before.
  */
 export default defineWorkflowTool({
   approval: founderApproval(stationPolicy),
@@ -27,11 +39,28 @@ export default defineWorkflowTool({
     "save its own deep supporting detail as an analysis artifact and return the id.",
   async execute({ message }, ctx) {
     "use workflow"
-    const response = await ctx.agent("analyst").send(message, {
-      outputSchema: ANALYST_OUTPUT_SCHEMA,
-      signal: ctx.abortSignal,
+    // Recording is three steps and pure functions of `lib/work/attempts.ts`; the body calls nothing else.
+    // beginStation sits OUTSIDE the try: its attempt-limit FatalError must reach the orchestrator
+    // as it is, never be recorded as this station failing.
+    const record = await beginStation({
+      callId: ctx.callId,
+      sessionId: ctx.session.id,
+      station: "analyst",
+      subject: subjectOf(ctx.session.auth.current),
     })
-    return stationOutput("analyst", await response.result())
+    let output: unknown
+    try {
+      const response = await ctx.agent("analyst").send(message, {
+        outputSchema: ANALYST_OUTPUT_SCHEMA,
+        signal: ctx.abortSignal,
+      })
+      output = stationOutput("analyst", await response.result())
+    } catch (error) {
+      await failStation(record, error instanceof Error ? error.message : String(error))
+      throw error
+    }
+    await endStation(record, summarizeStation("analyst", output))
+    return output
   },
   inputSchema: z.object({
     message: z

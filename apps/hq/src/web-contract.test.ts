@@ -673,7 +673,8 @@ describe("get_policy: the fake answers as real hq does", () => {
     const real = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/policy`, post)
     const fake = await createFakeHq().fetch(`${BASE}/v1/policy`, post)
     expect([real.status, fake.status]).toEqual([404, 404])
-||||||| parent of 3ef038c (feat(hq): get_digest, runs, spend and proposals over a window)
+  })
+})
 
 // get_digest: the real operation over seeded rows and the fake over a fixture of the same shape,
 // compared on status, error code, body keys and the client's error kind.

@@ -572,6 +572,11 @@ describe("the orchestrator's gh commands: the authorization matrix", () => {
       expect(verdict(decide(caller, "api", "repos/acme/widgets/pulls/34/merge", "-X", "PUT"))).toBe(
         DENY,
       )
+      // Another repository is refused, in any spelling of --repo.
+      for (const repo of [["--repo", "evil/other"], ["--repo=evil/other"], ["-R", "evil/other"]]) {
+        expect(verdict(decide(caller, ...OPEN, ...repo))).toBe(DENY)
+        expect(reasonOf(decide(caller, ...OPEN, ...repo))).toMatch(/only works on/)
+      }
       // Another branch, a fork's, or a request for people is ship, and ship is denied.
       for (const head of ["feature/x", "owner:agent/x", "main", "Agent/x", "agent-x"]) {
         expect(

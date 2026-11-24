@@ -316,14 +316,49 @@ describe("parseGh: writes are classified by what they can do", () => {
     expect(effectOf("pr", "ready", "agent/x")).toEqual({ kind: "ship" })
   })
 
-  test("a merge through gh api is refused for any method, path and field", () => {
+  test("a merge through gh api is refused for any method, path, field, input file and GraphQL", () => {
     for (const args of [
       ["api", "repos/acme/widgets/pulls/34/merge", "-X", "PUT"],
       ["api", "repos/acme/widgets/pulls/34/merge", "--method", "PUT"],
       ["api", "repos/acme/widgets/pulls/34", "-X", "PATCH"],
       ["api", "repos/acme/widgets/pulls", "-X", "POST"],
+      // A field makes gh send a body (and turns a GET into a POST): there is no field flag at all.
+      ["api", "repos/acme/widgets/pulls/34/merge", "-f", "merge_method=squash"],
+      ["api", "repos/acme/widgets/pulls/34/merge", "-F", "merge_method=squash"],
+      ["api", "repos/acme/widgets/pulls/34/merge", "--field", "merge_method=squash"],
+      ["api", "repos/acme/widgets/pulls/34/merge", "--raw-field", "merge_method=squash"],
+      ["api", "repos/acme/widgets/pulls/34/merge", "--input", "body.json"],
+      [
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation { mergePullRequest(input: {}) { clientMutationId } }",
+      ],
+      ["api", "graphql", "-F", "query=@merge.graphql"],
+      ["api", "graphql"],
     ]) {
-      expect(parseGh(args).ok).toBe(false)
+      expect([args, parseGh(args).ok]).toEqual([args, false])
+    }
+  })
+
+  test("a pull request for another repository is refused, in every spelling of --repo, for the one command that runs for an unattended run", () => {
+    const create = ["pr", "create", "--head", "agent/x", "--title", "T", "--body", "B"]
+    for (const repo of [
+      ["--repo", "evil/other"],
+      ["--repo=evil/other"],
+      ["-R", "evil/other"],
+      ["--repo", "evil/other/extra"],
+    ]) {
+      expect(refusalOf(...create, ...repo)).toMatch(/only works on/)
+      // A leading flag, before the command path, is held to the same rule.
+      expect(refusalOf(...repo, ...create)).toMatch(/only works on/)
+    }
+    // The factory's own repository is accepted, stripped, and changes nothing about the effect.
+    for (const repo of [
+      ["--repo", "acme/widgets"],
+      ["-R", "ACME/Widgets"],
+    ]) {
+      expect(effectOf(...create, ...repo)).toEqual({ kind: "open-pr" })
     }
   })
 
@@ -370,6 +405,37 @@ describe("parseGh: writes are classified by what they can do", () => {
         return result.ok && result.invocation.effect
       }
       expect(effect("bot/x")).toEqual({ kind: "open-pr" })
+      expect(effect("agent/x")).toEqual({ kind: "ship" })
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  // A prefix that does not end in a separator: the branch named exactly the prefix is a valid
+  // branch name, so the length check is what keeps it from being a factory branch.
+  test("with a prefix that ends in a letter, the branch that is exactly the prefix is not a factory branch", async () => {
+    vi.stubEnv("FACTORY_BRANCH_PREFIX", "bot")
+    vi.resetModules()
+    try {
+      const fresh = await import("#lib/github/cli.js")
+      const effect = (head: string) => {
+        const result = fresh.parseGh([
+          "pr",
+          "create",
+          "--head",
+          head,
+          "--title",
+          "T",
+          "--body",
+          "B",
+        ])
+        return result.ok && result.invocation.effect
+      }
+      expect(effect("bot")).toEqual({ kind: "ship" })
+      expect(effect("bot-x")).toEqual({ kind: "open-pr" })
+      expect(effect("bot/x")).toEqual({ kind: "open-pr" })
+      expect(effect("Bot")).toEqual({ kind: "ship" })
       expect(effect("agent/x")).toEqual({ kind: "ship" })
     } finally {
       vi.unstubAllEnvs()

@@ -57,7 +57,7 @@ Closes #12
 EOF
 )"
 
-Only non-interactive flags work. You never write code, commit, or push. Commands the factory has no business running, like merging, are unavailable, and so is taking a pull request out of draft; if a command is refused, read the reason, it says what would work instead.
+Only non-interactive flags work. You never write code, commit, or push. Commands the factory has no business running, like merging, are unavailable; if a command is refused, read the reason, it says what would work instead.
 
 # How you work
 
@@ -109,7 +109,7 @@ When the reviewer approves:
 - Open the pull request ready for review with \`gh pr create --head <branch> --base <default> --title ...\`: \`--head\` is the branch the implementer pushed (it starts with the factory's branch prefix) and \`--base\` is the repository's default branch. Do not request reviewers or assignees, and open it only now, after the reviewer has approved. The body is long Markdown, so pass it in a quoted heredoc.
 - Write the pull request body from the pipeline's outputs: the problem statement, the approach and why, the acceptance criteria as a checklist with the reviewer's pass or fail against each, verification commands and their results, any deviations from the plan, and "Closes #N" when the work item is a GitHub issue.
 - Report back with the pull request link and a one-paragraph summary: what was built, the review verdict, and anything a person should look at before merging. This report is the message you close with.
-- Merging is a decision for a person, and not something you can do at all: never run \`gh pr ready\`, never try to merge, and never open a pull request from a branch the implementer did not push. Closing issues is fine when the work calls for it, like closing duplicates you have confirmed, but say which issue and why.
+- Merging is a decision for a person, and not something you can do at all. Never run \`gh pr ready\` or try to merge on your own: a person marks it ready and merges. Never open a pull request from a branch the implementer did not push. Closing issues is fine when the work calls for it, like closing duplicates you have confirmed, but say which issue and why.
 
 ## 8. Learning from the run
 

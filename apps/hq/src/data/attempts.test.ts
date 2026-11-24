@@ -581,6 +581,25 @@ describe("attempts (in-process Postgres)", () => {
       expect(await stateOf(item.id)).toBe("attempt")
     })
 
+    it("claiming the last allowed fix works: the claimed row is not counted against its own budget guard", async () => {
+      const item = await seedItem(db(), { state: "plan", attemptLimit: 1 })
+      await contract(item.id)
+      const requested = await request(item.id, { kind: "fix" })
+      const claimed = await claimAttempt(db(), { attemptId: requested.id, actor: AGENT, now: NOW })
+      expect(claimed.status).toBe("running")
+      expect(await stateOf(item.id)).toBe("attempt")
+      expect((await factsOf(item.id)).attemptsUsed).toBe(1)
+      // and at the limit with the fix used, a new request is refused
+      await finishAttempt(db(), {
+        actor: AGENT,
+        attemptId: claimed.id,
+        result: "failed",
+        now: minutesAfter(NOW, 1),
+      })
+      await db().update(workItems).set({ state: "review" }).where(eq(workItems.id, item.id))
+      await expectAppError(request(item.id, { kind: "fix" }), "CONFLICT")
+    })
+
     it("claiming a fix in review takes review to attempt with reason retry_started", async () => {
       const item = await seedItem(db(), { state: "review", attemptLimit: 3 })
       const requested = await request(item.id, { kind: "fix" })
@@ -619,6 +638,8 @@ describe("attempts (in-process Postgres)", () => {
         }),
         "CONFLICT",
       )
+      const [still] = await db().select().from(attempts).where(eq(attempts.id, requested.id))
+      expect(still?.status).toBe("requested")
     })
 
     it("a claim of a running or finished attempt is CONFLICT", async () => {
@@ -649,7 +670,7 @@ describe("attempts (in-process Postgres)", () => {
       expect(again.number).toBe(2)
     })
 
-    it("requestAttempt takes origin founder_request or policy_dispatch and refuses anything else at runtime (the type refuses it at compile time: attempts.types.ts)", async () => {
+    it("requestAttempt takes origin founder_request or policy_dispatch; a call without origin fails typecheck (attempts.types.ts)", async () => {
       const item = await seedItem(db(), { state: "triage" })
       const loose = requestAttempt as (
         db: unknown,
@@ -824,7 +845,7 @@ describe("attempts (in-process Postgres)", () => {
       expect(finished[0]?.detail).toMatchObject({ result: "approved", number: 1 })
     })
 
-    it("a finish with no recorded pull request, or none on the attempt's branch, stores a null head sha", async () => {
+    it("a finish with no recorded pull request stores a null head sha", async () => {
       const { attempt } = await running("investigate")
       const done = await finishAttempt(db(), {
         actor: AGENT,
@@ -833,15 +854,37 @@ describe("attempts (in-process Postgres)", () => {
         now: minutesAfter(NOW, 1),
       })
       expect(done.reviewedHeadSha).toBeNull()
+    })
+
+    it("a finish by an attempt with no branch (finish and heartbeat both sent none) takes the item's newest pull request head, so an approval is never bound to any head", async () => {
       const other = await running("fix")
-      await seedPullRequest(db(), other.item.id, { number: 3 })
+      await seedPullRequest(db(), other.item.id, { number: 2, openedAt: NOW })
+      await seedPullRequest(db(), other.item.id, { number: 3, openedAt: minutesAfter(NOW, 1) })
+      await db()
+        .update(pullRequests)
+        .set({ headSha: "c".repeat(40) })
+        .where(and(eq(pullRequests.itemId, other.item.id), eq(pullRequests.number, 3)))
       const noBranch = await finishAttempt(db(), {
         actor: AGENT,
         attemptId: other.attempt.id,
         result: "failed",
+        now: minutesAfter(NOW, 2),
+      })
+      expect(noBranch.branch).toBeNull()
+      expect(noBranch.reviewedHeadSha).toBe("c".repeat(40))
+    })
+
+    it("a finish whose branch matches no pull request (a cross-cycle pull request on a different branch) stores null, never that pull request's sha", async () => {
+      const { item, attempt } = await running("fix")
+      await seedPullRequest(db(), item.id, { number: 3 })
+      const done = await finishAttempt(db(), {
+        actor: AGENT,
+        attemptId: attempt.id,
+        result: "failed",
+        branch: "agent/the-new-cycle-branch",
         now: minutesAfter(NOW, 1),
       })
-      expect(noBranch.reviewedHeadSha).toBeNull()
+      expect(done.reviewedHeadSha).toBeNull()
     })
 
     it("a finish takes the head sha from the pull request on the attempt's branch, not the item's newest (another cycle's pull request is another branch)", async () => {

@@ -438,21 +438,26 @@ export async function heartbeatAttempt(
 }
 
 /**
- * The head sha of the newest pull request on a branch of this item: what a reviewer verdict was
- * given on. Pull requests carry no cycle, so the attempt's own branch is what ties a pull request
- * to this attempt (an older cycle's pull request has another branch); no branch or no pull request
- * on it is null, which `ensureMergeApproval` accepts.
+ * The head sha a reviewer verdict was given on: the plan's rule is the recorded pull request's head
+ * sha, and the branch only decides WHICH one. Pull requests carry no cycle, so when the attempt
+ * has a branch the newest pull request on that branch is the one (an older cycle's pull request has
+ * another branch, so a different branch yields null, not that pull request's sha). With no branch
+ * (a dropped heartbeat) it is the item's newest pull request, as `loadFacts` reads it: a null here
+ * would let `ensureMergeApproval` bind an approval to any head. No pull request at all is null.
  */
 async function headShaOfBranch(
   tx: Tx,
   itemId: string,
   branch: string | null,
 ): Promise<string | null> {
-  if (branch === null) return null
   const [pr] = await tx
     .select({ headSha: pullRequests.headSha })
     .from(pullRequests)
-    .where(and(eq(pullRequests.itemId, itemId), eq(pullRequests.branch, branch)))
+    .where(
+      branch === null
+        ? eq(pullRequests.itemId, itemId)
+        : and(eq(pullRequests.itemId, itemId), eq(pullRequests.branch, branch)),
+    )
     .orderBy(desc(pullRequests.openedAt), desc(pullRequests.number))
     .limit(1)
   return pr?.headSha ?? null

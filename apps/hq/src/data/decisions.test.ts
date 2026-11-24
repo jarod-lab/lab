@@ -319,6 +319,31 @@ describe("founder decisions (in-process Postgres)", () => {
       expect((await itemOf(item.id)).state).toBe("attempt")
       await expectAppError(approve(item.id), "CONFLICT")
       expect((await approvalsOf(item.id))[0]?.status).toBe("pending")
+      // the dead card is never asked for: the fact is false, so the item has no merge_approval
+      const facts = await factsOf(item.id, minutesAfter(NOW, 31))
+      expect(facts.pendingMergeApproval).toBe(false)
+      expect(deriveAttention(facts)).not.toBe("merge_approval")
+    })
+
+    it("pendingMergeApproval is true only in review and for the current pull request's approval", async () => {
+      const { item } = await reviewed()
+      expect((await factsOf(item.id)).pendingMergeApproval).toBe(true)
+      expect(deriveAttention(await factsOf(item.id))).toBe("merge_approval")
+      // a newer pull request of the cycle takes over as current: the older approval is not asked for
+      await seedPullRequest(db(), item.id, {
+        number: 8,
+        state: "open",
+        openedAt: minutesAfter(NOW, 30),
+        branch: "factory/fix-8",
+      })
+      expect((await factsOf(item.id)).pendingMergeApproval).toBe(false)
+      expect(deriveAttention(await factsOf(item.id))).not.toBe("merge_approval")
+      // and out of review, whatever the approval row says
+      const other = await reviewed()
+      await forceState(db(), other.item.id, "attempt", NOW2)
+      expect((await factsOf(other.item.id, NOW2)).pendingMergeApproval).toBe(false)
+      await forceState(db(), other.item.id, "review", NOW2)
+      expect((await factsOf(other.item.id, NOW2)).pendingMergeApproval).toBe(true)
     })
 
     it("the pull request the approval is bound to must be the item's current one", async () => {
@@ -466,6 +491,8 @@ describe("founder decisions (in-process Postgres)", () => {
         actorId: FOUNDER,
         note: "Not worth it.",
       })
+      // the open question the stop withdrew is named in the stop's own event; the answered one is not
+      expect(rows[0]?.detail).toEqual({ withdrawnQuestionIds: [q1.id] })
       expect(rows[1]).toMatchObject({ reason: "stopped" })
       expect(rows[2]?.detail).toMatchObject({ attemptId: requested.id, reason: "stopped" })
       strictlyIncreasing(rows)
@@ -549,6 +576,40 @@ describe("founder decisions (in-process Postgres)", () => {
       await expectAppError(stop("nope"), "BAD_REQUEST")
       expect((await itemOf(item.id)).state).toBe("triage")
       expect(await eventsOf(item.id)).toHaveLength(0)
+    })
+  })
+
+  describe("stopItem events", () => {
+    it("a stop with nothing to withdraw has no detail, and a window close is one ms after the move", async () => {
+      const item = await seedItem(db(), { state: "verify" })
+      await addWindow(item.id)
+      await stop(item.id)
+      const rows = await eventsOf(item.id)
+      expect(rows.map((e) => [e.kind, e.at.getTime() - NOW2.getTime()])).toEqual([
+        ["transition", 0],
+        ["window_closed", 1],
+      ])
+      expect(rows[0]?.detail).toBeNull()
+    })
+
+    it("a stop lists every withdrawn question, oldest first", async () => {
+      const item = await seedItem(db(), { state: "plan" })
+      const ask = (prompt: string, now: Date) =>
+        askQuestion(db(), {
+          itemId: item.id,
+          prompt,
+          options: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+          actor: AGENT,
+          now,
+        })
+      const q1 = await ask("one", minutesAfter(NOW, 1))
+      const q2 = await ask("two", minutesAfter(NOW, 2))
+      await stop(item.id)
+      const transition = (await eventsOf(item.id)).find((e) => e.kind === "transition")
+      expect(transition?.detail).toEqual({ withdrawnQuestionIds: [q1.id, q2.id] })
     })
   })
 
@@ -764,7 +825,8 @@ describe("founder decisions (in-process Postgres)", () => {
         cycle: 1,
         detail: { pullRequestUrl: urlOf(7), pullRequestNumber: 7 },
       })
-      strictlyIncreasing(rows)
+      // the two founder events are one millisecond apart, in story order
+      expect(rows.map((e) => e.at.getTime() - NOW2.getTime())).toEqual([0, 1])
     })
 
     it("from verify ends the running window; from done leaves the passed one", async () => {
@@ -777,7 +839,9 @@ describe("founder decisions (in-process Postgres)", () => {
         "window_closed",
         "revert_requested",
       ])
-      strictlyIncreasing(await eventsOf(verify.id))
+      expect((await eventsOf(verify.id)).map((e) => e.at.getTime() - NOW2.getTime())).toEqual([
+        0, 1, 2,
+      ])
 
       const done = await mergedItem("done")
       const passed = await addWindow(done.id, { status: "passed" })
@@ -846,7 +910,7 @@ describe("founder decisions (in-process Postgres)", () => {
       const { item } = await reviewed({ attemptLimit: 3 })
       await approve(item.id, { founderId: "f-approve" })
       await stop(item.id, { founderId: "f-stop" })
-      await reopen(item.id, { founderId: "f-reopen" })
+      await reopen(item.id, { founderId: "f-reopen", now: minutesAfter(NOW2, 5) })
       expect(await founderEvents(item.id)).toEqual([
         ["merge_approved", "f-approve"],
         ["transition", "f-stop"],
@@ -915,17 +979,14 @@ describe("founder decisions (in-process Postgres)", () => {
         checkedAt: minutesAfter(NOW, 90),
       })
       const rows = await eventsOf(item.id)
-      // the signal and the move share the call's instant (W3); the window closes one ms after it
-      expect(rows.map((e) => e.kind).sort()).toEqual([
-        "signal_attached",
-        "transition",
-        "window_closed",
+      // story order, one millisecond apart: the signal, the move, the window's close
+      expect(rows.map((e) => [e.kind, e.at.getTime() - minutesAfter(NOW, 90).getTime()])).toEqual([
+        ["signal_attached", 0],
+        ["transition", 1],
+        ["window_closed", 2],
       ])
       const closed = rows.find((e) => e.kind === "window_closed")
-      expect(closed).toMatchObject({
-        actorType: "system",
-        at: new Date(minutesAfter(NOW, 90).getTime() + 1),
-      })
+      expect(closed).toMatchObject({ actorType: "system" })
       expect(closed?.detail).toMatchObject({ windowId: window.id, status: "failed" })
     })
 
@@ -951,7 +1012,11 @@ describe("founder decisions (in-process Postgres)", () => {
       })
       expect((await itemOf(item.id)).state).toBe("reopened")
       expect((await windowsOf(item.id))[0]).toMatchObject({ id: window.id, status: "passed" })
-      expect((await kindsOf(item.id)).sort()).toEqual(["signal_attached", "transition"])
+      expect(await kindsOf(item.id)).toEqual(["signal_attached", "transition"])
+      const times = (await eventsOf(item.id)).map(
+        (e) => e.at.getTime() - minutesAfter(NOW, 90).getTime(),
+      )
+      expect(times).toEqual([0, 1])
     })
 
     it("closes only the current cycle's running window and says whether it closed one", async () => {
@@ -996,6 +1061,26 @@ describe("founder decisions (in-process Postgres)", () => {
       )
       expect(again).toBe(false)
       expect((await eventsOf(item.id)).filter((e) => e.kind === "window_closed")).toHaveLength(1)
+    })
+  })
+
+  describe("a first signal's events are in story order", () => {
+    it("signal_attached, then the move into triage one millisecond later", async () => {
+      const out = await recordSignal(db(), {
+        source: "github_issue",
+        externalId: "evt-first",
+        dedupeKey: "github-issue:acme/web#99",
+        repo: "acme/web",
+        title: "New",
+        summary: "New",
+        recorder: { type: "agent", id: "agent-key" },
+        now: NOW,
+      })
+      const rows = await eventsOf(out.itemId)
+      expect(rows.map((e) => [e.kind, e.at.getTime() - NOW.getTime()])).toEqual([
+        ["signal_attached", 0],
+        ["transition", 1],
+      ])
     })
   })
 

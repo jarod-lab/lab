@@ -9,7 +9,7 @@
 // story order, so ordering by (at, id) tells the story.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
-import { and, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 
 import {
   agentQuestions,
@@ -71,7 +71,7 @@ const ticker = (now: Date) => {
 /**
  * End the item's running verification window of its CURRENT cycle (`stopped` when a founder ended
  * it, `failed` when a signal came back), stamp `checked_at` with `now` and write one
- * `window_closed` event at `eventAt` (default `now`). Does nothing, and says so, when there is no
+ * `window_closed` event at `eventAt()` (default `now`). Does nothing, and says so, when there is no
  * running window: an item still in `deploy`, or one whose window already closed. The caller holds
  * the item's lock. Returns whether a window was closed.
  */
@@ -83,7 +83,8 @@ export async function closeRunningWindow(
     note?: string
     actor: Actor
     now: Date
-    eventAt?: Date
+    /** The instant of the event, asked for only when a window is closed (so no tick is wasted). */
+    eventAt?: () => Date
   },
 ): Promise<boolean> {
   const { item, now } = input
@@ -101,7 +102,7 @@ export async function closeRunningWindow(
   if (!row) return false
   await appendEvent(tx, {
     itemId: item.id,
-    at: input.eventAt ?? now,
+    at: input.eventAt?.() ?? now,
     kind: "window_closed",
     actor: input.actor,
     note: input.note ?? null,
@@ -250,12 +251,19 @@ export async function stopItem(
   const founder: Actor = { type: "founder", id: founderId }
   return db.transaction(async (tx) => {
     const found = await lockItem(tx, itemId)
+    // The questions this stop withdraws, named in the stop's own event (no event kind for it).
+    const open = await tx
+      .select({ id: agentQuestions.id })
+      .from(agentQuestions)
+      .where(and(eq(agentQuestions.itemId, found.id), eq(agentQuestions.status, "open")))
+      .orderBy(asc(agentQuestions.createdAt), asc(agentQuestions.id))
     const item = await transitionItem(tx, {
       item: found,
       to: "stopped",
       actor: founder,
       reason: "stopped",
       ...(note === null ? {} : { note }),
+      ...(open.length === 0 ? {} : { detail: { withdrawnQuestionIds: open.map((q) => q.id) } }),
       now,
     })
     const at = ticker(now)
@@ -264,7 +272,7 @@ export async function stopItem(
       status: "stopped",
       actor: SYSTEM,
       now,
-      eventAt: at(),
+      eventAt: at,
     })
     await voidItemApprovals(tx, item, ["pending", "approved"], "stopped", at)
     const ended = await tx
@@ -320,7 +328,7 @@ export async function reopenItem(
         status: "stopped",
         actor: SYSTEM,
         now,
-        eventAt: ticker(now)(),
+        eventAt: ticker(now),
       })
     }
     return item
@@ -419,7 +427,7 @@ export async function requestRevert(
       status: "stopped",
       actor: SYSTEM,
       now,
-      eventAt: at(),
+      eventAt: at,
     })
     await appendEvent(tx, {
       itemId: item.id,

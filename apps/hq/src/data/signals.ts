@@ -170,7 +170,15 @@ export async function recordSignal(
       const signalId = await storeSignal(tx, item, signal, recorder, now)
       if (item.state === "verify" || item.state === "done") {
         const system: Actor = { type: "system", id: "hq" }
-        await transitionItem(tx, { item, to: "reopened", actor: system, reason: "recurrence", now })
+        // One millisecond after the signal_attached event, and the window's close one after that:
+        // (at, id) then tells the story in order.
+        await transitionItem(tx, {
+          item,
+          to: "reopened",
+          actor: system,
+          reason: "recurrence",
+          now: new Date(now.getTime() + 1),
+        })
         if (item.state === "verify") {
           // The window the recurrence reopened the item out of is over: it failed (one ms later,
           // so the story reads in order).
@@ -180,7 +188,7 @@ export async function recordSignal(
             note: "A signal with this item's dedupe key arrived inside the window.",
             actor: system,
             now,
-            eventAt: new Date(now.getTime() + 1),
+            eventAt: () => new Date(now.getTime() + 2),
           })
         }
         return { signalId, itemId: item.id, displayId: item.displayId, outcome: "reopened" }

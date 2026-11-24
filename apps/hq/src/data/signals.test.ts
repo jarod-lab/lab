@@ -58,7 +58,8 @@ describe("recordSignal (in-process Postgres)", () => {
       dedupeKey: "github-issue:acme/web#5",
       createdByType: "agent",
       createdById: "key-1",
-      stateChangedAt: NOW,
+      // the move into triage is one millisecond after the signal_attached event
+      stateChangedAt: new Date(NOW.getTime() + 1),
     })
     const rows = await signalRows()
     expect(rows).toHaveLength(1)
@@ -122,7 +123,10 @@ describe("recordSignal (in-process Postgres)", () => {
     const res = await record(issue(5, { externalId: "acme/web#5:again" }), later)
     expect(res).toMatchObject({ outcome: "reopened", itemId: first.itemId })
     const [item] = await itemsOf()
-    expect(item).toMatchObject({ state: "reopened", stateChangedAt: later })
+    expect(item).toMatchObject({
+      state: "reopened",
+      stateChangedAt: new Date(later.getTime() + 1),
+    })
     const reopen = (await eventsOf(first.itemId)).find(
       (e) => e.kind === "transition" && e.toState === "reopened",
     )

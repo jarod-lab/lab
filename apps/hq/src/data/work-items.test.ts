@@ -412,7 +412,14 @@ describe("work items (in-process Postgres)", () => {
         status: "open",
         createdAt: NOW,
       })
-      expect(await at(0)).toMatchObject({ pendingMergeApproval: true, openQuestion: true })
+      // The approval asks for a decision only while the item is in review (W5: otherwise the card
+      // would be dead); the question counts in any state.
+      expect(await at(0)).toMatchObject({ pendingMergeApproval: false, openQuestion: true })
+      const inReview = { ...item, state: "review" as const }
+      expect(await test.db.transaction((tx) => loadFacts(tx, inReview, NOW))).toMatchObject({
+        pendingMergeApproval: true,
+        openQuestion: true,
+      })
     })
   })
 

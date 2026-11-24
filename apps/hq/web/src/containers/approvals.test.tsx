@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expectNoA11yViolations } from "@lab/ui/a11y"
 import { QueryClient } from "@tanstack/react-query"
-import { fireEvent, within } from "@testing-library/react"
+import { act, fireEvent, waitFor, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
 import { hqKeys } from "../api/query-keys"
@@ -24,6 +24,20 @@ const seeded = (count: number): Proposal[] =>
 
 const posts = (hq: FakeHq) => hq.sent.filter((s) => s.method !== "GET")
 const listCalls = (hq: FakeHq) => hq.sent.filter((s) => s.path === "/v1/proposals")
+const statusCalls = (hq: FakeHq) => hq.sent.filter((s) => s.path === "/v1/factory/status")
+
+/** `count` proposals decided on a later day than any decision the fake makes itself. */
+const decidedLater = (count: number): Proposal[] =>
+  Array.from({ length: count }, (_, index) =>
+    proposalFixture({
+      id: `later-${String(index).padStart(2, "0")}`,
+      title: `Later ${index}`,
+      status: "approved",
+      entryId: `entry-later-${index}`,
+      createdAt: new Date(Date.UTC(2026, 10, 18, 9, index)).toISOString(),
+      decidedAt: new Date(Date.UTC(2026, 10, 20, 9, index)).toISOString(),
+    }),
+  )
 
 /** Hold every POST until `release()`, so a test can look at the screen mid-request. */
 function holdPosts(hq: FakeHq): { release(): void } {
@@ -191,6 +205,83 @@ describe("the Approvals screen", () => {
     expect(
       (within(first).getByRole("button", { name: "Approve" }) as HTMLButtonElement).disabled,
     ).toBe(false)
+  })
+
+  it("a 409 for a stale card whose decided row is not on the page still says so, on the page", async () => {
+    const hq = createFakeHq({ proposals: [...seeded(1), ...decidedLater(21)] })
+    const app = await renderApp({ path: "/app/approvals", hq })
+    const first = await card(app, "Proposal 1")
+    const stored = hq.state.proposals.find((p) => p.id === "proposal-001") as Proposal
+    stored.status = "approved"
+    stored.decidedAt = "2026-11-17T10:00:00.000Z"
+    stored.entryId = "entry-1"
+    await app.user.click(within(first).getByRole("button", { name: "Reject" }))
+
+    const notice = await app.findByRole("alert")
+    expect(notice.textContent).toContain("Already decided. Refresh to see the result.")
+    expect(notice.textContent).toContain("Proposal 1")
+    // The card is gone and the stale proposal is not among the 20 newest decisions.
+    expect(app.queryByRole("article", { name: "Proposal 1" })).toBeNull()
+    const decided = app.getByRole("region", { name: /Recently decided/ })
+    expect(within(decided).queryByText("Proposal 1")).toBeNull()
+    expect(within(decided).getAllByRole("listitem")).toHaveLength(20)
+
+    await app.user.click(within(notice).getByRole("button", { name: "Dismiss" }))
+    expect(app.queryByRole("alert")).toBeNull()
+  })
+
+  it("a decision made on a card that has no decided row afterwards is confirmed on the page", async () => {
+    const hq = createFakeHq({ proposals: [...seeded(1), ...decidedLater(21)] })
+    const app = await renderApp({ path: "/app/approvals", hq })
+    const first = await card(app, "Proposal 1")
+    await app.user.click(within(first).getByRole("button", { name: "Approve" }))
+
+    const needs = await app.findByRole("region", { name: /Needs you/ })
+    expect((await within(needs).findByRole("status")).textContent).toBe(
+      "Proposal 1: Approved.Dismiss",
+    )
+    expect(app.queryByRole("article", { name: "Proposal 1" })).toBeNull()
+  })
+
+  it("a 409 because the new entry's slug was taken shows hq's own message", async () => {
+    const hq = createFakeHq({ proposals: seeded(1) })
+    const app = await renderApp({ path: "/app/approvals", hq })
+    const first = await card(app, "Proposal 1")
+    hq.state.nextError = {
+      status: 409,
+      body: {
+        error: {
+          code: "CONFLICT",
+          message: 'A fact entry "pricing" already exists',
+          hint: "Propose a change to the existing entry with its current baseVersion instead.",
+        },
+      },
+    }
+    await app.user.click(within(first).getByRole("button", { name: "Approve" }))
+    const alert = await within(first).findByRole("alert")
+    expect(alert.textContent).toBe('A fact entry "pricing" already exists')
+    expect(alert.textContent).not.toContain("Already decided")
+  })
+
+  it("two clicks in the same tick send one request (the guard does not wait for a re-render)", async () => {
+    const hq = createFakeHq({ proposals: seeded(1) })
+    const hold = holdPosts(hq)
+    const app = await renderApp({ path: "/app/approvals", hq })
+    const first = await card(app, "Proposal 1")
+    const approve = within(first).getByRole("button", { name: "Approve" })
+    const reject = within(first).getByRole("button", { name: "Reject" })
+    // One act: React re-renders (and disables the buttons) only after all three have landed.
+    act(() => {
+      fireEvent.click(approve)
+      fireEvent.click(approve)
+      fireEvent.click(reject)
+    })
+    hold.release()
+    await within(await app.findByRole("region", { name: /Recently decided/ })).findByText(
+      "Proposal 1",
+    )
+    expect(posts(hq)).toHaveLength(1)
+    expect(posts(hq)[0]?.body).toEqual({ decision: "approve" })
   })
 
   it("a 403 shows the server's message and leaves the card", async () => {
@@ -365,20 +456,21 @@ describe("the Approvals screen", () => {
     expect(posts(hq)).toEqual([])
   })
 
-  it("deciding invalidates proposals and factoryStatus", async () => {
+  it("deciding invalidates proposals and factoryStatus: both are fetched again", async () => {
     const hq = createFakeHq({ proposals: seeded(1) })
     const app = await renderApp({ path: "/app/approvals", hq })
-    app.queryClient.setQueryData(hqKeys.factoryStatus(), factoryStatusFixture())
     const first = await card(app, "Proposal 1")
-    expect(app.queryClient.getQueryState(hqKeys.factoryStatus())?.isInvalidated).toBe(false)
-    const before = listCalls(hq).length
+    // The sidebar's runner card observes factoryStatus: wait for its first read.
+    await waitFor(() => expect(statusCalls(hq).length).toBeGreaterThan(0))
+    const listsBefore = listCalls(hq).length
+    const statusBefore = statusCalls(hq).length
 
     await app.user.click(within(first).getByRole("button", { name: "Approve" }))
     await within(await app.findByRole("region", { name: /Recently decided/ })).findByText(
       "Proposal 1",
     )
-    expect(app.queryClient.getQueryState(hqKeys.factoryStatus())?.isInvalidated).toBe(true)
-    expect(listCalls(hq).length).toBeGreaterThan(before)
+    await waitFor(() => expect(statusCalls(hq).length).toBeGreaterThan(statusBefore))
+    expect(listCalls(hq).length).toBeGreaterThan(listsBefore)
   })
 
   it("never calls decide on load, focus, visibility or retry", async () => {

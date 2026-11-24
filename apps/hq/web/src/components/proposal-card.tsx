@@ -42,7 +42,9 @@ export function ProposalCard({ proposal, onDecide, pending, error }: ProposalCar
     text.split("\n").length > LONG_BODY_LINES
   const shownText =
     !expanded && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : text
-  const clamp = (lines: string) => (expanded ? "" : lines)
+  // One decision for the clamp and the toggle: text is cut only on a card that offers "Show all".
+  // Under the thresholds above every field is short enough to show whole, at any width.
+  const clamp = (lines: string) => (long && !expanded ? lines : "")
 
   const decide = (decision: "approve" | "reject") => {
     if (pending) return
@@ -56,7 +58,7 @@ export function ProposalCard({ proposal, onDecide, pending, error }: ProposalCar
       aria-busy={pending || undefined}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-attention-border bg-attention-surface p-3.5"
     >
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
         <span className="font-mono text-[11px] text-faint">
           {proposal.id.slice(0, 8)} · proposal · {proposal.kind}
         </span>
@@ -77,7 +79,7 @@ export function ProposalCard({ proposal, onDecide, pending, error }: ProposalCar
         <span className="text-[11px] text-faint">Proposed text</span>
         {/* The box carries the padding; the clamped text sits inside it, so a cut-off line never
             shows in the padding. */}
-        <div className="min-w-0 rounded-control border border-border bg-muted p-2.5">
+        <div className="min-w-0 overflow-hidden rounded-control border border-border bg-muted p-2.5">
           <p
             id={`${id}-body`}
             className={`m-0 text-xs leading-relaxed whitespace-pre-wrap wrap-anywhere text-soft ${clamp("line-clamp-8")}`}
@@ -115,6 +117,7 @@ export function ProposalCard({ proposal, onDecide, pending, error }: ProposalCar
           <Button
             type="button"
             className="min-h-touch border-solar bg-solar px-4 text-primary-foreground hover:bg-solar/85"
+            aria-describedby={`${id}-title`}
             disabled={pending}
             onClick={() => decide("approve")}
           >
@@ -124,6 +127,7 @@ export function ProposalCard({ proposal, onDecide, pending, error }: ProposalCar
             type="button"
             variant="outline"
             className="min-h-touch border-input px-4"
+            aria-describedby={`${id}-title`}
             disabled={pending}
             onClick={() => decide("reject")}
           >

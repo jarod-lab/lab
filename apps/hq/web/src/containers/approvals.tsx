@@ -7,10 +7,15 @@ import type { Proposal } from "../api/schemas"
 import { ProposalCard } from "../components/proposal-card"
 import { errorMessage } from "../components/states"
 import { useHq } from "../lib/use-hq"
-import { ApprovalsPage, type Load } from "../pages/approvals-page"
+import { ApprovalsPage, type Load, type Notice } from "../pages/approvals-page"
 
 const PENDING_PAGE_SIZE = 25
-/** Each decided status is asked for this many, then merged by decision time. */
+/**
+ * Each decided status is asked for this many, then merged by decision time. "Recently decided" is
+ * therefore approximate: hq orders `list_proposals` by creation only (a Phase 4+ item is a
+ * decided-time order), so a proposal created long ago and decided just now can be missing. Nothing
+ * a founder must read depends on a row here (see `Notice`).
+ */
 const DECIDED_FETCH_LIMIT = 50
 const DECIDED_SHOWN = 20
 const ALREADY_DECIDED = "Already decided. Refresh to see the result."
@@ -39,7 +44,7 @@ function DecidableCard({
   onNotice,
 }: {
   proposal: Proposal
-  onNotice(proposalId: string, message: string | null): void
+  onNotice(proposalId: string, notice: Notice | null): void
 }) {
   const { client, queryClient } = useHq()
   // A second click can land before React has disabled the button; this closes that gap.
@@ -55,13 +60,22 @@ function DecidableCard({
     retry: false,
     mutationFn: (input: { decision: "approve" | "reject"; note?: string }) =>
       client.decideProposal({ proposalId: proposal.id, ...input }),
-    onSuccess: async () => {
-      onNotice(proposal.id, null)
+    onSuccess: async (_decision, input) => {
+      // Kept until dismissed, for a card that leaves Needs you with no decided row to show it.
+      onNotice(proposal.id, {
+        title: proposal.title,
+        message: input.decision === "approve" ? "Approved." : "Rejected.",
+        tone: "done",
+      })
       await refresh()
     },
     onError: async (error) => {
       sent.current = false
-      onNotice(proposal.id, decisionMessage(error))
+      onNotice(proposal.id, {
+        title: proposal.title,
+        message: decisionMessage(error),
+        tone: "error",
+      })
       if (error instanceof HqError && error.kind === "conflict") await refresh()
       // The session ended: the gate's probe sends the app to sign-in.
       if (error instanceof HqError && error.kind === "unauthorized") {
@@ -102,7 +116,12 @@ function toLoad<T>(
 /** The Approvals screen: the pending proposals, and the last decided ones. */
 export function Approvals() {
   const { client } = useHq()
-  const [notices, setNotices] = useState<Record<string, string>>({})
+  const [notices, setNotices] = useState<Record<string, Notice>>({})
+  const dropNotice = (id: string) =>
+    setNotices((current) => {
+      const { [id]: _dropped, ...rest } = current
+      return rest
+    })
 
   const pending = useInfiniteQuery({
     queryKey: hqKeys.proposals("pending"),
@@ -145,15 +164,15 @@ export function Approvals() {
       renderPending={(proposal) => (
         <DecidableCard
           proposal={proposal}
-          onNotice={(id, message) =>
-            setNotices((current) => {
-              const { [id]: _dropped, ...rest } = current
-              return message === null ? rest : { ...rest, [id]: message }
-            })
+          onNotice={(id, notice) =>
+            notice === null
+              ? dropNotice(id)
+              : setNotices((current) => ({ ...current, [id]: notice }))
           }
         />
       )}
       notices={notices}
+      onDismissNotice={dropNotice}
       hasMore={pending.hasNextPage}
       loadingMore={pending.isFetchingNextPage}
       onLoadMore={() => void pending.fetchNextPage()}

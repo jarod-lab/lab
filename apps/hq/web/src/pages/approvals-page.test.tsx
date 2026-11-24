@@ -17,6 +17,7 @@ function page(overrides: Partial<ApprovalsPageProps> = {}) {
     decided: ready([]),
     renderPending: (proposal) => <p>card {proposal.title}</p>,
     notices: {},
+    onDismissNotice: vi.fn(),
     hasMore: false,
     loadingMore: false,
     onLoadMore: vi.fn(),
@@ -132,12 +133,61 @@ describe("ApprovalsPage", () => {
     expect(decided.textContent).toContain('<img src=x onerror="1"> **hi**')
   })
 
+  it("never clamps a decided title (no toggle there to reveal it)", () => {
+    const view = page({
+      decided: ready([
+        proposalFixture({ status: "approved", title: "T".repeat(200), entryId: "e" }),
+      ]),
+    })
+    expect(view.container.querySelector("[class*='line-clamp']")).toBeNull()
+  })
+
   it("shows a notice beside the decided proposal it is about", () => {
     const view = page({
       decided: ready([proposalFixture({ id: "p9", status: "rejected", title: "Gone" })]),
-      notices: { p9: "Already decided. Refresh to see the result." },
+      notices: {
+        p9: {
+          title: "Gone",
+          message: "Already decided. Refresh to see the result.",
+          tone: "error",
+        },
+      },
     })
     expect(view.getByRole("alert").textContent).toBe("Already decided. Refresh to see the result.")
+  })
+
+  it("a notice with no card and no decided row shows at the top of Needs you, until dismissed", async () => {
+    const view = page({
+      pending: ready([proposalFixture({ id: "other", title: "Other" })]),
+      decided: ready([]),
+      notices: {
+        gone: {
+          title: '<img src=x onerror="1"> Gone',
+          message: "Already decided. Refresh to see the result.",
+          tone: "error",
+        },
+        ok: { title: "Fine", message: "Approved.", tone: "done" },
+        other: { title: "Other", message: "Founders only.", tone: "error" },
+      },
+    })
+    const needs = view.getByRole("region", { name: /Needs you/ })
+    const alert = within(needs).getByRole("alert")
+    expect(alert.textContent).toContain('<img src=x onerror="1"> Gone: Already decided.')
+    expect(alert.querySelector("img")).toBeNull()
+    expect(within(needs).getByRole("status").textContent).toContain("Fine: Approved.")
+    // The one whose card is still on screen is not repeated here.
+    expect(needs.textContent).not.toContain("Founders only.")
+    await view.user.click(within(alert).getByRole("button", { name: "Dismiss" }))
+    expect(view.props.onDismissNotice).toHaveBeenCalledExactlyOnceWith("gone")
+  })
+
+  it("a notice shows at the top while the decided list is loading or failed", () => {
+    const view = page({
+      decided: { status: "loading" },
+      notices: { gone: { title: "Gone", message: "Rejected.", tone: "done" } },
+    })
+    const needs = view.getByRole("region", { name: /Needs you/ })
+    expect(within(needs).getByRole("status").textContent).toContain("Gone: Rejected.")
   })
 
   it("an empty decided list says nothing has been decided", () => {

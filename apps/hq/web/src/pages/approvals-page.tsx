@@ -12,14 +12,29 @@ export type Load<T> =
   | { status: "error"; error: HqError; onRetry(): void }
   | { status: "ready"; items: T }
 
+/**
+ * What a decision left behind for the founder to read: hq's refusal ("error") or the confirmation
+ * of a decision made ("done"). It names the proposal because its card may be gone by then.
+ */
+export interface Notice {
+  title: string
+  message: string
+  tone: "error" | "done"
+}
+
 export interface ApprovalsPageProps {
   pending: Load<Proposal[]>
-  /** The last decided proposals, newest decision first. */
+  /**
+   * The newest decisions among the most recently created proposals, newest decision first. hq can
+   * only order `list_proposals` by creation, so a proposal created long ago and decided just now
+   * can be missing: that is why a decision's notice never depends on a row being here.
+   */
   decided: Load<Proposal[]>
   /** One pending proposal's card (the container wires its decision to hq). */
   renderPending(proposal: Proposal): ReactNode
-  /** A message to show beside a decided proposal (a decision that came back as already decided). */
-  notices: Record<string, string>
+  /** By proposal id. Beside its decided row when there is one, else at the top of Needs you. */
+  notices: Record<string, Notice>
+  onDismissNotice(proposalId: string): void
   hasMore: boolean
   loadingMore: boolean
   onLoadMore(): void
@@ -30,7 +45,7 @@ function when(iso: string | null): string | null {
   return iso === null ? null : `${iso.slice(0, 16).replace("T", " ")} UTC`
 }
 
-function DecidedRow({ proposal, notice }: { proposal: Proposal; notice: string | undefined }) {
+function DecidedRow({ proposal, notice }: { proposal: Proposal; notice: Notice | undefined }) {
   const approved = proposal.status === "approved"
   const at = when(proposal.decidedAt)
   return (
@@ -41,7 +56,7 @@ function DecidedRow({ proposal, notice }: { proposal: Proposal; notice: string |
         >
           {approved ? "Approved" : "Rejected"}
         </span>
-        <span className="min-w-0 flex-1 text-sm wrap-anywhere text-foreground line-clamp-2">
+        <span className="min-w-0 flex-1 text-sm wrap-anywhere text-foreground">
           {proposal.title}
         </span>
       </div>
@@ -59,9 +74,9 @@ function DecidedRow({ proposal, notice }: { proposal: Proposal; notice: string |
           </a>
         ) : null}
       </div>
-      {notice ? (
+      {notice?.tone === "error" ? (
         <p role="alert" className="m-0 text-xs wrap-anywhere text-destructive">
-          {notice}
+          {notice.message}
         </p>
       ) : null}
     </li>
@@ -74,10 +89,19 @@ export function ApprovalsPage({
   decided,
   renderPending,
   notices,
+  onDismissNotice,
   hasMore,
   loadingMore,
   onLoadMore,
 }: ApprovalsPageProps) {
+  // A notice whose proposal has a card or a decided row is shown there; any other would vanish
+  // with its card, so it is shown here until dismissed.
+  const placed = new Set([
+    ...(pending.status === "ready" ? pending.items : []).map((p) => p.id),
+    ...(decided.status === "ready" ? decided.items : []).map((p) => p.id),
+  ])
+  const orphans = Object.entries(notices).filter(([id]) => !placed.has(id))
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader title="Approvals" subtitle="Proposals from agents, waiting for a founder" />
@@ -95,6 +119,29 @@ export function ApprovalsPage({
             </span>
           ) : null}
         </h2>
+        {orphans.map(([id, notice]) => (
+          <div
+            key={id}
+            role={notice.tone === "error" ? "alert" : "status"}
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-card border border-border bg-card p-3"
+          >
+            <p
+              className={`m-0 min-w-0 flex-1 text-sm wrap-anywhere ${
+                notice.tone === "error" ? "text-destructive" : "text-soft"
+              }`}
+            >
+              {notice.title}: {notice.message}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch border-input"
+              onClick={() => onDismissNotice(id)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ))}
         {pending.status === "loading" ? <LoadingBlock label="proposals" /> : null}
         {pending.status === "error" ? (
           <ErrorBlock error={pending.error} onRetry={pending.onRetry} />

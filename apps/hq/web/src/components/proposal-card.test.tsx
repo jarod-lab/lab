@@ -77,7 +77,58 @@ describe("ProposalCard", () => {
     const body = view.getByText(/line one/)
     expect(body.className).toContain("whitespace-pre-wrap")
     expect(body.className).toContain("wrap-anywhere")
-    expect(body.className).toContain("line-clamp-8")
+    // Short text is shown whole: nothing clamps it.
+    expect(body.className).not.toContain("line-clamp")
+  })
+
+  it("if any line-clamp class is present, Show all exists (at and around every threshold)", () => {
+    const cases = [
+      { title: "T".repeat(115) },
+      { title: "T".repeat(121) },
+      { reason: "R".repeat(200) },
+      { reason: "R".repeat(241) },
+      { body: { text: "word ".repeat(90) } }, // 450 characters, one paragraph
+      { body: { text: "word ".repeat(97) } }, // 485 characters
+      { body: { text: "x".repeat(360) } },
+      {
+        body: {
+          text: `${"line of about sixty characters, so it wraps at 390 px wide\n".repeat(6)}`,
+        },
+      },
+      { body: { text: "a\n".repeat(9) } },
+      { body: { text: "y".repeat(40_000) } },
+    ]
+    for (const overrides of cases) {
+      const view = renderCard({}, proposalFixture(overrides))
+      const clamped = view.container.querySelector("[class*='line-clamp']") !== null
+      if (clamped) expect(view.queryByRole("button", { name: "Show all" })).not.toBeNull()
+      view.unmount()
+    }
+  })
+
+  it("a 450-character body, a 200-character reason and a 115-character title are shown whole", () => {
+    const view = renderCard(
+      {},
+      proposalFixture({
+        title: "T".repeat(115),
+        reason: "R".repeat(200),
+        body: { text: "word ".repeat(90) },
+      }),
+    )
+    expect(view.container.querySelector("[class*='line-clamp']")).toBeNull()
+    expect(view.queryByRole("button", { name: "Show all" })).toBeNull()
+  })
+
+  it("the buttons are described by the card's title, and the text boxes clip their overflow", () => {
+    const view = renderCard({}, proposalFixture({ title: "Pricing" }))
+    const title = view.getByRole("heading", { name: "Pricing" })
+    for (const name of ["Approve", "Reject"]) {
+      expect(view.getByRole("button", { name }).getAttribute("aria-describedby")).toBe(title.id)
+    }
+    expect(view.getByText("Free, then $20 per seat.").parentElement?.className).toContain(
+      "overflow-hidden",
+    )
+    expect(title.parentElement?.className).toContain("overflow-hidden")
   })
 
   it("clamps the title and reason, and keeps Approve out of the text's boxes", () => {

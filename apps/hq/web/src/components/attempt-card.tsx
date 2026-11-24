@@ -65,7 +65,12 @@ function metaOf(attempt: AttemptView): string {
   if (clock) parts.push(clock)
   if (attempt.durationMs !== null) parts.push(formatDuration(attempt.durationMs))
   if (attempt.status !== "requested") {
-    parts.push(`${attempt.files.length} ${attempt.files.length === 1 ? "file" : "files"} changed`)
+    // hq stores no files until the attempt reports some: for a running one "none yet" is not zero.
+    parts.push(
+      attempt.status === "running" && attempt.files.length === 0
+        ? "no files reported yet"
+        : `${attempt.files.length} ${attempt.files.length === 1 ? "file" : "files"} changed`,
+    )
     parts.push(`cost ${formatCost(attempt)}`)
   }
   return parts.join(" · ")

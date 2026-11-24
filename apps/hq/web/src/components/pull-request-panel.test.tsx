@@ -278,6 +278,36 @@ describe("PullRequestPanel", () => {
     expect(view.getByRole("button", { name: /Show all/ })).toBeTruthy()
   })
 
+  it("gives each panel its own heading id so two on a page stay distinct", () => {
+    const view = render(
+      <>
+        <PullRequestPanel
+          pr={pr()}
+          mergeApproval={null}
+          canApprove={false}
+          onApproveMerge={vi.fn()}
+          pending={false}
+          repo={REPO}
+          reviewer={null}
+        />
+        <PullRequestPanel
+          pr={pr({ number: 484, url: "https://github.com/acme/web/pull/484" })}
+          mergeApproval={null}
+          canApprove={false}
+          onApproveMerge={vi.fn()}
+          pending={false}
+          repo={REPO}
+          reviewer={null}
+        />
+      </>,
+    )
+    const ids = [...view.container.querySelectorAll("h2")].map((h) => h.id)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+    expect(view.getByRole("region", { name: "PR #483" })).toBeTruthy()
+    expect(view.getByRole("region", { name: "PR #484" })).toBeTruthy()
+  })
+
   it("has no inline style, every control is min-h-touch and no accessibility violations", async () => {
     const { view, user } = setup()
     await user.click(view.getByRole("button", { name: "Approve merge" }))

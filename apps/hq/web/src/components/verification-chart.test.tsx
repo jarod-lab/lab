@@ -19,10 +19,14 @@ const pad = (values: number[], n: number) => [...values, ...Array(n - values.len
 const FAC141 = buckets(pad([22, 28, 25, 31, 26], 24), [4, 1, 0, 0, 0, 0, 0])
 
 describe("VerificationChart", () => {
-  it("is an svg with role img, 24 or more rects, no style attribute and the three captions", () => {
+  it("is a figure with a text alternative around an aria-hidden svg of 24 or more rects, no style attribute and the three captions", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
-    const svg = view.getByRole("img")
-    expect(svg.tagName.toLowerCase()).toBe("svg")
+    const figure = view.getByRole("figure")
+    const svg = figure.querySelector("svg") as SVGElement
+    // the picture is decoration: the figcaption is its text alternative
+    expect(svg.getAttribute("aria-hidden")).toBe("true")
+    expect(svg.getAttribute("role")).toBeNull()
+    expect(view.queryByRole("img")).toBeNull()
     const rects = svg.querySelectorAll("rect")
     expect(rects.length).toBeGreaterThanOrEqual(24)
     expect(rects).toHaveLength(FAC141.length)
@@ -39,14 +43,19 @@ describe("VerificationChart", () => {
 
   it("says the label with the totals before the merge and since", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
-    expect(view.getByRole("img").getAttribute("aria-label")).toBe(
-      "Signals per 30 minutes: 132 before the merge, 5 since",
+    const figure = view.getByRole("figure", {
+      name: /^Signals per 30 minutes: 132 before the merge, 5 since\./,
+    })
+    const caption = figure.querySelector("figcaption") as HTMLElement
+    expect(caption.className).toContain("sr-only")
+    expect(caption.textContent).toBe(
+      "Signals per 30 minutes: 132 before the merge, 5 since. Each bar is one half hour: red before the merge, green from the merge on.",
     )
   })
 
   it("colours bars before the merge text-destructive and after it text-success, and the bucket at the merge is after", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
-    const rects = [...view.getByRole("img").querySelectorAll("rect")]
+    const rects = [...view.getByRole("figure").querySelectorAll("rect")]
     rects.forEach((rect, i) => {
       expect(rect.getAttribute("fill")).toBe("currentColor")
       const expected = i < 24 ? "text-destructive" : "text-success"
@@ -58,7 +67,7 @@ describe("VerificationChart", () => {
 
   it("scales the bars to the tallest one and draws a zero as a hairline", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
-    const rects = [...view.getByRole("img").querySelectorAll("rect")]
+    const rects = [...view.getByRole("figure").querySelectorAll("rect")]
     const height = (i: number) => Number(rects[i]?.getAttribute("height"))
     expect(height(3)).toBeGreaterThan(height(0))
     expect(height(3)).toBeGreaterThan(height(25))
@@ -75,15 +84,15 @@ describe("VerificationChart", () => {
     const view = render(<VerificationChart buckets={zeros} mergedAt={MERGED} />)
     const html = view.container.innerHTML
     expect(html).not.toContain("NaN")
-    expect(view.getByRole("img").getAttribute("aria-label")).toBe(
-      "Signals per 30 minutes: 0 before the merge, 0 since",
+    expect(view.getByRole("figure").querySelector("figcaption")?.textContent).toMatch(
+      /^Signals per 30 minutes: 0 before the merge, 0 since\./,
     )
     expect(view.getByText("No signals in this range")).toBeTruthy()
   })
 
   it("marks the merge in the chart where the first bucket since the merge starts", () => {
     const view = render(<VerificationChart buckets={FAC141} mergedAt={MERGED} />)
-    const marker = view.getByRole("img").querySelector("line")
+    const marker = view.getByRole("figure").querySelector("line")
     expect(marker).not.toBeNull()
     expect(marker?.getAttribute("class")).toContain("text-faint")
     expect(marker?.getAttribute("stroke")).toBe("currentColor")
@@ -104,20 +113,37 @@ describe("VerificationChart", () => {
     expect(view.queryByText("12 h before the merge")).toBeNull()
   })
 
+  it("a range cut to start after the merge says 'start of range', not 'merged'", () => {
+    const afterMerge = FAC141.slice(26)
+    const view = render(<VerificationChart buckets={afterMerge} mergedAt={MERGED} />)
+    expect(view.getByText("start of range")).toBeTruthy()
+    expect(view.queryByText("merged")).toBeNull()
+    expect(view.queryByText(/before the merge$/)).toBeNull()
+    const rects = [...view.getByRole("figure").querySelectorAll("rect")]
+    for (const rect of rects) expect(rect.getAttribute("class")).toContain("text-success")
+    expect(view.getByRole("figure").querySelector("line")).toBeNull()
+  })
+
+  it("a range that starts exactly at the merge says 'merged' on its left edge", () => {
+    const view = render(<VerificationChart buckets={FAC141.slice(24)} mergedAt={MERGED} />)
+    expect(view.getByText("merged")).toBeTruthy()
+    expect(view.queryByText("start of range")).toBeNull()
+  })
+
   it("without a merge, shows every bar as before and names no merge", () => {
     const view = render(<VerificationChart buckets={FAC141.slice(0, 24)} mergedAt={null} />)
-    const rects = [...view.getByRole("img").querySelectorAll("rect")]
+    const rects = [...view.getByRole("figure").querySelectorAll("rect")]
     for (const rect of rects) expect(rect.getAttribute("class")).toContain("text-destructive")
-    expect(view.getByRole("img").getAttribute("aria-label")).toBe(
-      "Signals per 30 minutes: 132 so far, no merge yet",
+    expect(view.getByRole("figure").querySelector("figcaption")?.textContent).toBe(
+      "Signals per 30 minutes: 132 so far, no merge yet. Each bar is one half hour.",
     )
     expect(view.queryByText("merged")).toBeNull()
-    expect(view.getByRole("img").querySelector("line")).toBeNull()
+    expect(view.getByRole("figure").querySelector("line")).toBeNull()
   })
 
   it("draws no chart when hq sent no buckets (an item without a recurrence key)", () => {
     const view = render(<VerificationChart buckets={[]} mergedAt={MERGED} />)
-    expect(view.queryByRole("img")).toBeNull()
+    expect(view.queryByRole("figure")).toBeNull()
     expect(view.container.querySelector("svg")).toBeNull()
     expect(view.getByText("No occurrence counts: this item has no recurrence key.")).toBeTruthy()
   })

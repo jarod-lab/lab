@@ -1,3 +1,5 @@
+import { useId } from "react"
+
 import type { PullRequestView, WorkItemDetail } from "../api/schemas"
 import { DEPLOY_GRACE_MINUTES } from "../../../src/work/constants"
 import { pullRequestLink } from "../lib/pull-request-link"
@@ -141,15 +143,16 @@ export function PullRequestPanel({
   /** The approving founder's name, when the page knows it (hq records an id, which is not shown). */
   approvedBy?: string | null
 }) {
+  const headingId = useId()
   const size = sizeOf(pr)
   const link = pullRequestLink(pr.url, pr.number, [repo])
   return (
     <section
-      aria-labelledby="pr-heading"
+      aria-labelledby={headingId}
       className="flex min-w-0 flex-col gap-2.5 overflow-hidden rounded-card border border-border bg-card px-4 py-3.5"
     >
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 id="pr-heading" className="m-0 flex items-baseline gap-2 text-[13px] font-semibold">
+        <h2 id={headingId} className="m-0 flex items-baseline gap-2 text-[13px] font-semibold">
           PR #{pr.number}
           {pr.isDraft ? (
             <span className="font-mono text-[11px] font-normal text-faint">draft</span>

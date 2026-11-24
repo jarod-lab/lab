@@ -118,6 +118,39 @@ describe("AttemptCard", () => {
     expect(tiny.getByText(/06:12/).textContent).toContain("less than $0.01")
   })
 
+  it("a running attempt that has reported no files says so and never '0 files changed'", () => {
+    const none = render(
+      <AttemptCard
+        attempt={attempt({
+          status: "running",
+          result: null,
+          durationMs: null,
+          finishedAt: null,
+          files: [],
+        })}
+      />,
+    )
+    expect(none.getByText(/06:12/).textContent).toContain("no files reported yet")
+    expect(none.container.textContent).not.toContain("0 files changed")
+    none.unmount()
+    const some = render(
+      <AttemptCard
+        attempt={attempt({
+          status: "running",
+          result: null,
+          durationMs: null,
+          finishedAt: null,
+          files: ["a.ts", "b.ts"],
+        })}
+      />,
+    )
+    expect(some.getByText(/06:12/).textContent).toContain("2 files changed")
+    some.unmount()
+    // a finished attempt with none really changed none
+    const finished = render(<AttemptCard attempt={attempt({ files: [] })} />)
+    expect(finished.getByText(/06:12/).textContent).toContain("0 files changed")
+  })
+
   it("says '1 file changed' for one file and shows no note paragraph without a note", () => {
     const view = render(<AttemptCard attempt={attempt({ files: ["a.ts"], note: null })} />)
     expect(view.getByText(/06:12/).textContent).toContain("1 file changed")

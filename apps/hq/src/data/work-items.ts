@@ -3,7 +3,7 @@
 // or beside it in data/; the pure rules are in work/machine.ts and are never re-implemented.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
-import { and, desc, eq, ilike, or, type SQL, sql } from "drizzle-orm"
+import { and, desc, eq, ilike, inArray, or, type SQL, sql } from "drizzle-orm"
 
 import {
   agentQuestions,
@@ -167,8 +167,10 @@ export async function resolveItem(db: Database, ref: string): Promise<WorkItemRo
 
 /**
  * The facts the machine's guards and the attention rules read, in one place. `contractItems`,
- * `attemptsUsed` and `newestFixResult` are the item's CURRENT cycle's; `pullRequest` is the item's
- * newest pull request, whatever its cycle.
+ * `attemptsUsed` and `newestFixResult` are the item's CURRENT cycle's; `activeAttempt` reads ALL of
+ * the item's attempts (one active attempt per item, whatever its cycle: a stopped item's running
+ * attempt is still active after a reopen); `pullRequest` is the item's newest pull request,
+ * whatever its cycle.
  */
 export async function loadFacts(
   tx: Tx,
@@ -185,10 +187,14 @@ export async function loadFacts(
       kind: attempts.kind,
       status: attempts.status,
       result: attempts.result,
-      leaseExpiresAt: attempts.leaseExpiresAt,
     })
     .from(attempts)
     .where(and(eq(attempts.itemId, item.id), eq(attempts.cycle, item.cycle)))
+  const [active] = await tx
+    .select({ status: attempts.status, leaseExpiresAt: attempts.leaseExpiresAt })
+    .from(attempts)
+    .where(and(eq(attempts.itemId, item.id), inArray(attempts.status, ["requested", "running"])))
+    .limit(1)
   const [pr] = await tx
     .select({ state: pullRequests.state, mergedAt: pullRequests.mergedAt })
     .from(pullRequests)
@@ -216,7 +222,6 @@ export async function loadFacts(
   const newestFinished = used
     .filter((a) => a.status === "finished")
     .sort((a, b) => b.number - a.number)[0]
-  const active = cycleAttempts.find((a) => a.status === "requested" || a.status === "running")
   const stale =
     active?.status === "running" && active.leaseExpiresAt !== null && active.leaseExpiresAt <= now
   const graceMs = DEPLOY_GRACE_MINUTES * 60_000
@@ -254,8 +259,9 @@ const NO_FACTS: GuardFacts = {
 /**
  * The only door to a state change: the machine decides (FORBIDDEN, CONFLICT), the row moves and one
  * `transition` event is written. The caller holds the item's lock (`lockItem`); the update is also
- * a compare-and-set on the state, so a stale row cannot write a second move. A move out of
- * `reopened` or `stopped` into `triage` starts the next cycle, and its event carries the new one.
+ * a compare-and-set on the state and the cycle, so a stale row cannot write a second move. A move
+ * out of `reopened` or `stopped` into `triage` ADDS 1 to `cycle` here, and its event carries the
+ * new one; callers never add it themselves.
  */
 export async function transitionItem(
   tx: Tx,
@@ -280,7 +286,13 @@ export async function transitionItem(
   const [row] = await tx
     .update(workItems)
     .set({ state: to, cycle, stateChangedAt: now, updatedAt: now })
-    .where(and(eq(workItems.id, item.id), eq(workItems.state, item.state)))
+    .where(
+      and(
+        eq(workItems.id, item.id),
+        eq(workItems.state, item.state),
+        eq(workItems.cycle, item.cycle),
+      ),
+    )
     .returning()
   if (!row) {
     throw new AppError("CONFLICT", "The work item moved while this change was in flight", {
@@ -318,7 +330,10 @@ export interface StoredSignal {
   occurredAt: Date
 }
 
-/** Insert a signal row and its `signal_attached` event on an item. Returns the signal's id. */
+/**
+ * Insert a signal row and its `signal_attached` event on an item. Returns the signal's id. It does
+ * not validate and takes no dedupe lock: only `recordSignal` and `createManualItem` call it.
+ */
 export async function storeSignal(
   tx: Tx,
   item: WorkItemRow,
@@ -354,7 +369,10 @@ export async function storeSignal(
   return id
 }
 
-/** A new item for a first signal: `signal` state, the signal attached, then `ingested` into triage. */
+/**
+ * A new item for a first signal: `signal` state, the signal attached, then `ingested` into triage.
+ * It does not validate and takes no dedupe lock: only `recordSignal` and `createManualItem` call it.
+ */
 export async function createItemFromSignal(
   tx: Tx,
   signal: StoredSignal,
@@ -390,6 +408,16 @@ export async function createItemFromSignal(
   return { item, signalId }
 }
 
+/** At most `max` UTF-16 units (the length the schemas count), cut between code points so an emoji is never split. */
+function firstChars(text: string, max: number): string {
+  let out = ""
+  for (const point of text) {
+    if (out.length + point.length > max) break
+    out += point
+  }
+  return out
+}
+
 /**
  * A founder-made item: source `manual`, one manual signal (`manual:<uuid>` for both the external
  * id and the dedupe key, so it never joins another item). The body, when there is one, is the
@@ -413,7 +441,9 @@ export async function createManualItem(
     dedupeKey: key,
     repo,
     title,
-    summary: body ? body.replace(/\s+/g, " ").trim().slice(0, SUMMARY_MAX_CHARS) || title : title,
+    summary: body
+      ? firstChars(body.replace(/\s+/g, " ").trim(), SUMMARY_MAX_CHARS) || title
+      : title,
     url: null,
     payload,
     occurredAt: input.now,

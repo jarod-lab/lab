@@ -163,6 +163,7 @@ describe("recordSignal (in-process Postgres)", () => {
     const res = await record(issue(5, { externalId: "x:s" }), minutesAfter(NOW, 5))
     expect(res).toMatchObject({ outcome: "attached", itemId: first.itemId })
     expect((await itemsOf())[0]?.state).toBe("stopped")
+    expect(await signalRows()).toHaveLength(2)
     expect((await eventsOf(first.itemId)).filter((e) => e.kind === "transition")).toHaveLength(1)
   })
 
@@ -174,6 +175,7 @@ describe("recordSignal (in-process Postgres)", () => {
       const res = await record(issue(5, { externalId: `x:${state}` }), minutesAfter(NOW, 5))
       expect(res).toMatchObject({ outcome: "attached", itemId: first.itemId })
       expect((await itemsOf())[0]?.state).toBe(state)
+      expect(await signalRows()).toHaveLength(2)
     },
   )
 

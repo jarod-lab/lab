@@ -8,6 +8,7 @@ import {
   agentQuestions,
   contractItems,
   mergeApprovals,
+  signals,
   verificationWindows,
   workItemEvents,
   workItems,
@@ -323,6 +324,21 @@ describe("work items (in-process Postgres)", () => {
       })
     })
 
+    it("a cycle-2 item that still holds a cycle-1 running attempt reads it as active", async () => {
+      const item = await seedItem(test.db, { state: "triage", cycle: 2, attemptLimit: 3 })
+      await seedAttempt(test.db, item.id, {
+        number: 1,
+        cycle: 1,
+        status: "running",
+        leaseExpiresAt: minutesAfter(NOW, 10),
+      })
+      const at = (m: number) =>
+        test.db.transaction((tx) => loadFacts(tx, item, minutesAfter(NOW, m)))
+      expect(await at(0)).toMatchObject({ activeAttempt: "fresh", attemptsUsed: 0 })
+      expect((await at(10)).activeAttempt).toBe("stale")
+      expect((await at(11)).activeAttempt).toBe("stale")
+    })
+
     it("a requested attempt is active and fresh but not used", async () => {
       const item = await seedItem(test.db, { state: "triage", attemptLimit: 1 })
       await seedAttempt(test.db, item.id, { number: 1, kind: "fix", status: "requested" })
@@ -425,6 +441,33 @@ describe("work items (in-process Postgres)", () => {
       expect(stored).toEqual([{ source: "person", by: "u1" }])
       const rows = await events(test.db, made.itemId)
       expect(rows.map((e) => e.kind).sort()).toEqual(["signal_attached", "transition"])
+      const stored2 = await test.db.select().from(signals).where(eq(signals.itemId, made.itemId))
+      expect(stored2).toHaveLength(1)
+      expect(stored2[0]).toMatchObject({
+        source: "manual",
+        repo: "acme/web",
+        title: "Fix the login page",
+        summary: "It 500s on Safari",
+        payload: { body: "It 500s on Safari" },
+        recordedByType: "person",
+        recordedById: "u1",
+      })
+      expect(stored2[0]?.externalId).toMatch(/^manual:[0-9a-f-]{36}$/)
+      expect(stored2[0]?.externalId).toBe(stored2[0]?.dedupeKey)
+      expect(stored2[0]?.dedupeKey).toBe(item.dedupeKey)
+    })
+
+    it("the manual summary is cut at a code point, never inside an emoji", async () => {
+      // 299 letters then a two-unit emoji: the 300th unit would split it.
+      const made = await createManualItem(test.db, {
+        title: "t",
+        body: `${"a".repeat(299)}\u{1F600}tail`,
+        repo: "acme/web",
+        founderId: "u1",
+        now: NOW,
+      })
+      const [row] = await test.db.select().from(signals).where(eq(signals.itemId, made.itemId))
+      expect(row?.summary).toBe("a".repeat(299))
     })
 
     it("refuses an empty or over-long title and a bad repo", async () => {
@@ -493,6 +536,21 @@ describe("work items (in-process Postgres)", () => {
       // LIKE wildcards in the query are literal text
       expect(await ids({ query: "%" })).toEqual([])
       expect(await ids({ query: "_" })).toEqual([])
+    })
+
+    it("pages items that share one createdAt without skipping or repeating any", async () => {
+      for (let i = 0; i < 5; i++) await seedItem(test.db, { title: `same${i}` })
+      const seen: string[] = []
+      let after: { at: Date; id: string } | undefined
+      for (let page = 0; page < 3; page++) {
+        const rows = await list({ limit: 2, after })
+        seen.push(...rows.map((r) => r.id))
+        const last = rows.at(-1)
+        if (!last) break
+        after = { at: last.createdAt, id: last.id }
+      }
+      expect(seen).toHaveLength(5)
+      expect(new Set(seen).size).toBe(5)
     })
 
     it("pages newest first by a (createdAt, id) cursor", async () => {

@@ -440,6 +440,12 @@ describe("ItemPage starting an attempt", () => {
       )
     })
 
+    it("an item in attempt with a pending merge approval gets no warning (only review does)", async () => {
+      const { view } = await show(workItemFixture({ state: "attempt" }), { issueUrl: ISSUE })
+      expect(region(view).textContent).toContain(LABEL)
+      expect(region(view).textContent).not.toContain("unusable")
+    })
+
     it("the warning is also given in claim mode, and only while the approval waits", async () => {
       const base = workItemFixture()
       const claim = await show(

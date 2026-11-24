@@ -42,6 +42,9 @@ export function Item({ itemRef }: { itemRef: string }) {
   const { pending, errors, notice, write } = useOneWrite({ queryClient })
   // The key of the last write that actually took the lock: only its refusal is the page's to show.
   const [lastRan, setLastRan] = useState<string | null>(null)
+  // A click was turned away since the write that is on its way took the lock (not `errors`, which
+  // keeps a key's busy message until that same control is used again).
+  const [turnedAway, setTurnedAway] = useState(false)
 
   const item = useQuery({
     queryKey: hqKeys.workItem(itemRef),
@@ -71,13 +74,15 @@ export function Item({ itemRef }: { itemRef: string }) {
   const label = data.displayId
   const run = (key: string, send: () => Promise<string>) => {
     void write(key, send).then((ran) => {
+      // A click turned away settles before the write that took the lock; that write's own end
+      // (ran) then clears the flag, so it belongs to one write and never outlives it.
+      setTurnedAway(!ran)
       if (ran) setLastRan(key)
     })
   }
   // While a write is on its way the page says only that a second click was turned away; after it,
   // the refusal of the key that actually ran. "Another change is in flight" is true only while it
   // is: a second click on the same button (before the lock opens again) leaves it in `errors`.
-  const turnedAway = Object.values(errors).includes(BUSY_MESSAGE)
   const ranError = lastRan === null ? null : (errors[lastRan] ?? null)
   const error =
     pending !== null

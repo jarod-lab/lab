@@ -270,6 +270,60 @@ describe("the Item detail screen", () => {
       expect(posts(hq)).toHaveLength(1)
     })
 
+    it("a double click on one control does not make a later write on another control say 'in flight'", async () => {
+      const hq = createFakeHq()
+      // The client keeps the fetch it was built with, so the hold is one wrapper with a gate that
+      // can be armed again for each write.
+      const real = hq.fetch
+      let gate: Promise<void> = Promise.resolve()
+      let reached = 0
+      hq.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "POST") {
+          reached += 1
+          await gate
+        }
+        return real(input, init)
+      }) as typeof fetch
+      const arm = () => {
+        let release = () => {}
+        gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        reached = 0
+        return release
+      }
+      const app = await renderApp({ path: "/app/work/FAC-6", hq })
+      const main = await page(app)
+      const releaseStop = arm()
+      await app.user.click(main.getByRole("button", { name: "Stop item" }))
+      await twice(
+        within(main.getByRole("group", { name: "Stop item" })).getByRole("button", {
+          name: "Stop item",
+        }),
+      )
+      expect(reached).toBe(1)
+      releaseStop()
+      await waitFor(() =>
+        expect(
+          (main.getByRole("button", { name: "Reopen item" }) as HTMLButtonElement).disabled,
+        ).toBe(false),
+      )
+      expect(app.queryByRole("alert")).toBeNull()
+      // A different control, held in flight: nothing was turned away, so nothing says so.
+      const releaseReopen = arm()
+      await app.user.click(main.getByRole("button", { name: "Reopen item" }))
+      await app.user.click(
+        within(main.getByRole("group", { name: "Reopen item" })).getByRole("button", {
+          name: "Reopen",
+        }),
+      )
+      expect(reached).toBe(1)
+      expect(app.queryByRole("alert")).toBeNull()
+      releaseReopen()
+      await waitFor(() => expect(posts(hq)).toHaveLength(2))
+      expect(app.queryByRole("alert")).toBeNull()
+    })
+
     it("two quick clicks on the confirmation of a stop send one POST", async () => {
       const hq = createFakeHq()
       const hold = holdPosts(hq)

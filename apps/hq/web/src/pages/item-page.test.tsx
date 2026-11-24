@@ -379,11 +379,21 @@ describe("ItemPage starting an attempt", () => {
       expect(within(region(view)).queryByRole("link")).toBeNull()
     })
 
-    it("an attempt that was requested or went stale is still active for hq", async () => {
+    it("a requested attempt is still active for hq", async () => {
       const queued = state("plan", {
         attemptList: [attempt(1, { kind: "investigate", status: "requested", result: null })],
       })
       const { view } = await show(queued, { issueUrl: ISSUE })
+      expect(region(view).textContent).toContain("An attempt is already running.")
+      expect(region(view).textContent).not.toContain(LABEL)
+    })
+
+    it("a running attempt whose lease went stale is still active for hq (attempts.running is false)", async () => {
+      const stale = state("attempt", {
+        attempts: { used: 1, limit: 3, running: false },
+        attemptList: [attempt(2, { kind: "fix", status: "running", result: null })],
+      })
+      const { view } = await show(stale, { issueUrl: ISSUE })
       expect(region(view).textContent).toContain("An attempt is already running.")
       expect(region(view).textContent).not.toContain(LABEL)
     })
@@ -400,12 +410,57 @@ describe("ItemPage starting an attempt", () => {
       },
     )
 
-    it("names Reopen item or Revert merge as the way back only where hq allows one", async () => {
-      const way = await show(verifyingItemFixture(), { issueUrl: ISSUE })
-      expect(region(way.view).textContent).toContain("Reopen item or Revert merge is the way back.")
-      way.view.unmount()
+    it("names as the way back only the controls hq offers from that state", async () => {
+      // verify: both are offered.
+      const both = await show(verifyingItemFixture(), { issueUrl: ISSUE })
+      expect(region(both.view).textContent).toContain(
+        "Reopen item or Revert merge is the way back.",
+      )
+      both.view.unmount()
+      // deploy as hq produces it: a merged pull request (canRevert) and no founder reopen edge.
+      const base = verifyingItemFixture()
+      const deploy = state("deploy", {
+        pullRequest: base.pullRequest,
+        actions: { ...base.actions, canReopen: false, canRevert: true },
+      })
+      const only = await show(deploy, { issueUrl: ISSUE })
+      expect(region(only.view).textContent).toContain("Revert merge is the way back.")
+      expect(region(only.view).textContent).not.toContain("Reopen item")
+      only.view.unmount()
+      // nothing offered: nothing named.
       const none = await show(state("deploy"), { issueUrl: ISSUE })
       expect(region(none.view).textContent).not.toContain("the way back")
+    })
+
+    it("beside a waiting merge approval the label line warns that another attempt makes it unusable", async () => {
+      const { view } = await show(workItemFixture(), { issueUrl: ISSUE })
+      expect(region(view).textContent).toContain(LABEL)
+      expect(region(view).textContent).toContain(
+        "Starting another attempt leaves the waiting merge approval unusable.",
+      )
+    })
+
+    it("the warning is also given in claim mode, and only while the approval waits", async () => {
+      const base = workItemFixture()
+      const claim = await show(
+        workItemFixture({ actions: { ...base.actions, canRequestAttempt: true } }),
+        { dispatch: "claim" },
+      )
+      expect(region(claim.view).textContent).toContain("leaves the waiting merge approval unusable")
+      claim.view.unmount()
+      const approved = await show(
+        workItemFixture({
+          mergeApproval: {
+            ...(base.mergeApproval as NonNullable<WorkItemDetail["mergeApproval"]>),
+            status: "approved",
+          },
+        }),
+        { issueUrl: ISSUE },
+      )
+      expect(region(approved.view).textContent).not.toContain("unusable")
+      approved.view.unmount()
+      const triage = await show(triageItemFixture(), { issueUrl: ISSUE })
+      expect(region(triage.view).textContent).not.toContain("unusable")
     })
 
     it.each([

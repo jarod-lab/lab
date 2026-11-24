@@ -325,9 +325,13 @@ function startRules(item: WorkItemDetail): {
     item.attemptList.some((a) => a.status === "requested" || a.status === "running")
   let blocked: string | null = null
   if (!REQUESTABLE_STATES.includes(state)) {
-    const back = item.actions.canReopen || item.actions.canRevert
+    // Only what hq offers from this state (a deploy item can be reverted, not reopened).
+    const back = [
+      item.actions.canReopen ? "Reopen item" : null,
+      item.actions.canRevert ? "Revert merge" : null,
+    ].filter((name) => name !== null)
     blocked = `No attempt starts while the item is in ${state}: hq starts one only from triage, plan, attempt or review.${
-      back ? " Reopen item or Revert merge is the way back." : ""
+      back.length > 0 ? ` ${back.join(" or ")} is the way back.` : ""
     }`
   } else if (active) {
     blocked = "An attempt is already running. Wait for it to finish, or for its lease to expire."
@@ -455,6 +459,16 @@ function StartAttempt({
           )}
         </div>
       )}
+      {(dispatch === "label" || dispatch === "claim") &&
+      rules.blocked === null &&
+      item.state === "review" &&
+      item.mergeApproval?.status === "pending" ? (
+        // A retry moves the item out of review: an approval left pending there can never be
+        // approved (hq's approveMerge needs the item in review).
+        <p className="m-0 text-xs leading-normal text-solar">
+          Starting another attempt leaves the waiting merge approval unusable.
+        </p>
+      ) : null}
     </section>
   )
 }

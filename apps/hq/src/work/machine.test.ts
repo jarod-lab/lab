@@ -329,6 +329,18 @@ describe("assertTransition", () => {
     expect(row).toMatchObject({ from: "verify", to: "reopened", actor: "founder", guard: null })
   })
 
+  it("refuses a founder's reason from another actor on the three shared edges", () => {
+    const code = (from: WorkState, to: WorkState, actor: WorkActor, reason: TransitionReason) =>
+      catchError(() =>
+        assertTransition({ from, to, actor, reason, facts: facts({ pullRequest: "closed" }) }),
+      ).code
+    expect(code("review", "stopped", "agent", "stopped")).toBe("CONFLICT")
+    expect(code("verify", "reopened", "system", "revert_requested")).toBe("CONFLICT")
+    expect(code("verify", "reopened", "system", "reopened")).toBe("CONFLICT")
+    expect(code("done", "reopened", "system", "revert_requested")).toBe("CONFLICT")
+    expect(code("done", "reopened", "agent", "recurrence")).toBe("FORBIDDEN")
+  })
+
   it("is FORBIDDEN, not CONFLICT, for every agent attempt at a founder-only edge", () => {
     const founderOnly = TRANSITIONS.filter(
       (r) =>
@@ -378,6 +390,13 @@ describe("deriveAttention", () => {
     expect(
       deriveAttention(att({ activeAttempt: "stale", attemptsUsed: 1, newestFixResult: "failed" })),
     ).toBe("stuck_attempt")
+    // a stale attempt never hides a question or a merge approval
+    expect(deriveAttention(att({ activeAttempt: "stale", openQuestion: true }))).toBe(
+      "agent_question",
+    )
+    expect(
+      deriveAttention(att({ state: "review", activeAttempt: "stale", pendingMergeApproval: true })),
+    ).toBe("merge_approval")
     // a stale attempt is an active one, so the budget does not apply while it is open
     expect(
       deriveAttention(att({ activeAttempt: "stale", attemptsUsed: 3, newestFixResult: "failed" })),
@@ -564,6 +583,14 @@ describe("deriveCardState", () => {
       deriveCardState(card({ state: "verify", windowEndsAt: minutesFromNow(-5) })).detail,
     ).toBe("verifier · closing")
     expect(deriveCardState(card({ state: "review" })).label).toBe("waiting")
+    expect(deriveCardState(card({ state: "review", newestFixResult: "approved" })).detail).toBe(
+      "in review · waits for the merge",
+    )
+    for (const newestFixResult of [null, "rejected", "failed"] as const) {
+      expect(deriveCardState(card({ state: "review", newestFixResult })).detail).toBe(
+        "in review · waits for the next attempt",
+      )
+    }
     expect(deriveCardState(card({ state: "signal" })).label).toBe("queued")
     expect(deriveCardState(card({ state: "plan" })).label).toBe("queued")
     expect(deriveCardState(card({ state: "attempt" })).label).toBe("queued")
@@ -618,6 +645,7 @@ describe("ids and sources", () => {
     expect(parseWorkRef("FAC-7")).toEqual({ kind: "number", number: 7 })
     const id = "0b9f3c1e-5d2a-4c3b-8a61-2f7e9d4c1a05"
     expect(parseWorkRef(id)).toEqual({ kind: "id", id })
+    expect(parseWorkRef(id.toUpperCase())).toEqual({ kind: "id", id })
     for (const bad of ["FAC-0", "FAC-1x", "", "FAC-", "FAC-01x", " FAC-1", "FAC--1", "x"]) {
       expect(parseWorkRef(bad), bad).toBeNull()
     }

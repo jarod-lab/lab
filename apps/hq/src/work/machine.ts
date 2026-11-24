@@ -309,7 +309,14 @@ export function deriveCardState(f: CardFacts): CardState {
     case "attempt":
       return { label: "queued", tone: "dim", detail: "waits for the next attempt" }
     default:
-      return { label: "waiting", tone: "dim", detail: "in review · waits for the merge" }
+      return {
+        label: "waiting",
+        tone: "dim",
+        detail:
+          f.newestFixResult === "approved"
+            ? "in review · waits for the merge"
+            : "in review · waits for the next attempt",
+      }
   }
 }
 
@@ -345,7 +352,7 @@ const DISPLAY = new RegExp(`^${WORK_ID_PREFIX}-(\\d+)$`, "i")
 export function parseWorkRef(
   ref: string,
 ): { kind: "id"; id: string } | { kind: "number"; number: number } | null {
-  if (UUID.test(ref)) return { kind: "id", id: ref }
+  if (UUID.test(ref)) return { kind: "id", id: ref.toLowerCase() }
   const m = DISPLAY.exec(ref)
   if (!m) return null
   const number = Number(m[1])

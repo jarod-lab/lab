@@ -138,7 +138,7 @@ afterEach(() => {
 })
 
 describe("onIssue records the signal and returns what it returned before", () => {
-  test("a trusted labeler's agent:build label dispatches as before and records the signal once", async () => {
+  test("onIssue returns the same dispatch result as before and records the signal: a trusted labeler's agent:build label dispatches and records once", async () => {
     const { calls } = hqOn()
     const { ctx, requests } = context()
     const result = await onIssue(
@@ -236,6 +236,19 @@ describe("onIssue records the signal and returns what it returned before", () =>
 })
 
 describe("onCheckSuite", () => {
+  test("onCheckSuite on main returns null and records one ci_failure; on a factory branch it still returns the CI-fix dispatch and records the check", async () => {
+    const main = hqOn()
+    expect(await onCheckSuite(context().ctx, suiteEvent())).toBeNull()
+    expect(main.calls.map((c) => c.method)).toEqual(["recordSignal"])
+    const branch = hqOn()
+    const result = await onCheckSuite(
+      context().ctx,
+      suiteEvent({ pullRequests: [34], raw: { head_branch: "agent/bug-y", head_sha: SHA } }),
+    )
+    expect(result?.context).toHaveLength(1)
+    expect(branch.calls.map((c) => c.method)).toEqual(["recordPullRequest"])
+  })
+
   test("a failure on main returns null and records exactly one ci_failure", async () => {
     const { calls } = hqOn()
     expect(await onCheckSuite(context().ctx, suiteEvent())).toBeNull()
@@ -324,7 +337,7 @@ describe("onCheckSuite", () => {
 })
 
 describe("onPullRequest", () => {
-  test("a bot's factory PR is recorded in full and the hook still returns null", async () => {
+  test("onPullRequest by a bot on agent/fix-x records the pull request and still returns null (in full)", async () => {
     const { calls } = hqOn()
     expect(await onPullRequest(context({ senderType: "Bot" }).ctx, prEvent("opened"))).toBeNull()
     expect(calls).toHaveLength(1)
@@ -391,6 +404,16 @@ describe("onPullRequest", () => {
     const result = await onPullRequest(context().ctx, prEvent("opened"))
     expect(result).not.toBeNull()
     expect(calls).toHaveLength(1)
+  })
+
+  test("a fork's PR with an agent/... ref is not recorded as a work pull request", async () => {
+    const { calls } = hqOn()
+    for (const repo of [{ full_name: "stranger/widgets" }, null]) {
+      const raw = { head: { ref: "agent/fix-x", sha: SHA, repo } }
+      const result = await onPullRequest(context().ctx, prEvent("opened", raw))
+      expect(result?.context).toHaveLength(1)
+    }
+    expect(calls).toEqual([])
   })
 
   test.each([
@@ -498,7 +521,7 @@ describe("hooks never throw and recording never changes a result", () => {
     },
   )
 
-  test("a hq that never answers (the 3 s timeout fires) is dropped and the hook goes on", async () => {
+  test("a failing or hanging hq (3 s timeout) never changes a hook's result and never throws: a hq that never answers is dropped and the hook goes on", async () => {
     vi.stubEnv("HQ_BASE_URL", "http://hq.test")
     vi.stubEnv("HQ_AGENT_API_KEY", "k")
     // The client's own AbortSignal.timeout(3000) is replaced by one that has already fired, and
@@ -581,7 +604,7 @@ describe("against the real hq of the fixture", () => {
     ).toEqual([])
   })
 
-  test("the first pull request record is not BAD_REQUEST, finds the item by branch and moves it to review", async () => {
+  test("onPullRequest records the first PR record with base, headSha, isDraft and state: not BAD_REQUEST against the real hq, it finds the item by branch and moves it to review", async () => {
     useRealHq(hq)
     const { itemId } = await hq.client.recordSignal({
       source: "github_issue",

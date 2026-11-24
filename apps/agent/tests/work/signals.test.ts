@@ -76,6 +76,12 @@ describe("issueSignal", () => {
     expect(issueSignal(issueFacts({ action: "reopened", authorAssociation: who }))).toBeNull()
   })
 
+  test("a stranger's opened issue (author_association NONE or CONTRIBUTOR) maps to null", () => {
+    for (const authorAssociation of ["NONE", "CONTRIBUTOR"]) {
+      expect(issueSignal(issueFacts({ authorAssociation }))).toBeNull()
+    }
+  })
+
   test("a Bot author maps to null", () => {
     expect(issueSignal(issueFacts({ authorType: "Bot" }))).toBeNull()
     expect(issueSignal(issueFacts({ authorLogin: "renovate[bot]", authorType: "User" }))).toBeNull()
@@ -201,6 +207,13 @@ describe("ciSignal", () => {
 
   test("the default branch is the constant main", () => {
     expect(CI_DEFAULT_BRANCH).toBe("main")
+  })
+
+  test("a CI suite failing on main with no pull request maps to ci_failure, on a feature branch or with a pull request or when it succeeded to null", () => {
+    expect(ciSignal(suiteFacts())?.source).toBe("ci_failure")
+    expect(ciSignal(suiteFacts({ headBranch: "feature/x" }))).toBeNull()
+    expect(ciSignal(suiteFacts({ pullRequests: [34] }))).toBeNull()
+    expect(ciSignal(suiteFacts({ conclusion: "success" }))).toBeNull()
   })
 
   test.each<[string, Partial<SuiteFacts>]>([
@@ -380,6 +393,15 @@ describe("pullRequestRecord", () => {
   })
 
   test("merged closed is merged, unmerged closed is closed, and neither sends merge fields when not merged", () => {
+    const merged = pullRequestRecord(
+      prFacts({
+        action: "closed",
+        merged: true,
+        prState: "closed",
+        mergedAt: "2026-11-24T11:00:00Z",
+      }),
+    )
+    expect(merged?.state).toBe("merged")
     const closed = pullRequestRecord(
       prFacts({
         action: "closed",
@@ -492,7 +514,7 @@ describe("readPrFacts", () => {
     vi.restoreAllMocks()
   })
 
-  test("an opened factory PR built from the real webhook shape (raw.pull_request, a Bot sender) maps to a record", () => {
+  test("an opened factory PR built from the real webhook shape (raw.pull_request from P1's payload, sender type Bot) maps to a record with base, headSha, isDraft false, state open", () => {
     const facts = readPrFacts(ctx, event({ action: "opened", pull_request: pr() }))
     expect(facts).not.toBeNull()
     const record = pullRequestRecord(facts as PrFacts)
@@ -553,6 +575,20 @@ describe("readPrFacts", () => {
       expect.objectContaining({ kind: "unmappable" }),
     )
     expect(recorderStats().dropped).toBe(1)
+  })
+
+  test("a payload with no base maps to null and logs work_record_dropped", () => {
+    const noBase = {
+      action: "opened",
+      headSha: null,
+      pullRequestNumber: 34,
+      raw: pr({ base: undefined }),
+    }
+    expect(readPrFacts(ctx, noBase as never)).toBeNull()
+    expect(log.warn).toHaveBeenCalledWith(
+      "work_record_dropped",
+      expect.objectContaining({ kind: "unmappable" }),
+    )
   })
 
   test("a head sha that is not a commit id is unmappable", () => {

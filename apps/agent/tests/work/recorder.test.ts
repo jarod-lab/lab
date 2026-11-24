@@ -44,7 +44,7 @@ describe("recordSafely", () => {
     expect(recorderStats()).toEqual({ dropped: 1, conflicts: 1, rejected: 0, unavailable: 0 })
   })
 
-  test("a 400 is rejected; a 503, a timeout and no connection are unavailable; all return null", async () => {
+  test("a 400, a 503 and a timeout are counted under rejected and unavailable and return null (a 404 and a 500 likewise)", async () => {
     expect(await recordSafely("a", failWith(new HqError("bad", 400, "BAD_REQUEST")))).toBeNull()
     expect(await recordSafely("a", failWith(new HqError("nf", 404, "NOT_FOUND")))).toBeNull()
     expect(await recordSafely("b", failWith(new HqError("down", 503, "UNAVAILABLE")))).toBeNull()
@@ -100,6 +100,20 @@ describe("hookHq", () => {
     vi.stubEnv("HQ_AGENT_API_KEY", "k")
     expect(hookHq()).toBeNull()
     expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  test("hookHq is null with no environment and builds a 3000 ms client with it", async () => {
+    vi.stubEnv("HQ_BASE_URL", "")
+    vi.stubEnv("HQ_AGENT_API_KEY", "")
+    expect(hookHq()).toBeNull()
+    vi.stubEnv("HQ_BASE_URL", "http://hq.test")
+    vi.stubEnv("HQ_AGENT_API_KEY", "k")
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response(JSON.stringify({ leaseExpiresAt: "t" }))),
+    )
+    const timeout = vi.spyOn(AbortSignal, "timeout")
+    await hookHq()?.heartbeatAttempt({ attemptId: "00000000-0000-0000-0000-000000000000" })
+    expect(timeout).toHaveBeenCalledWith(3000)
   })
 
   test("with both it builds a 3000 ms client on the agent's key", async () => {

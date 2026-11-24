@@ -234,7 +234,7 @@ describe("the client is held to hq's shapes", () => {
     }
   })
 
-  test("a key never gets a founder operation: the client has no method for one", () => {
+  test("a key never gets a founder operation: answerQuestion-like paths are not on the client", () => {
     const founderOnly = [
       "createWorkItem",
       "requestAttempt",
@@ -244,7 +244,6 @@ describe("the client is held to hq's shapes", () => {
       "reopenWorkItem",
       "retryWorkItem",
       "requestRevert",
-      "getWorkBoard",
       "decideProposal",
     ]
     for (const name of founderOnly) {

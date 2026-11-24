@@ -267,10 +267,7 @@ function decide(detail: WorkItemDetail, call: StationCall): Decision {
   if (keyed) {
     return { ok: true, attemptId: keyed.id, adopted: true }
   }
-  const ticketRef = call.subject?.kind === "ticket" ? call.subject.ticketId : null
-  const mine = (a: AttemptView): boolean =>
-    a.externalRef !== null &&
-    (a.externalRef.startsWith(`${call.sessionId}:`) || a.externalRef === ticketRef)
+  const mine = (a: AttemptView): boolean => belongsToCall(a, call)
   const active = list.filter((a) => a.status !== "finished")
   const running = active.find((a) => a.status === "running" && a.kind === want && mine(a))
   if (running) {
@@ -343,14 +340,33 @@ export async function adoptOrStartAttempt(
   return why === "start" ? { ok: false, reason: "error" } : why
 }
 
+/** Whether an attempt belongs to this call's session (the colon included) or to its ticket. */
+function belongsToCall(a: AttemptView, call: StationCall): boolean {
+  const ticketRef = call.subject?.kind === "ticket" ? call.subject.ticketId : null
+  return (
+    a.externalRef !== null &&
+    (a.externalRef.startsWith(`${call.sessionId}:`) || a.externalRef === ticketRef)
+  )
+}
+
 /**
- * Whether the implementer may not start another fix: the item's STORED limit is spent and the rows
- * show nothing to adopt (no keyed attempt, no running fix of this session, no foreign attempt).
+ * Whether the implementer's step must stop the run: the plan's rule, decided WITHOUT `decide`
+ * (whose later branches answer other questions). False for any other station, when no limit is
+ * stored, when an attempt carries this call's key (any status: a replay) and when a running fix of
+ * this session or ticket can be adopted. Otherwise true when `used` has reached the stored limit,
+ * whatever else is active: another session's running fix, or this session's own attempt of the
+ * other kind, does not give the implementer a budget it has not got.
  */
 export function limitReached(detail: WorkItemDetail, call: StationCall): boolean {
-  if (call.station !== "implementer" || detail.attempts.limit === null) {
+  const { limit, used } = detail.attempts
+  if (call.station !== "implementer" || limit === null) {
     return false
   }
-  const decision = decide(detail, call)
-  return typeof decision === "object" && !decision.ok && decision.reason === "conflict_limit"
+  const key = stationKey(call)
+  const adoptable = detail.attemptList.some(
+    (a) =>
+      a.externalRef === key ||
+      (a.status === "running" && a.kind === "fix" && belongsToCall(a, call)),
+  )
+  return !adoptable && used >= limit
 }

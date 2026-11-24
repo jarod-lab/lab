@@ -1,7 +1,12 @@
 import { FatalError } from "eve/workflow"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
 import { MAX_ATTEMPTS_PER_ITEM } from "#lib/constants.js"
-import { createHqClient } from "#lib/hq/client.js"
+import {
+  type AttemptView,
+  createHqClient,
+  type HqClient,
+  type WorkItemDetail,
+} from "#lib/hq/client.js"
 import { log } from "#lib/log.js"
 import {
   ATTEMPT_LIMIT_MESSAGE,
@@ -14,6 +19,7 @@ import {
   subjectOf,
   summarizeStation,
 } from "#lib/work/attempts.js"
+import { limitReached } from "#lib/work/attempts-shared.js"
 import { recorderStats, resetRecorderStats } from "#lib/work/recorder.js"
 import { CALLERS } from "../helpers.js"
 import { createHqFixture, type HqFixture } from "../hq/hq-fixture.js"
@@ -359,19 +365,22 @@ describe("adoptOrStartAttempt", () => {
       (await detailOf(hq, other.itemId)).attemptList.filter((a) => a.kind === "fix"),
     ).toHaveLength(1)
 
-    // conflict_limit: three fixes finished failed, started with no limit; none runs.
+    // conflict_limit: three fixes finished failed, started with no limit sent; none runs.
     const full = await newItem(hq)
     await toPlan(hq, full.itemId)
     for (let i = 0; i < 3; i++) {
       await setupFix(hq, full.itemId)
     }
     resetRecorderStats()
-    // The limit was never sent, so the first send stores 3 and the start is refused by hq.
+    // hq stores no limit for this item, so the local decision falls back to the call's own
+    // attemptLimit (3, used 3) and answers conflict_limit WITHOUT sending a start.
+    const wire = useRealHq(hq)
     const limited = callOf("implementer", issue(full.n), { attemptLimit: 3 })
     expect(await adoptOrStartAttempt(client(), limited, full.itemId)).toEqual({
       ok: false,
       reason: "conflict_limit",
     })
+    expect(wire.requests.filter((r) => r.startsWith("POST") && r.endsWith("/attempts"))).toEqual([])
     expect(await beginStation(limited)).toBeNull()
     expect(recorderStats().conflicts).toBeGreaterThan(0)
 
@@ -487,6 +496,114 @@ describe("the attempt limit", () => {
       await beginStation(callOf("implementer", issue(triage.n), { attemptLimit: 3 })),
     ).toBeNull()
     expect(recorderStats().dropped).toBe(1)
+  })
+
+  test("another session's running fix at the limit still throws the limit error, and a running fix of THIS session is adopted", async () => {
+    // The stored limit is 3, two fixes failed and a third, started by another session, runs:
+    // used is 3, so the budget is spent and nothing here is adoptable by this session.
+    const foreign = await newItem(hq)
+    await toPlan(hq, foreign.itemId)
+    await setupFix(hq, foreign.itemId, { limit: 3 })
+    await setupFix(hq, foreign.itemId)
+    await hq.client.startAttempt({
+      itemId: foreign.itemId,
+      kind: "fix",
+      externalRef: "wrun_someone_else:call-9:implementer",
+    })
+    expect((await detailOf(hq, foreign.itemId)).attempts).toEqual({
+      used: 3,
+      limit: 3,
+      running: true,
+    })
+    const thrown = await beginStation(
+      callOf("implementer", issue(foreign.n), { attemptLimit: 3 }),
+    ).catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(FatalError)
+    expect((thrown as Error).message).toBe(ATTEMPT_LIMIT_MESSAGE)
+    // The same rows with the running fix THIS session's: adopted, not thrown.
+    const own = await newItem(hq)
+    await toPlan(hq, own.itemId)
+    await setupFix(hq, own.itemId, { limit: 3 })
+    await setupFix(hq, own.itemId)
+    const started = await hq.client.startAttempt({
+      itemId: own.itemId,
+      kind: "fix",
+      externalRef: "wrun_session1:call-9:implementer",
+    })
+    const record = await beginStation(callOf("implementer", issue(own.n), { attemptLimit: 3 }))
+    expect(record).toMatchObject({ attemptId: started.id })
+  })
+
+  test("limitReached follows the plan's rule on the rows alone, whatever else is active", () => {
+    const attempt = (over: Partial<AttemptView>): AttemptView =>
+      ({
+        id: "a",
+        kind: "fix",
+        status: "finished",
+        externalRef: null,
+        ...over,
+      }) as AttemptView
+    const detail = (attemptList: AttemptView[], limit: number | null, used = 3) =>
+      ({ attempts: { used, limit, running: false }, attemptList }) as WorkItemDetail
+    const call = callOf("implementer", issue(1), { attemptLimit: 3 })
+    const key = stationKey(call)
+    // spent, nothing adoptable
+    expect(limitReached(detail([], 3), call)).toBe(true)
+    // below the limit, no stored limit, another station
+    expect(limitReached(detail([], 3, 2), call)).toBe(false)
+    expect(limitReached(detail([], null), call)).toBe(false)
+    expect(limitReached(detail([], 3), callOf("analyst", issue(1)))).toBe(false)
+    expect(limitReached(detail([], 3), callOf("reviewer", issue(1)))).toBe(false)
+    // an attempt with this call's key, in any status: a replay
+    expect(limitReached(detail([attempt({ externalRef: key })], 3), call)).toBe(false)
+    // a running fix of this session, or of this ticket: adoptable
+    const mine = attempt({ status: "running", externalRef: "wrun_session1:other:implementer" })
+    expect(limitReached(detail([mine], 3), call)).toBe(false)
+    const ticket = callOf("implementer", { kind: "ticket", ticketId: "t".repeat(32) })
+    const claimed = attempt({ status: "running", externalRef: "t".repeat(32) })
+    expect(limitReached(detail([claimed], 3), ticket)).toBe(false)
+    // another session's running fix, a requested one, this session's running investigation, and a
+    // session id that only starts like ours: none of them is adoptable, so the limit stands
+    for (const other of [
+      attempt({ status: "running", externalRef: "wrun_other:c:implementer" }),
+      attempt({ status: "requested" }),
+      attempt({ status: "running", kind: "investigate", externalRef: "wrun_session1:c:analyst" }),
+      attempt({ status: "running", externalRef: "wrun_session10:c:implementer" }),
+    ]) {
+      expect(limitReached(detail([other], 3), call)).toBe(true)
+    }
+  })
+
+  test("hq refuses a start the local read thought allowed, and the re-read says conflict_limit", async () => {
+    // Three failed fixes under a stored limit of 3. The first read the step makes is stale (it
+    // shows an untouched item), so the decision is "start"; hq answers 409 and the second read,
+    // which is fresh, shows used 3 of 3 with none running.
+    const { itemId, n } = await newItem(hq)
+    await toPlan(hq, itemId)
+    await setupFix(hq, itemId, { limit: 3 })
+    await setupFix(hq, itemId)
+    await setupFix(hq, itemId)
+    const wire = useRealHq(hq)
+    const real = createHqClient({ baseUrl: "http://hq.test", apiKey: "k" })
+    let reads = 0
+    const stale: HqClient = {
+      ...real,
+      getWorkItem: async (input) => {
+        const detail = await real.getWorkItem(input)
+        return reads++ === 0
+          ? { ...detail, attemptList: [], attempts: { used: 0, limit: null, running: false } }
+          : detail
+      },
+    }
+    expect(await adoptOrStartAttempt(stale, callOf("implementer", issue(n)), itemId)).toEqual({
+      ok: false,
+      reason: "conflict_limit",
+    })
+    // hq itself was asked, once, and refused.
+    expect(
+      wire.requests.filter((r) => r.startsWith("POST") && r.endsWith("/attempts")),
+    ).toHaveLength(1)
+    expect((await detailOf(hq, itemId)).attemptList.filter((a) => a.kind === "fix")).toHaveLength(3)
   })
 
   test("a keyed attempt that already exists at the limit is returned, not refused (a replay of the third fix)", async () => {

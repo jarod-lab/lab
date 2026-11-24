@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { NOTE_MAX_CHARS } from "@lab/hq/src/work/constants"
 import { FatalError } from "eve/workflow"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
@@ -326,15 +326,41 @@ describe("no hq call in a workflow body", () => {
     }
   })
 
-  test("the file a workflow body imports keeps the recorder, the logger, the environment and the client out of reach", () => {
-    // `attempts.ts` and the pure half it re-exports: every import that survives the step transform
-    // is bundled into the workflow, which refuses Node built-ins (pino). The hq half is a leaf
-    // that only the three steps call.
-    for (const source of [sharedSource, read("storable.ts")]) {
-      expect(source).not.toMatch(
-        /from "\.\/recorder|from "\.\.\/log|@lab\/env|\.\.\/constants|createHqClient/,
-      )
+  test("the files a workflow body may import reach no Node built-in, no recorder, no logger and no environment, transitively", () => {
+    // `attempts.ts` imports these (the pure half, re-exported); every import that survives the step
+    // transform is bundled into the workflow, which refuses Node built-ins (pino reaches node:os).
+    // Walk the relative imports from the pure half and check every specifier on the way.
+    const allowedPackages = new Set(["zod", "eve/context", "eve/workflow"])
+    const forbidden = /recorder|\/log\.js|@lab\/|constants\.js|^node:|^fs$|^path$|^os$/
+    const seen = new Set<string>()
+    const walk = (file: string) => {
+      if (seen.has(file)) return
+      seen.add(file)
+      const source = readFileSync(file, "utf8")
+      expect(source, file).not.toMatch(/process\.env/)
+      if (!file.endsWith("hq/client.ts")) {
+        expect(source, file).not.toMatch(/createHqClient/)
+      }
+      for (const match of source.matchAll(/(?:^|\n)(?:import|export)[^;]*?from\s+"([^"]+)"/g)) {
+        const specifier = match[1] ?? ""
+        expect(specifier, `${file} imports ${specifier}`).not.toMatch(forbidden)
+        if (specifier.startsWith(".")) {
+          walk(join(dirname(file), specifier.replace(/\.js$/, ".ts")))
+        } else {
+          expect(allowedPackages.has(specifier), `${file} imports ${specifier}`).toBe(true)
+        }
+      }
     }
+    walk(join(root, "agent/lib/work/attempts-shared.ts"))
+    walk(join(root, "agent/lib/work/storable.ts"))
+    // The walk reaches the hq client and the trust helpers, and nothing else.
+    expect([...seen].map((file) => file.slice(root.length + 1)).sort()).toEqual([
+      "agent/lib/hq/client.ts",
+      "agent/lib/trust.ts",
+      "agent/lib/work/attempts-shared.ts",
+      "agent/lib/work/storable.ts",
+    ])
+    // And what `attempts.ts` itself keeps after its three steps are stripped.
     const surviving = attemptsSource.replace(/"use step"[\s\S]*?\n}\n/g, "")
     expect(surviving).not.toMatch(
       /recordSafely\(|recordDropped\(|stepHq\(|findItem\(|recordEnd\(|recordFail\(/,

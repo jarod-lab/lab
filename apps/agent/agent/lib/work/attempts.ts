@@ -132,7 +132,10 @@ export async function beginStation(call: StationCall): Promise<StationRecord | n
  * - reviewer: finishes the running fix `approved` or `rejected` with the verdict (and the head sha
  *   the reviewer read, when known) and the blocking findings as the note.
  *
- * Called twice with the same summary it changes nothing the second time.
+ * Called twice with the same summary it changes nothing the second time. One exception, accepted: a
+ * second run of the analyst call whose first `set_contract` committed but whose finish was lost
+ * finds the attempt still running and sets the same contract again (hq replaces the rows and
+ * appends a second `contract_set` event; the content is the same).
  */
 export async function endStation(
   recordOf: StationRecord | null,

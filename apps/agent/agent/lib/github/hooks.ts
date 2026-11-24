@@ -119,7 +119,7 @@ export const FACTORY_INTAKE_TASK = [
   `This issue was handed to the factory with the "${FACTORY_LABEL}" label, and this run is unattended: nobody is watching to answer a question or approve an action, so never attempt an action that needs approval.`,
   "Triage the work item and run it through the pipeline. If it needs clarification, post the questions as a comment on the issue and stop; someone will re-label the issue when they've answered.",
   "Keep the requester in the loop as you go: post a short comment on this issue when triage and each station complete, except the last one. Comments on this issue are the one conversational write this run has; you cannot comment anywhere else.",
-  "Deliver the finished work as a draft pull request. The message you end the run with appears on this issue for you: link the pull request there, and let it stand in for the progress comment for this final step.",
+  "Deliver the finished work as a pull request ready for review. The message you end the run with appears on this issue for you: link the pull request there, and let it stand in for the progress comment for this final step.",
 ].join("\n\n")
 
 /**

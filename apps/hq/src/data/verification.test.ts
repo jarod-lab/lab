@@ -1,5 +1,5 @@
-import { asc, eq } from "drizzle-orm"
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { asc, eq, sql } from "drizzle-orm"
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import {
   agentQuestions,
@@ -15,6 +15,7 @@ import { createHqTestDb } from "../testing"
 import { DEPLOY_GRACE_MINUTES, VERIFY_WINDOW_HOURS } from "../work/constants"
 import type { VerifierKind } from "../work/machine"
 import type { PullRequestCheck } from "../work/types"
+import { requestRevert } from "./decisions"
 import {
   advanceDeployItem,
   evaluateContract,
@@ -32,13 +33,13 @@ import {
   seedItem,
   seedPullRequest,
 } from "./work.test.helpers"
-import { lockItem } from "./work-items"
+import { loadFacts, lockItem } from "./work-items"
 
 const KEY = "github-issue:acme/web#1"
 const HOUR = 60
 const GRACE = DEPLOY_GRACE_MINUTES
 const WINDOW_MIN = VERIFY_WINDOW_HOURS * 60
-const EMPTY = { advanced: [], passed: [], reopened: [], retriaged: [], abandoned: [] }
+const EMPTY = { advanced: [], passed: [], reopened: [], retriaged: [], abandoned: [], errors: [] }
 
 describe("the verification window and the sweep (in-process Postgres)", () => {
   let test: Awaited<ReturnType<typeof createHqTestDb>>
@@ -124,8 +125,12 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
   const addFix = (
     itemId: string,
     number: number,
-    result: "approved" | "rejected" | "failed" | null,
-    o: { cycle?: number; kind?: "fix" | "investigate"; status?: "finished" | "running" } = {},
+    result: "approved" | "rejected" | "failed" | "needs_answer" | null,
+    o: {
+      cycle?: number
+      kind?: "fix" | "investigate"
+      status?: "finished" | "running" | "requested"
+    } = {},
   ) =>
     seedAttempt(db(), itemId, {
       number,
@@ -262,7 +267,7 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
       strictlyIncreasing(events)
     })
 
-    it("a deploy item whose pull request is not merged, or has no merged_at, stays", async () => {
+    it("a deploy item whose pull request is not merged stays", async () => {
       const open = await mergedItem({ prState: "open" })
       expect(await sweep(minutesAfter(NOW, 3 * HOUR))).toEqual(EMPTY)
       expect((await itemRow(open.item.id)).state).toBe("deploy")
@@ -362,6 +367,9 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
       await addSignal(item.id, "github-issue:acme/web#2", minutesAfter(window.startsAt, 30))
       expect(await sweep(minutesAfter(window.startsAt, 60))).toEqual(EMPTY)
       expect((await itemRow(item.id)).state).toBe("verify")
+      // the row says so: with no signal after the start the verifier passes, it is not just pending
+      const before = (await contractOf(item.id)).find((r) => r.verifierKind === "signal_recurrence")
+      expect(before).toMatchObject({ status: "passing" })
 
       await addSignal(item.id, KEY, new Date(window.startsAt.getTime() + 1))
       const now = minutesAfter(window.startsAt, 90)
@@ -454,6 +462,24 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
     })
   })
 
+  describe("the window of the current cycle", () => {
+    it("settleVerifyItem reads the window of the item's current cycle, not another cycle's", async () => {
+      const { item } = await mergedItem({ state: "verify", cycle: 2 })
+      // cycle 1's window was closed (and is read first); cycle 2's is the running one
+      const old = await addWindow(item.id, minutesAfter(NOW, -2 * HOUR), {
+        cycle: 1,
+        status: "failed",
+      })
+      const window = await addWindow(item.id, minutesAfter(NOW, GRACE), { cycle: 2 })
+      await addFix(item.id, 1, "approved", { cycle: 2 })
+      await addContract(item.id, "reviewer", { cycle: 2, position: 1 })
+      expect(await sweep(window.endsAt)).toEqual({ ...EMPTY, passed: [item.id] })
+      const rows = await windowsOf(item.id)
+      expect(rows.find((w) => w.id === old.id)).toMatchObject({ status: "failed", checkedAt: null })
+      expect(rows.find((w) => w.id === window.id)).toMatchObject({ status: "passed" })
+    })
+  })
+
   // ---- evaluateContract ------------------------------------------------------------------------
   describe("evaluateContract", () => {
     const evaluate = async (itemId: string, now: Date) =>
@@ -510,6 +536,37 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
       // a newest fix still running is not approved either
       await addFix(item.id, 4, null, { status: "running" })
       expect(await evaluate(item.id, NOW)).toEqual({ allPassing: false, anyFailing: false })
+    })
+
+    it("the reviewer reads the same newest fix as loadFacts: a requested or needs_answer fix after an approved one does not hide it", async () => {
+      const factsResult = (itemId: string) =>
+        db().transaction(
+          async (tx) => (await loadFacts(tx, await lockItem(tx, itemId), NOW)).newestFixResult,
+        )
+      for (const later of [
+        { result: null, status: "requested" },
+        { result: "needs_answer", status: "finished" },
+      ] as const) {
+        const item = await verifyItemWith([])
+        await addContract(item.id, "reviewer")
+        await addFix(item.id, 1, "rejected")
+        await addFix(item.id, 2, "approved")
+        await addFix(item.id, 3, later.result, { status: later.status })
+        expect(await evaluate(item.id, NOW)).toEqual({ allPassing: true, anyFailing: false })
+        expect((await contractOf(item.id))[0]).toMatchObject({ status: "passing" })
+        expect((await contractOf(item.id))[0]?.evidence).toMatch(/fix attempt 2\./)
+        expect(await factsResult(item.id)).toBe("approved")
+      }
+    })
+
+    it("an item with an approved fix and a later requested fix reaches done once the window ends", async () => {
+      const { item } = await mergedItem({ state: "verify" })
+      const window = await addWindow(item.id, minutesAfter(NOW, GRACE))
+      await addContract(item.id, "reviewer")
+      await addFix(item.id, 1, "approved")
+      await addFix(item.id, 2, null, { status: "requested" })
+      expect(await sweep(window.endsAt)).toEqual({ ...EMPTY, passed: [item.id] })
+      expect((await itemRow(item.id)).state).toBe("done")
     })
 
     it("an approval from an earlier cycle does not count", async () => {
@@ -633,12 +690,11 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
     it("a stopped, done or other in-flight item is left alone", async () => {
       const stopped = await mergedItem({ state: "review" })
       await forceState(db(), stopped.item.id, "stopped", NOW)
-      const done = await mergedItem({ state: "done" })
-      const review = await mergedItem({ state: "review" })
+      await mergedItem({ state: "done" })
+      await mergedItem({ state: "review" })
       const before = await snapshot()
       expect(await sweep(minutesAfter(NOW, 30 * HOUR))).toEqual(EMPTY)
       expect(await snapshot()).toEqual(before)
-      expect([done.item.id, review.item.id]).toHaveLength(2)
     })
 
     it("every event the sweep writes is by the system actor", async () => {
@@ -649,6 +705,91 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
       const events = await db().select().from(workItemEvents)
       expect(events.length).toBeGreaterThan(0)
       expect(events.every((e) => e.actorType === "system" && e.actorId === "hq")).toBe(true)
+    })
+  })
+
+  // ---- one item's failure does not stop the pass -----------------------------------------------
+  describe("a failing item is isolated", () => {
+    /** An injected poison: each event insert for this item fails (a trigger per poisoned item). */
+    let poisoned = 0
+    const poison = async (itemId: string) => {
+      await db().execute(sql`create or replace function hq.test_fail_events() returns trigger
+        language plpgsql as $$ begin
+          raise exception 'boom %', TG_ARGV[0];
+        end $$`)
+      await db().execute(
+        sql.raw(
+          `create trigger test_fail_events_${++poisoned} before insert on hq.work_item_events
+           for each row when (new.item_id = '${itemId}')
+           execute function hq.test_fail_events('${itemId}')`,
+        ),
+      )
+    }
+    afterEach(async () => {
+      for (let i = 1; i <= poisoned; i++) {
+        await db().execute(
+          sql.raw(`drop trigger if exists test_fail_events_${i} on hq.work_item_events`),
+        )
+      }
+      poisoned = 0
+      await db().execute(sql`drop function if exists hq.test_fail_events()`)
+    })
+    const early = (hours: number) => minutesAfter(NOW, -hours * HOUR)
+
+    it("an item that throws is recorded in errors and the items behind it still move, in every rule", async () => {
+      // in each rule the poison item is the oldest (first in its list) and a healthy one follows
+      const badReopened = await seedItem(db(), { state: "reopened", title: "bad" })
+      const okReopened = await seedItem(db(), { state: "reopened", title: "ok" })
+      await forceState(db(), badReopened.id, "reopened", early(3))
+      const badDeploy = await mergedItem({ mergedAt: early(3) })
+      const okDeploy = await mergedItem({ mergedAt: early(3) })
+      await forceState(db(), badDeploy.item.id, "deploy", early(3))
+      const badVerify = await passingItem(early(8))
+      const okVerify = await passingItem(early(8))
+      await forceState(db(), badVerify.item.id, "verify", early(7))
+      await forceState(db(), okVerify.item.id, "verify", early(6))
+      for (const id of [badReopened.id, badDeploy.item.id, badVerify.item.id]) await poison(id)
+
+      const out = await sweep(NOW)
+      expect(out).toMatchObject({
+        retriaged: [okReopened.id],
+        advanced: [okDeploy.item.id],
+        passed: [okVerify.item.id],
+        reopened: [],
+        abandoned: [],
+      })
+      expect(out.errors).toEqual([
+        { itemId: badReopened.id, rule: "retriage", message: expect.stringMatching(/boom/) },
+        { itemId: badDeploy.item.id, rule: "advance", message: expect.stringMatching(/boom/) },
+        { itemId: badVerify.item.id, rule: "settle", message: expect.stringMatching(/boom/) },
+      ])
+      // the failed transactions rolled back whole
+      expect(await itemRow(badReopened.id)).toMatchObject({ state: "reopened", cycle: 1 })
+      expect((await itemRow(badDeploy.item.id)).state).toBe("deploy")
+      expect(await windowsOf(badDeploy.item.id)).toEqual([])
+      expect((await itemRow(badVerify.item.id)).state).toBe("verify")
+      expect((await windowsOf(badVerify.item.id))[0]?.status).toBe("running")
+      expect((await itemRow(okVerify.item.id)).state).toBe("done")
+      // and no message carries SQL or parameters
+      for (const e of out.errors) expect(e.message).not.toMatch(/insert|params/i)
+    })
+
+    it("a failing attempt expiry is recorded and the later rules still run", async () => {
+      const stuck = await seedItem(db(), { state: "attempt", title: "stuck" })
+      await seedAttempt(db(), stuck.id, {
+        number: 1,
+        status: "running",
+        result: null,
+        leaseExpiresAt: minutesAfter(NOW, -1),
+      })
+      const reopened = await seedItem(db(), { state: "reopened" })
+      await poison(stuck.id)
+      const out = await sweep(NOW)
+      expect(out.abandoned).toEqual([])
+      expect(out.retriaged).toEqual([reopened.id])
+      expect(out.errors).toEqual([
+        { itemId: null, rule: "expire", message: expect.stringMatching(/boom/) },
+      ])
     })
   })
 
@@ -677,6 +818,7 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
         reopened: [],
         retriaged: [e.id],
         abandoned: [stale.id],
+        errors: [],
       })
       expect((await itemRow(a.item.id)).state).toBe("deploy")
       expect((await itemRow(c.item.id)).state).toBe("verify")
@@ -715,10 +857,20 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
     })
 
     it("a revert request becomes a triage item at the next sweep with the exact next cycle", async () => {
-      const item = await seedItem(db(), { state: "reopened", cycle: 2 })
-      await sweep(NOW)
-      await sweep(NOW)
+      const { item } = await mergedItem({ cycle: 2 })
+      const asked = minutesAfter(NOW, 30)
+      await requestRevert(db(), { itemId: item.id, founderId: "founder-1", now: asked })
+      expect(await itemRow(item.id)).toMatchObject({ state: "reopened", cycle: 2 })
+      expect(await sweep(asked)).toEqual({ ...EMPTY, retriaged: [item.id] })
       expect(await itemRow(item.id)).toMatchObject({ state: "triage", cycle: 3 })
+      expect(await sweep(asked)).toEqual(EMPTY)
+      const events = await eventsOf(item.id)
+      expect(events.map((e) => [e.kind, e.toState, e.reason, e.cycle])).toEqual([
+        ["transition", "reopened", "revert_requested", 2],
+        ["revert_requested", null, null, 2],
+        ["transition", "triage", "retriaged", 3],
+      ])
+      strictlyIncreasing(events)
     })
 
     it("the cycle never gains more than the one the move into triage adds, over repeated sweeps", async () => {

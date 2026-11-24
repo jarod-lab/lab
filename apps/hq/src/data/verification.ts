@@ -11,8 +11,8 @@
 //
 // `transitionItem` owns the `cycle + 1` on `reopened>triage`: nothing here adds another.
 import type { Database } from "@lab/db"
-import { AppError } from "@lab/errors"
-import { and, asc, desc, eq, gt, gte, lte, max, sql } from "drizzle-orm"
+import { AppError, reportError } from "@lab/errors"
+import { and, asc, eq, gt, gte, lte, max, sql } from "drizzle-orm"
 
 import {
   agentQuestions,
@@ -34,6 +34,7 @@ import {
   currentPullRequest,
   loadFacts,
   lockItem,
+  newestFinishedFix,
   transitionItem,
   type Tx,
 } from "./work-items"
@@ -51,6 +52,16 @@ export interface SweepResult {
   retriaged: string[]
   /** Attempt ids whose lease passed. */
   abandoned: string[]
+  /** What failed and was skipped: one item's (or the expiry's) error never stops the pass. */
+  errors: SweepError[]
+}
+
+export interface SweepError {
+  /** The item whose transaction failed, or null for the attempt expiry. */
+  itemId: string | null
+  rule: "expire" | "retriage" | "advance" | "settle"
+  /** The error's code and message for an AppError, else its name and first line, capped. */
+  message: string
 }
 
 const SYSTEM: Actor = { type: "system", id: "hq" }
@@ -112,14 +123,18 @@ export async function evaluateContract(
   if (rows.length === 0) return { allPassing: false, anyFailing: false }
 
   const pr = await currentPullRequest(tx, item)
-  const [newestFix] = await tx
-    .select({ number: attempts.number, status: attempts.status, result: attempts.result })
+  // The same definition of "the newest fix" as `loadFacts` (a shared helper): the newest FINISHED
+  // fix of this cycle that counts, so a fix still `requested` or ended `needs_answer` is not it.
+  const cycleAttempts = await tx
+    .select({
+      number: attempts.number,
+      kind: attempts.kind,
+      status: attempts.status,
+      result: attempts.result,
+    })
     .from(attempts)
-    .where(
-      and(eq(attempts.itemId, item.id), eq(attempts.cycle, item.cycle), eq(attempts.kind, "fix")),
-    )
-    .orderBy(desc(attempts.number))
-    .limit(1)
+    .where(and(eq(attempts.itemId, item.id), eq(attempts.cycle, item.cycle)))
+  const newestFix = newestFinishedFix(cycleAttempts)
 
   const judge = async (kind: VerifierKind): Promise<Verdict> => {
     if (!CONNECTED_VERIFIER_KINDS.includes(kind)) {
@@ -134,8 +149,8 @@ export async function evaluateContract(
       }
       return pending(
         newestFix
-          ? `The newest fix attempt of this cycle (${newestFix.number}) is ${newestFix.result ?? newestFix.status}, not approved.`
-          : "This cycle has no fix attempt for the reviewer to approve.",
+          ? `The newest finished fix attempt of this cycle (${newestFix.number}) ended ${newestFix.result ?? newestFix.status}, not approved.`
+          : "This cycle has no finished fix attempt for the reviewer to approve.",
       )
     }
     if (kind === "ci") {
@@ -225,6 +240,9 @@ export async function advanceDeployItem(db: Database, itemId: string, now: Date)
         endsAt,
         status: "running",
       })
+      // A window of this cycle already existing is unreachable today (no path returns an item to
+      // `deploy` within a cycle). Were it ever reached, the item would stay in `verify` with no
+      // running window and `settleVerifyItem` would skip it: that is why this does not throw.
       .onConflictDoNothing()
       .returning({ id: verificationWindows.id })
     if (window) {
@@ -373,7 +391,8 @@ async function idsIn(db: Database, state: WorkState): Promise<string[]> {
  * of the pass is retriaged; (3) every `deploy` item past the grace opens its window; (4) every
  * `verify` item, including one rule 3 just advanced, is settled. An item moves at most one edge per
  * rule, so a merge older than grace plus window reaches `done` in one pass, and an item rule 4
- * reopens waits for the next pass to be retriaged. Idempotent over one clock.
+ * reopens waits for the next pass to be retriaged. Idempotent over one clock. An error in one
+ * item's transaction is recorded in `errors` and the pass goes on.
  */
 export async function runVerificationSweep(db: Database, now: Date): Promise<SweepResult> {
   const result: SweepResult = {
@@ -382,20 +401,63 @@ export async function runVerificationSweep(db: Database, now: Date): Promise<Swe
     reopened: [],
     retriaged: [],
     abandoned: [],
+    errors: [],
   }
-  result.abandoned = await expireStaleAttempts(db, now)
+  // One item's failure (a CONFLICT included: under the lock it means something is wrong) is
+  // recorded and skipped, so an item that always throws, and so never moves, cannot freeze the
+  // items behind it on every scheduled run. Its transaction rolled back whole.
+  const guarded = async (
+    itemId: string | null,
+    rule: SweepError["rule"],
+    run: () => Promise<void>,
+  ) => {
+    try {
+      await run()
+    } catch (error) {
+      reportError(error, { itemId, rule })
+      result.errors.push({ itemId, rule, message: describeFailure(error) })
+    }
+  }
+  await guarded(null, "expire", async () => {
+    result.abandoned = await expireStaleAttempts(db, now)
+  })
   for (const id of await idsIn(db, "reopened")) {
-    if (await retriageReopenedItem(db, id, now)) result.retriaged.push(id)
+    await guarded(id, "retriage", async () => {
+      if (await retriageReopenedItem(db, id, now)) result.retriaged.push(id)
+    })
   }
   for (const id of await idsIn(db, "deploy")) {
-    if (await advanceDeployItem(db, id, now)) result.advanced.push(id)
+    await guarded(id, "advance", async () => {
+      if (await advanceDeployItem(db, id, now)) result.advanced.push(id)
+    })
   }
   for (const id of await idsIn(db, "verify")) {
-    const outcome = await settleVerifyItem(db, id, now)
-    if (outcome === "passed") result.passed.push(id)
-    else if (outcome === "reopened") result.reopened.push(id)
+    await guarded(id, "settle", async () => {
+      const outcome = await settleVerifyItem(db, id, now)
+      if (outcome === "passed") result.passed.push(id)
+      else if (outcome === "reopened") result.reopened.push(id)
+    })
   }
   return result
+}
+
+const FAILURE_MAX_CHARS = 200
+
+/**
+ * No SQL and no parameters: an AppError's code and message, else the name and first line of the
+ * innermost cause (the database's own message sits there; the wrapper above it quotes the query).
+ */
+function describeFailure(error: unknown): string {
+  if (error instanceof AppError)
+    return `${error.code}: ${error.message}`.slice(0, FAILURE_MAX_CHARS)
+  let root: unknown = error
+  for (let depth = 0; root instanceof Error && root.cause instanceof Error && depth < 5; depth++) {
+    root = root.cause
+  }
+  if (root instanceof Error) {
+    return `${root.name}: ${root.message.split("\n")[0] ?? ""}`.slice(0, FAILURE_MAX_CHARS)
+  }
+  return "unknown error"
 }
 
 // ---------------------------------------------------------------------------------------------

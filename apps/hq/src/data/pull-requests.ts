@@ -25,6 +25,7 @@ import {
   lockItem,
   resolveItem,
   transitionItem,
+  type Tx,
   URL_MAX_CHARS,
   type WorkItemRow,
 } from "./work-items"
@@ -38,6 +39,44 @@ const INT_MAX = 2_147_483_647
 const HEAD_SHA = /^[0-9a-f]{7,64}$/i
 /** The shape every pull request url has, whatever the item: https, github.com, owner/name/pull/n. */
 const GITHUB_PULL_URL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*$/i
+
+const SYSTEM: Actor = { type: "system", id: "hq" }
+
+/**
+ * A merge ends what was still waiting for a start: the item's `requested` attempts (a founder's
+ * request made while it was in `review`) end as `abandoned` with the note `merged`, one
+ * `attempt_abandoned` event each, oldest first, at `next()` (after the move's own event). Left
+ * alone they would count as the item's active attempt for good (`assertNoActive`, `loadFacts`), so a
+ * reopened item could never be worked again. A `running` attempt is not touched: its lease ends it.
+ */
+async function abandonRequestedAttempts(
+  tx: Tx,
+  item: Pick<WorkItemRow, "id" | "cycle">,
+  next: () => Date,
+): Promise<void> {
+  const waiting = await tx
+    .select({ id: attempts.id })
+    .from(attempts)
+    .where(and(eq(attempts.itemId, item.id), eq(attempts.status, "requested")))
+  // No tick is spent when nothing waits: the events after this keep the instants they had.
+  if (waiting.length === 0) return
+  const ended = await tx
+    .update(attempts)
+    .set({ status: "finished", result: "abandoned", finishedAt: next(), note: "merged" })
+    .where(and(eq(attempts.itemId, item.id), eq(attempts.status, "requested")))
+    .returning({ id: attempts.id, number: attempts.number, kind: attempts.kind })
+  for (const a of ended.sort((x, y) => x.number - y.number)) {
+    await appendEvent(tx, {
+      itemId: item.id,
+      at: next(),
+      kind: "attempt_abandoned",
+      actor: SYSTEM,
+      note: "merged",
+      detail: { attemptId: a.id, number: a.number, kind: a.kind, reason: "merged" },
+      cycle: item.cycle,
+    })
+  }
+}
 
 const bad = (message: string, field: string) =>
   new AppError("BAD_REQUEST", message, { context: { field } })
@@ -361,6 +400,7 @@ export async function recordPullRequest(
           reason: "pull_request_merged",
           now: next(),
         })
+        await abandonRequestedAttempts(tx, item, next)
       }
       if (newClose && item.state === "review") {
         item = await transitionItem(tx, {

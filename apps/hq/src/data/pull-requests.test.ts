@@ -12,7 +12,7 @@ import {
 } from "../db/schema"
 import { createHqTestDb } from "../testing"
 import type { RecordPullRequestInput } from "../work/types"
-import { finishAttempt, heartbeatAttempt, startAttempt } from "./attempts"
+import { finishAttempt, heartbeatAttempt, requestAttempt, startAttempt } from "./attempts"
 import { ensureMergeApproval } from "./merge-approvals"
 import { recordPullRequest } from "./pull-requests"
 import {
@@ -414,6 +414,72 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       expect(all.slice(-3).map((e) => e.kind)).toEqual(["pull_request", "transition", "transition"])
       const state = await resolveItem(db(), item.id)
       expect(state.stateChangedAt).toEqual(new Date(at.getTime() + 2))
+    })
+
+    it("a merge ends the item's requested attempts as abandoned, after the move, so the item can be worked again", async () => {
+      const { item, attempt } = await fixing()
+      await record({ itemId: item.id })
+      await finishFix(attempt.id)
+      expect(await stateOf(item.id)).toBe("review")
+      // a founder asked for another fix while it was in review; then it was merged on GitHub
+      const asked = await requestAttempt(db(), {
+        itemId: item.id,
+        kind: "fix",
+        origin: "founder_request",
+        founderId: "founder-1",
+        now: minutesAfter(NOW, 15),
+      })
+      expect((await factsOf(item.id, minutesAfter(NOW, 16))).activeAttempt).toBe("fresh")
+
+      const at = minutesAfter(NOW, 20)
+      expect(await record({ state: "merged" }, at)).toMatchObject({ state: "deploy" })
+      const [row] = await db().select().from(attempts).where(eq(attempts.id, asked.id))
+      expect(row).toMatchObject({ status: "finished", result: "abandoned", note: "merged" })
+      expect((await factsOf(item.id, at)).activeAttempt).toBe("none")
+      const all = await events(item.id)
+      const tail = all.slice(-4)
+      expect(tail.map((e) => [e.kind, e.actorType])).toEqual([
+        ["pull_request", "agent"],
+        ["merge_approval_void", "system"],
+        ["transition", "agent"],
+        ["attempt_abandoned", "system"],
+      ])
+      for (let i = 1; i < tail.length; i++) {
+        expect(tail[i]!.at.getTime()).toBeGreaterThan(tail[i - 1]!.at.getTime())
+      }
+      expect(tail[3]).toMatchObject({
+        note: "merged",
+        detail: { attemptId: asked.id, reason: "merged" },
+      })
+    })
+
+    it("a merge recorded while in attempt ends the requested attempts after both hops", async () => {
+      const { item, attempt } = await fixing()
+      await finishFix(attempt.id, { result: "rejected" })
+      const asked = await requestAttempt(db(), {
+        itemId: item.id,
+        kind: "fix",
+        origin: "founder_request",
+        founderId: "founder-1",
+        now: minutesAfter(NOW, 15),
+      })
+      const at = minutesAfter(NOW, 20)
+      expect(await stateOf(item.id)).toBe("attempt")
+      expect(await record({ state: "merged" }, at)).toMatchObject({ state: "deploy" })
+      const [row] = await db().select().from(attempts).where(eq(attempts.id, asked.id))
+      expect(row).toMatchObject({ status: "finished", result: "abandoned", note: "merged" })
+      const all = await events(item.id)
+      const abandoned = all.find((e) => e.kind === "attempt_abandoned" && e.at >= at)
+      const hops = all.filter((e) => e.kind === "transition" && e.at >= at)
+      expect(hops).toHaveLength(2)
+      expect(abandoned?.at.getTime()).toBeGreaterThan(hops[1]!.at.getTime())
+      expect(abandoned?.detail).toMatchObject({ attemptId: asked.id, reason: "merged" })
+    })
+
+    it("a merge with no requested attempt writes no attempt_abandoned event", async () => {
+      const { item } = await fixing()
+      await record({ state: "merged" }, minutesAfter(NOW, 20))
+      expect(await eventKinds(item.id)).not.toContain("attempt_abandoned")
     })
 
     it("closed moves review to stopped and voids a pending approval", async () => {

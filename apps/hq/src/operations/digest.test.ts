@@ -292,6 +292,24 @@ describe("get_digest (PGlite)", () => {
     expect(times).toEqual([...times].sort().reverse())
   })
 
+  it("more than 30 mixed runs and proposals: the newest 30 of the union, newest first", async () => {
+    // Minutes ago: runs on even minutes, proposals on odd ones, 20 of each (40 events).
+    for (let i = 1; i <= 40; i++) {
+      if (i % 2 === 0) {
+        await addRun({ id: `mix-r${i}`, runner: "eve", startedAt: at(-i * MIN) })
+      } else {
+        await addProposal({ id: `mix-p${i}`, createdAt: at(-i * MIN) })
+      }
+    }
+    const body = await ok()
+    expect(body.events).toHaveLength(30)
+    expect(body.events.map((e) => e.at)).toEqual(
+      Array.from({ length: 30 }, (_, k) => at(-(k + 1) * MIN).toISOString()),
+    )
+    expect(body.events.filter((e) => e.kind === "run")).toHaveLength(15)
+    expect(body.events.filter((e) => e.kind === "proposal")).toHaveLength(15)
+  })
+
   it("an event per run and per proposal state change, with its text, result and cost", async () => {
     const finished = await addRun({
       id: "r-done",

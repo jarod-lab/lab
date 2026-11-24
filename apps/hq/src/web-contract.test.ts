@@ -504,7 +504,7 @@ describe("the fake of hq is as strict as hq", () => {
       { error: () => {} },
     )
     const fake = createFakeHq({ caller: "refused" })
-    for (const path of ["/v1/status", "/api/auth/get-session", "/v1/proposals"]) {
+    for (const path of ["/v1/status", "/api/auth/get-session", "/v1/proposals", "/v1/digest"]) {
       for (const send of [harnessFetch(refusedApp, ""), fake.fetch]) {
         const seen = await observe(await send(`${BASE}${path}`))
         expect(seen.status).toBe(503)
@@ -702,6 +702,16 @@ describe("the fake answers get_digest as hq does", () => {
       name: "get_digest with a since that is not a time is 400",
       as: "founder",
       steps: [get("/v1/digest?since=yesterday", 400, "BAD_REQUEST")],
+    },
+    {
+      name: "get_digest with a since at hour 24 is 400",
+      as: "founder",
+      steps: [get("/v1/digest?since=2026-11-16T24:00:00Z", 400, "BAD_REQUEST")],
+    },
+    {
+      name: "get_digest with a since on an impossible day is 400",
+      as: "founder",
+      steps: [get("/v1/digest?since=2026-02-30T00:00:00Z", 400, "BAD_REQUEST")],
     },
     {
       name: "get_digest with a since in the future is 400",

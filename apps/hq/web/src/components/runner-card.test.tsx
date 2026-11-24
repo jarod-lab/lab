@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { expectNoA11yViolations } from "@lab/ui/a11y"
 import { describe, expect, it } from "vitest"
 
 import { factoryStatusFixture } from "../test/fixtures"
@@ -54,6 +55,43 @@ describe("RunnerCard", () => {
     expect(b.getByText("Eve spend cap 0% left")).toBeTruthy()
   })
 
+  it("clamps the percent into 0..100 when remaining is below 0 or above the total", async () => {
+    const base = factoryStatusFixture()
+    const below = {
+      ...base,
+      allowance: { ...base.allowance, capUsd: 10, grantedUsd: 0, remainingUsd: -1 },
+    }
+    const a = await renderInRouter(<RunnerCard state="ready" status={below} />)
+    expect(a.getByText("Eve spend cap 0% left")).toBeTruthy()
+    expect(a.getByRole("progressbar").getAttribute("value")).toBe("0")
+    a.unmount()
+    const above = {
+      ...base,
+      allowance: { ...base.allowance, capUsd: 10, grantedUsd: 0, remainingUsd: 25 },
+    }
+    const b = await renderInRouter(<RunnerCard state="ready" status={above} />)
+    expect(b.getByText("Eve spend cap 100% left")).toBeTruthy()
+    expect(b.getByRole("progressbar").getAttribute("value")).toBe("100")
+  })
+
+  it("never reads a runner as online, busy, running or stuck, box included", async () => {
+    const base = factoryStatusFixture()
+    const status = {
+      ...base,
+      runners: [
+        { runner: "eve" as const, lastStartedAt: null, lastOutcome: null },
+        { runner: "sandbox" as const, lastStartedAt: null, lastOutcome: null },
+        { runner: "box" as const, lastStartedAt: "2026-11-17T11:59:30.000Z", lastOutcome: null },
+      ],
+    }
+    const view = await renderInRouter(<RunnerCard state="ready" status={status} />)
+    const text = view.container.textContent?.toLowerCase() ?? ""
+    expect(text).toContain("box · last run just now")
+    for (const word of ["online", "busy", "running", "stuck", "idle", "active"]) {
+      expect(text, word).not.toContain(word)
+    }
+  })
+
   it("loading and error states render without a progress element", async () => {
     const loading = await renderInRouter(<RunnerCard state="loading" status={undefined} />)
     expect(loading.container.querySelector("progress")).toBeNull()
@@ -63,6 +101,17 @@ describe("RunnerCard", () => {
     const failed = await renderInRouter(<RunnerCard state="error" status={undefined} />)
     expect(failed.container.querySelector("progress")).toBeNull()
     expect(failed.getByText("Runner status unavailable")).toBeTruthy()
+  })
+
+  it("has no accessibility violations in the ready, loading and error states", async () => {
+    const ready = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    await expectNoA11yViolations(ready.container.innerHTML)
+    ready.unmount()
+    const loading = await renderInRouter(<RunnerCard state="loading" status={undefined} />)
+    await expectNoA11yViolations(loading.container.innerHTML)
+    loading.unmount()
+    const failed = await renderInRouter(<RunnerCard state="error" status={undefined} />)
+    await expectNoA11yViolations(failed.container.innerHTML)
   })
 
   it("links to /app/runner and has no inline style", async () => {

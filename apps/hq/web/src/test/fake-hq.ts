@@ -19,6 +19,10 @@ export interface FakeHqState {
   caller: "founder" | "non-founder" | "signed-out" | "refused"
   user: SessionUser
   proposals: Proposal[]
+  /**
+   * Seeded apart from `proposals` (the default says 1 pending with none listed): a test that
+   * wants the badge and the list to agree seeds both. A decision lowers this count by one.
+   */
   factoryStatus: FactoryStatus
   digest: Digest
   policy: Policy
@@ -44,6 +48,44 @@ export const FAKE_PASSWORD = "correct-horse-battery" // gitleaks:allow (a test v
 const TRUSTED_ORIGIN = "http://localhost:3100"
 const SIGN_IN_LIMIT = 5
 const DECIDED_AT = "2026-11-17T12:00:00.000Z"
+
+// get_factory_status's reply, as hq builds it: exactly these keys, the three runners in RUNNERS
+// order, and a box runner that never reports how a run ended. A fixture that drifts from it throws
+// (a test bug), so the fake can never be looser than hq.
+const iso = z.string().datetime({ offset: true })
+const factoryStatusStrict = z.strictObject({
+  now: iso,
+  pendingProposals: z.number().int().min(0),
+  runners: z
+    .array(
+      z.strictObject({
+        runner: z.enum(["eve", "sandbox", "box"]),
+        lastStartedAt: iso.nullable(),
+        lastOutcome: z.enum(["succeeded", "failed", "stopped"]).nullable(),
+      }),
+    )
+    .refine(
+      (runners) => runners.map((r) => r.runner).join() === "eve,sandbox,box",
+      "eve, sandbox and box, in that order",
+    )
+    .refine((runners) => runners[2]?.lastOutcome === null, "a box run never reports an outcome"),
+  allowance: z.strictObject({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    spentUsd: z.number(),
+    reservedUsd: z.number(),
+    capUsd: z.number(),
+    grantedUsd: z.number(),
+    remainingUsd: z.number().min(0),
+  }),
+})
+
+/**
+ * A fixture the fake cannot answer with because hq never would. Thrown from createFakeHq, or from
+ * fetch (where the client would read a rejected fetch as `unreachable`, so it is also recorded:
+ * test/setup.ts fails the test that caused it).
+ */
+export class FakeHqError extends Error {}
+export const fakeViolations: FakeHqError[] = []
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(body), {
@@ -116,6 +158,15 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     ...initial,
   }
   const sent: Sent[] = []
+
+  function strictFactoryStatus(record: boolean): FactoryStatus {
+    const parsed = factoryStatusStrict.safeParse(state.factoryStatus)
+    if (parsed.success) return parsed.data
+    const error = new FakeHqError(`factoryStatus is not what hq returns: ${parsed.error.message}`)
+    if (record) fakeViolations.push(error)
+    throw error
+  }
+  strictFactoryStatus(false)
 
   /**
    * An Origin from another site. An absent one passes on purpose: the fake stands in for the
@@ -212,6 +263,11 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       )
     }
     const approve = body.decision === "approve"
+    // The count get_factory_status reports follows the pending proposals.
+    state.factoryStatus = {
+      ...state.factoryStatus,
+      pendingProposals: Math.max(0, state.factoryStatus.pendingProposals - 1),
+    }
     proposal.status = approve ? "approved" : "rejected"
     proposal.decidedBy = state.user.id
     proposal.decidedAt = DECIDED_AT
@@ -249,7 +305,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     const reads: Record<string, () => Response> = {
       "/v1/status": () => json(200, { ok: true, version: "0.0.0" }),
       "/v1/proposals": () => listProposals(search),
-      "/v1/factory/status": () => json(200, state.factoryStatus),
+      "/v1/factory/status": () => json(200, strictFactoryStatus(true)),
       "/v1/digest": () => digestReply(search),
       "/v1/policy": () => json(200, state.policy),
     }

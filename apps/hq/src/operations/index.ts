@@ -8,6 +8,7 @@ import { proposalOperations } from "./proposals"
 import { runOperations } from "./runs"
 import { defineOperation, type HqDeps } from "./shared"
 import { spendOperations } from "./spend"
+import { statusOperations } from "./status"
 
 export type { HqDeps } from "./shared"
 
@@ -43,5 +44,6 @@ export function createHqOperations(deps: HqDeps) {
     ...proposalOperations(deps),
     ...runOperations(deps),
     ...spendOperations(deps),
+    ...statusOperations(deps),
   ])
 }

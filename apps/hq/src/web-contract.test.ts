@@ -11,14 +11,20 @@ import {
   decisionSchema,
   digestSchema,
   errorEnvelopeSchema,
+  factoryStatusSchema,
   policySchema,
   proposalsPageSchema,
   refusedBodySchema,
   sessionReplySchema,
   statusSchema,
 } from "../web/src/api/schemas"
-import { createFakeHq, type FakeHq, type FakeHqState } from "../web/src/test/fake-hq"
-import { proposalFixture } from "../web/src/test/fixtures"
+import {
+  createFakeHq,
+  type FakeHq,
+  type FakeHqState,
+  fakeViolations,
+} from "../web/src/test/fake-hq"
+import { factoryStatusFixture, proposalFixture } from "../web/src/test/fixtures"
 import { createHqHarness } from "./app.test.helpers"
 import { proposals, runs, spend } from "./db/schema"
 import { createLazyHq } from "./lazy-hq"
@@ -787,5 +793,173 @@ describe("the fake answers get_digest as hq does", () => {
     expect(faked.parsed.every(Boolean)).toBe(true)
     expect(faked.keys).toEqual(real.keys)
     expect(faked.kinds).toEqual(real.kinds)
+  })
+})
+
+// get_factory_status: the real operation over rows that make factoryStatusFixture, and the fake
+// over the fixture, compared on status, error code, body keys and the client's error kind.
+describe("the fake answers get_factory_status as hq does", () => {
+  let hq: Awaited<ReturnType<typeof createHqHarness>>
+  const cookies = {} as Record<Caller, string>
+  const statusStep = (status: number, code: string | null): Step => ({
+    method: "GET",
+    path: () => "/v1/factory/status",
+    schema: status === 200 ? factoryStatusSchema : undefined,
+    status,
+    code,
+  })
+  const cases: { as: Caller; status: number; code: string | null }[] = [
+    { as: "founder", status: 200, code: null },
+    { as: "non-founder", status: 403, code: "FORBIDDEN" },
+    { as: "signed-out", status: 401, code: "UNAUTHORIZED" },
+  ]
+
+  beforeAll(async () => {
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"] })
+    cookies.founder = (await hq.signUp("founder@example.com")).cookie
+    cookies["non-founder"] = (await hq.signUp("someone@example.com")).cookie
+    cookies["signed-out"] = ""
+    // Rows that make factoryStatusFixture: one run on Eve that succeeded, $3.80 of Eve spend and
+    // one pending proposal at the harness clock (2026-11-17T12:00:00Z).
+    await hq.db.insert(runs).values({
+      id: "run-1",
+      task: "Triage the inbox",
+      trigger: "test",
+      runner: "eve",
+      startedAt: new Date("2026-11-17T08:00:00Z"),
+      endedAt: new Date("2026-11-17T08:30:00Z"),
+      outcome: "succeeded",
+    })
+    await hq.db.insert(spend).values({
+      id: "spend-1",
+      runId: "run-1",
+      day: "2026-11-17",
+      source: "eve",
+      amountUsd: "3.8000",
+      model: "haiku",
+      estimated: false,
+      createdAt: new Date("2026-11-17T08:10:00Z"),
+    })
+    await hq.db.insert(proposals).values({
+      id: "proposal-1",
+      kind: "fact",
+      slug: "pricing",
+      title: "Pricing",
+      body: { text: "Free, then $20 per seat." },
+      reason: "Stated in the founders call",
+      status: "pending",
+      proposedByType: "agent",
+      proposedById: "agent-1",
+      createdAt: new Date("2026-11-17T09:00:00Z"),
+    })
+  })
+  afterAll(async () => {
+    await hq.close()
+  })
+
+  it.each(cases)("$as GET /v1/factory/status is $status", async ({ as, status, code }) => {
+    const steps = [statusStep(status, code)]
+    const real = await runSteps(steps, harnessFetch(hq.app, cookies[as]), "")
+    const fake = await runSteps(steps, createFakeHq({ caller: as }).fetch, "")
+    const expected = { statuses: [status], codes: [code] }
+    expect({ statuses: real.statuses, codes: real.codes }).toEqual(expected)
+    expect({ statuses: fake.statuses, codes: fake.codes }).toEqual(expected)
+    expect(real.parsed.every(Boolean)).toBe(true)
+    expect(fake.parsed.every(Boolean)).toBe(true)
+    expect(fake.keys).toEqual(real.keys)
+    expect(fake.kinds).toEqual(real.kinds)
+  })
+
+  it("the fixture is what real hq returns, value for value", async () => {
+    const res = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/factory/status`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(factoryStatusFixture())
+  })
+
+  it("a decision lowers pendingProposals by one in both", async () => {
+    const decideReal = await harnessFetch(hq.app, cookies.founder)(
+      `${BASE}/v1/proposals/proposal-1/decision`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "reject" }),
+      },
+    )
+    expect(decideReal.status).toBe(200)
+    const real = (await (
+      await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/factory/status`)
+    ).json()) as { pendingProposals: number }
+
+    const fake = createFakeHq({ proposals: [proposalFixture({ id: "proposal-1" })] })
+    const client = createHqClient({ baseUrl: BASE, fetch: fake.fetch })
+    await client.decideProposal({ proposalId: "proposal-1", decision: "reject" })
+    const faked = await client.getFactoryStatus()
+    expect(real.pendingProposals).toBe(0)
+    expect(faked.pendingProposals).toBe(real.pendingProposals)
+  })
+
+  it("the client reads getFactoryStatus the same way, and it is read-only on the wire", async () => {
+    const kindOf = async (call: Promise<unknown>): Promise<HqErrorKind | "ok"> =>
+      call.then(
+        () => "ok" as const,
+        (error: { kind: HqErrorKind }) => error.kind,
+      )
+    const expected: Record<string, HqErrorKind | "ok"> = {
+      founder: "ok",
+      "non-founder": "forbidden",
+      "signed-out": "unauthorized",
+    }
+    for (const as of ["founder", "non-founder", "signed-out"] as const) {
+      const fake = createFakeHq({ caller: as })
+      const real = createHqClient({ baseUrl: BASE, fetch: harnessFetch(hq.app, cookies[as]) })
+      const faked = createHqClient({ baseUrl: BASE, fetch: fake.fetch })
+      expect(await kindOf(real.getFactoryStatus()), as).toBe(expected[as])
+      expect(await kindOf(faked.getFactoryStatus()), as).toBe(expected[as])
+      expect(fake.sent.every((s) => s.method === "GET")).toBe(true)
+    }
+    // Only GET is a route: a write to /v1/factory/status is a 404 in both.
+    const post = { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }
+    const real = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/factory/status`, post)
+    const fake = await createFakeHq().fetch(`${BASE}/v1/factory/status`, post)
+    expect([real.status, fake.status]).toEqual([404, 404])
+  })
+
+  it("a refused boot is 503 with a string error, in the real lazy hq and the fake", async () => {
+    const refusedApp = createLazyHq(
+      async () => {
+        throw new Error("boom")
+      },
+      { error: () => {} },
+    )
+    const fake = createFakeHq({ caller: "refused" })
+    for (const send of [harnessFetch(refusedApp, ""), fake.fetch]) {
+      const seen = await observe(await send(`${BASE}/v1/factory/status`))
+      expect(seen.status).toBe(503)
+      expect(seen.text).toBe('{"error":"service unavailable"}')
+      expect(errorFromReply(seen.status, seen.headers, seen.json).kind).toBe("refused")
+    }
+  })
+
+  it("the fake refuses to answer with a status hq would never send", async () => {
+    const good = factoryStatusFixture()
+    const bad = [
+      { ...good, extra: 1 },
+      { ...good, runners: good.runners.slice(0, 2) },
+      { ...good, runners: [...good.runners].reverse() },
+      {
+        ...good,
+        runners: good.runners.map((r) =>
+          r.runner === "box" ? { ...r, lastOutcome: "failed" as const } : r,
+        ),
+      },
+      { ...good, allowance: { ...good.allowance, remainingUsd: -1 } },
+    ]
+    for (const factoryStatus of bad) {
+      const fake = createFakeHq()
+      fake.state.factoryStatus = factoryStatus as typeof good
+      await expect(fake.fetch(`${BASE}/v1/factory/status`)).rejects.toThrow()
+    }
+    // Provoked on purpose: the setup's afterEach would otherwise fail this test.
+    fakeViolations.length = 0
   })
 })

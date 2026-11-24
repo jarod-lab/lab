@@ -1,5 +1,15 @@
 import { cleanup, configure } from "@testing-library/react"
-import { afterEach } from "vitest"
+import { afterEach, expect } from "vitest"
+
+import { fakeViolations } from "./fake-hq"
+
+// A fixture the fake of hq refuses to answer with would reach the client as an unreachable hq and
+// could pass a test that expects an error: fail the test that caused it, whatever it asserted.
+// A test that provokes one on purpose empties `fakeViolations` itself.
+afterEach(() => {
+  const seen = fakeViolations.splice(0)
+  expect(seen.map((e) => e.message)).toEqual([])
+})
 
 // Node tests (hq's own, the contract test) share this file: only a jsdom test has a document.
 if (typeof document !== "undefined") {

@@ -15,3 +15,13 @@ export const MAX_QUESTION_OPTIONS = 5
 
 /** `label`: an attempt starts from the trusted `agent:build` label. `claim`: from a founder's request. */
 export const ATTEMPT_DISPATCH_MODE: "label" | "claim" = "label"
+
+// The caps of what an attempt may carry (the data layer enforces them; the operations' schemas and
+// the web import the same numbers, so a field's limit is stated once).
+export const EXTERNAL_REF_MAX_CHARS = 200
+export const RUN_ID_MAX_CHARS = 200
+export const BRANCH_MAX_CHARS = 200
+export const SESSION_ID_MAX_CHARS = 200
+export const FILES_MAX = 200
+export const FILE_MAX_CHARS = 500
+export const ATTEMPT_LIMIT_MAX = 10

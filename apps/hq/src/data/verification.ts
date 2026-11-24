@@ -25,7 +25,7 @@ import {
 } from "../db/schema"
 import { DEPLOY_GRACE_MINUTES, VERIFY_WINDOW_HOURS } from "../work/constants"
 import type { VerifierKind, WorkState } from "../work/machine"
-import { expireStaleAttempts } from "./attempts"
+import { expireAttempt, listStaleAttempts } from "./attempts"
 import { CONNECTED_VERIFIER_KINDS } from "./contract"
 import { closeRunningWindow } from "./decisions"
 import { appendEvent } from "./work-events"
@@ -57,7 +57,7 @@ export interface SweepResult {
 }
 
 export interface SweepError {
-  /** The item whose transaction failed, or null for the attempt expiry. */
+  /** The item whose transaction failed (an attempt's item for the expiry), or null when none is known. */
   itemId: string | null
   rule: "expire" | "retriage" | "advance" | "settle"
   /** The error's code and message for an AppError, else its name and first line, capped. */
@@ -418,9 +418,18 @@ export async function runVerificationSweep(db: Database, now: Date): Promise<Swe
       result.errors.push({ itemId, rule, message: describeFailure(error) })
     }
   }
+  // Each stale attempt is its own guarded step: one that throws is recorded with its item's id and
+  // skips only itself (it is tried again on the next pass), never the attempts behind it.
+  let stale: { id: string; itemId: string }[] = []
   await guarded(null, "expire", async () => {
-    result.abandoned = await expireStaleAttempts(db, now)
+    stale = await listStaleAttempts(db, now)
   })
+  for (const attempt of stale) {
+    await guarded(attempt.itemId, "expire", async () => {
+      if (await expireAttempt(db, attempt.id, attempt.itemId, now))
+        result.abandoned.push(attempt.id)
+    })
+  }
   for (const id of await idsIn(db, "reopened")) {
     await guarded(id, "retriage", async () => {
       if (await retriageReopenedItem(db, id, now)) result.retriaged.push(id)

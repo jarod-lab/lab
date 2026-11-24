@@ -104,7 +104,7 @@ export async function askQuestion(
       itemId: item.id,
       at: now,
       kind: "question_asked",
-      actor: { type: actor.type, id: actorId },
+      actor: { type: actor.type, id: actorId, via: actor.via },
       detail: { questionId: row.id, attemptId },
       cycle: item.cycle,
     })

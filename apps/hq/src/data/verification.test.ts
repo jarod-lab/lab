@@ -788,7 +788,7 @@ describe("the verification window and the sweep (in-process Postgres)", () => {
       expect(out.abandoned).toEqual([])
       expect(out.retriaged).toEqual([reopened.id])
       expect(out.errors).toEqual([
-        { itemId: null, rule: "expire", message: expect.stringMatching(/boom/) },
+        { itemId: stuck.id, rule: "expire", message: expect.stringMatching(/boom/) },
       ])
     })
   })

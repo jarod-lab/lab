@@ -20,6 +20,9 @@ const run = promisify(execFile)
 // there. This file is not in `e2e:hq` (its script lives in a patch target): run it by name,
 // `pnpm exec e2e run e2e/hq-work.e2e.ts --target hq`.
 
+/** What a clean database holds in flight after this test's own seed (8 items) with room to spare. */
+const MAX_IN_FLIGHT = 40
+
 type Need = {
   kind: string
   itemId: string
@@ -77,8 +80,19 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
   // What hq says waits for a founder, read before the screen is: the test names cards by it.
   const board = await read<{
     columns: { items: { id: string; repo: string }[] }[]
+    stats: { inFlight: number }
     needsYou?: Need[]
   }>("/v1/work/board")
+  // Every write on /app/approvals holds its card until hq has been read again, so the screen is only
+  // as quick as hq's board and status reads. A database that other suites filled (the real-Postgres
+  // race tests write hundreds of in-flight items to a worktree's database) makes those reads take
+  // seconds and the journey time out without saying why: say why, before anything is written.
+  if (board.stats.inFlight > MAX_IN_FLIGHT) {
+    throw new Error(
+      `the hq database holds ${board.stats.inFlight} in-flight work items, more than this test's own seed ` +
+        "explains (the race tests leave theirs behind); run `pnpm wt reset-db` and try again",
+    )
+  }
   const mine = new Set<string>(
     board.columns
       .flatMap((column) => column.items)

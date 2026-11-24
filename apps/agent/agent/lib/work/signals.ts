@@ -7,6 +7,7 @@ import type {
 import type { PullRequestCheck, RecordPullRequestInput, RecordSignalInput } from "../hq/client.js"
 import { FACTORY_BRANCH_PREFIX, FACTORY_LABEL, FACTORY_REPO } from "../constants.js"
 import { recordDropped } from "./recorder.js"
+import { storable } from "./storable.js"
 
 /**
  * What a GitHub webhook becomes in hq: pure mappers from the event's facts to the input of
@@ -60,21 +61,6 @@ const count = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2_147_483_647
     ? value
     : null
-
-const isHighSurrogate = (unit: number) => unit >= 0xd800 && unit <= 0xdbff
-const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g
-
-/**
- * Text hq can store, at most `max` UTF-16 units: a cut never leaves half a surrogate pair, and a
- * NUL byte or a lone surrogate (which hq refuses, dropping the whole record) becomes U+FFFD.
- */
-export function storable(value: string, max: number): string {
-  let cut = value.slice(0, max)
-  if (cut.length > 0 && isHighSurrogate(cut.charCodeAt(cut.length - 1))) {
-    cut = cut.slice(0, -1)
-  }
-  return cut.replaceAll("\u0000", "�").replace(LONE_SURROGATE, "�")
-}
 
 const issueUrl = (repo: string, number: number) => `https://github.com/${repo}/issues/${number}`
 const pullUrl = (repo: string, number: number) => `https://github.com/${repo}/pull/${number}`

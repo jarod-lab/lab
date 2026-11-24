@@ -1,0 +1,172 @@
+import { FatalError } from "eve/workflow"
+import {
+  adoptOrStartAttempt,
+  ATTEMPT_LIMIT_MESSAGE,
+  kindOf,
+  limitReached,
+  type StationCall,
+  type StationRecord,
+  type StationSummary,
+  stationKey,
+} from "./attempts-shared.js"
+import { findItem, recordEnd, recordFail, stepHq } from "./attempts-record.js"
+import { recordDropped, recordSafely } from "./recorder.js"
+
+export {
+  ATTEMPT_CAPS,
+  ATTEMPT_LIMIT_MESSAGE,
+  type AdoptResult,
+  type AttemptSubject,
+  adoptOrStartAttempt,
+  contractFor,
+  type Station,
+  type StationCall,
+  type StationRecord,
+  type StationSummary,
+  stationKey,
+  subjectOf,
+  summarizeStation,
+} from "./attempts-shared.js"
+
+/**
+ * Recording the Foreman stations as hq attempts: the steps the three `run_*` wrappers call.
+ *
+ * @remarks
+ * A station wrapper's `execute` is a `"use workflow"` body. eve replays such a body (after every
+ * `sleep()` and on resume) and says it "must stay deterministic", so a body never calls hq. It
+ * reads `ctx.session.id`, `ctx.callId` and `ctx.session.auth.current`, calls the pure functions
+ * below ({@link subjectOf}, {@link stationKey}, {@link summarizeStation}) and calls three top-level
+ * `"use step"` functions: {@link beginStation}, {@link endStation} and {@link failStation}. Each
+ * takes only serialisable values and builds its own hq client from the environment (`stepHq` in `attempts-record.ts`).
+ * eve reuses a step's recorded result when the body replays and retries a step that throws, so
+ * every step is idempotent: hq answers a start with a key it already holds by returning that
+ * attempt (Task 4 rule 1), and a finish with the stored result is a no-op.
+ *
+ * What eve does with a step's throw (probe P4, `decisions/p4-workflow-steps.md`):
+ * - a `FatalError` from `eve/workflow` is never retried and reaches the orchestrator as a tool
+ *   error with its exact message. {@link beginStation} throws one, and only one: the attempt limit
+ *   (`ATTEMPT_LIMIT_MESSAGE`).
+ * - a plain `Error` is retried three times and then surfaces wrapped in a `FatalError` whose
+ *   message starts `Step "<id>" failed after 3 retries: `. A `try/catch` in a workflow body sees
+ *   BOTH as a `FatalError`, so it cannot tell them apart by class; the prefix is the only
+ *   difference. No step here throws a plain error: everything that is not the limit is caught,
+ *   logged as `work_record_dropped` and counted ({@link recordSafely}), because a retried step
+ *   must never fail a build and a step that swallows its errors is never retried.
+ *
+ * Unrecorded fall-through: with hq unreachable, the environment unset, no item for the session or
+ * a refusal, a step records nothing and the station runs as before. The one exception is the
+ * attempt limit, which hq's own item read (a successful one) can answer.
+ *
+ * The run id (`defineState` of the spend hook) cannot be read from a body or a step (P4 (e)), so
+ * `runId` is never sent and an attempt's cost reads "Not reported".
+ *
+ * The lease is UNVERIFIED. hq abandons a running attempt after `ATTEMPT_LEASE_MINUTES` (45) without
+ * a heartbeat. This lab sets no station timeout and no per-station limit and has no periodic
+ * heartbeat: the implementer's one heartbeat (branch and files, when it has pushed) is the only
+ * one, so 45 minutes between the start and that heartbeat, or between it and the reviewer's
+ * finish, is a guess either way. The sweep abandons only per the lease and nothing else.
+ */
+
+/**
+ * Finds the session's item and starts or adopts the station's attempt. A step.
+ *
+ * @returns The record the other steps take, or null: nothing is recorded and the station runs.
+ * @throws FatalError(ATTEMPT_LIMIT_MESSAGE) when the implementer's read of the item succeeded, its
+ * fix attempts of this cycle have reached the stored limit and none is adoptable. It is thrown
+ * outside `recordSafely` (which never rethrows) and never decided from an error message; eve does
+ * not retry it and the orchestrator sees it as a tool error.
+ */
+export async function beginStation(call: StationCall): Promise<StationRecord | null> {
+  "use step"
+  try {
+    const hq = call.subject === null ? null : stepHq()
+    if (hq === null) {
+      return null
+    }
+    const itemId = await findItem(hq, call)
+    if (itemId === null) {
+      return null
+    }
+    if (call.station === "implementer") {
+      const detail = await recordSafely("get_work_item", () => hq.getWorkItem({ itemId }))
+      if (detail !== null && limitReached(detail, call)) {
+        throw new FatalError(ATTEMPT_LIMIT_MESSAGE)
+      }
+    }
+    const result = await adoptOrStartAttempt(hq, call, itemId)
+    if (!result.ok) {
+      recordDropped(
+        "begin_station",
+        result.reason.startsWith("conflict")
+          ? "conflict"
+          : result.reason === "hq_unreachable"
+            ? "unavailable"
+            : "rejected",
+      )
+      return null
+    }
+    return {
+      itemId,
+      attemptId: result.attemptId,
+      kind: kindOf(call.station),
+      key: stationKey(call),
+    }
+  } catch (error) {
+    if (error instanceof FatalError) {
+      throw error
+    }
+    // Anything else (a bad payload, a TypeError) must not be retried by eve three times and then
+    // stop the station: the build runs unrecorded.
+    recordDropped("begin_station", "unavailable")
+    return null
+  }
+}
+
+/**
+ * Records what a station produced. A step; never throws.
+ *
+ * - analyst: sets the contract (acceptance criteria, recurrence, a `ci` item when the item has pull
+ *   request checks) unless a fix of this cycle exists, then finishes `investigated`.
+ * - implementer: `pushed: false` finishes `failed` with the first limitation; otherwise sends the
+ *   branch and files in one heartbeat and leaves the attempt running for the reviewer.
+ * - reviewer: finishes the running fix `approved` or `rejected` with the verdict (and the head sha
+ *   the reviewer read, when known) and the blocking findings as the note.
+ *
+ * Called twice with the same summary it changes nothing the second time.
+ */
+export async function endStation(
+  recordOf: StationRecord | null,
+  summary: StationSummary,
+): Promise<void> {
+  "use step"
+  try {
+    const hq = recordOf === null ? null : stepHq()
+    if (recordOf === null || hq === null) {
+      return
+    }
+    await recordEnd(hq, recordOf, summary)
+  } catch {
+    recordDropped("end_station", "unavailable")
+  }
+}
+
+/**
+ * Ends the running attempt `failed` with `The <station> station failed: <message>` (the message
+ * cut at 500 characters; it is the error text the orchestrator already gets). A step; never
+ * throws, so the wrapper's rethrow is always the station's own error.
+ *
+ * A reviewer that fails ends the implementer's running fix: that is the attempt it was reviewing.
+ * An attempt that is not running, or is of another kind than the station's, is left alone.
+ */
+export async function failStation(recordOf: StationRecord | null, message: string): Promise<void> {
+  "use step"
+  try {
+    const hq = recordOf === null ? null : stepHq()
+    if (recordOf === null || hq === null) {
+      return
+    }
+    await recordFail(hq, recordOf, message)
+  } catch {
+    recordDropped("fail_station", "unavailable")
+  }
+}

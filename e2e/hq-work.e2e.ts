@@ -126,7 +126,10 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
     return problems
   }
 
-  let passed = false
+  // The journey's own error is kept: the cleanup reads hq again (a read can throw), and an error
+  // thrown from a `finally` would replace the journey's. Both are collected and rethrown, the
+  // journey's first.
+  let journeyError: { error: unknown } | null = null
   try {
     const needs = (board.needsYou ?? []).filter((n) => mine.has(n.itemId))
     const merge = needs.find((n) => n.kind === "merge_approval")
@@ -207,11 +210,32 @@ test("a founder sees a seeded pipeline on /app/work, opens an item, approves its
     await expect(screen.getByRole("heading", "Work")).toBeVisible()
     await expect(cardOf(screen.getByRole("region", /^Needs you/), merge)).toBeHidden()
     await expect(cardOf(screen.getByRole("region", "In review"), merge)).toBeVisible()
-    passed = true
-  } finally {
-    const problems = await stopMine()
-    // A failed journey keeps its own error; a passing one must not leak.
-    if (passed && problems.length > 0)
-      throw new Error(`the e2e left work behind: ${problems.join("; ")}`)
+  } catch (error) {
+    journeyError = { error }
+  }
+
+  let problems: string[]
+  let cleanupError: { error: unknown } | null = null
+  try {
+    problems = await stopMine()
+  } catch (error) {
+    problems = []
+    cleanupError = { error }
+  }
+  const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+  const cleanup = [
+    ...(cleanupError ? [`the cleanup threw: ${messageOf(cleanupError.error)}`] : []),
+    ...(problems.length > 0 ? [`the e2e left work behind: ${problems.join("; ")}`] : []),
+  ]
+  if (journeyError) {
+    if (cleanup.length === 0) throw journeyError.error
+    throw new AggregateError(
+      [journeyError.error, ...(cleanupError ? [cleanupError.error] : [])],
+      `${messageOf(journeyError.error)} (and the cleanup failed too: ${cleanup.join("; ")})`,
+      { cause: journeyError.error },
+    )
+  }
+  if (cleanup.length > 0) {
+    throw new Error(cleanup.join("; "), cleanupError ? { cause: cleanupError.error } : undefined)
   }
 })

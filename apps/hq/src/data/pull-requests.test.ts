@@ -671,7 +671,7 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
     })
 
     /** Cycle 1 merged #7 on BRANCH (attempt 1); the item was reopened and cycle 2's fix reuses BRANCH. */
-    async function reusedBranch() {
+    async function reusedBranch(branch2: string | null = BRANCH) {
       const item = await seedItem(db(), { state: "attempt", cycle: 2 })
       const first = await seedAttempt(db(), item.id, {
         number: 1,
@@ -691,12 +691,26 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
         cycle: 2,
         status: "running",
         result: null,
-        branch: BRANCH,
+        branch: branch2,
         leaseExpiresAt: minutesAfter(NOW, 600),
         now: minutesAfter(NOW, 100),
       })
       return item
     }
+
+    it("a finish in cycle 2 never takes the head of cycle 1's pull request, with the branch reused or with none", async () => {
+      for (const branch2 of [BRANCH, null]) {
+        await resetWork(db())
+        const item = await reusedBranch(branch2)
+        const [second] = await db()
+          .select()
+          .from(attempts)
+          .where(and(eq(attempts.itemId, item.id), eq(attempts.number, 2)))
+        if (!second) throw new Error("no attempt 2")
+        const done = await finishFix(second.id, { now: minutesAfter(NOW, 130) })
+        expect(done.reviewedHeadSha).toBeNull()
+      }
+    })
 
     it("a branch reused by the next cycle does not make the old merged pull request its own", async () => {
       const item = await reusedBranch()

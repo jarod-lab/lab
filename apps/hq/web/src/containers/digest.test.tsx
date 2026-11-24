@@ -17,13 +17,17 @@ const digestCalls = (hq: ReturnType<typeof createFakeHq>) =>
 /** A hq whose digest read fails with `status`, everything else as the fake answers. */
 function failingDigest(hq: ReturnType<typeof createFakeHq>, status: number) {
   let failing = true
+  const refused: string[] = []
   return {
     ...hq,
+    /** The digest reads this wrapper refused (the underlying fake never sees them). */
+    refused,
     stop: () => {
       failing = false
     },
-    fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
-      failing && urlOf(input).startsWith("/v1/digest")
+    fetch: ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (failing && urlOf(input).startsWith("/v1/digest")) refused.push(urlOf(input))
+      return failing && urlOf(input).startsWith("/v1/digest")
         ? Promise.resolve(
             new Response(
               JSON.stringify({ error: { code: "RATE_LIMITED", message: "slow down" } }),
@@ -33,7 +37,8 @@ function failingDigest(hq: ReturnType<typeof createFakeHq>, status: number) {
               },
             ),
           )
-        : hq.fetch(input, init)) as typeof fetch,
+        : hq.fetch(input, init)
+    }) as typeof fetch,
   }
 }
 
@@ -108,7 +113,8 @@ describe("the Digest screen", () => {
     const hq = failingDigest(base, 400)
     const app = await renderApp({ path: "/app/digest", hq })
     expect(await app.findByRole("alert")).toBeTruthy()
-    expect(digestCalls(base)).toHaveLength(0)
+    // Exactly one read, with no since, and no second one: nothing was cleared or retried.
+    expect(hq.refused).toEqual(["/v1/digest"])
   })
 
   it("with localStorage throwing, the page renders and Mark as read does not crash", async () => {

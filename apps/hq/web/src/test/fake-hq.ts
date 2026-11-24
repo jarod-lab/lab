@@ -1,7 +1,22 @@
 import { z } from "zod"
 
-import type { Digest, FactoryStatus, Policy, Proposal, SessionUser } from "../api/schemas"
-import { digestFixture, factoryStatusFixture, policyFixture } from "./fixtures"
+import type {
+  Digest,
+  FactoryStatus,
+  Policy,
+  Proposal,
+  SessionUser,
+  WorkBoard,
+  WorkItemDetail,
+} from "../api/schemas"
+import { isWorkPath, workCountsOf, workRoutes } from "./fake-work"
+import {
+  digestFixture,
+  factoryStatusFixture,
+  policyFixture,
+  workBoardFixture,
+  workItemsFixture,
+} from "./fixtures"
 
 // A fake of hq for component tests. It answers with hq's real wire shapes and refusals; the
 // contract test (apps/hq/src/web-contract.test.ts) holds it to the real app, status by status.
@@ -26,6 +41,16 @@ export interface FakeHqState {
   factoryStatus: FactoryStatus
   digest: Digest
   policy: Policy
+  /**
+   * The pipeline. `workBoard.dispatch` is hq's dispatch mode (`label` refuses request_attempt).
+   * A decision changes the board, the item and `factoryStatus.work` together; a fixture that
+   * hq's own schema would not produce, or that carries a key hq never sends, is a FakeHqError.
+   */
+  workBoard: WorkBoard
+  /** Item details by id; a reference `FAC-<n>` resolves by `displayId`. */
+  workItems: Record<string, WorkItemDetail>
+  /** Dedupe keys by item id: only list_work_items' `dedupeKey` filter reads them. */
+  workDedupeKeys: Record<string, string>
   /** Answer the next request with this instead (then it clears): a one-off 5xx, 429, 403 and so on. */
   nextError: { status: number; body: unknown } | null
   /** The password a sign-in must send. */
@@ -153,13 +178,20 @@ export function urlOf(input: RequestInfo | URL): string {
 }
 
 export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
+  const workBoard = initial.workBoard ?? workBoardFixture()
+  const workItems = initial.workItems ?? workItemsFixture()
   const state: FakeHqState = {
     caller: "founder",
     user: { id: "user-1", email: "founder@example.com", name: "Founder" },
     proposals: [],
-    factoryStatus: factoryStatusFixture(),
+    // A fresh hq has no work (factoryStatusFixture); this fake starts with a board, so its counts
+    // are the board's, as hq derives them. A test that passes its own factoryStatus keeps it.
+    factoryStatus: factoryStatusFixture({ work: workCountsOf(workBoard, workItems) }),
     digest: digestFixture(),
     policy: policyFixture(),
+    workBoard,
+    workItems,
+    workDedupeKeys: {},
     nextError: null,
     password: FAKE_PASSWORD,
     signInAs: "founder",
@@ -176,6 +208,17 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     throw error
   }
   strictFactoryStatus(false)
+  const work = workRoutes({
+    state,
+    json,
+    appError,
+    violate: (message) => {
+      const error = new FakeHqError(message)
+      fakeViolations.push(error)
+      throw error
+    },
+  })
+  work.strict(false)
 
   /**
    * An Origin from another site. An absent one passes on purpose: the fake stands in for the
@@ -320,8 +363,20 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     }
     const read = method === "GET" ? reads[path] : undefined
     const isDecision = method === "POST" && decision !== null
+    const workRoute = work.match(method, path)
     // An unknown path or method is a 404 before anything asks who is calling.
-    if (!read && !isDecision) return appError(404, "NOT_FOUND", "Not found")
+    if (!read && !isDecision && !workRoute) {
+      // The app has no business calling a work path hq (or this fake) has no route for: a screen
+      // that does is a bug, so it is recorded (test/setup.ts fails the test).
+      if (isWorkPath(path)) {
+        fakeViolations.push(
+          new FakeHqError(
+            `the app called ${method} ${path}, a work path the fake has no route for`,
+          ),
+        )
+      }
+      return appError(404, "NOT_FOUND", "Not found")
+    }
 
     if (state.caller === "signed-out") {
       return appError(401, "UNAUTHORIZED", "Send an API key or OAuth access token")
@@ -349,6 +404,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       if (body === undefined) return appError(400, "BAD_REQUEST", "Body must be JSON")
       if (!isRecord(body)) return appError(400, "BAD_REQUEST", "Body must be a JSON object")
     }
+    if (workRoute) return workRoute.run(search, body as Record<string, unknown>)
     if (read) return read()
     return decide(decodeURIComponent(decision?.[1] ?? ""), body as Record<string, unknown>)
   }

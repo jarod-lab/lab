@@ -12,12 +12,17 @@
 // merges that need the clock are backdated with `record_pull_request`'s `mergedAt` (hq clamps it
 // to <= its now). Run it on a database nobody else writes to.
 //
-// Idempotent: each item is found again by its dedupe key (`github-issue:<repo>#<n>`) and only the
-// missing ones are built; with all ten present nothing is written and no sweep runs. (If a first
-// run died half-way, a second one builds the missing items and runs one more sweep, which also
-// retriages an already reopened item.)
+// Work history can never be deleted, so a wrong base url would leave about 40 rows in a real
+// organization: the script refuses a base url that is not this machine (localhost, a *.localhost
+// name, 127.0.0.0/8 or ::1) unless `--allow-remote` is passed.
 //
-// Usage: node scripts/seed-work.mjs <baseUrl> <cookieFile> [owner/name]
+// Idempotent: each item is found again by its dedupe key (`github-issue:<repo>#<n>`); with all ten
+// present nothing is written and no sweep runs. The unit is the item, not the run: a first run that
+// died half-way leaves a partly built item that a second run counts as found and does not repair
+// (seed a fresh database instead), and one that died between the sweep and the recurrence leaves
+// no reopened item. A second run after a clean first one writes nothing.
+//
+// Usage: node scripts/seed-work.mjs <baseUrl> <cookieFile> [owner/name] [--allow-remote]
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
@@ -46,6 +51,17 @@ export const SEED_ISSUES = {
 }
 const SHA = (seed) => seed.toString(16).padStart(40, "a")
 
+/** Whether a url names this machine: localhost, `*.localhost` (worktree stacks), 127/8, ::1. */
+export function isLoopback(url) {
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase()
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(host)
+  )
+}
+
 /** A cookie file as a Cookie header value: the header itself, or a Netscape jar's rows. */
 export function cookieHeaderFrom(text) {
   const lines = text
@@ -68,8 +84,20 @@ export function cookieHeaderFrom(text) {
  * Seed the pipeline. `fetch` defaults to the global one; a test passes one that calls the app.
  * Returns what it built and what it found, by role, and any warnings.
  */
-export async function seedWork({ baseUrl, cookie, fetch = globalThis.fetch, repo = "acme/web" }) {
+export async function seedWork({
+  baseUrl,
+  cookie,
+  fetch = globalThis.fetch,
+  repo = "acme/web",
+  allowRemote = false,
+}) {
   const base = new URL(baseUrl)
+  if (!allowRemote && !isLoopback(baseUrl)) {
+    throw new Error(
+      `${base.origin} is not this machine. Work history can never be deleted, so seeding a real ` +
+        "organization would leave about 40 rows in it for good. Pass --allow-remote if you mean it.",
+    )
+  }
   const origin = base.origin
   const prefix = base.pathname.replace(/\/$/, "")
   const touched = []
@@ -333,13 +361,17 @@ export async function seedWork({ baseUrl, cookie, fetch = globalThis.fetch, repo
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [baseUrl, cookieFile, repo] = process.argv.slice(2)
+  const args = process.argv.slice(2)
+  const allowRemote = args.includes("--allow-remote")
+  const [baseUrl, cookieFile, repo] = args.filter((arg) => arg !== "--allow-remote")
   if (!baseUrl || !cookieFile) {
-    process.stderr.write("usage: node scripts/seed-work.mjs <baseUrl> <cookieFile> [owner/name]\n")
+    process.stderr.write(
+      "usage: node scripts/seed-work.mjs <baseUrl> <cookieFile> [owner/name] [--allow-remote]\n",
+    )
     process.exit(2)
   }
   const cookie = cookieHeaderFrom(readFileSync(cookieFile, "utf8"))
-  const result = await seedWork({ baseUrl, cookie, repo })
+  const result = await seedWork({ baseUrl, cookie, repo, allowRemote })
   for (const warning of result.warnings) process.stderr.write(`warning: ${warning}\n`)
   const { touched: _touched, ...summary } = result
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)

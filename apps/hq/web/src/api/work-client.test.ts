@@ -3,11 +3,14 @@ import { describe, expect, it, vi } from "vitest"
 
 import { createFakeHq, fakeViolations } from "../test/fake-hq"
 import {
+  factoryStatusFixture,
   needsYouFixture,
+  questionFixture,
   WORK_HEAD_SHA,
   WORK_IDS,
   workBoardFixture,
   workItemFixture,
+  workItemsFixture,
 } from "../test/fixtures"
 import { createHqClient } from "./client"
 import { HqError } from "./errors"
@@ -253,7 +256,7 @@ describe("the work methods of the hq client", () => {
     expect(factoryStatusSchema.safeParse({ ...base, work: { inFlight: 1 } }).success).toBe(false)
   })
 
-  it("the fake accepts a work key on get_factory_status, answers every work route, and records a FakeHqError for an unknown work path", async () => {
+  it("the fake accepts a work key on get_factory_status and a pipeline key on get_digest without recording a violation, answers every new work route, and records a FakeHqError in fakeViolations for an unknown work path", async () => {
     const hq = createFakeHq()
     hq.state.factoryStatus = {
       ...hq.state.factoryStatus,
@@ -261,6 +264,9 @@ describe("the work methods of the hq client", () => {
     }
     const client = createHqClient({ fetch: hq.fetch })
     await expect(client.getFactoryStatus()).resolves.toMatchObject({ work: { needsYou: 1 } })
+    // the digest's pipeline key (Task 19 builds it): the fake's digest reply is not strict about it
+    hq.state.digest = { ...hq.state.digest, pipeline: null } as typeof hq.state.digest
+    await expect(client.getDigest()).resolves.toMatchObject({ summary: { tone: "quiet" } })
     await client.getWorkBoard()
     await client.listWorkItems()
     await client.getWorkItem({ itemId: "FAC-1" })
@@ -287,6 +293,74 @@ describe("the work methods of the hq client", () => {
     fakeViolations.length = 0
     expect((await hq.fetch("http://localhost:3100/v1/nope")).status).toBe(404)
     expect(fakeViolations).toHaveLength(0)
+  })
+
+  it("a default fake's get_factory_status.work is its board's own numbers, before and after a decision; a fresh hq's fixture stays zeros", async () => {
+    const zeros = { inFlight: 0, needsYou: 0, pendingMergeApprovals: 0, openQuestions: 0 }
+    expect(factoryStatusFixture().work).toEqual(zeros)
+    const hq = createFakeHq({ workBoard: workBoardFixture({ dispatch: "claim" }) })
+    const client = createHqClient({ fetch: hq.fetch })
+    const work = async () => (await client.getFactoryStatus()).work
+    expect(await work()).toEqual({
+      inFlight: hq.state.workBoard.stats.inFlight,
+      needsYou: hq.state.workBoard.stats.needsYou,
+      pendingMergeApprovals: 1,
+      openQuestions: 1,
+    })
+    expect(await work()).toEqual({
+      inFlight: 5,
+      needsYou: 3,
+      pendingMergeApprovals: 1,
+      openQuestions: 1,
+    })
+    await client.approveMerge({ itemId: "FAC-6", headSha: WORK_HEAD_SHA })
+    expect(await work()).toEqual({
+      inFlight: 5,
+      needsYou: 2,
+      pendingMergeApprovals: 0,
+      openQuestions: 1,
+    })
+    await client.answerQuestion({ questionId: WORK_IDS.question, optionId: "up" })
+    expect(await work()).toEqual({
+      inFlight: 5,
+      needsYou: 1,
+      pendingMergeApprovals: 0,
+      openQuestions: 0,
+    })
+    // a test that passes its own status keeps it until a decision changes the counts
+    const own = createFakeHq({ factoryStatus: factoryStatusFixture() })
+    expect((await createHqClient({ fetch: own.fetch }).getFactoryStatus()).work).toEqual(zeros)
+  })
+
+  it("openQuestions counts every open question of an item in flight, also one a merge approval hides", async () => {
+    const hidden = questionFixture({
+      id: "00000000-0000-4000-8000-000000000601",
+      prompt: "Also this?",
+    })
+    const items = workItemsFixture()
+    items[WORK_IDS.review] = workItemFixture({ questions: [hidden] })
+    const hq = createFakeHq({ workItems: items })
+    const client = createHqClient({ fetch: hq.fetch })
+    // two open questions, one Needs you card for a question: hq counts the questions
+    expect((await client.getFactoryStatus()).work).toMatchObject({
+      openQuestions: 2,
+      pendingMergeApprovals: 1,
+    })
+    await client.approveMerge({ itemId: "FAC-6", headSha: WORK_HEAD_SHA })
+    // the approval is decided, the question the card hid comes forward
+    const board = await client.getWorkBoard()
+    expect(board.needsYou.map((n) => [n.displayId, n.kind])).toEqual([
+      ["FAC-2", "agent_question"],
+      ["FAC-5", "attempt_budget"],
+      ["FAC-6", "agent_question"],
+    ])
+    expect(board.stats.needsYou).toBe(3)
+    expect((await client.getFactoryStatus()).work).toMatchObject({
+      needsYou: 3,
+      pendingMergeApprovals: 0,
+      openQuestions: 2,
+    })
+    expect((await client.getWorkItem({ itemId: "FAC-6" })).card.label).toBe("asking you")
   })
 
   it("the fake refuses a board or an item hq could not have sent", () => {

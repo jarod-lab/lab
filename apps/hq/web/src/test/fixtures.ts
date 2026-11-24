@@ -137,6 +137,7 @@ export const WORK_IDS = {
   review: "47334031-ce5e-421f-b072-040cdd201835",
   verifying: "e3026e46-3286-4963-9c1e-76223e1b4477",
   done: "c22068c9-5336-4095-b102-27ec55c76475",
+  building: "7c2f5e1a-3d4b-4a6e-9c1d-2b8e0f4a6d13",
   question: "3e20b5f9-737c-4983-ac3f-58b7736e1308",
 } as const
 /** The head of the review item's open pull request (FAC-6, pull request 106). */
@@ -650,10 +651,11 @@ export function needsYouFixture(
     case "stuck_attempt":
       return {
         ...base,
-        itemId: WORK_IDS.exhausted,
-        displayId: "FAC-5",
-        title: "Export times out on large workspaces",
-        reason: "The attempt stopped reporting.",
+        itemId: WORK_IDS.building,
+        displayId: "FAC-4",
+        title: "Search ignores accents",
+        // hq's words (work-board.ts), and the instant the attempt's lease ran out
+        reason: "Attempt 2 has not reported since its lease ran out.",
         ...overrides,
       }
   }

@@ -20,6 +20,9 @@ export type SeedRole = keyof typeof SEED_ISSUES
 
 export function cookieHeaderFrom(text: string): string
 
+/** Whether a url names this machine: localhost, *.localhost, 127.0.0.0/8, ::1. */
+export function isLoopback(url: string): boolean
+
 export interface SeedResult {
   built: SeedRole[]
   found: SeedRole[]
@@ -45,4 +48,6 @@ export function seedWork(input: {
   cookie: string
   fetch?: typeof fetch
   repo?: string
+  /** Seed a base url that is not this machine (work history can never be deleted). */
+  allowRemote?: boolean
 }): Promise<SeedResult>

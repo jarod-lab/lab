@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import {
   cookieHeaderFrom,
+  isLoopback,
   MERGE_MINUTES_AGO,
   SEED_ISSUES,
   type SeedResult,
@@ -59,7 +60,7 @@ describe("seed-work.mjs", () => {
     return cards.find((card) => card.displayId === first.ids[role])
   }
 
-  it("the seed produces an item in every board column, a pending merge approval, an open question, an exhausted item, a verify item with 134 minutes left (still in verify) and a reopened item, through /v1 only", async () => {
+  it("the seed produces an item in every board column, a pending merge approval, an open question, an exhausted item, a verify item with 134 minutes left (still in verify) and a reopened item (the second verify item, reopened by a recurring signal), through /v1 only", async () => {
     expect(first.built).toHaveLength(10)
     expect(first.found).toEqual([])
     const b = board()
@@ -173,5 +174,56 @@ describe("seed-work.mjs", () => {
     ].join("\n")
     expect(cookieHeaderFrom(jar)).toBe("session=xyz; other=1")
     expect(() => cookieHeaderFrom("# nothing\n")).toThrow("no cookie")
+  })
+
+  it("refuses a base url that is not this machine unless --allow-remote is passed, and writes nothing", async () => {
+    const calls: string[] = []
+    const spy: typeof fetch = async (input) => {
+      calls.push(urlOf(input))
+      return new Response(JSON.stringify({ now: "2026-11-17T12:00:00.000Z", items: [] }))
+    }
+    for (const remote of [
+      "https://hq.example.com",
+      "https://hq.acme.dev/app",
+      "http://192.168.1.20:3100",
+      "http://10.0.0.5",
+      "https://notlocalhost.com",
+      "http://localhost.evil.com",
+    ]) {
+      await expect(
+        seedWork({ baseUrl: remote, cookie: "a=b", fetch: spy }),
+        remote,
+      ).rejects.toThrow(/--allow-remote/)
+    }
+    expect(calls).toEqual([])
+    // with the flag it goes ahead (here every item is already "found", so it only reads)
+    const found: typeof fetch = async (input) =>
+      urlOf(input).includes("/v1/work/board")
+        ? new Response(JSON.stringify({ now: "2026-11-17T12:00:00.000Z" }))
+        : new Response(JSON.stringify({ items: [{ displayId: "FAC-1" }] }))
+    const result = await seedWork({
+      baseUrl: "https://hq.example.com",
+      cookie: "a=b",
+      fetch: found,
+      allowRemote: true,
+    })
+    expect(result.built).toEqual([])
+    for (const local of [
+      "http://localhost:3100",
+      "https://w15-web-client.app.lab.localhost",
+      "http://127.0.0.1:3100",
+      "http://127.1.2.3",
+      "http://[::1]:3100",
+    ]) {
+      expect(isLoopback(local), local).toBe(true)
+    }
+    expect(isLoopback("https://hq.example.com")).toBe(false)
+    expect(isLoopback("http://localhost.evil.com")).toBe(false)
+  })
+
+  it("the command line passes --allow-remote through and the usage line names it", () => {
+    const text = readFileSync(SCRIPT, "utf8")
+    expect(text).toContain('args.includes("--allow-remote")')
+    expect(text).toContain("[owner/name] [--allow-remote]")
   })
 })

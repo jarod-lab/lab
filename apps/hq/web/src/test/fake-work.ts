@@ -131,11 +131,40 @@ const byWaitingThenNewest = (a: WorkItemSummary, b: WorkItemSummary): number => 
   return Date.parse(b.stateChangedAt) - Date.parse(a.stateChangedAt) || b.number - a.number
 }
 
+/**
+ * What `get_factory_status.work` says about a board and its items, as hq counts it
+ * (data/status.ts): the board's own numbers, and EVERY open question of an item in flight, also one
+ * the item's card hides behind a merge approval (so not the needs-you cards).
+ */
+export function workCountsOf(
+  board: FakeHqState["workBoard"],
+  items: FakeHqState["workItems"],
+): NonNullable<FakeHqState["factoryStatus"]["work"]> {
+  return {
+    inFlight: board.stats.inFlight,
+    needsYou: board.stats.needsYou,
+    pendingMergeApprovals: board.needsYou.filter((n) => n.kind === "merge_approval").length,
+    openQuestions: Object.values(items)
+      .filter((i) => inFlight(i.state))
+      .reduce((sum, i) => sum + i.questions.filter((q) => q.status === "open").length, 0),
+  }
+}
+
 export function workRoutes(env: Env) {
   const { state, json, appError } = env
   let seq = 0
   const uuid = () => `00000000-0000-4000-8000-${(0xf00000000000 + ++seq).toString(16)}`
   const nowIso = () => state.workBoard.now
+  // The rows hq keeps for a pull request and a window have ids the views do not carry; the events
+  // name them, so the fake gives each item one of each, the same every time.
+  const hidden = new Map<string, string>()
+  const hiddenId = (kind: "pr" | "window", item: WorkItemDetail) => {
+    const key = `${kind}:${item.id}:${item.cycle}`
+    if (!hidden.has(key)) hidden.set(key, uuid())
+    return hidden.get(key) as string
+  }
+  /** An event hq's own system writes. */
+  const bySystem = { actorType: "system", actorId: "hq" } as const
 
   /** What hq answers for an input that fails its schema: BAD_REQUEST with zod's own words, nothing looked up. */
   const invalid = (error: z.ZodError) => appError(400, "BAD_REQUEST", z.prettifyError(error))
@@ -275,6 +304,7 @@ export function workRoutes(env: Env) {
     to: WorkItemSummary["state"],
     reason: string,
     note: string | null,
+    detail: Record<string, unknown> | null = null,
   ) {
     const from = item.state
     event(item, "transition", `Moved from ${from} to ${to} (${reason.replaceAll("_", " ")}).`, {
@@ -282,6 +312,7 @@ export function workRoutes(env: Env) {
       toState: to,
       reason,
       note,
+      detail,
     })
     item.state = to
     item.stateChangedAt = nowIso()
@@ -307,7 +338,21 @@ export function workRoutes(env: Env) {
     board.needsYou = board.needsYou.filter(
       (n) => !(n.itemId === after.id && (removed.length === 0 || removed.includes(n.kind))),
     )
+    const surfaced = questionNeed(after)
+    if (surfaced && !board.needsYou.some((n) => n.itemId === after.id)) {
+      board.needsYou = [...board.needsYou, surfaced].sort(
+        (a, b) =>
+          Date.parse(a.since) - Date.parse(b.since) ||
+          Number(a.displayId.slice(4)) - Number(b.displayId.slice(4)),
+      )
+    }
     const stats = board.stats
+    // A merge counts as resolved today while it is the item's current pull request: a new cycle
+    // (a reopened stopped item) starts without one.
+    const mergedToday = (item: WorkItemDetail) =>
+      item.pullRequest?.state === "merged" &&
+      item.pullRequest.mergedAt?.slice(0, 10) === board.now.slice(0, 10)
+    stats.resolvedToday += Number(mergedToday(after)) - Number(mergedToday(before))
     stats.inFlight += Number(inFlight(after.state)) - Number(inFlight(before.state))
     stats.watching += Number(after.state === "verify") - Number(before.state === "verify")
     stats.reopened += Number(after.state === "reopened") - Number(before.state === "reopened")
@@ -318,12 +363,7 @@ export function workRoutes(env: Env) {
     if (state.factoryStatus.work) {
       state.factoryStatus = {
         ...state.factoryStatus,
-        work: {
-          inFlight: stats.inFlight,
-          needsYou: stats.needsYou,
-          pendingMergeApprovals: board.needsYou.filter((n) => n.kind === "merge_approval").length,
-          openQuestions: board.needsYou.filter((n) => n.kind === "agent_question").length,
-        },
+        work: workCountsOf(board, state.workItems),
       }
     }
   }
@@ -359,10 +399,45 @@ export function workRoutes(env: Env) {
     })
   }
 
+  /**
+   * What waits for a founder is derived, never stored: once a decision clears one need, an open
+   * question the card was hiding behind it (a merge approval) comes forward, the oldest first.
+   */
   const clearAttention = (item: WorkItemDetail) => {
+    const open = item.questions
+      .filter((q) => q.status === "open")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+    if (open && inFlight(item.state)) {
+      item.attention = "agent_question"
+      item.waitingSince = open.createdAt
+      item.card = { label: "asking you", tone: "amber", detail: "waits for your answer" }
+      return
+    }
     item.attention = null
     item.waitingSince = null
     item.card = idleCard(item)
+  }
+
+  /** The Needs you card of an item whose attention is an open question. */
+  function questionNeed(item: WorkItemDetail): NeedsYou | null {
+    const open = item.questions
+      .filter((q) => q.status === "open")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]
+    if (!open || item.attention !== "agent_question") return null
+    return {
+      kind: "agent_question",
+      itemId: item.id,
+      displayId: item.displayId,
+      title: item.title,
+      reason: "The agent asked a question and waits for your answer.",
+      since: open.createdAt,
+      question: {
+        questionId: open.id,
+        prompt: open.prompt,
+        options: open.options,
+        defaultOptionId: open.defaultOptionId,
+      },
+    }
   }
 
   // ---- the routes ---------------------------------------------------------------------------------
@@ -459,7 +534,9 @@ export function workRoutes(env: Env) {
         canRequestAttempt: false,
       },
     }
-    event(item, "signal_attached", "A signal was attached.", { actorType: "founder" })
+    event(item, "signal_attached", "A signal was attached.", {
+      detail: { source: "manual", signalId: item.signal?.id, externalId: key },
+    })
     event(item, "transition", "Moved from signal to triage (ingested).", {
       fromState: "signal",
       toState: "triage",
@@ -540,7 +617,14 @@ export function workRoutes(env: Env) {
         { at: nowIso(), kind: "request", text: parsed.data.instructions },
       ]
     }
-    event(item, "attempt_requested", `Attempt ${view.number} requested.`)
+    event(item, "attempt_requested", `Attempt ${view.number} requested.`, {
+      detail: {
+        attemptId: view.id,
+        number: view.number,
+        kind: view.kind,
+        origin: "founder_request",
+      },
+    })
     clearAttention(item)
     sync(before, item)
     return json(200, view)
@@ -604,7 +688,10 @@ export function workRoutes(env: Env) {
         { at: nowIso(), kind: "answer", text: parsed.data.note },
       ]
     }
-    event(item, "question_answered", "A founder answered a question.")
+    event(item, "question_answered", "A founder answered a question.", {
+      note: parsed.data.note ?? null,
+      detail: { questionId: question.id, optionId: chosen.id },
+    })
     clearAttention(item)
     // Where hq dispatches, an answer also requests the attempt it asks for (never a default). If
     // that request is refused the answer stays recorded, the history says why, and the reply is
@@ -618,8 +705,9 @@ export function workRoutes(env: Env) {
       refused = refusal(item, kind)
       if (refused) {
         event(item, "attempt_request_refused", "No attempt was requested after the answer.", {
-          reason: "CONFLICT",
+          reason: "conflict",
           note: refused.message,
+          detail: { questionId: question.id, optionId: chosen.id, kind },
           at: new Date(Date.parse(nowIso()) + 1).toISOString(),
         })
       } else {
@@ -630,7 +718,14 @@ export function workRoutes(env: Env) {
           ...item.founderNotes,
           { at: nowIso(), kind: "request", text: instructions },
         ]
-        event(item, "attempt_requested", `Attempt ${view.number} requested.`)
+        event(item, "attempt_requested", `Attempt ${view.number} requested.`, {
+          detail: {
+            attemptId: view.id,
+            number: view.number,
+            kind: view.kind,
+            origin: "founder_request",
+          },
+        })
       }
       item.card = idleCard(item)
     }
@@ -684,6 +779,12 @@ export function workRoutes(env: Env) {
     }
     event(item, "merge_approved", "Merge approved by a founder.", {
       note: parsed.data.note ?? null,
+      detail: {
+        approvalId: approval.id,
+        headSha: sha,
+        pullRequestId: hiddenId("pr", item),
+        pullRequestNumber: pr.number,
+      },
     })
     clearAttention(item)
     sync(before, item, ["merge_approval"])
@@ -693,11 +794,14 @@ export function workRoutes(env: Env) {
   const cannotMove = (from: string, to: string) =>
     appError(409, "CONFLICT", `A work item cannot move from ${from} to ${to}.`)
 
-  /** What a stop, a reopen or a revert does to the things that hang off the item. */
+  /** A running window ends (hq's system closes it and says so). */
   function endWindow(item: WorkItemDetail, status: "stopped") {
-    if (item.window?.status === "running") {
-      item.window = { ...item.window, status, remainingMinutes: null }
-    }
+    if (item.window?.status !== "running") return
+    item.window = { ...item.window, status, remainingMinutes: null }
+    event(item, "window_closed", `The verification window closed (${status}).`, {
+      ...bySystem,
+      detail: { windowId: hiddenId("window", item), status },
+    })
   }
 
   function stop(body: Record<string, unknown>, itemId: string): Response {
@@ -707,16 +811,43 @@ export function workRoutes(env: Env) {
     if (!item) return notFound("Work item")
     if (!inFlight(item.state)) return cannotMove(item.state, "stopped")
     const before = structuredClone(item)
-    moved(item, "stopped", "stopped", parsed.data.note ?? null)
+    const open = item.questions.filter((q) => q.status === "open")
+    moved(
+      item,
+      "stopped",
+      "stopped",
+      parsed.data.note ?? null,
+      open.length === 0 ? null : { withdrawnQuestionIds: open.map((q) => q.id) },
+    )
     endWindow(item, "stopped")
-    if (item.pullRequest?.state === "open" && item.mergeApproval?.status !== "void") {
-      if (item.mergeApproval && ["pending", "approved"].includes(item.mergeApproval.status)) {
-        item.mergeApproval = { ...item.mergeApproval, status: "void" }
-      }
+    // A pending or approved merge approval on an open pull request is voided.
+    const approval = item.mergeApproval
+    if (
+      item.pullRequest?.state === "open" &&
+      approval &&
+      ["pending", "approved"].includes(approval.status)
+    ) {
+      item.mergeApproval = { ...approval, status: "void" }
+      event(item, "merge_approval_void", "Merge approval voided (stopped).", {
+        ...bySystem,
+        reason: "stopped",
+        detail: {
+          approvalId: approval.id,
+          headSha: approval.headSha,
+          pullRequestId: hiddenId("pr", item),
+          was: approval.status,
+        },
+      })
     }
     item.questions = item.questions.map((q) =>
       q.status === "open" ? { ...q, status: "withdrawn" } : q,
     )
+    for (const a of item.attemptList.filter((x) => x.status === "requested")) {
+      event(item, "attempt_abandoned", `Attempt ${a.number} abandoned (stopped).`, {
+        ...bySystem,
+        detail: { attemptId: a.id, number: a.number, kind: a.kind, reason: "stopped" },
+      })
+    }
     item.attemptList = item.attemptList.map((a) =>
       a.status === "requested"
         ? {
@@ -744,10 +875,22 @@ export function workRoutes(env: Env) {
     if (!["verify", "done", "stopped"].includes(item.state))
       return cannotMove(item.state, "reopened")
     const before = structuredClone(item)
-    moved(item, to, "reopened", parsed.data.note ?? null)
+    // The move into triage adds 1 to the cycle, and the event it writes is the new cycle's.
     if (to === "triage") item.cycle += 1
+    moved(item, to, "reopened", parsed.data.note ?? null)
     endWindow(item, "stopped")
     item.stages = stagesAt("triage")
+    if (to === "triage") {
+      // What hq scopes to a cycle starts empty again: the contract, the verification window, the
+      // current pull request and its merge approval, and the count of fix attempts used. The
+      // attempts themselves, the questions and the notes stay on the item; the limit is the item's.
+      item.contract = []
+      item.window = null
+      item.pullRequest = null
+      item.mergeApproval = null
+      // (a running attempt of the old cycle is left alone: hq cannot reach the agent)
+      item.attempts = { ...item.attempts, used: 0 }
+    }
     item.card =
       to === "triage"
         ? idleCard(item)
@@ -777,6 +920,7 @@ export function workRoutes(env: Env) {
     ]
     event(item, "retry_granted", "A founder granted one more attempt.", {
       note: parsed.data.note.trim(),
+      detail: { from: before.attempts.limit, to: item.attempts.limit },
     })
     clearAttention(item)
     sync(before, item, ["attempt_budget"])
@@ -795,7 +939,7 @@ export function workRoutes(env: Env) {
     if (!["deploy", "verify", "done"].includes(item.state))
       return cannotMove(item.state, "reopened")
     const before = structuredClone(item)
-    moved(item, "reopened", "revert_requested", parsed.data.note ?? null)
+    moved(item, "reopened", "revert_requested", null)
     endWindow(item, "stopped")
     if (parsed.data.note) {
       item.founderNotes = [
@@ -805,6 +949,7 @@ export function workRoutes(env: Env) {
     }
     event(item, "revert_requested", "A founder requested a revert.", {
       note: parsed.data.note ?? null,
+      detail: { pullRequestUrl: pr.url, pullRequestNumber: pr.number, headSha: pr.headSha },
     })
     item.stages = stagesAt("triage")
     item.card = { label: "reopened", tone: "coral", detail: "back in triage" }

@@ -27,7 +27,7 @@ describe("the app router", () => {
     ] as const
     for (const [path, label] of screens) {
       const app = await renderApp({ path, hq: createFakeHq() })
-      // Every screen is built: assert its own content, not a placeholder.
+      // Every screen asserts its own content; the Work route is a placeholder until Task 16.
       const built: Record<(typeof screens)[number][0], () => Promise<unknown>> = {
         "/app/digest": () => app.findByRole("status", { name: "Digest summary" }),
         // The Work screens arrive in Tasks 16 and 17b: until then the route is a placeholder.

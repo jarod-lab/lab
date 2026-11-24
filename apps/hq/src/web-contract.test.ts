@@ -1004,7 +1004,7 @@ describe("the fake answers get_factory_status as hq does", () => {
 // are not in the fake on purpose: the app has no client method for them.
 // ---------------------------------------------------------------------------------------------
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/
 
 /**
@@ -1013,17 +1013,24 @@ const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/
  */
 function normalized(value: unknown): unknown {
   const names = new Map<string, string>()
+  const name = (uuid: string) => {
+    const key = uuid.toLowerCase()
+    if (!names.has(key)) names.set(key, `<uuid ${names.size}>`)
+    return names.get(key) as string
+  }
   const walk = (v: unknown): unknown => {
     if (typeof v === "string") {
-      if (UUID.test(v)) {
-        if (!names.has(v)) names.set(v, `<uuid ${names.size}>`)
-        return names.get(v)
-      }
-      return ISO_TIME.test(v) ? "<time>" : v
+      // a time anywhere in a string stays a time; a uuid inside a string (`manual:<uuid>`) is named
+      return ISO_TIME.test(v) ? "<time>" : v.replace(UUID_ANYWHERE, name)
     }
     if (Array.isArray(v)) return v.map(walk)
     if (v !== null && typeof v === "object") {
-      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+      // keys in one order, so a name does not depend on how a database ordered a jsonb object
+      return Object.fromEntries(
+        Object.entries(v)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, x]) => [k, walk(x)]),
+      )
     }
     return v
   }
@@ -1456,6 +1463,96 @@ const workCases: WorkCase[] = [
     ],
   },
   {
+    name: "a stopped item reopened into triage starts a fresh cycle: its contract, window, pull request and fix attempts are the new cycle's",
+    as: "founder",
+    touches: ["exhausted", "review", "verifying", "asking", "building"],
+    steps: (["exhausted", "review", "verifying", "asking", "building"] as const).flatMap((key) => [
+      { method: "POST" as const, path: item(key, "/stop"), body: { note: "pause it" }, ...ok },
+      { method: "POST" as const, path: item(key, "/reopen"), body: { note: "back" }, ...ok },
+    ]),
+  },
+  {
+    name: "the founder writes refuse a foreign Origin, all eight, before the body is read",
+    as: "founder",
+    steps: (
+      [
+        () => "/v1/work-items",
+        item("triage", "/attempt-requests"),
+        (ids: Ids) => `/v1/questions/${ids.question}/answer`,
+        item("review", "/merge-approval"),
+        item("triage", "/stop"),
+        item("done", "/reopen"),
+        item("exhausted", "/retry"),
+        item("done", "/revert-request"),
+      ] satisfies ((ids: Ids) => string)[]
+    ).map(
+      (path): WorkStep => ({
+        method: "POST",
+        path,
+        body: "not json",
+        headers: { origin: "https://evil.example" },
+        status: 403,
+        code: "FORBIDDEN",
+        kind: "untrusted-origin",
+      }),
+    ),
+  },
+  {
+    name: "reopen and revert refuse a bad input before they look the item up",
+    as: "founder",
+    steps: [
+      {
+        method: "POST",
+        path: () => "/v1/work-items/FAC-999/reopen",
+        body: { note: 5 },
+        ...badRequest,
+      },
+      { method: "POST", path: () => "/v1/work-items/nope/reopen", body: {}, ...badRequest },
+      {
+        method: "POST",
+        path: item("done", "/reopen"),
+        body: { note: "x".repeat(2001) },
+        ...badRequest,
+      },
+      {
+        method: "POST",
+        path: () => "/v1/work-items/FAC-999/revert-request",
+        body: { note: 5 },
+        ...badRequest,
+      },
+      { method: "POST", path: () => "/v1/work-items/nope/revert-request", body: {}, ...badRequest },
+      {
+        method: "POST",
+        path: item("done", "/revert-request"),
+        body: { note: "x".repeat(2001) },
+        ...badRequest,
+      },
+      {
+        method: "POST",
+        path: () => "/v1/work-items/FAC-999/reopen",
+        body: "not json",
+        ...badRequest,
+      },
+      {
+        method: "POST",
+        path: () => "/v1/work-items/FAC-999/revert-request",
+        body: "[1]",
+        ...badRequest,
+      },
+    ],
+  },
+  {
+    name: "approve_merge on an item that also has an open question: the question still counts in the status",
+    as: "founder",
+    touches: ["review"],
+    setup: async ({ ids, ask }) => {
+      ids.question2 = await ask(ids.review)
+    },
+    steps: [
+      { method: "POST", path: item("review", "/merge-approval"), body: { headSha: "SHA" }, ...ok },
+    ],
+  },
+  {
     name: "retry_work_item: 200 for an exhausted item, then 409; an item with attempts left is 409",
     as: "founder",
     touches: ["exhausted"],
@@ -1739,25 +1836,53 @@ describe.each(["label", "claim"] as const)(
       return out
     }
 
-    /** What a case leaves behind, as one comparison reads it. */
-    async function afterwards(read: (path: string) => Promise<unknown>, touches: (keyof Ids)[]) {
-      const events = new Map<string, unknown>()
+    /** An event as a comparison reads it: everything but its own id and its time. */
+    const eventView = (e: Record<string, unknown>) => {
+      const { id: _id, at: _at, ...rest } = e
+      return rest
+    }
+    /** Events in one order (hq's ticks of a millisecond order them, the fake's do not). */
+    const sortedEvents = (events: Record<string, unknown>[]) => {
+      const mask = (e: Record<string, unknown>) =>
+        JSON.stringify(eventView(e)).replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, "<uuid>")
+      return events.map(eventView).sort((a, b) => mask(a).localeCompare(mask(b)))
+    }
+
+    /**
+     * What a case leaves behind, as one comparison reads it: the board, the status, each touched
+     * item and the NEW events of each (every event the case wrote, by kind, states, actor, reason,
+     * note, detail and cycle), and the items the case created, whole.
+     */
+    async function afterwards(
+      read: (path: string) => Promise<unknown>,
+      touches: (keyof Ids)[],
+      before: { items: Set<string>; events: Set<string> },
+    ) {
+      type Detail = { id: string; number: number; events: Record<string, unknown>[] }
       const item = async (key: keyof Ids) => {
-        const detail = (await read(`/v1/work-items/${ids[key]}`)) as {
-          events: Record<string, unknown>[]
+        const { events, ...rest } = (await read(`/v1/work-items/${ids[key]}`)) as Detail
+        return {
+          detail: normalized(rest),
+          events: normalized(sortedEvents(events.filter((e) => !before.events.has(String(e.id))))),
         }
-        const { events: all, ...rest } = detail
-        events.set(key, all)
-        return normalized(rest)
       }
-      const items = Object.fromEntries(
-        await Promise.all(touches.map(async (k) => [k, await item(k)])),
+      const touched = await Promise.all(touches.map(async (k) => [k, await item(k)] as const))
+      const listed = (await read("/v1/work-items?limit=100")) as { items: Detail[] }
+      const made = await Promise.all(
+        listed.items
+          .filter((i) => !before.items.has(i.id))
+          .sort((a, b) => a.number - b.number)
+          .map(async (i) => {
+            const { events, ...rest } = (await read(`/v1/work-items/${i.id}`)) as Detail
+            return normalized({ ...rest, events: sortedEvents(events) })
+          }),
       )
       return {
         board: normalized(await read("/v1/work/board")),
         status: normalized(await read("/v1/factory/status")),
-        items,
-        events,
+        items: Object.fromEntries(touched.map(([k, v]) => [k, v.detail])),
+        events: Object.fromEntries(touched.map(([k, v]) => [k, v.events])),
+        created: made,
       }
     }
 
@@ -1785,6 +1910,12 @@ describe.each(["label", "claim"] as const)(
         },
       })
       const fake = await fakeFromReal(as)
+      const before = {
+        items: new Set(Object.keys(fake.state.workItems)),
+        events: new Set(
+          Object.values(fake.state.workItems).flatMap((i) => i.events.map((e) => e.id)),
+        ),
+      }
       const send = harnessFetch(hq.app, cookies[as])
       const real = await run(steps, send)
       const faked = await run(steps, fake.fetch)
@@ -1810,11 +1941,13 @@ describe.each(["label", "claim"] as const)(
         expect(res.status, path).toBe(200)
         return res.json()
       }
-      const left = await afterwards(readFake, touches)
-      const right = await afterwards(readJson, touches)
+      const left = await afterwards(readFake, touches, before)
+      const right = await afterwards(readJson, touches, before)
       expect(left.board).toEqual(right.board)
       expect(left.status).toEqual(right.status)
       expect(left.items).toEqual(right.items)
+      expect(left.events).toEqual(right.events)
+      expect(left.created).toEqual(right.created)
       expect(fakeViolations).toEqual([])
     })
 

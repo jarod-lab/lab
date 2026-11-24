@@ -9,7 +9,7 @@ import type {
   WorkBoard,
   WorkItemDetail,
 } from "../api/schemas"
-import { isWorkPath, workRoutes } from "./fake-work"
+import { isWorkPath, workCountsOf, workRoutes } from "./fake-work"
 import {
   digestFixture,
   factoryStatusFixture,
@@ -178,15 +178,19 @@ export function urlOf(input: RequestInfo | URL): string {
 }
 
 export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
+  const workBoard = initial.workBoard ?? workBoardFixture()
+  const workItems = initial.workItems ?? workItemsFixture()
   const state: FakeHqState = {
     caller: "founder",
     user: { id: "user-1", email: "founder@example.com", name: "Founder" },
     proposals: [],
-    factoryStatus: factoryStatusFixture(),
+    // A fresh hq has no work (factoryStatusFixture); this fake starts with a board, so its counts
+    // are the board's, as hq derives them. A test that passes its own factoryStatus keeps it.
+    factoryStatus: factoryStatusFixture({ work: workCountsOf(workBoard, workItems) }),
     digest: digestFixture(),
     policy: policyFixture(),
-    workBoard: workBoardFixture(),
-    workItems: workItemsFixture(),
+    workBoard,
+    workItems,
     workDedupeKeys: {},
     nextError: null,
     password: FAKE_PASSWORD,

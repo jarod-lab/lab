@@ -394,7 +394,7 @@ describe("the board and the item detail reads (in-process Postgres)", () => {
         toState: "done",
         reason: "window_passed",
       })
-      // V2: done today but merged yesterday, and no window on record: neither resolved nor verified.
+      // V2: done today but merged yesterday, and its window did not pass: neither resolved nor verified.
       const v2 = await seedItem(db(), {
         state: "done",
         now: minutesAfter(NOW, -2 * HOUR),
@@ -404,6 +404,7 @@ describe("the board and the item detail reads (in-process Postgres)", () => {
         state: "merged",
         mergedAt: minutesAfter(NOW, -20 * HOUR),
       })
+      await seedWindow(v2.id, { startsAt: minutesAfter(NOW, -400), status: "stopped" })
       await event(v2.id, "transition", minutesAfter(NOW, -2 * HOUR), {
         fromState: "verify",
         toState: "done",

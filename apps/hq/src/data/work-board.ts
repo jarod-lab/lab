@@ -14,9 +14,14 @@
 // only links are the pull request and signal urls, and each is checked (`pullRequestUrl`,
 // `checkSignalUrl`).
 //
-// A read runs in one repeatable-read transaction, so a board is one snapshot. Cost: `loadFacts` is
-// a handful of queries per in-flight item, so a board is O(in-flight items): fine for the org sizes
-// this phase targets, and the place to batch if a board ever passes a few hundred items.
+// A read runs in one repeatable-read transaction, so a board is one snapshot. Cost: `readItem` is
+// 11 to 13 sequential queries per in-flight item (`loadFacts` plus the pull request, the active
+// attempt and the first signal, which `loadFacts` also reads), so a board is O(in-flight items).
+// That is accepted for one small repo per org in this phase; the ceiling is the board's size, and
+// the follow-up is to hand those reads over from `loadFacts` and batch them per board.
+//
+// The detail's lists are capped (`ATTEMPTS_SHOWN`, `QUESTIONS_SHOWN`, `EVENTS_SHOWN`,
+// `NOTE_EVENTS_SHOWN`): the newest rows are returned, and `truncated` says when older ones exist.
 import type { Database } from "@lab/db"
 import { AppError } from "@lab/errors"
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm"
@@ -31,13 +36,15 @@ import {
   signals,
   spend,
   verificationWindows,
+  WINDOW_STATUSES,
   workItemEvents,
   workItems,
 } from "../db/schema"
-import { ATTEMPT_DISPATCH_MODE, BOARD_COLUMN_CAP } from "../work/constants"
+import { ATTEMPT_DISPATCH_MODE, BOARD_COLUMN_CAP, DEPLOY_GRACE_MINUTES } from "../work/constants"
 import {
   type Attention,
   type AttemptKind,
+  ATTEMPT_RESULTS,
   type AttemptResult,
   type AttemptStatus,
   BOARD_COLUMNS,
@@ -50,6 +57,7 @@ import {
   findTransition,
   isInFlight,
   type SignalSource,
+  TRANSITION_REASONS,
   type TransitionReason,
   type VerifierKind,
   WORK_STAGES,
@@ -60,7 +68,7 @@ import {
 import type { PullRequestCheck, PullRequestState, ReviewerVerdict } from "../work/types"
 import { CONNECTED_VERIFIER_KINDS } from "./contract"
 import { parseUnits, unitsToUsd } from "./money"
-import { occurrenceBuckets } from "./verification"
+import { BUCKET_MINUTES, MAX_BUCKETS, occurrenceBuckets } from "./verification"
 import {
   currentPullRequest,
   loadFacts,
@@ -251,7 +259,7 @@ export interface WorkItemDetailData extends WorkItemSummaryData {
     startsAt: Date
     endsAt: Date
     remainingMinutes: number | null
-    mergedAt: Date | null
+    mergedAt: Date
     pastEnd: boolean
     waitingOn: {
       contractItemId: string
@@ -262,6 +270,8 @@ export interface WorkItemDetailData extends WorkItemSummaryData {
   } | null
   founderNotes: { at: Date; kind: "retry" | "answer" | "revert" | "request"; text: string }[]
   events: EventViewData[]
+  /** True where older rows exist than the capped list returned (the newest are kept). */
+  truncated: { attempts: boolean; questions: boolean; events: boolean }
   actions: {
     canStop: boolean
     canReopen: boolean
@@ -284,6 +294,10 @@ const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
 const EVIDENCE_MAX_CHARS = 4000
 const EVENTS_SHOWN = 50
+const ATTEMPTS_SHOWN = 50
+const QUESTIONS_SHOWN = 50
+const NOTE_EVENTS_SHOWN = 100
+const ABANDONED_EVENTS_MAX = 100
 
 const startOfUtcDay = (d: Date) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
@@ -384,6 +398,15 @@ function newestFixPhrase(result: AttemptResult | null): string {
   }
 }
 
+/** A stored string reaches a sentence only as one of the values of its enum: else a fixed word. */
+const known = <T extends string>(allowed: readonly T[], value: unknown): T | null =>
+  typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : null
+const VOID_REASONS = ["head_sha_changed", "pull_request_closed", "merged", "stopped"] as const
+const END_REASONS = ["merged", "stopped"] as const
+const OTHER = "other"
+const parenthetical = (allowed: readonly string[], value: unknown): string =>
+  value === undefined || value === null ? "" : ` (${words(known(allowed, value) ?? OTHER)})`
+
 function eventSummary(e: {
   kind: string
   fromState: WorkState | null
@@ -392,11 +415,13 @@ function eventSummary(e: {
   detail: Record<string, unknown> | null
 }): string {
   const d = e.detail ?? {}
-  const n = typeof d.number === "number" ? `Attempt ${d.number}` : "An attempt"
-  const reason = e.reason ? ` (${words(e.reason)})` : ""
+  const n =
+    typeof d.number === "number" && Number.isInteger(d.number)
+      ? `Attempt ${d.number}`
+      : "An attempt"
   switch (e.kind) {
     case "transition":
-      return `Moved from ${e.fromState ?? "no state"} to ${e.toState ?? "no state"}${reason}.`
+      return `Moved from ${e.fromState ?? "no state"} to ${e.toState ?? "no state"}${parenthetical(TRANSITION_REASONS, e.reason)}.`
     case "signal_attached":
       return "A signal was attached."
     case "attempt_requested":
@@ -404,9 +429,9 @@ function eventSummary(e: {
     case "attempt_started":
       return `${n} started.`
     case "attempt_finished":
-      return `${n} finished${typeof d.result === "string" ? ` (${words(d.result)})` : ""}.`
+      return `${n} finished${parenthetical(ATTEMPT_RESULTS, d.result)}.`
     case "attempt_abandoned":
-      return `${n} abandoned (${typeof d.reason === "string" ? words(d.reason) : "lease expired"}).`
+      return `${n} abandoned (${d.reason === undefined ? "lease expired" : words(known(END_REASONS, d.reason) ?? OTHER)}).`
     case "pull_request":
       return "Pull request recorded."
     case "merge_approval_requested":
@@ -414,7 +439,7 @@ function eventSummary(e: {
     case "merge_approved":
       return "Merge approved by a founder."
     case "merge_approval_void":
-      return `Merge approval voided${reason}.`
+      return `Merge approval voided${parenthetical(VOID_REASONS, e.reason)}.`
     case "question_asked":
       return "The agent asked a question."
     case "question_answered":
@@ -428,7 +453,7 @@ function eventSummary(e: {
     case "window_started":
       return "The verification window opened."
     case "window_closed":
-      return `The verification window closed${typeof d.status === "string" ? ` (${d.status})` : ""}.`
+      return `The verification window closed${parenthetical(WINDOW_STATUSES, d.status)}.`
     default:
       return "Something was recorded."
   }
@@ -744,12 +769,16 @@ export async function workBoard(
       .sort((a, b) => a.needs.since.getTime() - b.needs.since.getTime() || a.number - b.number)
       .map((r) => r.needs)
 
+    // Running attempts of items in flight, with a live lease: what the cards show. A stopped item's
+    // attempt that is still running (a stop leaves it to its lease) is on no card and not counted.
     const [running] = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(attempts)
+      .innerJoin(workItems, eq(workItems.id, attempts.itemId))
       .where(
         and(
           eq(attempts.status, "running"),
+          inArray(workItems.state, [...WORK_STAGES]),
           sql`(${attempts.leaseExpiresAt} is null or ${attempts.leaseExpiresAt} > ${now.toISOString()}::timestamptz)`,
         ),
       )
@@ -967,11 +996,13 @@ export async function itemDetail(
       checkedAt: c.checkedAt,
     }))
 
-    const attemptRows = await tx
+    const newestAttempts = await tx
       .select()
       .from(attempts)
       .where(eq(attempts.itemId, item.id))
-      .orderBy(asc(attempts.number))
+      .orderBy(desc(attempts.number))
+      .limit(ATTEMPTS_SHOWN + 1)
+    const attemptRows = newestAttempts.slice(0, ATTEMPTS_SHOWN).reverse()
     const runIds = [...new Set(attemptRows.flatMap((a) => (a.runId ? [a.runId] : [])))]
     const costs = runIds.length
       ? await tx
@@ -985,11 +1016,23 @@ export async function itemDetail(
           .groupBy(spend.runId)
       : []
     const costOf = new Map(costs.map((c) => [c.runId, c]))
-    const abandoned = await tx
-      .select({ detail: workItemEvents.detail })
-      .from(workItemEvents)
-      .where(and(eq(workItemEvents.itemId, item.id), eq(workItemEvents.kind, "attempt_abandoned")))
-      .orderBy(asc(workItemEvents.at), asc(workItemEvents.id))
+    const abandoned = attemptRows.length
+      ? await tx
+          .select({ detail: workItemEvents.detail })
+          .from(workItemEvents)
+          .where(
+            and(
+              eq(workItemEvents.itemId, item.id),
+              eq(workItemEvents.kind, "attempt_abandoned"),
+              inArray(
+                sql<string>`${workItemEvents.detail}->>'attemptId'`,
+                attemptRows.map((a) => a.id),
+              ),
+            ),
+          )
+          .orderBy(asc(workItemEvents.at), asc(workItemEvents.id))
+          .limit(ABANDONED_EVENTS_MAX)
+      : []
     const endReasons = new Map<string, AttemptViewData["endReason"]>()
     for (const e of abandoned) {
       const attemptId = e.detail?.attemptId
@@ -1036,11 +1079,13 @@ export async function itemDetail(
       }
     })
 
-    const questionRows = await tx
+    const newestQuestions = await tx
       .select()
       .from(agentQuestions)
       .where(eq(agentQuestions.itemId, item.id))
-      .orderBy(asc(agentQuestions.createdAt), asc(agentQuestions.id))
+      .orderBy(desc(agentQuestions.createdAt), desc(agentQuestions.id))
+      .limit(QUESTIONS_SHOWN + 1)
+    const questionRows = newestQuestions.slice(0, QUESTIONS_SHOWN).reverse()
     const questions: QuestionViewData[] = questionRows.map((q) => ({
       id: q.id,
       attemptId: q.attemptId,
@@ -1096,11 +1141,18 @@ export async function itemDetail(
     let window: WorkItemDetailData["window"] = null
     if (windowRow) {
       const running = windowRow.status === "running"
-      const mergedAt = pr?.mergedAt ?? null
-      // From 12 hours before the merge to now, and never past the window's end: a long-finished
-      // item would otherwise ask for more buckets than a read may hold.
-      const from = new Date((mergedAt ?? windowRow.startsAt).getTime() - 12 * HOUR_MS)
+      // The merge instant is read from hq's own window row (it opened `DEPLOY_GRACE_MINUTES` after
+      // the merge), never from a pull request row: a second pull request with an agent-asserted
+      // `mergedAt` must not move it. The range runs from 12 hours before the merge to now, never
+      // past the window's end, and never over what one read may hold.
+      const mergedAt = new Date(windowRow.startsAt.getTime() - DEPLOY_GRACE_MINUTES * MINUTE_MS)
       const to = new Date(Math.min(now.getTime(), windowRow.endsAt.getTime()))
+      const from = new Date(
+        Math.max(
+          mergedAt.getTime() - 12 * HOUR_MS,
+          to.getTime() - (MAX_BUCKETS - 1) * BUCKET_MINUTES * MINUTE_MS,
+        ),
+      )
       window = {
         status: windowRow.status,
         startsAt: windowRow.startsAt,
@@ -1139,7 +1191,8 @@ export async function itemDetail(
           isNotNull(workItemEvents.note),
         ),
       )
-      .orderBy(asc(workItemEvents.at), asc(workItemEvents.id))
+      .orderBy(desc(workItemEvents.at), desc(workItemEvents.id))
+      .limit(NOTE_EVENTS_SHOWN)
     const noteKinds = {
       retry_granted: "retry",
       question_answered: "answer",
@@ -1164,8 +1217,8 @@ export async function itemDetail(
       .from(workItemEvents)
       .where(eq(workItemEvents.itemId, item.id))
       .orderBy(desc(workItemEvents.at), desc(workItemEvents.id))
-      .limit(EVENTS_SHOWN)
-    const events: EventViewData[] = eventRows.map((e) => ({
+      .limit(EVENTS_SHOWN + 1)
+    const events: EventViewData[] = eventRows.slice(0, EVENTS_SHOWN).map((e) => ({
       id: e.id,
       at: e.at,
       kind: e.kind,
@@ -1216,6 +1269,11 @@ export async function itemDetail(
       window,
       founderNotes,
       events,
+      truncated: {
+        attempts: newestAttempts.length > ATTEMPTS_SHOWN,
+        questions: newestQuestions.length > QUESTIONS_SHOWN,
+        events: eventRows.length > EVENTS_SHOWN,
+      },
       actions,
     }
   }, READ_ONLY)

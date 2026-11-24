@@ -476,6 +476,14 @@ describe("pull requests and merge approvals (in-process Postgres)", () => {
       expect(abandoned?.detail).toMatchObject({ attemptId: asked.id, reason: "merged" })
     })
 
+    it("a merge leaves a running attempt alone: its lease ends it", async () => {
+      const { item, attempt } = await fixing()
+      await record({ state: "merged" }, minutesAfter(NOW, 20))
+      const [row] = await db().select().from(attempts).where(eq(attempts.id, attempt.id))
+      expect(row).toMatchObject({ status: "running", result: null })
+      expect(await eventKinds(item.id)).not.toContain("attempt_abandoned")
+    })
+
     it("a merge with no requested attempt writes no attempt_abandoned event", async () => {
       const { item } = await fixing()
       await record({ state: "merged" }, minutesAfter(NOW, 20))

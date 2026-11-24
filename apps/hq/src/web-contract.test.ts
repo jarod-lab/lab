@@ -33,11 +33,15 @@ import {
 } from "../web/src/api/schemas"
 import {
   createFakeHq,
+  digestStrict,
   type FakeHq,
   type FakeHqState,
   fakeViolations,
 } from "../web/src/test/fake-hq"
 import {
+  digestFixture,
+  digestPipelineFixture,
+  emptyDigestPipeline,
   factoryStatusFixture,
   needsYouFixture,
   policyFixture,
@@ -825,6 +829,16 @@ describe("the fake answers get_digest as hq does", () => {
     expect(faked.parsed.every(Boolean)).toBe(true)
     expect(faked.keys).toEqual(real.keys)
     expect(faked.kinds).toEqual(real.kinds)
+  })
+
+  it("the fake's whole-digest schema parses the real digest with a run, spend and a pending proposal", async () => {
+    const res = await harnessFetch(hq.app, cookies.founder)(`${BASE}/v1/digest`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { events: unknown[]; decisions: unknown[]; spend: unknown }
+    // the Phase 3 part is populated, so every nested key of it is checked, not only the empty lists
+    expect(body.events.length).toBeGreaterThan(0)
+    expect(body.decisions.length).toBeGreaterThan(0)
+    expect(digestStrict.safeParse(body).success).toBe(true)
   })
 })
 
@@ -2224,6 +2238,162 @@ describe("the fake and hq agree on a work path nobody serves", () => {
       fakeViolations.length = 0
     } finally {
       await hq.close()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// get_digest's `pipeline` (Task 19). The real digest over a fresh hq and over the seed's board,
+// against the fake's fixtures: the same keys, the same VALUES on what a seed fixes, and a fake
+// that refuses a pipeline hq would never send.
+// ---------------------------------------------------------------------------------------------
+
+describe("get_digest's pipeline: the fake and hq agree", () => {
+  let hq: Awaited<ReturnType<typeof createHqHarness>>
+  let cookie = ""
+  const read = async (path: string): Promise<{ pipeline: unknown } & Record<string, unknown>> => {
+    const res = await harnessFetch(hq.app, cookie)(`${BASE}${path}`)
+    expect(res.status, path).toBe(200)
+    return (await res.json()) as { pipeline: unknown } & Record<string, unknown>
+  }
+  /** The events and the merges in one order: hq's ties are by id, which a seed cannot fix. */
+  const inOrder = (pipeline: unknown) => {
+    const p = pipeline as {
+      events: { displayId: string; result: string }[]
+      merged: { displayId: string }[]
+    }
+    return {
+      ...p,
+      events: [...p.events].sort((a, b) =>
+        `${a.displayId}:${a.result}`.localeCompare(`${b.displayId}:${b.result}`, "en", {
+          numeric: true,
+        }),
+      ),
+      merged: [...p.merged].sort((a, b) =>
+        a.displayId.localeCompare(b.displayId, "en", { numeric: true }),
+      ),
+    }
+  }
+
+  // hq's clock is fixed in the harness, and a window excludes its own end: the seed writes at the
+  // fixed instant, so the clock moves one minute on once it has.
+  const SEEDED_AT = new Date("2026-11-17T12:00:00Z")
+  let clock = SEEDED_AT
+
+  beforeAll(async () => {
+    hq = await createHqHarness({ founderEmails: ["founder@example.com"], now: () => clock })
+    cookie = (await hq.signUp("founder@example.com")).cookie
+  })
+  afterAll(async () => {
+    await hq.close()
+  })
+
+  it("a fresh hq answers the pipeline the fixture holds: zeros and empty lists, value for value", async () => {
+    const real = await read("/v1/digest")
+    expect(real.pipeline).toEqual(digestFixture().pipeline)
+    expect(real.pipeline).toEqual(emptyDigestPipeline())
+    const fake = (await (await createFakeHq().fetch(`${BASE}/v1/digest`)).json()) as typeof real
+    expect(Object.keys(fake).sort()).toEqual(Object.keys(real).sort())
+  })
+
+  it("the fake's whole-digest schema parses a real hq reply, the Phase 3 part too, and a reply with no pipeline key parses through the client's schema", async () => {
+    const real = await read("/v1/digest")
+    expect(digestStrict.safeParse(real).success).toBe(true)
+    // an older hq sends no pipeline key: the client still reads the rest
+    const { pipeline: _omitted, ...older } = real
+    expect("pipeline" in older).toBe(false)
+    expect(digestSchema.safeParse(older).success).toBe(true)
+    expect(digestSchema.parse(older).pipeline).toBeUndefined()
+    // ...and the strict fake would not answer with one (hq always sends the key)
+    expect(digestStrict.safeParse(older).success).toBe(false)
+  })
+
+  it("the seed's pipeline equals digestPipelineFixture on everything a seed fixes (times and uuids aside)", async () => {
+    await seedWork({ baseUrl: BASE, cookie, fetch: harnessFetch(hq.app, cookie) })
+    clock = new Date(SEEDED_AT.getTime() + 60_000)
+    const real = await read("/v1/digest")
+    expect(normalized(inOrder(real.pipeline))).toEqual(normalized(inOrder(digestPipelineFixture())))
+    // the fake serves it with the same keys, parsed by the client's own schema
+    const fake = createFakeHq()
+    fake.state.digest = digestFixture({ pipeline: digestPipelineFixture() })
+    const faked = await (await fake.fetch(`${BASE}/v1/digest`)).json()
+    expect(keySet((faked as { pipeline: unknown }).pipeline)).toEqual(keySet(real.pipeline))
+    expect(digestSchema.safeParse(faked).success).toBe(true)
+    expect(digestSchema.safeParse(real).success).toBe(true)
+  })
+
+  it("the fake accepts a null pipeline and a populated one without recording a violation", async () => {
+    const before = fakeViolations.length
+    for (const pipeline of [null, emptyDigestPipeline(), digestPipelineFixture()]) {
+      const fake = createFakeHq()
+      fake.state.digest = digestFixture({ pipeline })
+      const res = await fake.fetch(`${BASE}/v1/digest`)
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { pipeline: unknown }).pipeline).toEqual(pipeline)
+    }
+    expect(fakeViolations.length).toBe(before)
+  })
+
+  it("the fake refuses to answer with a digest or a pipeline hq would never send", async () => {
+    const good = digestFixture({ pipeline: digestPipelineFixture() })
+    const p = digestPipelineFixture()
+    const { pipeline: _dropped, ...withoutPipeline } = good
+    const bad: unknown[] = [
+      { ...good, pipeline: { ...p, extra: 1 } },
+      { ...good, pipeline: { ...p, stuckAttempts: -1 } },
+      { ...good, pipeline: { ...p, opened: 1.5 } },
+      { ...good, pipeline: { ...p, needsYou: [{ ...p.needsYou[0], extra: 1 }] } },
+      { ...good, pipeline: { ...p, needsYou: [{ ...p.needsYou[0], kind: "default_answer" }] } },
+      { ...good, pipeline: { ...p, merged: [{ ...p.merged[0], state: "live" }] } },
+      { ...good, pipeline: { ...p, events: [{ ...p.events[0], result: "deployed" }] } },
+      { ...good, pipeline: { ...p, events: [{ ...p.events[0], at: undefined }] } },
+      { ...good, extra: 1 },
+      // hq always sends the key: an older hq's reply is not one the fake may answer with
+      withoutPipeline,
+    ]
+    for (const digest of bad) {
+      const fake = createFakeHq()
+      fake.state.digest = digest as typeof good
+      await expect(fake.fetch(`${BASE}/v1/digest`)).rejects.toThrow()
+    }
+    // Provoked on purpose: the setup's afterEach would otherwise fail this test.
+    fakeViolations.length = 0
+  })
+
+  it("with the work tables dropped the real digest parses with pipeline null, in the real hq and in the fake", async () => {
+    const dropped = await createHqHarness({ founderEmails: ["founder@example.com"] })
+    try {
+      const droppedCookie = (await dropped.signUp("founder@example.com")).cookie
+      for (const table of [
+        "work_item_events",
+        "verification_windows",
+        "merge_approvals",
+        "agent_questions",
+        "contract_items",
+        "pull_requests",
+        "attempts",
+        "signals",
+        "work_items",
+      ]) {
+        await dropped.db.execute(sql.raw(`drop table "hq"."${table}" cascade`))
+      }
+      const fake = createFakeHq()
+      fake.state.digest = digestFixture({ pipeline: null })
+      const fakeBody = (await (await fake.fetch(`${BASE}/v1/digest`)).json()) as Record<
+        string,
+        unknown
+      >
+      expect(digestSchema.parse(fakeBody).pipeline).toBeNull()
+      const body = (await (
+        await harnessFetch(dropped.app, droppedCookie)(`${BASE}/v1/digest`)
+      ).json()) as { pipeline: unknown }
+      expect(body.pipeline).toBeNull()
+      expect(digestSchema.parse(body).pipeline).toBeNull()
+      // the same top-level keys, and the key is there with null in both
+      expect(Object.keys(fakeBody).sort()).toEqual(Object.keys(body).sort())
+      expect(fakeBody.pipeline).toBeNull()
+    } finally {
+      await dropped.close()
     }
   })
 })

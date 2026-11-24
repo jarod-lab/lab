@@ -5,6 +5,7 @@ import { z } from "zod"
 import {
   attemptView,
   contractItemView,
+  digestPipeline,
   eventView,
   needsYou,
   pullRequestSummary,
@@ -146,8 +147,12 @@ export const digestSchema = z.object({
   health: z.object({ stuckRuns: z.number().int(), lastRunStartedAt: iso.nullable() }),
   productHealth: z.object({ connected: z.literal(false) }),
   deploys: z.object({ connected: z.literal(false) }),
+  // The pipeline's part (hq's own schema); null before hq's work tables exist. Optional so an
+  // older hq, which sends no `pipeline` key at all, still parses.
+  pipeline: digestPipeline.nullable().optional(),
 })
 export type Digest = z.infer<typeof digestSchema>
+export type DigestPipeline = z.infer<typeof digestPipeline>
 
 export const policySchema = z.object({
   spend: z.object({

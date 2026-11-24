@@ -322,7 +322,7 @@ const shortSha = (sha: string) => sha.slice(0, 7)
  * very url (case aside): a row can hold anything, and only a GitHub pull request page of the item's
  * own repository is ever returned.
  */
-function pullRequestUrl(repo: string, number: number, stored: string): string {
+export function pullRequestUrl(repo: string, number: number, stored: string): string {
   const canonical = `https://github.com/${repo}/pull/${number}`
   return stored.toLowerCase() === canonical.toLowerCase() ? stored : canonical
 }

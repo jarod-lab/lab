@@ -414,3 +414,60 @@ export const sweepResult = z.object({
     )
     .describe("What failed and was skipped: one item's error never stops the pass"),
 })
+
+// ---------------------------------------------------------------------------------------------
+// get_digest's `pipeline` (Task 19). One shape, built twice: the web's fake validates its fixtures
+// with the strict build, so a key hq never sends is refused there.
+// ---------------------------------------------------------------------------------------------
+
+export const DIGEST_MERGED_STATES = ["merged", "verifying", "verified", "reopened"] as const
+export const DIGEST_EVENT_RESULTS = ["opened", "merged", "reopened", "verified", "stopped"] as const
+
+const digestNeedsYouShape = {
+  kind: attention,
+  itemId: z.string(),
+  displayId: z.string(),
+  title: z.string(),
+  reason: z.string(),
+  since: isoDate,
+}
+const digestMergedShape = {
+  at: isoDate,
+  displayId: z.string(),
+  title: z.string(),
+  pullRequestUrl: z.string(),
+  state: z.enum(DIGEST_MERGED_STATES),
+}
+const digestEventShape = {
+  at: isoDate,
+  displayId: z.string(),
+  text: z.string().describe("The item's title: untrusted text, shown as text only"),
+  result: z.enum(DIGEST_EVENT_RESULTS),
+}
+const count = (description: string) => z.number().int().min(0).describe(description)
+const digestCounts = {
+  opened: count("Items that entered triage in the window"),
+  resolved: count("Items whose verification window passed (they moved to done) in the window"),
+  reopened: count("Items reopened in the window, one count per item"),
+  stuckAttempts: count("Running attempts whose lease has passed, as of the window's end"),
+  needsYouTotal: count("Every item that waits for a founder now"),
+}
+const digestLists = {
+  needsYou: "What waits for a founder now, oldest first, at most 5",
+  merged: "Pull requests merged in the window, newest first, at most 10",
+  events: "Newest first, at most 30",
+}
+
+export const digestPipeline = z.object({
+  ...digestCounts,
+  needsYou: z.array(z.object(digestNeedsYouShape)).describe(digestLists.needsYou),
+  merged: z.array(z.object(digestMergedShape)).describe(digestLists.merged),
+  events: z.array(z.object(digestEventShape)).describe(digestLists.events),
+})
+/** The same shape, strict at every level: what the web's fake holds its fixtures to. */
+export const digestPipelineStrict = z.strictObject({
+  ...digestCounts,
+  needsYou: z.array(z.strictObject(digestNeedsYouShape)),
+  merged: z.array(z.strictObject(digestMergedShape)),
+  events: z.array(z.strictObject(digestEventShape)),
+})

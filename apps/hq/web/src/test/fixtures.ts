@@ -1,6 +1,7 @@
 import type {
   AttemptView,
   Digest,
+  DigestPipeline,
   FactoryStatus,
   NeedsYou,
   Policy,
@@ -86,7 +87,23 @@ export function digestFixture(overrides: Partial<Digest> = {}): Digest {
     health: { stuckRuns: 0, lastRunStartedAt: "2026-11-17T08:00:00.000Z" },
     productHealth: { connected: false },
     deploys: { connected: false },
+    // A fresh hq with its work tables and no work: zeros and empty lists, not null.
+    pipeline: emptyDigestPipeline(),
     ...overrides,
+  }
+}
+
+/** What a fresh hq (work tables, no work) answers for `get_digest`'s `pipeline`, value for value. */
+export function emptyDigestPipeline(): DigestPipeline {
+  return {
+    opened: 0,
+    resolved: 0,
+    reopened: 0,
+    stuckAttempts: 0,
+    needsYou: [],
+    needsYouTotal: 0,
+    merged: [],
+    events: [],
   }
 }
 
@@ -742,6 +759,74 @@ export function workBoardFixture(overrides: Partial<WorkBoard> = {}): WorkBoard 
       needsYouFixture("agent_question"),
       needsYouFixture("attempt_budget"),
       needsYouFixture("merge_approval"),
+    ],
+    ...overrides,
+  }
+}
+
+/**
+ * `get_digest`'s `pipeline` for the board scripts/seed-work.mjs makes, read on the seed's own day:
+ * ten items opened, one verified, one reopened, three waiting on a founder (the board's three
+ * cards), four pull requests merged, one for each word the digest has for one. The contract test
+ * compares it with a real hq on everything a seed fixes (times and uuids aside).
+ */
+export function digestPipelineFixture(overrides: Partial<DigestPipeline> = {}): DigestPipeline {
+  const needs = (kind: NeedsYou["kind"]) => {
+    const { itemId, displayId, title, reason, since } = needsYouFixture(kind)
+    return { kind, itemId, displayId, title, reason, since }
+  }
+  const event = (
+    minute: number,
+    displayId: string,
+    text: string,
+    result: DigestPipeline["events"][number]["result"],
+  ) => ({ at: `2026-11-17T11:${String(minute).padStart(2, "0")}:00.000Z`, displayId, text, result })
+  const merged = (
+    at: string,
+    displayId: string,
+    title: string,
+    pr: number,
+    state: DigestPipeline["merged"][number]["state"],
+  ) => ({
+    at,
+    displayId,
+    title,
+    pullRequestUrl: `https://github.com/${WORK_REPO}/pull/${pr}`,
+    state,
+  })
+  const titles: [string, string][] = [
+    ["FAC-1", "Checkout shows a blank page"],
+    ["FAC-2", "Invoices are rounded the wrong way"],
+    ["FAC-3", "Password reset mail arrives twice"],
+    ["FAC-4", "Search ignores accents"],
+    ["FAC-5", "Export times out on large workspaces"],
+    ["FAC-6", "Empty cart crashes the checkout"],
+    ["FAC-7", "Sign-in link opens the wrong page"],
+    ["FAC-8", "Webhook retries flood the queue"],
+    ["FAC-9", "Dashboard totals drift after a refund"],
+    ["FAC-10", "Avatar upload rejects large PNGs"],
+  ]
+  const title = (id: string) => titles.find(([d]) => d === id)?.[1] ?? id
+  return {
+    opened: 10,
+    resolved: 1,
+    reopened: 1,
+    stuckAttempts: 0,
+    needsYou: [needs("agent_question"), needs("attempt_budget"), needs("merge_approval")],
+    needsYouTotal: 3,
+    merged: [
+      merged("2026-11-17T11:55:00.000Z", "FAC-7", title("FAC-7"), 107, "merged"),
+      merged("2026-11-17T08:40:00.000Z", "FAC-9", title("FAC-9"), 109, "reopened"),
+      merged("2026-11-17T07:59:00.000Z", "FAC-8", title("FAC-8"), 108, "verifying"),
+      merged("2026-11-17T05:00:00.000Z", "FAC-10", title("FAC-10"), 110, "verified"),
+    ],
+    events: [
+      event(59, "FAC-10", title("FAC-10"), "verified"),
+      ...(["FAC-9", "FAC-8", "FAC-10", "FAC-7"] as const).map((id, i) =>
+        event(58 - i, id, title(id), "merged"),
+      ),
+      event(50, "FAC-9", title("FAC-9"), "reopened"),
+      ...titles.map(([id, text], i) => event(40 - i, id, text, "opened")),
     ],
     ...overrides,
   }

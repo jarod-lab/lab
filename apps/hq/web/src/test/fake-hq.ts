@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { digestPipelineStrict } from "../../../src/operations/work-schemas"
+import { ENTRY_KINDS } from "../api/schemas"
 import type {
   Digest,
   FactoryStatus,
@@ -111,6 +113,59 @@ const factoryStatusStrict = z.strictObject({
       openQuestions: z.number().int().min(0),
     })
     .nullable(),
+})
+
+// get_digest's reply, as hq builds it: exactly these keys. `pipeline` is hq's own schema (strict at
+// every level) and the key is always there, an object or null before the work tables exist; an
+// older hq's reply with no `pipeline` key is one the fake may not answer with.
+const digestStrict = z.strictObject({
+  since: iso,
+  until: iso,
+  hours: z.number().int(),
+  summary: z.strictObject({
+    tone: z.enum(["quiet", "attention"]),
+    runsFinished: z.number().int().min(0),
+    runsFailed: z.number().int().min(0),
+    pendingProposals: z.number().int().min(0),
+  }),
+  decisions: z.array(
+    z.strictObject({
+      proposalId: z.string(),
+      entryKind: z.enum(ENTRY_KINDS),
+      title: z.string(),
+      reason: z.string(),
+      createdAt: iso,
+    }),
+  ),
+  events: z.array(
+    z.strictObject({
+      at: iso,
+      kind: z.enum(["run", "proposal"]),
+      ref: z.string(),
+      text: z.string(),
+      result: z.enum([
+        "started",
+        "succeeded",
+        "failed",
+        "stopped",
+        "proposed",
+        "approved",
+        "rejected",
+      ]),
+      costUsd: z.number().nullable(),
+    }),
+  ),
+  spend: z.strictObject({
+    totalUsd: z.number(),
+    estimatedUsd: z.number(),
+    bySource: z.array(
+      z.strictObject({ source: z.enum(["eve", "build", "box"]), amountUsd: z.number() }),
+    ),
+  }),
+  health: z.strictObject({ stuckRuns: z.number().int().min(0), lastRunStartedAt: iso.nullable() }),
+  productHealth: z.strictObject({ connected: z.literal(false) }),
+  deploys: z.strictObject({ connected: z.literal(false) }),
+  pipeline: digestPipelineStrict.nullable(),
 })
 
 /**
@@ -343,7 +398,13 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
         return appError(400, "BAD_REQUEST", "since is in the future")
       }
     }
-    return json(200, state.digest)
+    const parsed = digestStrict.safeParse(state.digest)
+    if (!parsed.success) {
+      const error = new FakeHqError(`digest is not what hq returns: ${parsed.error.message}`)
+      fakeViolations.push(error)
+      throw error
+    }
+    return json(200, parsed.data)
   }
 
   function v1(

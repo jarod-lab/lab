@@ -11,11 +11,16 @@ describe("renderApp", () => {
     expect(app.router.history.location.pathname).toBe("/app/approvals")
     expect(await app.findByRole("heading", { name: "Approvals" })).toBeTruthy()
     expect(app.hq).toBe(hq)
-    const reply = await hq.fetch("/v1/status")
-    expect(await reply.json()).toEqual({ ok: true, version: "0.0.0" })
-    // The gate's probe, the sidebar's session lookup and the call above.
+    // A request through the router's own client reaches the fake, not the network.
+    const before = hq.sent.length
+    expect(await app.router.options.context.client.status()).toEqual({ ok: true, version: "0.0.0" })
+    expect(hq.sent.length).toBe(before + 1)
+    expect(hq.sent.at(-1)?.path).toBe("/v1/status")
+    // The gate's probe, the sidebar's session lookup and runner card, and the call above.
+    await app.findByText("eve · last run 4h ago")
     expect(hq.sent.map((s) => s.path).sort()).toEqual([
       "/api/auth/get-session",
+      "/v1/factory/status",
       "/v1/status",
       "/v1/status",
     ])

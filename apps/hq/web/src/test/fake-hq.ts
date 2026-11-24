@@ -45,6 +45,36 @@ const TRUSTED_ORIGIN = "http://localhost:3100"
 const SIGN_IN_LIMIT = 5
 const DECIDED_AT = "2026-11-17T12:00:00.000Z"
 
+// get_factory_status's reply, as hq builds it: exactly these keys, the three runners in RUNNERS
+// order, and a box runner that never reports how a run ended. A fixture that drifts from it throws
+// (a test bug), so the fake can never be looser than hq.
+const iso = z.string().datetime({ offset: true })
+const factoryStatusStrict = z.strictObject({
+  now: iso,
+  pendingProposals: z.number().int().min(0),
+  runners: z
+    .array(
+      z.strictObject({
+        runner: z.enum(["eve", "sandbox", "box"]),
+        lastStartedAt: iso.nullable(),
+        lastOutcome: z.enum(["succeeded", "failed", "stopped"]).nullable(),
+      }),
+    )
+    .refine(
+      (runners) => runners.map((r) => r.runner).join() === "eve,sandbox,box",
+      "eve, sandbox and box, in that order",
+    )
+    .refine((runners) => runners[2]?.lastOutcome === null, "a box run never reports an outcome"),
+  allowance: z.strictObject({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    spentUsd: z.number(),
+    reservedUsd: z.number(),
+    capUsd: z.number(),
+    grantedUsd: z.number(),
+    remainingUsd: z.number().min(0),
+  }),
+})
+
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(body), {
     status,
@@ -212,6 +242,11 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
       )
     }
     const approve = body.decision === "approve"
+    // The count get_factory_status reports follows the pending proposals.
+    state.factoryStatus = {
+      ...state.factoryStatus,
+      pendingProposals: Math.max(0, state.factoryStatus.pendingProposals - 1),
+    }
     proposal.status = approve ? "approved" : "rejected"
     proposal.decidedBy = state.user.id
     proposal.decidedAt = DECIDED_AT
@@ -249,7 +284,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     const reads: Record<string, () => Response> = {
       "/v1/status": () => json(200, { ok: true, version: "0.0.0" }),
       "/v1/proposals": () => listProposals(search),
-      "/v1/factory/status": () => json(200, state.factoryStatus),
+      "/v1/factory/status": () => json(200, factoryStatusStrict.parse(state.factoryStatus)),
       "/v1/digest": () => digestReply(search),
       "/v1/policy": () => json(200, state.policy),
     }

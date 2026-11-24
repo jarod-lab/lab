@@ -2,10 +2,9 @@ import { createRoute, Outlet, useRouterState } from "@tanstack/react-router"
 
 import { AppGate } from "../components/app-gate"
 import { AppFrame } from "../components/app-frame"
-import { RunnerCard } from "../components/runner-card"
-import { Sidebar } from "../components/sidebar"
 import { EmptyState } from "../components/states"
 import { Account } from "../containers/account"
+import { ShellStatus } from "../containers/shell-status"
 import { NAV_ITEMS } from "../lib/nav"
 import { rootRoute } from "./root"
 
@@ -15,18 +14,7 @@ function AppLayout() {
     (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
   )
   return (
-    <AppFrame
-      sidebar={
-        <Sidebar
-          items={NAV_ITEMS}
-          activeKey={active?.key ?? null}
-          badges={{}}
-          // The live status container replaces this placeholder (Task 7).
-          runner={<RunnerCard status={undefined} state="loading" />}
-          account={<Account />}
-        />
-      }
-    >
+    <AppFrame sidebar={<ShellStatus activeKey={active?.key ?? null} account={<Account />} />}>
       <Outlet />
     </AppFrame>
   )

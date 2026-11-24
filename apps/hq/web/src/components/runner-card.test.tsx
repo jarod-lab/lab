@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { expectNoA11yViolations } from "@lab/ui/a11y"
 import { describe, expect, it } from "vitest"
 
 import { factoryStatusFixture } from "../test/fixtures"
@@ -100,6 +101,17 @@ describe("RunnerCard", () => {
     const failed = await renderInRouter(<RunnerCard state="error" status={undefined} />)
     expect(failed.container.querySelector("progress")).toBeNull()
     expect(failed.getByText("Runner status unavailable")).toBeTruthy()
+  })
+
+  it("has no accessibility violations in the ready, loading and error states", async () => {
+    const ready = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    await expectNoA11yViolations(ready.container.innerHTML)
+    ready.unmount()
+    const loading = await renderInRouter(<RunnerCard state="loading" status={undefined} />)
+    await expectNoA11yViolations(loading.container.innerHTML)
+    loading.unmount()
+    const failed = await renderInRouter(<RunnerCard state="error" status={undefined} />)
+    await expectNoA11yViolations(failed.container.innerHTML)
   })
 
   it("links to /app/runner and has no inline style", async () => {

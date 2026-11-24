@@ -18,7 +18,12 @@ import {
   sessionReplySchema,
   statusSchema,
 } from "../web/src/api/schemas"
-import { createFakeHq, type FakeHq, type FakeHqState } from "../web/src/test/fake-hq"
+import {
+  createFakeHq,
+  type FakeHq,
+  type FakeHqState,
+  fakeViolations,
+} from "../web/src/test/fake-hq"
 import { factoryStatusFixture, proposalFixture } from "../web/src/test/fixtures"
 import { createHqHarness } from "./app.test.helpers"
 import { proposals, runs, spend } from "./db/schema"
@@ -950,8 +955,11 @@ describe("the fake answers get_factory_status as hq does", () => {
       { ...good, allowance: { ...good.allowance, remainingUsd: -1 } },
     ]
     for (const factoryStatus of bad) {
-      const fake = createFakeHq({ factoryStatus: factoryStatus as typeof good })
+      const fake = createFakeHq()
+      fake.state.factoryStatus = factoryStatus as typeof good
       await expect(fake.fetch(`${BASE}/v1/factory/status`)).rejects.toThrow()
     }
+    // Provoked on purpose: the setup's afterEach would otherwise fail this test.
+    fakeViolations.length = 0
   })
 })

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { expectNoA11yViolations } from "@lab/ui/a11y"
 import { act } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { createQueryClient } from "../api/query-client"
 import { hqKeys } from "../api/query-keys"
-import { createFakeHq, urlOf } from "../test/fake-hq"
+import { createFakeHq, FakeHqError, fakeViolations, urlOf } from "../test/fake-hq"
 import { factoryStatusFixture, proposalFixture } from "../test/fixtures"
 import { renderApp } from "../test/render"
 
@@ -23,12 +24,16 @@ describe("ShellStatus: the live sidebar", () => {
     const link = await app.findByRole("link", { name: /Approvals/ })
     expect(await app.findByText("3")).toBeTruthy()
     expect(link.textContent).toContain("3")
+    // The live sidebar with its ready runner card (axe leaves the document empty: markup first).
+    await app.findByRole("progressbar", { name: "Eve spend cap left" })
+    const liveSidebar = app.container.innerHTML
 
     hq.state.factoryStatus = factoryStatusFixture({ pendingProposals: 0 })
     await act(() => app.queryClient.invalidateQueries({ queryKey: hqKeys.factoryStatus() }))
     await vi.waitFor(() => {
       expect(app.getByRole("link", { name: /Approvals/ }).textContent).toBe("Approvals")
     })
+    await expectNoA11yViolations(liveSidebar)
   })
 
   it("approving a proposal elsewhere refreshes the badge on invalidate", async () => {
@@ -67,10 +72,12 @@ describe("ShellStatus: the live sidebar", () => {
     queryClient.setDefaultOptions({ queries: { retry: false } })
     const app = await renderApp({ path: "/app/digest", hq, queryClient })
     expect(await app.findByText("Runner status unavailable")).toBeTruthy()
+    const failedSidebar = app.container.innerHTML
     expect(app.getByRole("navigation", { name: "Primary" })).toBeTruthy()
     await app.user.click(app.getByRole("link", { name: /Approvals/ }))
     expect(await app.findByRole("heading", { name: "Approvals" })).toBeTruthy()
     expect(app.router.history.location.pathname).toBe("/app/approvals")
+    await expectNoA11yViolations(failedSidebar)
   })
 
   it("polls every 30 s while the tab is visible and not while it is hidden", async () => {
@@ -92,5 +99,19 @@ describe("ShellStatus: the live sidebar", () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true })
     await act(() => vi.advanceTimersByTimeAsync(30_000))
     await vi.waitFor(() => expect(statusCalls(hq)).toHaveLength(3))
+  })
+})
+
+describe("the fake refuses a fixture hq would never send", () => {
+  it("throws from createFakeHq, and a state changed later fails the test by name, not as unreachable", async () => {
+    const bad = { ...factoryStatusFixture(), extra: 1 } as ReturnType<typeof factoryStatusFixture>
+    expect(() => createFakeHq({ factoryStatus: bad })).toThrow(FakeHqError)
+
+    const hq = createFakeHq()
+    hq.state.factoryStatus = bad
+    await expect(hq.fetch("/v1/factory/status")).rejects.toBeInstanceOf(FakeHqError)
+    // Recorded for test/setup.ts, which would fail this test; this one provoked it on purpose.
+    expect(fakeViolations).toHaveLength(1)
+    fakeViolations.length = 0
   })
 })

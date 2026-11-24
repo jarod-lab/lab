@@ -19,6 +19,10 @@ export interface FakeHqState {
   caller: "founder" | "non-founder" | "signed-out" | "refused"
   user: SessionUser
   proposals: Proposal[]
+  /**
+   * Seeded apart from `proposals` (the default says 1 pending with none listed): a test that
+   * wants the badge and the list to agree seeds both. A decision lowers this count by one.
+   */
   factoryStatus: FactoryStatus
   digest: Digest
   policy: Policy
@@ -74,6 +78,14 @@ const factoryStatusStrict = z.strictObject({
     remainingUsd: z.number().min(0),
   }),
 })
+
+/**
+ * A fixture the fake cannot answer with because hq never would. Thrown from createFakeHq, or from
+ * fetch (where the client would read a rejected fetch as `unreachable`, so it is also recorded:
+ * test/setup.ts fails the test that caused it).
+ */
+export class FakeHqError extends Error {}
+export const fakeViolations: FakeHqError[] = []
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
   new Response(JSON.stringify(body), {
@@ -146,6 +158,15 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     ...initial,
   }
   const sent: Sent[] = []
+
+  function strictFactoryStatus(record: boolean): FactoryStatus {
+    const parsed = factoryStatusStrict.safeParse(state.factoryStatus)
+    if (parsed.success) return parsed.data
+    const error = new FakeHqError(`factoryStatus is not what hq returns: ${parsed.error.message}`)
+    if (record) fakeViolations.push(error)
+    throw error
+  }
+  strictFactoryStatus(false)
 
   /**
    * An Origin from another site. An absent one passes on purpose: the fake stands in for the
@@ -284,7 +305,7 @@ export function createFakeHq(initial: Partial<FakeHqState> = {}): FakeHq {
     const reads: Record<string, () => Response> = {
       "/v1/status": () => json(200, { ok: true, version: "0.0.0" }),
       "/v1/proposals": () => listProposals(search),
-      "/v1/factory/status": () => json(200, factoryStatusStrict.parse(state.factoryStatus)),
+      "/v1/factory/status": () => json(200, strictFactoryStatus(true)),
       "/v1/digest": () => digestReply(search),
       "/v1/policy": () => json(200, state.policy),
     }

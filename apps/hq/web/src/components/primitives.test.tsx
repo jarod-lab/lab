@@ -86,6 +86,21 @@ describe("page primitives", () => {
     expect(view.container.querySelector("[style]")).toBeNull()
   })
 
+  it("AppFrame packs wrapped lines at the top, so no gap opens above the runner card", () => {
+    const view = render(
+      <AppFrame sidebar={<nav aria-label="Primary">side</nav>}>
+        <p>content</p>
+      </AppFrame>,
+    )
+    const classes = (view.container.firstElementChild?.className ?? "").split(/\s+/)
+    // Wrapped (a phone), the spare viewport height must not be shared between the two lines: the
+    // sidebar's spacer would push the runner card down by the share. Side by side (one line
+    // spanning the sidebar's 232px and the panel's 560px basis) the line still fills the viewport.
+    expect(classes).toContain("content-start")
+    expect(classes).toContain("min-[792px]:content-stretch")
+    expect(classes).toContain("min-h-screen")
+  })
+
   it("has no a11y violations", async () => {
     const view = render(
       <AppFrame sidebar={<nav aria-label="Primary">side</nav>}>

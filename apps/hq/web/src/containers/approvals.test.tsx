@@ -197,21 +197,13 @@ describe("the Approvals screen", () => {
     const hq = createFakeHq({ proposals: seeded(1) })
     const app = await renderApp({ path: "/app/approvals", hq })
     const first = await card(app, "Proposal 1")
-    hq.state.nextError = {
-      status: 403,
-      body: {
-        error: {
-          code: "FORBIDDEN",
-          message: "Only a founder can decide a proposal",
-          hint: "Ask a founder.",
-        },
-      },
-    }
+    // The account lost founder status after the screen loaded: hq's own refusal comes back.
+    hq.state.caller = "non-founder"
     const before = listCalls(hq).length
     await app.user.click(within(first).getByRole("button", { name: "Approve" }))
 
     expect((await within(first).findByRole("alert")).textContent).toBe(
-      "Only a founder can decide a proposal",
+      "This brain is for the organization's founders",
     )
     expect(app.getByRole("article", { name: "Proposal 1" })).toBeTruthy()
     expect(listCalls(hq).length).toBe(before)
@@ -259,7 +251,7 @@ describe("the Approvals screen", () => {
 
     hq.state.nextError = {
       status: 500,
-      body: { error: { code: "INTERNAL", message: "Something went wrong" } },
+      body: { error: { code: "INTERNAL", message: "Internal error" } },
     }
     await app.user.click(approve())
     await within(first).findByText(/hq had a problem/)
@@ -335,7 +327,7 @@ describe("the Approvals screen", () => {
     await app.findByRole("navigation", { name: "Primary" })
     hq.state.nextError = {
       status: 500,
-      body: { error: { code: "INTERNAL", message: "Something went wrong" } },
+      body: { error: { code: "INTERNAL", message: "Internal error" } },
     }
     await app.router.navigate({ to: "/approvals" })
     const alert = await app.findByRole("alert")
@@ -353,10 +345,17 @@ describe("the Approvals screen", () => {
     const firstPage = listCalls(hq).find((s) => s.search.includes("status=pending"))
     expect(firstPage?.search).toContain("limit=25")
     expect(firstPage?.search).not.toContain("cursor")
+    // The badge counts what is loaded: with a next page it says so instead of undercounting.
+    expect(
+      app.getByRole("region", { name: /Needs you/ }).querySelector("h2 span")?.textContent,
+    ).toBe("25+")
 
     await app.user.click(app.getByRole("button", { name: "Load more" }))
     await card(app, "Proposal 30")
     expect(app.getAllByRole("article")).toHaveLength(30)
+    expect(
+      app.getByRole("region", { name: /Needs you/ }).querySelector("h2 span")?.textContent,
+    ).toBe("30")
     expect(app.queryByRole("button", { name: "Load more" })).toBeNull()
     expect(
       listCalls(hq).some(

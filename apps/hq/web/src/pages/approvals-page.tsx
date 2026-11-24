@@ -91,6 +91,7 @@ export function ApprovalsPage({
           {pending.status === "ready" && pending.items.length > 0 ? (
             <span className="rounded-md bg-solar px-1.5 py-px font-mono text-[11px] font-medium text-primary-foreground">
               {pending.items.length}
+              {hasMore ? "+" : ""}
             </span>
           ) : null}
         </h2>

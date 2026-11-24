@@ -39,6 +39,11 @@ describe("ApprovalsPage", () => {
     expect(within(needs).getAllByRole("listitem")).toHaveLength(2)
   })
 
+  it("shows the count as 'N+' while a next page exists, so it never undercounts", () => {
+    const view = page({ pending: ready([proposalFixture()]), hasMore: true })
+    expect(within(view.getByRole("region", { name: /Needs you/ })).getByText("1+")).toBeTruthy()
+  })
+
   it("says 'Nothing needs you' with no pending proposals", () => {
     const view = page()
     expect(view.getByText("Nothing needs you")).toBeTruthy()

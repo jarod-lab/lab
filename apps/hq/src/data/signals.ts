@@ -10,6 +10,7 @@ import { signals, workItems } from "../db/schema"
 import { RECURRENCE_REOPEN_DAYS } from "../work/constants"
 import { CONNECTED_SIGNAL_SOURCES, SIGNAL_SOURCES, type SignalSource } from "../work/machine"
 import type { RecordSignalInput } from "../work/types"
+import { closeRunningWindow } from "./decisions"
 import { isUniqueViolation } from "./entries"
 import {
   type Actor,
@@ -168,13 +169,20 @@ export async function recordSignal(
       }
       const signalId = await storeSignal(tx, item, signal, recorder, now)
       if (item.state === "verify" || item.state === "done") {
-        await transitionItem(tx, {
-          item,
-          to: "reopened",
-          actor: { type: "system", id: "hq" },
-          reason: "recurrence",
-          now,
-        })
+        const system: Actor = { type: "system", id: "hq" }
+        await transitionItem(tx, { item, to: "reopened", actor: system, reason: "recurrence", now })
+        if (item.state === "verify") {
+          // The window the recurrence reopened the item out of is over: it failed (one ms later,
+          // so the story reads in order).
+          await closeRunningWindow(tx, {
+            item,
+            status: "failed",
+            note: "A signal with this item's dedupe key arrived inside the window.",
+            actor: system,
+            now,
+            eventAt: new Date(now.getTime() + 1),
+          })
+        }
         return { signalId, itemId: item.id, displayId: item.displayId, outcome: "reopened" }
       }
       return { signalId, itemId: item.id, displayId: item.displayId, outcome: "attached" }

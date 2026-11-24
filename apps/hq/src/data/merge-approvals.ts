@@ -10,7 +10,7 @@ import { currentPullRequest, type Actor, type Tx } from "./work-items"
 
 const SYSTEM: Actor = { type: "system", id: "hq" }
 
-export type VoidReason = "head_sha_changed" | "pull_request_closed" | "merged"
+export type VoidReason = "head_sha_changed" | "pull_request_closed" | "merged" | "stopped"
 
 /**
  * Void the approvals of a pull request, one `merge_approval_void` event each (`reason` says why).

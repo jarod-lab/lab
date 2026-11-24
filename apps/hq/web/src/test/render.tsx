@@ -11,35 +11,12 @@ import { type RenderResult, render } from "@testing-library/react"
 import userEvent, { type UserEvent } from "@testing-library/user-event"
 import type { ReactNode } from "react"
 
-import { createHqClient, type HqClient } from "../api/client"
+import { createHqClient } from "../api/client"
 import { createQueryClient } from "../api/query-client"
+import { type AppRouter, createAppRouter } from "../router"
 import { createFakeHq, type FakeHq } from "./fake-hq"
 
-interface RouterContext {
-  queryClient: QueryClient
-  client: HqClient
-}
-
-/**
- * The router the harness mounts: basepath "/app", memory history, the app's context. Until the
- * app's own router exists (`createAppRouter`, the layout task) it has one catch-all route that
- * renders `ui`; that task swaps this for the real route tree and drops `ui`.
- */
-function buildRouter(context: RouterContext, path: string, ui: ReactNode) {
-  const rootRoute = createRootRouteWithContext<RouterContext>()({ component: Outlet })
-  const catchAll = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "$",
-    component: () => ui,
-  })
-  return createRouter({
-    routeTree: rootRoute.addChildren([catchAll]),
-    history: createMemoryHistory({ initialEntries: [path] }),
-    basepath: "/app",
-    context,
-  })
-}
-export type AppRouter = ReturnType<typeof buildRouter>
+export type { AppRouter }
 
 export type RenderAppResult = RenderResult & {
   router: AppRouter
@@ -49,19 +26,19 @@ export type RenderAppResult = RenderResult & {
 }
 
 /**
- * Render the app against a fake hq. `path` is a public path (`/app/approvals`), default
- * `/app/digest`; the default hq has a founder signed in. Every request goes to `hq.fetch`.
+ * Render the app (its real route tree, basepath "/app", memory history) against a fake hq. `path`
+ * is a public path (`/app/approvals`), default `/app/digest`; the default hq has a founder signed
+ * in. Every request goes to `hq.fetch`.
  */
 export async function renderApp(
-  options: { path?: string; hq?: FakeHq; queryClient?: QueryClient; ui?: ReactNode } = {},
+  options: { path?: string; hq?: FakeHq; queryClient?: QueryClient } = {},
 ): Promise<RenderAppResult> {
   const hq = options.hq ?? createFakeHq()
   const queryClient = options.queryClient ?? createQueryClient()
   const client = createHqClient({ fetch: hq.fetch })
-  const router = buildRouter(
+  const router = createAppRouter(
     { queryClient, client },
-    options.path ?? "/app/digest",
-    options.ui ?? null,
+    { history: createMemoryHistory({ initialEntries: [options.path ?? "/app/digest"] }) },
   )
   await router.load()
   const user = userEvent.setup()
@@ -71,4 +48,21 @@ export async function renderApp(
     </QueryClientProvider>,
   )
   return Object.assign(result, { router, queryClient, hq, user })
+}
+
+/**
+ * Render one component inside a router (so `Link` works) at basepath "/app", for component tests
+ * that do not need the app's routes.
+ */
+export async function renderInRouter(ui: ReactNode): Promise<RenderResult> {
+  const rootRoute = createRootRouteWithContext<Record<string, never>>()({ component: Outlet })
+  const page = createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => ui })
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([page]),
+    history: createMemoryHistory({ initialEntries: ["/app/"] }),
+    basepath: "/app",
+    context: {},
+  })
+  await router.load()
+  return render(<RouterProvider router={router} />)
 }

@@ -23,6 +23,8 @@ if (typeof document !== "undefined") {
   if (typeof Element.prototype.scrollIntoView !== "function") {
     Element.prototype.scrollIntoView = () => {}
   }
+  // The router restores scroll on navigation; jsdom's window.scrollTo only logs 'not implemented'.
+  window.scrollTo = () => {}
   // jsdom has no matchMedia. Wide and light by default.
   if (typeof window.matchMedia !== "function") {
     window.matchMedia = (query: string) =>

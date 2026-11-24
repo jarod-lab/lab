@@ -1,0 +1,75 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from "vitest"
+
+import { factoryStatusFixture } from "../test/fixtures"
+import { renderInRouter } from "../test/render"
+import { RunnerCard } from "./runner-card"
+
+describe("RunnerCard", () => {
+  it("says 'Runner status not reported' and never 'online'", async () => {
+    const view = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    expect(view.getByText("Runner status not reported")).toBeTruthy()
+    expect(view.container.textContent?.toLowerCase()).not.toContain("online")
+  })
+
+  it("shows the newest run's runner and a relative time, from the status clock", async () => {
+    const view = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    // now 12:00, eve started 08:00
+    expect(view.getByText("eve · last run 4h ago")).toBeTruthy()
+  })
+
+  it("says 'no runs yet' when no runner has started", async () => {
+    const base = factoryStatusFixture()
+    const status = {
+      ...base,
+      runners: base.runners.map((r) => ({ ...r, lastStartedAt: null, lastOutcome: null })),
+    }
+    const view = await renderInRouter(<RunnerCard state="ready" status={status} />)
+    expect(view.getByText("no runs yet")).toBeTruthy()
+  })
+
+  it("shows the Eve cap left as a progress element and '62% left' (spent 3.8 of 10)", async () => {
+    const view = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    const bar = view.getByRole("progressbar", { name: "Eve spend cap left" })
+    expect(bar.tagName).toBe("PROGRESS")
+    expect(bar.getAttribute("value")).toBe("62")
+    expect(bar.getAttribute("max")).toBe("100")
+    expect(view.getByText("Eve spend cap 62% left")).toBeTruthy()
+  })
+
+  it("counts a grant into the cap and clamps to 0..100", async () => {
+    const base = factoryStatusFixture()
+    const granted = {
+      ...base,
+      allowance: { ...base.allowance, capUsd: 10, grantedUsd: 10, spentUsd: 5, remainingUsd: 15 },
+    }
+    const a = await renderInRouter(<RunnerCard state="ready" status={granted} />)
+    expect(a.getByText("Eve spend cap 75% left")).toBeTruthy()
+    a.unmount()
+    const over = {
+      ...base,
+      allowance: { ...base.allowance, capUsd: 0, grantedUsd: 0, remainingUsd: -1 },
+    }
+    const b = await renderInRouter(<RunnerCard state="ready" status={over} />)
+    expect(b.getByText("Eve spend cap 0% left")).toBeTruthy()
+  })
+
+  it("loading and error states render without a progress element", async () => {
+    const loading = await renderInRouter(<RunnerCard state="loading" status={undefined} />)
+    expect(loading.container.querySelector("progress")).toBeNull()
+    expect(loading.getByText("Runner status not reported")).toBeTruthy()
+    expect(loading.getByText("Loading runner status")).toBeTruthy()
+    loading.unmount()
+    const failed = await renderInRouter(<RunnerCard state="error" status={undefined} />)
+    expect(failed.container.querySelector("progress")).toBeNull()
+    expect(failed.getByText("Runner status unavailable")).toBeTruthy()
+  })
+
+  it("links to /app/runner and has no inline style", async () => {
+    const view = await renderInRouter(<RunnerCard state="ready" status={factoryStatusFixture()} />)
+    const link = view.getByRole("link")
+    expect(link.getAttribute("href")).toBe("/app/runner")
+    expect(link.className).toContain("min-h-touch")
+    expect(view.container.querySelector("[style]")).toBeNull()
+  })
+})

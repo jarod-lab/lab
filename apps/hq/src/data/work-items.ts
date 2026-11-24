@@ -242,10 +242,10 @@ export async function loadFacts(
     .from(verificationWindows)
     .where(and(eq(verificationWindows.itemId, item.id), eq(verificationWindows.cycle, item.cycle)))
   // A pending approval is a card that asks for a decision, so it counts only while the decision
-  // can be taken: the item is in `review` and the approval is bound to its CURRENT pull request
-  // (`approveMerge` refuses anything else). Otherwise the card would be dead.
+  // can be taken: the item is in `review` and the approval is bound to its CURRENT pull request,
+  // which is open (`approveMerge` refuses anything else). Otherwise the card would be dead.
   const [pending] =
-    item.state === "review" && pr
+    item.state === "review" && pr?.state === "open"
       ? await tx
           .select({ id: mergeApprovals.id })
           .from(mergeApprovals)

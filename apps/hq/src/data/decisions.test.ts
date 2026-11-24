@@ -256,9 +256,16 @@ describe("founder decisions (in-process Postgres)", () => {
       const before = await eventsOf(item.id)
       const approvals = await approvalsOf(item.id)
       expect(approvals.map((a) => a.status)).toEqual(["void"])
+      // the plan's pinned message, although no approval is pending any more
       await expectAppError(approve(item.id, { headSha: SHA_A }), "CONFLICT")
+      await expect(approve(item.id, { headSha: SHA_A })).rejects.toThrow(
+        "The pull request changed since you looked",
+      )
       // the new head has no approval until a new approved attempt: approving it is CONFLICT too
       await expectAppError(approve(item.id, { headSha: SHA_B }), "CONFLICT")
+      await expect(approve(item.id, { headSha: SHA_B })).rejects.toThrow(
+        "No merge approval is waiting",
+      )
       expect(await eventsOf(item.id)).toHaveLength(before.length)
       expect((await approvalsOf(item.id)).map((a) => a.status)).toEqual(["void"])
     })
@@ -576,6 +583,79 @@ describe("founder decisions (in-process Postgres)", () => {
       await expectAppError(stop("nope"), "BAD_REQUEST")
       expect((await itemOf(item.id)).state).toBe("triage")
       expect(await eventsOf(item.id)).toHaveLength(0)
+    })
+  })
+
+  describe("stopItem and approvals that were already acted on", () => {
+    const voids = async (itemId: string) =>
+      (await eventsOf(itemId)).filter((e) => e.kind === "merge_approval_void")
+
+    it("a stop in deploy after approve and merge leaves the approval approved and writes no void", async () => {
+      const { item, approval } = await reviewed()
+      await approve(item.id)
+      await record(item.id, { state: "merged" }, minutesAfter(NOW, 30))
+      expect((await itemOf(item.id)).state).toBe("deploy")
+      const before = await voids(item.id)
+      await stop(item.id)
+      expect((await itemOf(item.id)).state).toBe("stopped")
+      expect(await approvalsOf(item.id)).toMatchObject([{ id: approval.id, status: "approved" }])
+      expect(await voids(item.id)).toHaveLength(before.length)
+    })
+
+    it("a stop after the pull request closed leaves a pending approval's record alone too", async () => {
+      // a closed pull request already voided the pending approval (W4b); the stop adds nothing
+      const { item } = await reviewed({ attemptLimit: 3 })
+      await approve(item.id)
+      await db()
+        .update(pullRequests)
+        .set({ state: "closed" })
+        .where(eq(pullRequests.itemId, item.id))
+      await stop(item.id)
+      expect((await approvalsOf(item.id)).map((a) => a.status)).toEqual(["approved"])
+      expect(await voids(item.id)).toHaveLength(0)
+    })
+
+    it("a cycle 2 stop keeps cycle 1's approved approval on its merged pull request, and voids the open one", async () => {
+      const { item, approval: first } = await reviewed()
+      await approve(item.id)
+      await record(item.id, { state: "merged" }, minutesAfter(NOW, 30))
+      // the item was reopened and is in review again in cycle 2 with a new open pull request
+      await db()
+        .update(workItems)
+        .set({ cycle: 2, state: "review" })
+        .where(eq(workItems.id, item.id))
+      const second = await seedAttempt(db(), item.id, {
+        number: 2,
+        cycle: 2,
+        kind: "fix",
+        result: "approved",
+        branch: "factory/fix-9",
+      })
+      const open = await seedPullRequest(db(), item.id, {
+        number: 9,
+        state: "open",
+        openedAt: minutesAfter(NOW, 120),
+        branch: "factory/fix-9",
+        attemptId: second.id,
+      })
+      const [pending] = await db()
+        .insert(mergeApprovals)
+        .values({
+          id: crypto.randomUUID(),
+          itemId: item.id,
+          pullRequestId: open.id,
+          headSha: open.headSha,
+          status: "pending",
+          requestedAt: minutesAfter(NOW, 121),
+        })
+        .returning()
+      await stop(item.id)
+      const rows = await approvalsOf(item.id)
+      expect(Object.fromEntries(rows.map((a) => [a.id, a.status]))).toEqual({
+        [first.id]: "approved",
+        [pending?.id ?? ""]: "void",
+      })
+      expect(await voids(item.id)).toHaveLength(1)
     })
   })
 

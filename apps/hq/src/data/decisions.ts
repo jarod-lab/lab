@@ -15,6 +15,7 @@ import {
   agentQuestions,
   attempts,
   mergeApprovals,
+  pullRequests,
   verificationWindows,
   workItems,
 } from "../db/schema"
@@ -112,7 +113,11 @@ export async function closeRunningWindow(
   return true
 }
 
-/** Void the item's approvals in `statuses` on every one of its pull requests (a stop, say). */
+/**
+ * Void the item's approvals in `statuses` on its OPEN pull requests (a stop, say): those are the
+ * ones that could still authorize a merge. An approval on a merged or closed pull request was
+ * already acted on and keeps its status, as the record of what the founder decided.
+ */
 async function voidItemApprovals(
   tx: Tx,
   item: Pick<WorkItemRow, "id" | "cycle">,
@@ -123,7 +128,14 @@ async function voidItemApprovals(
   const rows = await tx
     .selectDistinct({ pullRequestId: mergeApprovals.pullRequestId })
     .from(mergeApprovals)
-    .where(and(eq(mergeApprovals.itemId, item.id), inArray(mergeApprovals.status, [...statuses])))
+    .innerJoin(pullRequests, eq(pullRequests.id, mergeApprovals.pullRequestId))
+    .where(
+      and(
+        eq(mergeApprovals.itemId, item.id),
+        inArray(mergeApprovals.status, [...statuses]),
+        eq(pullRequests.state, "open"),
+      ),
+    )
   for (const { pullRequestId } of rows) {
     await voidMergeApprovals(tx, {
       itemId: item.id,
@@ -180,6 +192,12 @@ export async function approveMerge(
       .from(mergeApprovals)
       .where(and(eq(mergeApprovals.pullRequestId, pr.id), eq(mergeApprovals.status, "pending")))
     if (!pending) {
+      // The founder saw a head that is no longer the pull request's: a push voided the approval.
+      if (sha !== pr.headSha) {
+        throw new AppError("CONFLICT", "The pull request changed since you looked", {
+          hint: "Read the work item again and approve the head it shows now.",
+        })
+      }
       const [decided] = await tx
         .select({ id: mergeApprovals.id })
         .from(mergeApprovals)
@@ -234,8 +252,8 @@ export async function approveMerge(
 /**
  * Stop an in-flight item (the machine says which states have a founder edge: anything else is
  * CONFLICT and nothing is written). In the same transaction, in this order: a running verification
- * window ends as `stopped`; every pending or approved merge approval is voided (a stopped item
- * holds no live go-ahead); every `requested` attempt ends as `abandoned` (otherwise it would block
+ * window ends as `stopped`; every pending or approved merge approval on an OPEN pull request is voided (a stopped item
+ * holds no live go-ahead; one on a merged or closed pull request was already acted on and stays); every `requested` attempt ends as `abandoned` (otherwise it would block
  * the item for good); open questions are withdrawn. A `running` attempt is left alone: hq cannot
  * reach the agent, the attempt's lease and the sweep end it, and what it still reports belongs on
  * the ledger.

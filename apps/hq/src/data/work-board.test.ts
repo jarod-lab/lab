@@ -364,12 +364,76 @@ describe("the board and the item detail reads (in-process Postgres)", () => {
       const e = await seedItem(db(), { state: "plan" })
       await seedQuestion(e.id, { createdAt: minutesAfter(NOW, -10) })
       await seedQuestion(e.id, { createdAt: minutesAfter(NOW, -90) })
-      // verify: watching.
+      // verify: watching, with no pull request on record.
       await seedItem(db(), { state: "verify" })
-      // done today with a passed window and one with none.
-      const verified = await seedItem(db(), { state: "done", now: minutesAfter(NOW, -HOUR) })
-      await seedWindow(verified.id, { startsAt: minutesAfter(NOW, -400), status: "passed" })
-      await seedItem(db(), { state: "done", now: minutesAfter(NOW, -2 * HOUR) })
+      // W: in verify, its merge landed 30 minutes ago (today) and the window runs.
+      const watched = await seedItem(db(), { state: "verify", dedupeKey: "kw" })
+      await seedPullRequest(db(), watched.id, { state: "merged", mergedAt: minutesAfter(NOW, -30) })
+      await seedWindow(watched.id, { startsAt: minutesAfter(NOW, -15) })
+      // S: stuck in verify (merged yesterday, window over, posthog cannot verify): still watching.
+      const stuck = await seedItem(db(), { state: "verify", dedupeKey: "ks" })
+      await seedPullRequest(db(), stuck.id, {
+        state: "merged",
+        mergedAt: minutesAfter(NOW, -30 * HOUR),
+      })
+      await seedWindow(stuck.id, { startsAt: minutesAfter(NOW, -30 * HOUR + 15) })
+      await seedContract(stuck.id, [{ kind: "posthog" }])
+      // V1: merged today, reached done today with a passed window.
+      const v1 = await seedItem(db(), {
+        state: "done",
+        now: minutesAfter(NOW, -HOUR),
+        dedupeKey: "kv1",
+      })
+      await seedPullRequest(db(), v1.id, {
+        state: "merged",
+        mergedAt: minutesAfter(NOW, -7 * HOUR),
+      })
+      await seedWindow(v1.id, { startsAt: minutesAfter(NOW, -400), status: "passed" })
+      await event(v1.id, "transition", minutesAfter(NOW, -HOUR), {
+        fromState: "verify",
+        toState: "done",
+        reason: "window_passed",
+      })
+      // V2: done today but merged yesterday, and no window on record: neither resolved nor verified.
+      const v2 = await seedItem(db(), {
+        state: "done",
+        now: minutesAfter(NOW, -2 * HOUR),
+        dedupeKey: "kv2",
+      })
+      await seedPullRequest(db(), v2.id, {
+        state: "merged",
+        mergedAt: minutesAfter(NOW, -20 * HOUR),
+      })
+      await event(v2.id, "transition", minutesAfter(NOW, -2 * HOUR), {
+        fromState: "verify",
+        toState: "done",
+        reason: "window_passed",
+      })
+      // Deployed: the merge was recorded today (a transition event) though GitHub's merged_at is old.
+      const deployed = await seedItem(db(), { state: "deploy", dedupeKey: "kd" })
+      await seedPullRequest(db(), deployed.id, {
+        state: "merged",
+        mergedAt: minutesAfter(NOW, -5 * 24 * HOUR),
+      })
+      await event(deployed.id, "transition", minutesAfter(NOW, -20), {
+        fromState: "review",
+        toState: "deploy",
+        reason: "pull_request_merged",
+      })
+      // Retriaged into cycle 2: its cycle 1 merge, today, is not this cycle's.
+      const again = await seedItem(db(), { state: "triage", cycle: 2, dedupeKey: "kc" })
+      const oldFix = await seedAttempt(db(), again.id, { number: 1, cycle: 1, result: "approved" })
+      await seedPullRequest(db(), again.id, {
+        state: "merged",
+        mergedAt: minutesAfter(NOW, -3 * HOUR),
+        attemptId: oldFix.id,
+      })
+      await event(again.id, "transition", minutesAfter(NOW, -3 * HOUR), {
+        fromState: "review",
+        toState: "deploy",
+        reason: "pull_request_merged",
+        cycle: 1,
+      })
       // reopened today twice for one item and once for another; one yesterday.
       const r1 = await seedItem(db(), { state: "triage", dedupeKey: "k1" })
       await event(r1.id, "transition", minutesAfter(NOW, -3 * HOUR), {
@@ -397,20 +461,32 @@ describe("the board and the item detail reads (in-process Postgres)", () => {
 
       const b = await board()
       expect(b.stats).toEqual({
-        // A, B, C, D, E, the verify item and the three reopened-then-retriaged items in triage.
-        inFlight: 9,
+        // A, B, C, D, E, the three verify items, the deploy item, the cycle 2 item and the three
+        // reopened-then-retriaged items in triage.
+        inFlight: 13,
         runningAttempts: 1,
         needsYou: 3,
         oldestWaitingMinutes: 90,
-        resolvedToday: 2,
+        // Merge recorded today in the current cycle: W (merged_at), V1 (merged_at), Deployed (event).
+        resolvedToday: 3,
+        // Reached done today with a passed window: V1 only.
         verifiedToday: 1,
-        watching: 1,
+        // Every item in verify, the one stuck behind posthog included.
+        watching: 3,
         reopened: 2,
         latestReopened: {
           displayId: r2.displayId,
           reason: "A contract check failed during the verification window.",
         },
       })
+    })
+
+    it("oldestWaitingMinutes is never negative when a writer's clock ran ahead of now", async () => {
+      const item = await seedItem(db(), { state: "plan" })
+      await seedQuestion(item.id, { createdAt: minutesAfter(NOW, 10) })
+      const b = await board()
+      expect(b.needsYou).toHaveLength(1)
+      expect(b.stats.oldestWaitingMinutes).toBe(0)
     })
 
     it("needsYou lists a pending merge approval, an open question, an exhausted item and a stale attempt, each with a deterministic reason sentence, oldest first", async () => {

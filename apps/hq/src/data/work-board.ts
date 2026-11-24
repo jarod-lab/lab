@@ -26,6 +26,7 @@ import {
   attempts,
   contractItems,
   mergeApprovals,
+  pullRequests,
   type QuestionStatus,
   signals,
   spend,
@@ -45,6 +46,7 @@ import {
   columnFor,
   deriveAttention,
   deriveCardState,
+  displayId,
   findTransition,
   isInFlight,
   type SignalSource,
@@ -752,27 +754,58 @@ export async function workBoard(
         ),
       )
 
-    const doneToday = reads.filter(
-      (r) =>
-        r.item.state === "done" && columnFor("done", r.item.stateChangedAt, now) === "done_today",
-    )
-    const passed = doneToday.length
-      ? await tx
-          .select({ itemId: verificationWindows.itemId, cycle: verificationWindows.cycle })
-          .from(verificationWindows)
-          .where(
-            and(
-              inArray(
-                verificationWindows.itemId,
-                doneToday.map((r) => r.item.id),
-              ),
-              eq(verificationWindows.status, "passed"),
-            ),
-          )
-      : []
-    const verifiedToday = doneToday.filter((r) =>
-      passed.some((w) => w.itemId === r.item.id && w.cycle === r.item.cycle),
-    ).length
+    // Resolved today: a merge recorded today for the item's CURRENT cycle, either observed (the
+    // `pull_request_merged` transition, stamped today) or reported by GitHub (`merged_at` today on
+    // the current pull request). One count per item.
+    const resolved = new Set<string>()
+    const mergeMoves = await tx
+      .select({ itemId: workItemEvents.itemId })
+      .from(workItemEvents)
+      .innerJoin(
+        workItems,
+        and(eq(workItems.id, workItemEvents.itemId), eq(workItems.cycle, workItemEvents.cycle)),
+      )
+      .where(
+        and(
+          eq(workItemEvents.kind, "transition"),
+          eq(workItemEvents.toState, "deploy"),
+          eq(workItemEvents.reason, "pull_request_merged"),
+          gte(workItemEvents.at, dayStart),
+          lt(workItemEvents.at, dayEnd),
+        ),
+      )
+    for (const m of mergeMoves) resolved.add(m.itemId)
+    const mergedToday = await tx
+      .select({ pr: pullRequests, item: workItems })
+      .from(pullRequests)
+      .innerJoin(workItems, eq(workItems.id, pullRequests.itemId))
+      .where(and(gte(pullRequests.mergedAt, dayStart), lt(pullRequests.mergedAt, dayEnd)))
+    for (const m of mergedToday) {
+      if ((await currentPullRequest(tx, toWorkItemRow(m.item)))?.id === m.pr.id) {
+        resolved.add(m.item.id)
+      }
+    }
+    // Verified today: reached `done` today, and the window of that cycle passed. Counted from the
+    // move and the window rows, never from "resolved".
+    const verifiedMoves = await tx
+      .selectDistinct({ itemId: workItemEvents.itemId })
+      .from(workItemEvents)
+      .innerJoin(
+        verificationWindows,
+        and(
+          eq(verificationWindows.itemId, workItemEvents.itemId),
+          eq(verificationWindows.cycle, workItemEvents.cycle),
+          eq(verificationWindows.status, "passed"),
+        ),
+      )
+      .where(
+        and(
+          eq(workItemEvents.kind, "transition"),
+          eq(workItemEvents.toState, "done"),
+          gte(workItemEvents.at, dayStart),
+          lt(workItemEvents.at, dayEnd),
+        ),
+      )
 
     // Reopened today: the transitions into `reopened` stamped today, one count per item. The state
     // itself is no source: the sweep retriages an item within the half hour.
@@ -816,12 +849,12 @@ export async function workBoard(
           waits.length === 0
             ? null
             : Math.max(0, Math.floor((now.getTime() - Math.min(...waits)) / MINUTE_MS)),
-        resolvedToday: doneToday.length,
-        verifiedToday,
+        resolvedToday: resolved.size,
+        verifiedToday: verifiedMoves.length,
         watching: reads.filter((r) => r.item.state === "verify").length,
         reopened: new Set(reopenedEvents.map((e) => e.itemId)).size,
         latestReopened: latest
-          ? { displayId: `FAC-${latest.number}`, reason: reopenedReason(latest.reason) }
+          ? { displayId: displayId(latest.number), reason: reopenedReason(latest.reason) }
           : null,
       },
       needsYou,
